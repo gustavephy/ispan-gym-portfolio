@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <dirs>
+    <entry loc="/Applications/SpringToolsForEclipse.app/Contents/Eclipse/plugins/org.eclipse.justj.openjdk.hotspot.jre.full.macosx.aarch64_25.0.3.v20260502-0818" stamp="1780991636000"/>
     <entry loc="C:\Tools\microsoft-jdk-25.0.3\jdk-25.0.3+9" stamp="1776511288000"/>
+    <entry loc="/Applications/SpringToolsForEclipse.app/Contents/Eclipse/plugins/org.eclipse.justj.openjdk.hotspot.jre.full.macosx.aarch64_25.0.3.v20260502-0818/jre" stamp="1780991636000"/>
     <entry loc="C:\JavaFramework\sts-5.1.1.RELEASE\plugins\org.eclipse.justj.openjdk.hotspot.jre.full.win32.x86_64_25.0.2.v20260203-1141\jre" stamp="1773731384000"/>
+    <entry loc="/Users/atapp/Library/Java/JavaVirtualMachines/temurin-21.0.11/Contents/Home" stamp="1779470775016"/>
     <entry loc="C:\JavaFramework\sts-5.1.1.RELEASE\plugins\org.eclipse.justj.openjdk.hotspot.jre.full.win32.x86_64_25.0.2.v20260203-1141" stamp="1773731384000"/>
 </dirs>

@@ -1,5 +1,8 @@
 eclipse.preferences.version=1
-org.eclipse.jdt.core.classpathVariable.M2_REPO=C\:/Users/User/.m2/repository
+org.eclipse.jdt.core.classpathVariable.JRE_LIB=/Applications/SpringToolsForEclipse.app/Contents/Eclipse/plugins/org.eclipse.justj.openjdk.hotspot.jre.full.macosx.aarch64_25.0.3.v20260502-0818/jre/lib/jrt-fs.jar
+org.eclipse.jdt.core.classpathVariable.JRE_SRC=/Applications/SpringToolsForEclipse.app/Contents/Eclipse/plugins/org.eclipse.justj.openjdk.hotspot.jre.full.macosx.aarch64_25.0.3.v20260502-0818/jre/lib/src.zip
+org.eclipse.jdt.core.classpathVariable.JRE_SRCROOT=
+org.eclipse.jdt.core.classpathVariable.M2_REPO=/Users/atapp/.m2/repository
 org.eclipse.jdt.core.compiler.codegen.targetPlatform=25
 org.eclipse.jdt.core.compiler.compliance=25
 org.eclipse.jdt.core.compiler.release=enabled
