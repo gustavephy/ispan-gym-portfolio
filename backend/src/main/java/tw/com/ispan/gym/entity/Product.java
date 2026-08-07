@@ -2,7 +2,6 @@ package tw.com.ispan.gym.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Locale.Category;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -30,18 +29,20 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    //商品類型（GOODS = 實體商品，COURSE = 教練課程，DESCRIPTION = 教練課程）
     @Column(nullable = false, length = 20)
     private String type = "GOODS";
 
-    @Column(nullable = false, length = 50, columnDefinition="NVARCHAR(50)")
+    @Column(nullable = false, length = 50, columnDefinition = "NVARCHAR(50)")
     private String name;
 
-    @Column(length = 500, columnDefinition="NVARCHAR(500)")
+    @Column(length = 500, columnDefinition = "NVARCHAR(500)")
     private String description;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
+
+    @Column(nullable = false)
+    private Long stock = 0L;
 
     @Column(nullable = false)
     private Integer sessionsPerUnit = 0;
@@ -49,7 +50,7 @@ public class Product {
     @Version
     private Integer version = 0;
 
-    @Column(nullable = false, length = 20, columnDefinition="VARCHAR(20)")
+    @Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
     private String status = "ACTIVE";
 
     @Column(columnDefinition = "NVARCHAR(MAX)")
@@ -65,7 +66,7 @@ public class Product {
     @JoinColumn(name = "category_id")
     private Category category;
 
-    @Column(length = 50, columnDefinition="NVARCHAR(50)")
+    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
     private String classSize;
 
     @CreatedDate
