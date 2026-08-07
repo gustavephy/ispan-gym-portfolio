@@ -44,14 +44,14 @@ public class InventoryLog {
 	@Column(name="balance_after")
 	private Integer balanceAfter;
 	
-	@ManyToOne
-	@JoinColumn(name="ref_order_id")
-	private Order refOrder;
-	
-	@ManyToOne
-	@JoinColumn(name="operator_id")
-	private User oprerator;
-	
+//	@ManyToOne
+//	@JoinColumn(name="ref_order_id")
+//	private Order refOrder;
+//	
+//	@ManyToOne
+//	@JoinColumn(name="operator_id")
+//	private User oprerator;
+//	
 	@CreatedDate
 	@Column(updatable=false,columnDefinition="datetime2")
 	private LocalDateTime createdAt;

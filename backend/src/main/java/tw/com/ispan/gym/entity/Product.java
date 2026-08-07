@@ -2,7 +2,7 @@ package tw.com.ispan.gym.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Locale.Category;
+import tw.com.ispan.gym.entity.Category;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;

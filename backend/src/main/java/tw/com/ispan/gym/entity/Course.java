@@ -48,13 +48,14 @@ public class Course {
 	private Product product;
 	
 	//專門提供前端使用
-	@Column(name = "product_id", insertable = false, updatable = false)
-	private Product productId;
 	
-	@ManyToOne
-	@JoinColumn(name = "trainer_id", nullable = false)
-	@JsonIgnore
-	private User trainer;
+	@Column(name = "product_id", insertable = false, updatable = false)
+	private Integer productId;
+	
+//	@ManyToOne
+//	@JoinColumn(name = "trainer_id", nullable = false)
+//	@JsonIgnore
+//	private User trainer;
 	
 	@Column(nullable=false)
 	private Integer maxCapacity=15;

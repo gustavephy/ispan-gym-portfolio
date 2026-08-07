@@ -17,6 +17,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 
+
 @Entity
 @Table(name = "subscription")
 @Data
@@ -27,14 +28,14 @@ public class Subscription {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
 	
-	@ManyToOne
-	@JoinColumn(name = "user_id", nullable = false)
-	private User user;
-	
-	@ManyToOne
-	@JoinColumn(name = "order_id", nullable = false)
-	private Order order;
-	
+//	@ManyToOne
+//	@JoinColumn(name = "user_id", nullable = false)
+//	private User user;
+//	
+//	@ManyToOne
+//	@JoinColumn(name = "order_id", nullable = false)
+//	private Order order;
+//	
 	@Column(nullable = false)
 	private LocalDateTime startDate;
 	
