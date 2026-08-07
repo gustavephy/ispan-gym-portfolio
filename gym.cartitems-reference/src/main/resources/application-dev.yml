@@ -1,3 +1,0 @@
-app:
-  # TODO: replace with authenticated user from Spring Security/JWT.
-  dev-current-user-id: ${DEV_CURRENT_USER_ID}
