@@ -39,7 +39,7 @@ public class CartService {
         // Locking the owning user serializes concurrent additions for the same cart and
         // prevents two requests from racing against UX_cart_user_product.
         User user = users.findByIdForUpdate(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("雿輻??摮"));
+                .orElseThrow(() -> new ResourceNotFoundException("找不到指定的會員"));
         Product product = products.findById(request.productId())
                 .orElseThrow(() -> new ProductNotFoundException(request.productId()));
         validateAvailable(product);

@@ -26,58 +26,54 @@ import lombok.Data;
 @Data
 @EntityListeners(AuditingEntityListener.class)
 public class Course {
-	
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
-	
-	@Column(nullable = false, length = 100, columnDefinition="NVARCHAR(100)")
+
+	@Column(nullable = false, length = 100, columnDefinition = "NVARCHAR(100)")
 	private String name;
-	
-	@Column(length = 500, columnDefinition="NVARCHAR(500)")
+
+	@Column(length = 500, columnDefinition = "NVARCHAR(500)")
 	private String description;
-	
-	@Column(length = 500, columnDefinition="NVARCHAR(500)")
+
+	@Column(length = 500, columnDefinition = "NVARCHAR(500)")
 	private String imageUrl;
-	
-	@Column(nullable = false, length = 20, columnDefinition="VARCHAR(20)")
+
+	@Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
 	private String courseType;
-	
-	//??敺垢雿輻
+
 	@ManyToOne
 	@JoinColumn(name = "product_id", nullable = false)
 	@JsonIgnore
 	private Product product;
-	
-	//撠????垢雿輻
+
 	@Column(name = "product_id", insertable = false, updatable = false)
 	private Integer productId;
-	
+
 	@ManyToOne
 	@JoinColumn(name = "trainer_id", nullable = false)
 	@JsonIgnore
 	private User trainer;
-	
-	@Column(nullable=false)
-	private Integer maxCapacity=15;
-	
+
+	@Column(nullable = false)
+	private Integer maxCapacity = 15;
+
 	@Column(nullable = false, columnDefinition = "bit default 0")
-	private Boolean isTrial=false;
-	
+	private Boolean isTrial = false;
+
 	@Column(nullable = false, columnDefinition = "bit default 0")
-	private Boolean isOpenForSubscription=false;
-	
-	@Column(nullable = false, length = 20, columnDefinition="VARCHAR(20)")
-	private String status="ACTIVE";
-	
+	private Boolean isOpenForSubscription = false;
+
+	@Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
+	private String status = "ACTIVE";
+
 	@CreatedDate
 	@Column(columnDefinition = "datetime2")
 	private LocalDateTime createdAt;
-	
+
 	@LastModifiedDate
 	@Column(columnDefinition = "datetime2")
 	private LocalDateTime updatedAt;
-	
-	
-}
 
+}

@@ -4,6 +4,7 @@ import tw.com.ispan.gym.cart.exception.*;
 import java.time.LocalDateTime;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -52,7 +53,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiErrorResponse> invalidRequest(MethodArgumentNotValidException ex) {
-        return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "隢?甈?撽?憭望?");
+        return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "請確認輸入資料是否正確");
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    ResponseEntity<ApiErrorResponse> unauthenticated(AuthenticationException ex) {
+        return response(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", ex.getMessage());
     }
 
     private ResponseEntity<ApiErrorResponse> response(HttpStatus status, String code, String message) {

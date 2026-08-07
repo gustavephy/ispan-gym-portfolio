@@ -29,14 +29,13 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    //??憿?嚗OODS = 撖阡???嚗OURSE = ?毀隤脩?嚗ESCRIPTION = ?毀隤脩?嚗?
     @Column(nullable = false, length = 20)
     private String type = "GOODS";
 
-    @Column(nullable = false, length = 50, columnDefinition="NVARCHAR(50)")
+    @Column(nullable = false, length = 50, columnDefinition = "NVARCHAR(50)")
     private String name;
 
-    @Column(length = 500, columnDefinition="NVARCHAR(500)")
+    @Column(length = 500, columnDefinition = "NVARCHAR(500)")
     private String description;
 
     @Column(nullable = false, precision = 10, scale = 2)
@@ -51,7 +50,7 @@ public class Product {
     @Version
     private Integer version = 0;
 
-    @Column(nullable = false, length = 20, columnDefinition="VARCHAR(20)")
+    @Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
     private String status = "ACTIVE";
 
     @Column(columnDefinition = "NVARCHAR(MAX)")
@@ -67,7 +66,7 @@ public class Product {
     @JoinColumn(name = "category_id")
     private Category category;
 
-    @Column(length = 50, columnDefinition="NVARCHAR(50)")
+    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
     private String classSize;
 
     @CreatedDate
@@ -78,4 +77,3 @@ public class Product {
     @Column(columnDefinition = "datetime2")
     private LocalDateTime updatedAt;
 }
-
