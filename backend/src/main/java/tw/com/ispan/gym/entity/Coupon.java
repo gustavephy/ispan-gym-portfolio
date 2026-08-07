@@ -13,10 +13,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 
 @Entity
-@Table(name = "coupons")
+@Table(name = "coupons", uniqueConstraints = @UniqueConstraint(name = "UX_coupons_code", columnNames = "code"))
 @Data
 @EntityListeners(AuditingEntityListener.class)
 public class Coupon {

@@ -19,6 +19,16 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 
+/**
+ * 團課報名。
+ *
+ * 唯一性約束以篩選索引維護，無法用 @UniqueConstraint 表達
+ * （直接對 (session_id, member_id) 下 unique 會讓取消後無法重新報名）：
+ *
+ * CREATE UNIQUE INDEX UX_gcb_session_member
+ *     ON group_class_bookings(session_id, member_id)
+ *     WHERE status = 'BOOKED';
+ */
 @Entity
 @Table(name = "group_class_bookings")
 @Data
