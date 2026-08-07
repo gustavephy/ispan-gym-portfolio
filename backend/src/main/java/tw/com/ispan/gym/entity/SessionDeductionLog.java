@@ -42,10 +42,10 @@ public class SessionDeductionLog {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    /** 觸發此異動的預約（取消/核銷時有值，購課時為 null） */
+    /** 觸發此異動的私教預約（取消/核銷時有值，購課時為 null） */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reservation_id", nullable = true)
-    private Reservation reservation;
+    @JoinColumn(name = "coach_booking_id", nullable = true)
+    private CoachBooking coachBooking;
 
     /** 事件類型 */
     @Column(nullable = false, length = 30)

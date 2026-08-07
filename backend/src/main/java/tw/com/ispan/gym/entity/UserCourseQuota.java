@@ -72,6 +72,13 @@ public class UserCourseQuota {
     @Column(name = "expiry_date", columnDefinition = "datetime2")
     private LocalDateTime expiryDate;
 
+    /**
+     * 樂觀鎖：book/consume/refund 都是 read-modify-write，
+     * 並發時若無版本控管會造成 lost update，破壞 total = remaining + reserved + used
+     */
+    @Version
+    private Integer version = 0;
+
     // ─── 便利方法 ───────────────────────────────────────────────
 
     /** 訂課：remaining-1, reserved+1 */
