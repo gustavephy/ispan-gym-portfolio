@@ -1,5 +1,7 @@
 package tw.com.ispan.gym.entity;
 
+import tw.com.ispan.gym.user.entity.User;
+
 import java.time.LocalDateTime;
 
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -33,7 +35,7 @@ public class UserCoupon {
 	@JoinColumn(name = "coupon_id", nullable = false)
 	private Coupon coupon;
 	
-	//狀態: UNUSED(未使用)/USED(已使用)/EXPIRED(已過期)
+	//??? UNUSED(?芯蝙??/USED(撌脖蝙??/EXPIRED(撌脤???
 	private String status="UNUSED";
 	
 	@Column(columnDefinition = "datetime2")
@@ -42,3 +44,4 @@ public class UserCoupon {
 	@Column(columnDefinition = "datetime2")
 	private LocalDateTime usedAt;
 }
+

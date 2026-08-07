@@ -2,7 +2,6 @@ package tw.com.ispan.gym.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Locale.Category;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -30,7 +29,7 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    //商品類型（GOODS = 實體商品，COURSE = 教練課程，DESCRIPTION = 教練課程）
+    //??憿?嚗OODS = 撖阡???嚗OURSE = ?毀隤脩?嚗ESCRIPTION = ?毀隤脩?嚗?
     @Column(nullable = false, length = 20)
     private String type = "GOODS";
 
@@ -42,6 +41,9 @@ public class Product {
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
+
+    @Column(nullable = false)
+    private Long stock = 0L;
 
     @Column(nullable = false)
     private Integer sessionsPerUnit = 0;
@@ -76,3 +78,4 @@ public class Product {
     @Column(columnDefinition = "datetime2")
     private LocalDateTime updatedAt;
 }
+

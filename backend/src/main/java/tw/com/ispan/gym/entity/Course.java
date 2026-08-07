@@ -1,5 +1,7 @@
 package tw.com.ispan.gym.entity;
 
+import tw.com.ispan.gym.user.entity.User;
+
 import java.time.LocalDateTime;
 
 import org.springframework.data.annotation.CreatedDate;
@@ -41,15 +43,15 @@ public class Course {
 	@Column(nullable = false, length = 20, columnDefinition="VARCHAR(20)")
 	private String courseType;
 	
-	//提供後端使用
+	//??敺垢雿輻
 	@ManyToOne
 	@JoinColumn(name = "product_id", nullable = false)
 	@JsonIgnore
 	private Product product;
 	
-	//專門提供前端使用
+	//撠????垢雿輻
 	@Column(name = "product_id", insertable = false, updatable = false)
-	private Product productId;
+	private Integer productId;
 	
 	@ManyToOne
 	@JoinColumn(name = "trainer_id", nullable = false)
@@ -78,3 +80,4 @@ public class Course {
 	
 	
 }
+
