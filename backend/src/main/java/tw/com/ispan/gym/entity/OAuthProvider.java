@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.user.entity;
+package tw.com.ispan.gym.entity;
 
 public enum OAuthProvider { GOOGLE }
 

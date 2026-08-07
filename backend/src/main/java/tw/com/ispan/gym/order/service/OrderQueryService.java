@@ -23,13 +23,13 @@ public class OrderQueryService {
         this.orderItems = orderItems;
     }
 
-    public List<OrderSummaryResponse> findMine(Long userId) {
+    public List<OrderSummaryResponse> findMine(Integer userId) {
         return orders.findAllByUserIdOrderByCreatedAtDesc(userId).stream().map(this::summary).toList();
     }
 
-    public OrderDetailResponse findMineById(Long userId, Long orderId) {
+    public OrderDetailResponse findMineById(Integer userId, Long orderId) {
         Order order = orders.findByIdAndUserId(orderId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("找不到指定的訂單"));
+                .orElseThrow(() -> new ResourceNotFoundException("?曆??唳?摰?閮"));
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
                 .map(item -> new OrderItemResponse(item.getId(), item.getProduct().getId(),
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),

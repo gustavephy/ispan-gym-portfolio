@@ -1,6 +1,5 @@
 package tw.com.ispan.gym.entity;
 
-import tw.com.ispan.gym.user.entity.User;
 
 import java.time.LocalDateTime;
 

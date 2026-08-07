@@ -9,9 +9,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Component;
-import tw.com.ispan.gym.user.entity.User;
-import tw.com.ispan.gym.user.entity.UserStatus;
-import tw.com.ispan.gym.user.repository.UserRepository;
+import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.UserStatus;
+import tw.com.ispan.gym.repository.UserRepository;
 
 @Component
 @Profile("!dev")
@@ -23,17 +23,17 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
     }
 
     @Override
-    public Long requireCurrentUserId() {
+    public Integer requireCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()
                 || "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new AuthenticationCredentialsNotFoundException("請先登入後再執行此操作");
+            throw new AuthenticationCredentialsNotFoundException("隢??餃敺??瑁?甇斗?雿?);
         }
 
         User user = resolveUser(authentication)
-                .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("找不到登入資訊對應的會員帳號"));
+                .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("?曆??啁?亥?閮????撣唾?"));
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new DisabledException("此會員帳號目前無法使用");
+            throw new DisabledException("甇斗??∪董??瘜蝙??);
         }
         return user.getId();
     }

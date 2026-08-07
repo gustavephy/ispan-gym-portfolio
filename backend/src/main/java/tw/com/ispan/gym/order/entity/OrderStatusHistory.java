@@ -3,7 +3,7 @@ package tw.com.ispan.gym.order.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.Nationalized;
-import tw.com.ispan.gym.user.entity.User;
+import tw.com.ispan.gym.entity.User;
 
 @Entity
 @Table(name = "order_status_history")

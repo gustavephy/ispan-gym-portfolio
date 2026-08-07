@@ -1,7 +1,7 @@
 package tw.com.ispan.gym.order.entity;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
-import tw.com.ispan.gym.user.entity.User;
+import tw.com.ispan.gym.entity.User;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

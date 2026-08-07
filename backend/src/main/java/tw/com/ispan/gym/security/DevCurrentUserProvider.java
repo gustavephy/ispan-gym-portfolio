@@ -8,14 +8,14 @@ import org.springframework.stereotype.Component;
 @Component
 @Profile("dev")
 public class DevCurrentUserProvider implements CurrentUserProvider {
-    private final Long currentUserId;
+    private final Integer currentUserId;
 
-    public DevCurrentUserProvider(@Value("${app.dev-current-user-id}") Long currentUserId) {
+    public DevCurrentUserProvider(@Value("${app.dev-current-user-id}") Integer currentUserId) {
         this.currentUserId = currentUserId;
     }
 
     @Override
-    public Long requireCurrentUserId() {
+    public Integer requireCurrentUserId() {
         return currentUserId;
     }
 }

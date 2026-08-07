@@ -7,8 +7,8 @@ import tw.com.ispan.gym.cart.repository.CartItemRepository;
 import tw.com.ispan.gym.common.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.entity.Product;
 import tw.com.ispan.gym.product.repository.ProductRepository;
-import tw.com.ispan.gym.user.entity.User;
-import tw.com.ispan.gym.user.repository.UserRepository;
+import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.repository.UserRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -25,7 +25,7 @@ public class CartService {
         this.cartItems = cartItems; this.products = products; this.users = users;
     }
 
-    public CartResponse getCart(Long userId) {
+    public CartResponse getCart(Integer userId) {
         List<CartItemResponse> items = cartItems.findAllByUserIdOrderByCreatedAtAsc(userId)
                 .stream().map(this::toResponse).toList();
         BigDecimal total = items.stream().map(CartItemResponse::subtotal)
@@ -34,12 +34,12 @@ public class CartService {
     }
 
     @Transactional
-    public CartItemResponse addItem(Long userId, AddCartItemRequest request) {
+    public CartItemResponse addItem(Integer userId, AddCartItemRequest request) {
         validateQuantity(request.quantity());
         // Locking the owning user serializes concurrent additions for the same cart and
         // prevents two requests from racing against UX_cart_user_product.
         User user = users.findByIdForUpdate(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("找不到指定的會員"));
+                .orElseThrow(() -> new ResourceNotFoundException("?曆??唳?摰??"));
         Product product = products.findById(request.productId())
                 .orElseThrow(() -> new ProductNotFoundException(request.productId()));
         validateAvailable(product);
@@ -61,7 +61,7 @@ public class CartService {
     }
 
     @Transactional
-    public CartItemResponse updateQuantity(Long userId, Long cartItemId, UpdateCartItemRequest request) {
+    public CartItemResponse updateQuantity(Integer userId, Long cartItemId, UpdateCartItemRequest request) {
         validateQuantity(request.quantity());
         CartItem item = ownedItem(userId, cartItemId);
         validateAvailable(item.getProduct());
@@ -71,16 +71,16 @@ public class CartService {
     }
 
     @Transactional
-    public void removeItem(Long userId, Long cartItemId) {
+    public void removeItem(Integer userId, Long cartItemId) {
         cartItems.delete(ownedItem(userId, cartItemId));
     }
 
     @Transactional
-    public void clearCart(Long userId) {
+    public void clearCart(Integer userId) {
         cartItems.deleteAllByUserId(userId);
     }
 
-    private CartItem ownedItem(Long userId, Long cartItemId) {
+    private CartItem ownedItem(Integer userId, Long cartItemId) {
         CartItem item = cartItems.findById(cartItemId)
                 .orElseThrow(() -> new CartItemNotFoundException(cartItemId));
         if (!item.getUser().getId().equals(userId)) {

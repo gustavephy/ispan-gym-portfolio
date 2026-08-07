@@ -2,7 +2,7 @@ package tw.com.ispan.gym.cart.entity;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
 import tw.com.ispan.gym.entity.Product;
-import tw.com.ispan.gym.user.entity.User;
+import tw.com.ispan.gym.entity.User;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 

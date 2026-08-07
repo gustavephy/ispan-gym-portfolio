@@ -6,9 +6,9 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CartItemRepository extends JpaRepository<CartItem, Long> {
-    List<CartItem> findAllByUserIdOrderByCreatedAtAsc(Long userId);
-    Optional<CartItem> findByIdAndUserId(Long id, Long userId);
-    Optional<CartItem> findByUserIdAndProductId(Long userId, Integer productId);
-    long deleteAllByUserId(Long userId);
+    List<CartItem> findAllByUserIdOrderByCreatedAtAsc(Integer userId);
+    Optional<CartItem> findByIdAndUserId(Long id, Integer userId);
+    Optional<CartItem> findByUserIdAndProductId(Integer userId, Integer productId);
+    long deleteAllByUserId(Integer userId);
 }
 

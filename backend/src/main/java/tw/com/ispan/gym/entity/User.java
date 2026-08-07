@@ -45,8 +45,9 @@ public class User {
 	@Column(name = "phone", length = 20)
 	private String phone;
 
+	@Enumerated(EnumType.STRING)
 	@Column(name = "gender", length = 10)
-	private String gender;
+	private Gender gender;
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "role", length = 20, nullable = false)
@@ -55,8 +56,16 @@ public class User {
 	@Column(name = "password_hash", length = 255)
 	private String passwordHash;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "oauth_provider", length = 20)
+	private OAuthProvider oauthProvider;
+
+	@Column(name = "oauth_sub", length = 255)
+	private String oauthSub;
+
+	@Enumerated(EnumType.STRING)
 	@Column(name = "status", length = 20, nullable = false)
-	private String status = "ACTIVE";
+	private UserStatus status = UserStatus.ACTIVE;
 
 	@Column(name = "avatar_url", length = 500)
 	private String avatarUrl;
