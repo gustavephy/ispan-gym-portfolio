@@ -27,13 +27,13 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()
                 || "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new AuthenticationCredentialsNotFoundException("隢??餃敺??瑁?甇斗?雿?);
+            throw new AuthenticationCredentialsNotFoundException("請先登入後再執行此操作");
         }
 
         User user = resolveUser(authentication)
-                .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("?曆??啁?亥?閮????撣唾?"));
+                .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("找不到登入資訊對應的會員帳號"));
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new DisabledException("甇斗??∪董??瘜蝙??);
+            throw new DisabledException("此會員帳號目前無法使用");
         }
         return user.getId();
     }
