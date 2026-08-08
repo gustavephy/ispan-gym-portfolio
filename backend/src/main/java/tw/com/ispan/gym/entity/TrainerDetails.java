@@ -15,12 +15,13 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Nationalized;
 
 @Entity
-@Table(name = "trainer_details")
+@Table(name = "trainer_details", uniqueConstraints = @UniqueConstraint(name = "UX_trainer_details_user_id", columnNames = "user_id"))
 @Getter
 @Setter
 public class TrainerDetails {
@@ -30,7 +31,7 @@ public class TrainerDetails {
 	private Integer id;
 
 	@OneToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "user_id", nullable = false, unique = true, foreignKey = @ForeignKey(name = "FK_trainer_details_user_id"))
+	@JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "FK_trainer_details_user_id"))
 	private User user;
 
 	@Nationalized

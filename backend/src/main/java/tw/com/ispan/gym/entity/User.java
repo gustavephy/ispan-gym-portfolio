@@ -39,7 +39,7 @@ public class User {
 	@Column(name = "dob")
 	private LocalDate dob;
 
-	@Column(name = "email", length = 100, nullable = false, unique = true)
+	@Column(name = "email", length = 100, nullable = false)
 	private String email;
 
 	@Column(name = "phone", length = 20)
