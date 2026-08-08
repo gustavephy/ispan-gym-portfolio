@@ -27,19 +27,9 @@ public class UserCoupon {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
-<<<<<<< HEAD
-	
-//	@ManyToOne
-//	@JoinColumn(name = "user_id", nullable = false)
-//	private User user;
-	
-=======
-
 	@ManyToOne
 	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
-
->>>>>>> origin/dev
 	@ManyToOne
 	@JoinColumn(name = "coupon_id", nullable = false)
 	private Coupon coupon;

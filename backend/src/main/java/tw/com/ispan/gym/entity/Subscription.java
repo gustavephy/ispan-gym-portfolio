@@ -27,18 +27,6 @@ public class Subscription {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
-<<<<<<< HEAD
-	
-//	@ManyToOne
-//	@JoinColumn(name = "user_id", nullable = false)
-//	private User user;
-//	
-//	@ManyToOne
-//	@JoinColumn(name = "order_id", nullable = false)
-//	private Order order;
-//	
-=======
-
 	@ManyToOne
 	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
@@ -46,8 +34,6 @@ public class Subscription {
 	@ManyToOne
 	@JoinColumn(name = "order_id", nullable = false)
 	private Order order;
-
->>>>>>> origin/dev
 	@Column(nullable = false)
 	private LocalDateTime startDate;
 
