@@ -2,11 +2,6 @@ package tw.com.ispan.gym.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-<<<<<<< HEAD
-import tw.com.ispan.gym.entity.Category;
-=======
->>>>>>> origin/dev
-
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
