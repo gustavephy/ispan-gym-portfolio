@@ -22,41 +22,40 @@ import lombok.Data;
 @Data
 @EntityListeners(AuditingEntityListener.class)
 public class InventoryLog {
-	
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
-	
+
 	@ManyToOne
-	@JoinColumn(name="product_sku_id")
+	@JoinColumn(name = "product_sku_id")
 	private ProductSku productSku;
-	
-	//INCOMING, OUTGOING, ADJUSTMENT
-	@Column(nullable=false, length=20)
-	private String changeType; 
-	
-	@Column(nullable=false)
+
+	@Column(nullable = false, length = 20)
+	private String changeType;
+
+	@Column(nullable = false)
 	private Integer quantity;
-	
-	@Column(length=500, columnDefinition="NVARCHAR(500)")
+
+	@Column(length = 500, columnDefinition = "NVARCHAR(500)")
 	private String description;
-	
-	@Column(name="balance_after")
+
+	@Column(name = "balance_after")
 	private Integer balanceAfter;
-	
-//	@ManyToOne
-//	@JoinColumn(name="ref_order_id")
-//	private Order refOrder;
-//	
-//	@ManyToOne
-//	@JoinColumn(name="operator_id")
-//	private User oprerator;
-//	
+
+	@ManyToOne
+	@JoinColumn(name = "ref_order_id")
+	private Order refOrder;
+
+	@ManyToOne
+	@JoinColumn(name = "operator_id")
+	private User oprerator;
+
 	@CreatedDate
-	@Column(updatable=false,columnDefinition="datetime2")
+	@Column(updatable = false, columnDefinition = "datetime2")
 	private LocalDateTime createdAt;
-	
+
 	@LastModifiedDate
-	@Column(columnDefinition="datetime2")
+	@Column(columnDefinition = "datetime2")
 	private LocalDateTime updatedAt;
 }
