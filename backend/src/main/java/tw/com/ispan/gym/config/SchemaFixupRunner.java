@@ -72,6 +72,16 @@ public class SchemaFixupRunner implements CommandLineRunner {
                     ON orders(user_coupon_id)
                     WHERE user_coupon_id IS NOT NULL
                 """);
+
+        // 同一使用者同一天只能有一筆有效的 InBody 記錄。
+        // 本表採軟刪除，限定 deleted_at IS NULL 才能讓「刪除後重新上傳」成立。
+        // 早期版本以一般 UNIQUE CONSTRAINT 表達（擋不住軟刪除重傳），先清掉。
+        dropConstraintIfExists("inbody_records", "UQ_inbody_user_date");
+        createFilteredUniqueIndex("UX_inbody_user_date", """
+                CREATE UNIQUE INDEX UX_inbody_user_date
+                    ON inbody_records(user_id, update_date)
+                    WHERE deleted_at IS NULL
+                """);
     }
 
     // === 既有資料回填 =========================================================
@@ -196,6 +206,18 @@ public class SchemaFixupRunner implements CommandLineRunner {
         if (rows > 0) {
             log.info("已回填 {}：{} 列", target, rows);
         }
+    }
+
+    private void dropConstraintIfExists(String table, String constraint) {
+        Integer found = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM sys.objects
+                    WHERE name = ? AND parent_object_id = OBJECT_ID(?)
+                """, Integer.class, constraint, table);
+        if (found == null || found == 0) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE " + table + " DROP CONSTRAINT " + constraint);
+        log.info("已移除約束 {}.{}", table, constraint);
     }
 
     private void dropColumnIfExists(String table, String column) {
