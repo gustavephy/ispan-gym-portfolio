@@ -57,13 +57,6 @@ public class User {
 	private String passwordHash;
 
 	@Enumerated(EnumType.STRING)
-	@Column(name = "oauth_provider", length = 20)
-	private OAuthProvider oauthProvider;
-
-	@Column(name = "oauth_sub", length = 255)
-	private String oauthSub;
-
-	@Enumerated(EnumType.STRING)
 	@Column(name = "status", length = 20, nullable = false)
 	private UserStatus status = UserStatus.ACTIVE;
 

@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.security;
 
+import java.util.Locale;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
@@ -7,19 +8,24 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Component;
+import tw.com.ispan.gym.entity.OAuthProvider;
 import tw.com.ispan.gym.entity.User;
 import tw.com.ispan.gym.entity.UserStatus;
+import tw.com.ispan.gym.repository.UserOauthAccountRepository;
 import tw.com.ispan.gym.repository.UserRepository;
 
 @Component
 @Profile("!dev")
 public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
     private final UserRepository users;
+    private final UserOauthAccountRepository oauthAccounts;
 
-    public UnconfiguredCurrentUserProvider(UserRepository users) {
+    public UnconfiguredCurrentUserProvider(UserRepository users, UserOauthAccountRepository oauthAccounts) {
         this.users = users;
+        this.oauthAccounts = oauthAccounts;
     }
 
     @Override
@@ -41,11 +47,8 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
     private Optional<User> resolveUser(Authentication authentication) {
         Object principal = authentication.getPrincipal();
         if (principal instanceof OAuth2User oauth2User) {
-            String subject = oauth2User.getAttribute("sub");
-            if (subject != null && !subject.isBlank()) {
-                Optional<User> user = users.findByOauthSub(subject);
-                if (user.isPresent()) return user;
-            }
+            Optional<User> bound = resolveByProviderBinding(authentication, oauth2User);
+            if (bound.isPresent()) return bound;
             String email = oauth2User.getAttribute("email");
             if (email != null && !email.isBlank()) return users.findByEmailIgnoreCase(email);
         }
@@ -54,5 +57,24 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
         }
         String name = authentication.getName();
         return name == null || name.isBlank() ? Optional.empty() : users.findByEmailIgnoreCase(name);
+    }
+
+    /** 以 (provider, sub) 查 user_oauth_accounts 綁定表；sub 只在同一 provider 內唯一 */
+    private Optional<User> resolveByProviderBinding(Authentication authentication, OAuth2User oauth2User) {
+        if (!(authentication instanceof OAuth2AuthenticationToken token)) {
+            return Optional.empty();
+        }
+        OAuthProvider provider;
+        try {
+            provider = OAuthProvider.valueOf(
+                    token.getAuthorizedClientRegistrationId().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return Optional.empty();
+        }
+        String subject = oauth2User.getAttribute("sub");
+        if (subject == null || subject.isBlank()) {
+            return Optional.empty();
+        }
+        return oauthAccounts.findUserByProviderAndSubject(provider, subject);
     }
 }

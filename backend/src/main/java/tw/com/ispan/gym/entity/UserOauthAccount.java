@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
@@ -32,8 +34,9 @@ public class UserOauthAccount {
 	@JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "FK_user_oauth_accounts_user_id"))
 	private User user;
 
+	@Enumerated(EnumType.STRING)
 	@Column(name = "oauth_provider", length = 20, nullable = false)
-	private String oauthProvider;
+	private OAuthProvider oauthProvider;
 
 	@Column(name = "provider_user_id", length = 255, nullable = false)
 	private String providerUserId;

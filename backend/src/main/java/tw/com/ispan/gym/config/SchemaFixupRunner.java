@@ -37,6 +37,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
     public void run(String... args) {
         createFilteredUniqueIndexes();
         backfillExistingRows();
+        migrateOauthBindingsToAccountTable();
         dropObsoleteColumns();
     }
 
@@ -96,6 +97,30 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 """);
     }
 
+    // === OAuth 綁定回歸 user_oauth_accounts ===================================
+    // users.oauth_provider / oauth_sub 是整併重複 User entity 時混入的第二套
+    // 設計，缺唯一約束。綁定資料遷回原設計的 user_oauth_accounts
+    //（有 UX_user_oauth_accounts_provider 複合唯一約束）後，
+    // 移除 users 上的兩個欄位。
+    // 註：若歷史資料中兩個 user 共用同一組 (provider, sub)，只有第一筆會遷入，
+    // 其餘略過 —— 那本來就是缺唯一約束造成的髒資料，遷移量請看啟動 log。
+
+    private void migrateOauthBindingsToAccountTable() {
+        if (columnExists("users", "oauth_sub")) {
+            backfill("user_oauth_accounts", """
+                    INSERT INTO user_oauth_accounts (user_id, oauth_provider, provider_user_id, created_at)
+                    SELECT u.id, u.oauth_provider, u.oauth_sub, SYSDATETIME()
+                        FROM users u
+                        WHERE u.oauth_sub IS NOT NULL AND u.oauth_provider IS NOT NULL
+                          AND NOT EXISTS (SELECT 1 FROM user_oauth_accounts a
+                                              WHERE a.oauth_provider = u.oauth_provider
+                                                AND a.provider_user_id = u.oauth_sub)
+                    """);
+        }
+        dropColumnIfExists("users", "oauth_provider");
+        dropColumnIfExists("users", "oauth_sub");
+    }
+
     // === 清除已淘汰的欄位 =====================================================
     // orders.coupon_id 已由 orders.user_coupon_id 取代（改指向 user_coupons，
     // 才能標記「這張券用掉了」並保證一張券只用一次）。
@@ -131,14 +156,18 @@ public class SchemaFixupRunner implements CommandLineRunner {
     }
 
     private void dropColumnIfExists(String table, String column) {
-        Integer found = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM sys.columns
-                    WHERE object_id = OBJECT_ID(?) AND name = ?
-                """, Integer.class, table, column);
-        if (found == null || found == 0) {
+        if (!columnExists(table, column)) {
             return;
         }
         jdbc.execute("ALTER TABLE " + table + " DROP COLUMN " + column);
         log.info("已移除淘汰欄位 {}.{}", table, column);
+    }
+
+    private boolean columnExists(String table, String column) {
+        Integer found = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM sys.columns
+                    WHERE object_id = OBJECT_ID(?) AND name = ?
+                """, Integer.class, table, column);
+        return found != null && found > 0;
     }
 }
