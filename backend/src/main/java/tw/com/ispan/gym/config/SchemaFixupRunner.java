@@ -38,6 +38,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         createFilteredUniqueIndexes();
         backfillExistingRows();
         dropObsoleteColumns();
+        dropDuplicateUniqueOnUsersEmail();
     }
 
     // === 篩選唯一索引 =========================================================
@@ -106,6 +107,41 @@ public class SchemaFixupRunner implements CommandLineRunner {
     private void dropObsoleteColumns() {
         dropColumnIfExists("orders", "coupon_id");
         dropColumnIfExists("order_items", "line_amount");
+    }
+
+    // === 清除重複的唯一索引 ===================================================
+    // users.email 曾同時以 @UniqueConstraint(UX_users_email) 與 unique=true
+    // 宣告，Hibernate 因此建了兩個功能相同的唯一約束。unique=true 已自
+    // entity 移除，這裡清掉它先前建出的那個（名稱是 Hibernate 產生的 UK_ 開頭
+    // 雜湊，無法寫死，改由 sys.indexes 動態找出 UX_users_email 以外、
+    // 只含 email 單欄的唯一索引/約束）。
+
+    private void dropDuplicateUniqueOnUsersEmail() {
+        var duplicates = jdbc.queryForList("""
+                SELECT i.name AS name, i.is_unique_constraint AS is_constraint
+                    FROM sys.indexes i
+                    JOIN sys.index_columns ic
+                        ON ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.key_ordinal = 1
+                    JOIN sys.columns c
+                        ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+                    WHERE i.object_id = OBJECT_ID('users')
+                      AND i.is_unique = 1
+                      AND c.name = 'email'
+                      AND i.name <> 'UX_users_email'
+                      AND (SELECT COUNT(*) FROM sys.index_columns k
+                               WHERE k.object_id = i.object_id AND k.index_id = i.index_id
+                                 AND k.key_ordinal >= 1) = 1
+                """);
+        for (var row : duplicates) {
+            String name = (String) row.get("name");
+            boolean isConstraint = Boolean.TRUE.equals(row.get("is_constraint"));
+            if (isConstraint) {
+                jdbc.execute("ALTER TABLE users DROP CONSTRAINT [" + name + "]");
+            } else {
+                jdbc.execute("DROP INDEX [" + name + "] ON users");
+            }
+            log.info("已移除 users.email 的重複唯一索引 {}", name);
+        }
     }
 
     // === 工具方法 =============================================================
