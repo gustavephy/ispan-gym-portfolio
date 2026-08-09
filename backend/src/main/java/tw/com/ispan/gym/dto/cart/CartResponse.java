@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.dto;
+package tw.com.ispan.gym.dto.cart;
 
 import java.math.BigDecimal;
 import java.util.List;

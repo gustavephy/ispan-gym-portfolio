@@ -1,7 +1,7 @@
 package tw.com.ispan.gym.controller;
 
-import tw.com.ispan.gym.dto.OrderDetailResponse;
-import tw.com.ispan.gym.dto.OrderSummaryResponse;
+import tw.com.ispan.gym.dto.order.OrderDetailResponse;
+import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
 import tw.com.ispan.gym.service.OrderQueryService;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import java.util.List;

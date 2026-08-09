@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.dto;
+package tw.com.ispan.gym.dto.order;
 
 import jakarta.validation.constraints.Size;
 
