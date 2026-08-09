@@ -4,9 +4,12 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.Nationalized;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
 @Table(name = "order_items")
+@EntityListeners(AuditingEntityListener.class)
 public class OrderItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -25,10 +28,9 @@ public class OrderItem {
     private BigDecimal priceAtBuy;
     @Column(name = "quantity", nullable = false)
     private Long quantity;
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-    @Column(name = "line_amount", insertable = false, updatable = false, precision = 19, scale = 2)
-    private BigDecimal lineAmount;
 
     protected OrderItem() {}
     public Long getId() { return id; }
@@ -36,6 +38,5 @@ public class OrderItem {
     public String getProductNameAtBuy() { return productNameAtBuy; }
     public BigDecimal getPriceAtBuy() { return priceAtBuy; }
     public Long getQuantity() { return quantity; }
-    public BigDecimal getLineAmount() { return lineAmount; }
 }
 

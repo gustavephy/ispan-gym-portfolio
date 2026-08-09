@@ -99,10 +99,13 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // === 清除已淘汰的欄位 =====================================================
     // orders.coupon_id 已由 orders.user_coupon_id 取代（改指向 user_coupons，
     // 才能標記「這張券用掉了」並保證一張券只用一次）。
+    // order_items.line_amount 原設計是 DB 計算欄位，但從未真正建立，
+    // 一直是 NULL；小計已由查詢端以 price_at_buy * quantity 現算。
     // Hibernate 的 update 模式永遠不會刪欄位，只能自己來。
 
     private void dropObsoleteColumns() {
         dropColumnIfExists("orders", "coupon_id");
+        dropColumnIfExists("order_items", "line_amount");
     }
 
     // === 工具方法 =============================================================

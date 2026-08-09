@@ -5,9 +5,13 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.Nationalized;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
 @Table(name = "payment_transactions")
+@EntityListeners(AuditingEntityListener.class)
 public class PaymentTransaction {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "order_id") private Order order;
@@ -25,8 +29,8 @@ public class PaymentTransaction {
     @Column(name = "simulate_paid", nullable = false) private Boolean simulatePaid;
     @Nationalized @Lob @Column(name = "request_payload") private String requestPayload;
     @Nationalized @Lob @Column(name = "response_payload") private String responsePayload;
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false) private LocalDateTime createdAt;
-    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false) private LocalDateTime updatedAt;
+    @CreatedDate @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
+    @LastModifiedDate @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
     @Column(name = "paid_at") private LocalDateTime paidAt;
     @Version @Column(nullable = false) private Integer version;
     protected PaymentTransaction() {}

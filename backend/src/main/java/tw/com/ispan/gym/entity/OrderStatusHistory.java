@@ -3,9 +3,12 @@ package tw.com.ispan.gym.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.Nationalized;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
 @Table(name = "order_status_history")
+@EntityListeners(AuditingEntityListener.class)
 public class OrderStatusHistory {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "order_id") private Order order;
@@ -14,6 +17,6 @@ public class OrderStatusHistory {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "changed_by_id") private User changedBy;
     @Column(name = "change_source", nullable = false, length = 20) private String changeSource;
     @Nationalized @Column(length = 500) private String note;
-    @Column(name = "changed_at", nullable = false, insertable = false, updatable = false) private LocalDateTime changedAt;
+    @CreatedDate @Column(name = "changed_at", nullable = false, updatable = false) private LocalDateTime changedAt;
     protected OrderStatusHistory() {}
 }
