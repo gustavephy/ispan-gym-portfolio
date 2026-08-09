@@ -40,7 +40,7 @@ public class CoachBooking {
     private User member;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 10)
     private CoachBookingStatus status = CoachBookingStatus.PENDING;
 
     /** 銷課金鑰，會員產生，教練核銷時輸入比對 */

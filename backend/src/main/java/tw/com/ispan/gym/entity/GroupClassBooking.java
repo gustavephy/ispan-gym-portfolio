@@ -48,7 +48,7 @@ public class GroupClassBooking {
     private User member;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 10)
     private GroupClassBookingStatus status = GroupClassBookingStatus.BOOKED;
 
     @CreatedDate

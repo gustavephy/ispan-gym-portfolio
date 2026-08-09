@@ -42,11 +42,11 @@ public class User {
 	@Column(name = "email", length = 100, nullable = false)
 	private String email;
 
-	@Column(name = "phone", length = 20)
+	@Column(name = "phone", length = 10)
 	private String phone;
 
 	@Enumerated(EnumType.STRING)
-	@Column(name = "gender", length = 10)
+	@Column(name = "gender", length = 5)
 	private Gender gender;
 
 	@Enumerated(EnumType.STRING)
@@ -57,7 +57,7 @@ public class User {
 	private String passwordHash;
 
 	@Enumerated(EnumType.STRING)
-	@Column(name = "status", length = 20, nullable = false)
+	@Column(name = "status", length = 10, nullable = false)
 	private UserStatus status = UserStatus.ACTIVE;
 
 	@Column(name = "avatar_url", length = 500)

@@ -41,7 +41,7 @@ public class Subscription {
 	@Column(nullable = false)
 	private LocalDateTime endDate;
 
-	@Column(nullable = false)
+	@Column(nullable = false, length = 10)
 	private String status = "ACTIVE";
 
 	@CreatedDate

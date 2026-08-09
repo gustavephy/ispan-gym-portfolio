@@ -46,7 +46,7 @@ public class GroupClassSession {
     private LocalDateTime endAt;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 10)
     private GroupClassSessionStatus status = GroupClassSessionStatus.SCHEDULED;
 
     /** 本場次可容納人數。建立時由 Course.maxCapacity 帶入，之後可依實際教室調整 */

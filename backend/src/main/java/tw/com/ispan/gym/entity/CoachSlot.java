@@ -54,7 +54,7 @@ public class CoachSlot {
     private LocalDateTime endAt;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 10)
     private SlotStatus status = SlotStatus.AVAILABLE;
 
     @Version

@@ -25,7 +25,7 @@ public class Order extends TaipeiTimestampEntity {
     @Column(name = "trade_no", length = 20)
     private String tradeNo;
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 10)
     private OrderStatus status;
     @Column(name = "paid_at")
     private LocalDateTime paidAt;

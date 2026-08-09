@@ -35,11 +35,42 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        narrowColumnLengths();
         createFilteredUniqueIndexes();
         backfillExistingRows();
         migrateOauthBindingsToAccountTable();
         dropObsoleteColumns();
         dropDuplicateUniqueIndexes();
+    }
+
+    // === 欄位長度收斂 =========================================================
+    // 狀態類欄位值域封閉,長度收斂為 10;gender 有 OTHER 兜底,收為 5;
+    // phone 依台灣門號格式收為 10。分類類欄位(role、oauth_provider、
+    // products.type)值域會隨業務擴充,保留 20 不動。
+    // ddl-auto 不會縮既有欄位,必須自己 ALTER;縮之前檢查既有資料長度,
+    // 超過目標寬度就略過並留警告,絕不截斷資料。
+    // coach_slots.status / group_class_bookings.status 被篩選唯一索引的
+    // WHERE 條件引用,需要縮時先卸索引,由後續 createFilteredUniqueIndexes
+    // 重建 —— 因此本方法必須排在建索引之前執行。
+
+    private void narrowColumnLengths() {
+        if (varcharWiderThan("coach_slots", "status", 10)) {
+            dropIndexIfExists("coach_slots", "UX_coach_slots_trainer_start");
+        }
+        if (varcharWiderThan("group_class_bookings", "status", 10)) {
+            dropIndexIfExists("group_class_bookings", "UX_gcb_session_member");
+        }
+
+        narrowVarchar("users", "gender", 5);
+        narrowVarchar("users", "phone", 10);
+        narrowVarchar("users", "status", 10);
+        narrowVarchar("coach_slots", "status", 10);
+        narrowVarchar("coach_bookings", "status", 10);
+        narrowVarchar("group_class_sessions", "status", 10);
+        narrowVarchar("group_class_bookings", "status", 10);
+        narrowVarchar("orders", "status", 10);
+        narrowVarchar("user_coupons", "status", 10);
+        narrowVarchar("subscription", "status", 10);
     }
 
     // === 篩選唯一索引 =========================================================
@@ -206,6 +237,46 @@ public class SchemaFixupRunner implements CommandLineRunner {
         if (rows > 0) {
             log.info("已回填 {}：{} 列", target, rows);
         }
+    }
+
+    private boolean varcharWiderThan(String table, String column, int length) {
+        Integer wider = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM sys.columns c
+                    JOIN sys.types t ON t.user_type_id = c.user_type_id
+                    WHERE c.object_id = OBJECT_ID(?) AND c.name = ?
+                      AND t.name = 'varchar' AND c.max_length > ?
+                """, Integer.class, table, column, length);
+        return wider != null && wider > 0;
+    }
+
+    private void narrowVarchar(String table, String column, int length) {
+        if (!varcharWiderThan(table, column, length)) {
+            return;
+        }
+        Integer maxLen = jdbc.queryForObject(
+                "SELECT MAX(LEN(" + column + ")) FROM " + table, Integer.class);
+        if (maxLen != null && maxLen > length) {
+            log.warn("{}.{} 既有資料最長 {} 字元,超過目標寬度 {},略過縮欄", table, column, maxLen, length);
+            return;
+        }
+        Boolean nullable = jdbc.queryForObject("""
+                SELECT is_nullable FROM sys.columns
+                    WHERE object_id = OBJECT_ID(?) AND name = ?
+                """, Boolean.class, table, column);
+        jdbc.execute("ALTER TABLE " + table + " ALTER COLUMN " + column
+                + " varchar(" + length + ") " + (Boolean.TRUE.equals(nullable) ? "NULL" : "NOT NULL"));
+        log.info("已將 {}.{} 縮為 varchar({})", table, column, length);
+    }
+
+    private void dropIndexIfExists(String table, String indexName) {
+        Integer found = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.indexes WHERE name = ? AND object_id = OBJECT_ID(?)",
+                Integer.class, indexName, table);
+        if (found == null || found == 0) {
+            return;
+        }
+        jdbc.execute("DROP INDEX [" + indexName + "] ON " + table);
+        log.info("已暫卸索引 {}(欄位縮寬後由後續步驟重建)", indexName);
     }
 
     private void dropConstraintIfExists(String table, String constraint) {
