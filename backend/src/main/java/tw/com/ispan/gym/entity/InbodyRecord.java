@@ -13,7 +13,6 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import lombok.AllArgsConstructor;
@@ -26,14 +25,20 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/**
+ * 「同使用者同天不得重複上傳」由篩選唯一索引維護（SchemaFixupRunner）：
+ *
+ * CREATE UNIQUE INDEX UX_inbody_user_date
+ *     ON inbody_records(user_id, update_date)
+ *     WHERE deleted_at IS NULL;
+ *
+ * 不能用一般 @UniqueConstraint —— 本表採軟刪除，普通唯一約束
+ * 會連已刪除的列一起算，使用者刪掉當天記錄後就無法重新上傳。
+ */
 @Entity
 @Table(
         name = "inbody_records",
-        indexes = @Index(name = "IX_inbody_user_id", columnList = "user_id"),
-        uniqueConstraints = @UniqueConstraint(
-                name = "UQ_inbody_user_date",
-                columnNames = {"user_id", "update_date"}
-        )
+        indexes = @Index(name = "IX_inbody_user_id", columnList = "user_id")
 )
 @Getter
 @Setter

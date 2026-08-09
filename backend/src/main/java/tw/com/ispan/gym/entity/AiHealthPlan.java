@@ -2,6 +2,7 @@ package tw.com.ispan.gym.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -11,6 +12,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
@@ -21,6 +24,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
 public class AiHealthPlan {
 
     @Id
@@ -48,7 +52,8 @@ public class AiHealthPlan {
     @Column(name = "pdf_url", length = 500)
     private String pdfUrl;
 
-    /** 由 SQL Server DEFAULT SYSDATETIME() 產生。 */
-    @Column(name = "created_at", insertable = false, updatable = false)
+    /** 由 Spring Auditing（台北時區）於寫入時填入；schema 無 DB DEFAULT 可依賴。 */
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 }

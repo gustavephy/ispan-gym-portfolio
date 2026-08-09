@@ -2,6 +2,7 @@ package tw.com.ispan.gym.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -13,6 +14,9 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Nationalized;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
@@ -23,6 +27,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
 public class ChatMessage {
 
     @Id
@@ -39,6 +44,8 @@ public class ChatMessage {
     @Column(name = "receiver_id", nullable = false)
     private Integer receiverId;
 
+    /** 中文內容必須 NVARCHAR；缺 @Nationalized 會建成 varchar，中文全變問號 */
+    @Nationalized
     @Column(name = "message_content", nullable = false, length = 500)
     private String messageContent;
 
@@ -49,8 +56,9 @@ public class ChatMessage {
     @Column(name = "read_at")
     private LocalDateTime readAt;
 
-    /** 由 SQL Server DEFAULT SYSDATETIME() 產生。 */
-    @Column(name = "created_at", insertable = false, updatable = false)
+    /** 由 Spring Auditing（台北時區）於寫入時填入；schema 無 DB DEFAULT 可依賴。 */
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     public void markAsRead() {
