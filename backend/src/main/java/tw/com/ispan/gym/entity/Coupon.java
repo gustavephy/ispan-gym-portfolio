@@ -14,11 +14,20 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import tw.com.ispan.gym.enums.CouponStatus;
+import tw.com.ispan.gym.enums.CouponType;
+import tw.com.ispan.gym.enums.CouponApplicableType;
 
 @Entity
 @Table(name = "coupons", uniqueConstraints = @UniqueConstraint(name = "UX_coupons_code", columnNames = "code"))
-@Data
+@Getter
+@Setter
+@ToString
 @EntityListeners(AuditingEntityListener.class)
 public class Coupon {
 	@Id
@@ -35,7 +44,8 @@ public class Coupon {
 	private String code;
 	
 	@Column(nullable = false, length = 20, columnDefinition="VARCHAR(20)")
-	private String type = "CASH";
+	@Enumerated(EnumType.STRING)
+	private CouponType type = CouponType.CASH;
 	
 	@Column(nullable = false, precision = 10, scale = 2)
 	private BigDecimal value;
@@ -43,11 +53,13 @@ public class Coupon {
 	@Column(nullable = false, precision = 10, scale = 2)
 	private BigDecimal minSpend = BigDecimal.ZERO;
 	
+	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20, columnDefinition="VARCHAR(20)")
-	private String status = "ACTIVE";
+	private CouponStatus status = CouponStatus.ACTIVE;
 	
 	@Column(nullable = false, length = 20, columnDefinition="VARCHAR(20)")
-	private String applicableType = "ALL";
+	@Enumerated(EnumType.STRING)
+	private CouponApplicableType applicableType = CouponApplicableType.ALL;
 	
 	@Column(nullable = false)
 	private Integer totalQuantity = 0;

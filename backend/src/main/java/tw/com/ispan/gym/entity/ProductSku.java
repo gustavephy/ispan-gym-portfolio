@@ -7,10 +7,13 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 import java.math.BigDecimal;
 
@@ -18,7 +21,9 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
 @Table(name = "product_skus")
-@Data
+@Getter
+@Setter
+@ToString(exclude = {"product"})
 @EntityListeners(AuditingEntityListener.class)
 public class ProductSku {
 
@@ -26,7 +31,7 @@ public class ProductSku {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @ManyToOne
+    @ManyToOne(fetch=FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
@@ -55,7 +60,10 @@ public class ProductSku {
 
     @Column(length = 500, columnDefinition="NVARCHAR(500)")
     private String skuImageUrl;
-
+    
+    @Column(columnDefinition="NVARCHAR(2000)")
+    private String specifications;
+    
     @Column(nullable = false)
     private Integer stock = 0;
     

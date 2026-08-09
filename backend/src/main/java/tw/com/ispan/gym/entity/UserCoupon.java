@@ -12,13 +12,21 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import tw.com.ispan.gym.enums.UserCouponStatus;
 
 @Entity
 @Table(name = "user_coupons")
-@Data
+@Getter
+@Setter
+@ToString(exclude = {"user","coupon"})
 @EntityListeners(AuditingEntityListener.class)
 public class UserCoupon {
 
@@ -26,16 +34,17 @@ public class UserCoupon {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
 
-	@ManyToOne
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
 
-	@ManyToOne
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "coupon_id", nullable = false)
 	private Coupon coupon;
 
+	@Enumerated(EnumType.STRING)
 	@Column(length = 10)
-	private String status = "UNUSED";
+	private UserCouponStatus status = UserCouponStatus.UNUSED;
 
 	@Column(columnDefinition = "datetime2")
 	private LocalDateTime claimedAt;

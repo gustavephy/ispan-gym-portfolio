@@ -10,6 +10,7 @@ import tw.com.ispan.gym.dto.UpdateCartItemRequest;
 import tw.com.ispan.gym.entity.CartItem;
 import tw.com.ispan.gym.entity.Product;
 import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.enums.ProductType;
 import tw.com.ispan.gym.exception.CartItemNotFoundException;
 import tw.com.ispan.gym.exception.ForbiddenCartAccessException;
 import tw.com.ispan.gym.exception.InsufficientStockException;
@@ -112,7 +113,7 @@ public class CartService {
     }
 
     private void validateStock(Product product, long requestedQuantity) {
-        if ("GOODS".equals(product.getType()) && requestedQuantity > product.getStock()) {
+        if (ProductType.GOODS.equals(product.getType()) && requestedQuantity > product.getStock()) {
             throw new InsufficientStockException(product.getId(), requestedQuantity, product.getStock());
         }
     }
@@ -120,7 +121,7 @@ public class CartService {
     private CartItemResponse toResponse(CartItem item) {
         Product product = item.getProduct();
         BigDecimal subtotal = product.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
-        return new CartItemResponse(item.getId(), product.getId(), product.getType(), product.getName(),
+        return new CartItemResponse(item.getId(), product.getId(), product.getType().name(), product.getName(),
                 product.getImageUrl(), product.getPrice(), item.getQuantity(), subtotal);
     }
 }

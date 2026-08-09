@@ -16,13 +16,21 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import tw.com.ispan.gym.enums.CourseStatus;
 
 @Entity
 @Table(name = "courses")
-@Data
+@Getter
+@Setter
+@ToString(exclude = {"product","trainer"})
 @EntityListeners(AuditingEntityListener.class)
 public class Course {
 
@@ -42,7 +50,7 @@ public class Course {
 	@Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
 	private String courseType;
 
-	@ManyToOne
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "product_id", nullable = false)
 	@JsonIgnore
 	private Product product;
@@ -50,7 +58,7 @@ public class Course {
 	@Column(name = "product_id", insertable = false, updatable = false)
 	private Integer productId;
 
-	@ManyToOne
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "trainer_id", nullable = false)
 	@JsonIgnore
 	private User trainer;
@@ -65,7 +73,8 @@ public class Course {
 	private Boolean isOpenForSubscription = false;
 
 	@Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
-	private String status = "ACTIVE";
+	@Enumerated(EnumType.STRING)
+	private CourseStatus status = CourseStatus.ACTIVE;
 
 	@CreatedDate
 	@Column(columnDefinition = "datetime2")

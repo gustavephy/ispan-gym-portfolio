@@ -6,11 +6,18 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import tw.com.ispan.gym.enums.CategoryStatus;
 
-@Data
 @Entity
 @Table(name = "categories")
+@Getter
+@Setter
+@ToString
 public class Category {
 
 	@Id
@@ -29,6 +36,7 @@ public class Category {
 	@Column(nullable = false)
 	private Integer sortOrder = 0;
 
+	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
-	private String status = "ACTIVE";
+	private CategoryStatus status = CategoryStatus.ACTIVE;
 }
