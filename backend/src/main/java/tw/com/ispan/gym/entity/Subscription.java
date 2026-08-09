@@ -13,27 +13,36 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.Data;
-
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import tw.com.ispan.gym.enums.SubscriptionStatus;
 
 @Entity
 @Table(name = "subscription")
-@Data
+@Getter
+@Setter
+@ToString(exclude = {"user","order"})
 @EntityListeners(AuditingEntityListener.class)
 public class Subscription {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
-	@ManyToOne
+
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
 
-	@ManyToOne
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "order_id", nullable = false)
 	private Order order;
+	
 	@Column(nullable = false)
 	private LocalDateTime startDate;
 
@@ -41,7 +50,8 @@ public class Subscription {
 	private LocalDateTime endDate;
 
 	@Column(nullable = false)
-	private String status = "ACTIVE";
+	@Enumerated(EnumType.STRING)
+	private SubscriptionStatus status = SubscriptionStatus.ACTIVE;
 
 	@CreatedDate
 	@Column(updatable = false, columnDefinition = "datetime2")

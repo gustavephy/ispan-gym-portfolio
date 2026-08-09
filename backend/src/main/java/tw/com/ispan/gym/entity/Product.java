@@ -13,14 +13,23 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import tw.com.ispan.gym.enums.ProductStatus;
+import tw.com.ispan.gym.enums.ProductType;
 
 @Entity
 @Table(name = "products")
-@Data
+@Getter
+@Setter
+@ToString(exclude = {"category"})
 @EntityListeners(AuditingEntityListener.class)
 public class Product {
 
@@ -29,7 +38,8 @@ public class Product {
     private Integer id;
 
     @Column(nullable = false, length = 20)
-    private String type = "GOODS";
+    @Enumerated(EnumType.STRING)
+    private ProductType type = ProductType.GOODS;
 
     @Column(nullable = false, length = 50, columnDefinition = "NVARCHAR(50)")
     private String name;
@@ -50,7 +60,8 @@ public class Product {
     private Integer version = 0;
 
     @Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
-    private String status = "ACTIVE";
+    @Enumerated(EnumType.STRING)
+    private ProductStatus status = ProductStatus.ACTIVE;
 
     @Column(columnDefinition = "NVARCHAR(MAX)")
     private String imageUrl;
@@ -61,7 +72,7 @@ public class Product {
     @Column(nullable = false, columnDefinition = "bit default 0")
     private Boolean isOpenForSubscription = false;
 
-    @ManyToOne
+    @ManyToOne(fetch=FetchType.LAZY)
     @JoinColumn(name = "category_id")
     private Category category;
 

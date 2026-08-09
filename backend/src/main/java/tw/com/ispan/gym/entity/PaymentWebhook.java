@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.payment.entity;
+package tw.com.ispan.gym.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;

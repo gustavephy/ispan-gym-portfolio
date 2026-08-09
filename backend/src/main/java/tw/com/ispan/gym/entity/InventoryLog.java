@@ -13,13 +13,18 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 @Entity
 @Table(name = "inventory_log")
-@Data
+@Getter
+@Setter
+@ToString(exclude={"productSku","refOrder","operator"})
 @EntityListeners(AuditingEntityListener.class)
 public class InventoryLog {
 
@@ -27,7 +32,7 @@ public class InventoryLog {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
 
-	@ManyToOne
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "product_sku_id")
 	private ProductSku productSku;
 
@@ -43,13 +48,13 @@ public class InventoryLog {
 	@Column(name = "balance_after")
 	private Integer balanceAfter;
 
-	@ManyToOne
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "ref_order_id")
 	private Order refOrder;
 
-	@ManyToOne
+	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "operator_id")
-	private User oprerator;
+	private User operator;
 
 	@CreatedDate
 	@Column(updatable = false, columnDefinition = "datetime2")

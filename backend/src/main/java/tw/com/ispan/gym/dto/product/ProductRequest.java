@@ -1,0 +1,42 @@
+package tw.com.ispan.gym.dto.product;
+
+import java.math.BigDecimal;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+public class ProductRequest {
+	@NotBlank(message="商品名稱不能為空")
+	private String name;
+	
+	private String decription;
+	
+	@NotBlank(message="商品類型不得為空")
+	private String type;
+	
+	@NotNull(message="價格不得為空")
+	@DecimalMin(value="0.01",message="價格必須大於 0")
+	private BigDecimal price;
+	
+	@NotNull(message="庫存不得為空")
+	@Min(value=0,message="庫存不得為負數")
+	private Integer stock;
+	
+    private String imageUrl;
+
+    private Integer categoryId;
+
+    private String classSize;
+
+    private String brand;
+
+    private Double weight;
+
+    private String specifications;
+
+    private Boolean isTrial = false;
+
+    private Integer sessionsPerUnit = 1;
+}
