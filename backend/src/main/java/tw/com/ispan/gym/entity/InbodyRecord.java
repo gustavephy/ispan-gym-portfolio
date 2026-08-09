@@ -5,9 +5,15 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import lombok.AllArgsConstructor;
@@ -21,7 +27,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "inbody_records")
+@Table(
+        name = "inbody_records",
+        indexes = @Index(name = "IX_inbody_user_id", columnList = "user_id"),
+        uniqueConstraints = @UniqueConstraint(
+                name = "UQ_inbody_user_date",
+                columnNames = {"user_id", "update_date"}
+        )
+)
 @Getter
 @Setter
 @Builder
@@ -35,6 +48,12 @@ public class InbodyRecord {
 
     @Column(name = "user_id", nullable = false)
     private Integer userId;
+
+    /** 僅用於建立資料庫 FK；寫入時以 userId 維持既有 API 契約。 */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false,
+            foreignKey = @ForeignKey(name = "FK_inbody_user"))
+    private User user;
 
     @Column(name = "update_date", nullable = false)
     private LocalDate updateDate;
