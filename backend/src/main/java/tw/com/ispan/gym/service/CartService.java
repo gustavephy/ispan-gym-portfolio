@@ -1,15 +1,14 @@
 package tw.com.ispan.gym.service;
 
-import tw.com.ispan.gym.dto.*;
-import tw.com.ispan.gym.exception.*;
 import tw.com.ispan.gym.common.exception.ResourceNotFoundException;
-import tw.com.ispan.gym.dto.AddCartItemRequest;
-import tw.com.ispan.gym.dto.CartItemResponse;
-import tw.com.ispan.gym.dto.CartResponse;
-import tw.com.ispan.gym.dto.UpdateCartItemRequest;
+import tw.com.ispan.gym.dto.cart.AddCartItemRequest;
+import tw.com.ispan.gym.dto.cart.CartItemResponse;
+import tw.com.ispan.gym.dto.cart.CartResponse;
+import tw.com.ispan.gym.dto.cart.UpdateCartItemRequest;
 import tw.com.ispan.gym.entity.CartItem;
 import tw.com.ispan.gym.entity.Product;
 import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.enums.ProductStatus;
 import tw.com.ispan.gym.enums.ProductType;
 import tw.com.ispan.gym.exception.CartItemNotFoundException;
 import tw.com.ispan.gym.exception.ForbiddenCartAccessException;
@@ -107,7 +106,7 @@ public class CartService {
     }
 
     private void validateAvailable(Product product) {
-        if (!"ACTIVE".equals(product.getStatus())) {
+        if (!ProductStatus.ACTIVE.equals(product.getStatus())) {
             throw new ProductUnavailableException(product.getId());
         }
     }
