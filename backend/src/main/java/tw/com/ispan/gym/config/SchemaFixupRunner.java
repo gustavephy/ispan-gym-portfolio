@@ -38,7 +38,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         createFilteredUniqueIndexes();
         backfillExistingRows();
         dropObsoleteColumns();
-        dropDuplicateUniqueOnUsersEmail();
+        dropDuplicateUniqueIndexes();
     }
 
     // === 篩選唯一索引 =========================================================
@@ -110,13 +110,20 @@ public class SchemaFixupRunner implements CommandLineRunner {
     }
 
     // === 清除重複的唯一索引 ===================================================
-    // users.email 曾同時以 @UniqueConstraint(UX_users_email) 與 unique=true
-    // 宣告，Hibernate 因此建了兩個功能相同的唯一約束。unique=true 已自
+    // 這些欄位曾同時以具名 @UniqueConstraint 與 unique=true 宣告，
+    // Hibernate 因此各建了兩個功能相同的唯一約束。unique=true 已自
     // entity 移除，這裡清掉它先前建出的那個（名稱是 Hibernate 產生的 UK_ 開頭
-    // 雜湊，無法寫死，改由 sys.indexes 動態找出 UX_users_email 以外、
-    // 只含 email 單欄的唯一索引/約束）。
+    // 雜湊，無法寫死，改由 sys.indexes 動態找出具名約束以外、
+    // 只含該單欄的唯一索引/約束）。
 
-    private void dropDuplicateUniqueOnUsersEmail() {
+    private void dropDuplicateUniqueIndexes() {
+        dropDuplicateUnique("users", "email", "UX_users_email");
+        dropDuplicateUnique("email_verifications", "token", "UX_email_verifications_token");
+        dropDuplicateUnique("password_reset_tokens", "token", "UX_password_reset_tokens_token");
+        dropDuplicateUnique("trainer_details", "user_id", "UX_trainer_details_user_id");
+    }
+
+    private void dropDuplicateUnique(String table, String column, String keepName) {
         var duplicates = jdbc.queryForList("""
                 SELECT i.name AS name, i.is_unique_constraint AS is_constraint
                     FROM sys.indexes i
@@ -124,23 +131,23 @@ public class SchemaFixupRunner implements CommandLineRunner {
                         ON ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.key_ordinal = 1
                     JOIN sys.columns c
                         ON c.object_id = ic.object_id AND c.column_id = ic.column_id
-                    WHERE i.object_id = OBJECT_ID('users')
+                    WHERE i.object_id = OBJECT_ID(?)
                       AND i.is_unique = 1
-                      AND c.name = 'email'
-                      AND i.name <> 'UX_users_email'
+                      AND c.name = ?
+                      AND i.name <> ?
                       AND (SELECT COUNT(*) FROM sys.index_columns k
                                WHERE k.object_id = i.object_id AND k.index_id = i.index_id
                                  AND k.key_ordinal >= 1) = 1
-                """);
+                """, table, column, keepName);
         for (var row : duplicates) {
             String name = (String) row.get("name");
             boolean isConstraint = Boolean.TRUE.equals(row.get("is_constraint"));
             if (isConstraint) {
-                jdbc.execute("ALTER TABLE users DROP CONSTRAINT [" + name + "]");
+                jdbc.execute("ALTER TABLE " + table + " DROP CONSTRAINT [" + name + "]");
             } else {
-                jdbc.execute("DROP INDEX [" + name + "] ON users");
+                jdbc.execute("DROP INDEX [" + name + "] ON " + table);
             }
-            log.info("已移除 users.email 的重複唯一索引 {}", name);
+            log.info("已移除 {}.{} 的重複唯一索引 {}", table, column, name);
         }
     }
 
