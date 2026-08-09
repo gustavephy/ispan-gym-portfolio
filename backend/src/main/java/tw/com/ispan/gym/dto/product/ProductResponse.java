@@ -50,7 +50,7 @@ public class ProductResponse {
     
     public static ProductResponse from(Product product, java.util.List<Course> trainerCourses) {
         ProductResponse dto = from(product);
-        if ("COURSE".equals(product.getType().name()) && trainerCourses != null) {
+        if (ProductType.COURSE.equals(product.getType()) && trainerCourses != null) {
             trainerCourses.stream()
                 // 多重安全比對防線：ID 比對或名稱模糊比對
                 .filter(tc -> (tc.getProductId() != null && tc.getProductId().equals(product.getId()))
