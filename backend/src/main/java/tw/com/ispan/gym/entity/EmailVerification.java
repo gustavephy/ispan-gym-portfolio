@@ -14,11 +14,12 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "email_verifications")
+@Table(name = "email_verifications", uniqueConstraints = @UniqueConstraint(name = "UX_email_verifications_token", columnNames = "token"))
 @Getter
 @Setter
 public class EmailVerification {
@@ -31,7 +32,7 @@ public class EmailVerification {
 	@JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "FK_email_verifications_user_id"))
 	private User user;
 
-	@Column(name = "token", nullable = false, unique = true)
+	@Column(name = "token", nullable = false)
 	private UUID token;
 
 	@Column(name = "expires_at", nullable = false)
