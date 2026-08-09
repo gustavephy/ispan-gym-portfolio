@@ -10,10 +10,11 @@ import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
 import tw.com.ispan.gym.entity.Coupon;
+import tw.com.ispan.gym.enums.CouponStatus;
 
 public interface CouponRepository extends JpaRepository<Coupon, Integer> {
 	Optional<Coupon> findByCode(String code);
-	List<Coupon> findByStatus(String status);
+	List<Coupon> findByStatus(CouponStatus status);
 	
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("SELECT c FROM Coupon c WHERE c.id =:id")

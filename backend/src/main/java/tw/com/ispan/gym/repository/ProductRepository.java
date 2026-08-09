@@ -9,16 +9,18 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import tw.com.ispan.gym.entity.Product;
+import tw.com.ispan.gym.enums.ProductStatus;
+import tw.com.ispan.gym.enums.ProductType;
 
 public interface ProductRepository extends JpaRepository<Product, Integer> {
-    Page<Product> findByStatus(String status, Pageable pageable);
-    
-    Page<Product> findByTypeAndStatus(String type,String status,Pageable pageable);
-    
-    List<Product> findByStatus(String status);
-    
-    List<Product> findByTypeAndStatus(String type,String status);
-    
+    Page<Product> findByStatus(ProductStatus status, Pageable pageable);
+
+    Page<Product> findByTypeAndStatus(ProductType type, ProductStatus status, Pageable pageable);
+
+    List<Product> findByStatus(ProductStatus status);
+
+    List<Product> findByTypeAndStatus(ProductType type, ProductStatus status);
+
     @Query("SELECT DISTINCT p FROM Product p " +
            "LEFT JOIN ProductSku s ON s.product.id = p.id " +
            "WHERE p.status = :status " +
@@ -29,10 +31,9 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
            "OR CAST(s.weight AS string) LIKE %:keyword% OR s.material LIKE %:keyword% OR s.origin LIKE %:keyword% " +
            "OR s.color LIKE %:keyword% OR s.brand LIKE %:keyword%)")
     Page<Product> findProductWithFilters(
-    	@Param("type") String type,
-    	@Param("status") String status,
+    	@Param("type") ProductType type,
+    	@Param("status") ProductStatus status,
     	@Param("categoryId") Integer categoryId,
     	@Param("keyword") String keyword,
     	Pageable pageable);
 }
-
