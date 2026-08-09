@@ -1,5 +1,4 @@
 package tw.com.ispan.gym.entity;
-import tw.com.ispan.gym.enums.OrderStatus;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
