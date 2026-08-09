@@ -11,9 +11,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Component;
-import tw.com.ispan.gym.entity.OAuthProvider;
+import tw.com.ispan.gym.enums.OAuthProvider;
 import tw.com.ispan.gym.entity.User;
-import tw.com.ispan.gym.entity.UserStatus;
+import tw.com.ispan.gym.enums.UserStatus;
 import tw.com.ispan.gym.repository.UserOauthAccountRepository;
 import tw.com.ispan.gym.repository.UserRepository;
 

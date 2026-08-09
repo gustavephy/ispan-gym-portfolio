@@ -1,4 +1,5 @@
 package tw.com.ispan.gym.entity;
+import tw.com.ispan.gym.enums.GroupClassSessionStatus;
 
 import java.time.LocalDateTime;
 

@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.dto;
 
-import tw.com.ispan.gym.entity.OrderStatus;
+import tw.com.ispan.gym.enums.OrderStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 

@@ -1,4 +1,5 @@
 package tw.com.ispan.gym.entity;
+import tw.com.ispan.gym.enums.OrderStatus;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
 import jakarta.persistence.*;
