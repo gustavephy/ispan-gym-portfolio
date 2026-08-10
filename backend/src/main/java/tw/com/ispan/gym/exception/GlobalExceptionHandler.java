@@ -15,44 +15,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(ProductNotFoundException.class)
-    ResponseEntity<ApiErrorResponse> productNotFound(ProductNotFoundException ex) {
-        return response(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", ex.getMessage());
-    }
-
-    @ExceptionHandler(CartItemNotFoundException.class)
-    ResponseEntity<ApiErrorResponse> cartItemNotFound(CartItemNotFoundException ex) {
-        return response(HttpStatus.NOT_FOUND, "CART_ITEM_NOT_FOUND", ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidQuantityException.class)
-    ResponseEntity<ApiErrorResponse> invalidQuantity(InvalidQuantityException ex) {
-        return response(HttpStatus.BAD_REQUEST, "INVALID_QUANTITY", ex.getMessage());
-    }
-
-    @ExceptionHandler(ProductUnavailableException.class)
-    ResponseEntity<ApiErrorResponse> productUnavailable(ProductUnavailableException ex) {
-        return response(HttpStatus.BAD_REQUEST, "PRODUCT_UNAVAILABLE", ex.getMessage());
-    }
-
-    @ExceptionHandler(InsufficientStockException.class)
-    ResponseEntity<ApiErrorResponse> insufficientStock(InsufficientStockException ex) {
-        return response(HttpStatus.CONFLICT, "INSUFFICIENT_STOCK", ex.getMessage());
-    }
-
-    @ExceptionHandler(ForbiddenCartAccessException.class)
-    ResponseEntity<ApiErrorResponse> forbiddenCartAccess(ForbiddenCartAccessException ex) {
-        return response(HttpStatus.FORBIDDEN, "FORBIDDEN_CART_ACCESS", ex.getMessage());
-    }
-
-    @ExceptionHandler(ResourceNotFoundException.class)
-    ResponseEntity<ApiErrorResponse> notFound(ResourceNotFoundException ex) {
-        return response(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage());
-    }
-
-    @ExceptionHandler(BusinessRuleException.class)
-    ResponseEntity<ApiErrorResponse> businessRule(BusinessRuleException ex) {
-        return response(HttpStatus.CONFLICT, "BUSINESS_RULE_VIOLATION", ex.getMessage());
+    /**
+     * 專案自訂的例外一律走這裡，狀態碼與錯誤代碼由例外自己攜帶。
+     * 新增 ApiException 子類時不需要再回頭修改本類別。
+     */
+    @ExceptionHandler(ApiException.class)
+    ResponseEntity<ApiErrorResponse> apiException(ApiException ex) {
+        return response(ex.getStatus(), ex.getCode(), ex.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

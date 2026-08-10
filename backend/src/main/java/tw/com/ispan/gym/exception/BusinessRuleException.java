@@ -1,6 +1,9 @@
 package tw.com.ispan.gym.exception;
 
-public class BusinessRuleException extends RuntimeException {
-    public BusinessRuleException(String message) { super(message); }
-}
+import org.springframework.http.HttpStatus;
 
+public class BusinessRuleException extends ApiException {
+    public BusinessRuleException(String message) {
+        super(HttpStatus.CONFLICT, "BUSINESS_RULE_VIOLATION", message);
+    }
+}
