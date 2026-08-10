@@ -29,7 +29,7 @@ public class OrderQueryService {
 
     public OrderDetailResponse findMineById(Integer userId, Long orderId) {
         Order order = orders.findByIdAndUserId(orderId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("?曆??唳?摰?閮"));
+                .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
                 .map(item -> new OrderItemResponse(item.getId(), item.getProduct().getId(),
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
