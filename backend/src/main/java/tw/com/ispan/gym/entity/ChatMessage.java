@@ -66,6 +66,13 @@ public class ChatMessage {
         readAt = LocalDateTime.now();
     }
 
+    /**
+     * 這裡刻意保留 IllegalStateException 而非改用 BusinessRuleException：
+     * @PrePersist 拋出的例外會被 Hibernate 包成 PersistenceException 再往上傳，
+     * GlobalExceptionHandler 收到的並非原始型別，換型別也不會變成 409。
+     * 且下列三項本質是輸入驗證（應為 400），正確做法是在接上 controller 時
+     * 移到 DTO 的 @NotNull／service 層驗證，而非留在 entity callback。
+     */
     @PrePersist
     @PreUpdate
     private void synchronizeRoomId() {

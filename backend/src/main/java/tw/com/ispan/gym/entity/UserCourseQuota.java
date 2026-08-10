@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
+import tw.com.ispan.gym.exception.BusinessRuleException;
 
 /**
  * 會員課程包額度
@@ -84,7 +85,7 @@ public class UserCourseQuota {
     /** 訂課：remaining-1, reserved+1 */
     public void book() {
         if (this.remainingCourse <= 0)
-            throw new IllegalStateException("課程剩餘額度不足");
+            throw new BusinessRuleException("課程剩餘額度不足");
         this.remainingCourse--;
         this.reservedCourse++;
     }
@@ -92,7 +93,7 @@ public class UserCourseQuota {
     /** 核銷/遲取消：reserved-1, used+1（已消耗，不退還） */
     public void consume() {
         if (this.reservedCourse <= 0)
-            throw new IllegalStateException("無預約中的堂數可消耗");
+            throw new BusinessRuleException("無預約中的堂數可消耗");
         this.reservedCourse--;
         this.usedCourse++;
     }
@@ -100,7 +101,7 @@ public class UserCourseQuota {
     /** 準時取消（≥72h）：reserved-1, remaining+1（退還） */
     public void refund() {
         if (this.reservedCourse <= 0)
-            throw new IllegalStateException("無預約中的堂數可退還");
+            throw new BusinessRuleException("無預約中的堂數可退還");
         this.reservedCourse--;
         this.remainingCourse++;
     }

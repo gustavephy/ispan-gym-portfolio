@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.entity;
 import tw.com.ispan.gym.enums.GroupClassSessionStatus;
+import tw.com.ispan.gym.exception.BusinessRuleException;
 
 import java.time.LocalDateTime;
 
@@ -74,16 +75,16 @@ public class GroupClassSession {
     /** 報名：bookedCount+1。額滿或場次已取消則拒絕 */
     public void book() {
         if (status != GroupClassSessionStatus.SCHEDULED)
-            throw new IllegalStateException("此場次已取消，無法報名");
+            throw new BusinessRuleException("此場次已取消，無法報名");
         if (bookedCount >= capacity)
-            throw new IllegalStateException("此場次已額滿");
+            throw new BusinessRuleException("此場次已額滿");
         this.bookedCount++;
     }
 
     /** 取消報名：bookedCount-1 */
     public void cancelBooking() {
         if (bookedCount <= 0)
-            throw new IllegalStateException("此場次沒有可取消的報名");
+            throw new BusinessRuleException("此場次沒有可取消的報名");
         this.bookedCount--;
     }
 
