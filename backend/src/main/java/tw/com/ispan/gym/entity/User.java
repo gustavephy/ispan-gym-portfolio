@@ -70,9 +70,7 @@ public class User {
 	@Column(name = "emergency_contact", length = 50)
 	private String emergencyContact;
 
-	@Column(name = "emergency_phone", length = 20)
-	private String emergencyPhone;
-
+	@Column(name = "emergency_phone", leng
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
@@ -83,7 +81,9 @@ public class User {
 	protected void onCreate() {
 		createdAt = LocalDateTime.now();
 		updatedAt = createdAt;
-	}
+	}th = 20)
+	private String emergencyPhone;
+
 
 	@PreUpdate
 	protected void onUpdate() {
