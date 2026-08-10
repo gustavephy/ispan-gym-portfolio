@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tw.com.ispan.gym.common.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.OrderItemResponse;
 import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
@@ -29,7 +29,7 @@ public class OrderQueryService {
 
     public OrderDetailResponse findMineById(Integer userId, Long orderId) {
         Order order = orders.findByIdAndUserId(orderId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("?曆??唳?摰?閮"));
+                .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
                 .map(item -> new OrderItemResponse(item.getId(), item.getProduct().getId(),
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),

@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.service;
 
-import tw.com.ispan.gym.common.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.dto.cart.AddCartItemRequest;
 import tw.com.ispan.gym.dto.cart.CartItemResponse;
 import tw.com.ispan.gym.dto.cart.CartResponse;
@@ -49,7 +49,7 @@ public class CartService {
         // Locking the owning user serializes concurrent additions for the same cart and
         // prevents two requests from racing against UX_cart_user_product.
         User user = users.findByIdForUpdate(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("?曆??唳?摰??"));
+                .orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
         Product product = products.findById(request.productId())
                 .orElseThrow(() -> new ProductNotFoundException(request.productId()));
         validateAvailable(product);

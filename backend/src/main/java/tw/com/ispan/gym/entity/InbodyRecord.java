@@ -96,6 +96,11 @@ public class InbodyRecord {
         deletedAt = LocalDateTime.now();
     }
 
+    /**
+     * 同 ChatMessage：@PrePersist 的例外會被 Hibernate 包裝，改用
+     * BusinessRuleException 也無法讓 GlobalExceptionHandler 正確辨識，
+     * 故維持原樣，待接上 controller 時改以 DTO 驗證處理。
+     */
     @PrePersist
     @PreUpdate
     private void validateMeasurement() {
