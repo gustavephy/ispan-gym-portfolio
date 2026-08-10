@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -62,6 +63,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthenticationException.class)
     ResponseEntity<ApiErrorResponse> unauthenticated(AuthenticationException ex) {
         return response(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", ex.getMessage());
+    }
+
+    /**
+     * 方法層級授權失敗（@PreAuthorize 等）。若不單獨列出會被下方的兜底接走，
+     * 導致本該是 403 的回應變成 500。
+     * 注意：filter 層的授權失敗（如 SecurityConfig 的 /api/admin/**）不會經過這裡，
+     * 需另外設定 AccessDeniedHandler 才能統一格式。
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ApiErrorResponse> accessDenied(AccessDeniedException ex) {
+        return response(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "沒有權限執行此操作");
     }
 
     /**
