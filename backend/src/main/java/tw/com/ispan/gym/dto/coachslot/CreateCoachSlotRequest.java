@@ -2,6 +2,7 @@ package tw.com.ispan.gym.dto.coachslot;
 
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -15,4 +16,9 @@ public class CreateCoachSlotRequest {
     @NotNull(message = "結束時間不可為空")
     @Future(message = "結束時間必須是未來時間")
     private LocalDateTime endAt;
+
+    @AssertTrue(message = "結束時間必須晚於開始時間")
+    private boolean isEndAfterStart() {
+        return startAt == null || endAt == null || endAt.isAfter(startAt);
+    }
 }

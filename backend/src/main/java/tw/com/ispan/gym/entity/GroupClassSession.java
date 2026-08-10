@@ -1,4 +1,6 @@
 package tw.com.ispan.gym.entity;
+
+import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
 import tw.com.ispan.gym.enums.GroupClassSessionStatus;
 
 import java.time.LocalDateTime;
@@ -22,12 +24,13 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 @Entity
 @Table(name = "group_class_sessions")
 @Data
-@EntityListeners(AuditingEntityListener.class)
-public class GroupClassSession {
+@EqualsAndHashCode(callSuper = false)
+public class GroupClassSession extends TaipeiTimestampEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -60,14 +63,6 @@ public class GroupClassSession {
 
     @Version
     private Integer version = 0;
-
-    @CreatedDate
-    @Column(updatable = false, columnDefinition = "datetime2")
-    private LocalDateTime createdAt;
-
-    @LastModifiedDate
-    @Column(columnDefinition = "datetime2")
-    private LocalDateTime updatedAt;
 
     // ─── 便利方法 ───────────────────────────────────────────────
 

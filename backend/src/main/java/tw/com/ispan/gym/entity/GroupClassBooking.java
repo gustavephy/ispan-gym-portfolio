@@ -1,14 +1,11 @@
 package tw.com.ispan.gym.entity;
+
+import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
 import tw.com.ispan.gym.enums.GroupClassBookingStatus;
-
-import java.time.LocalDateTime;
-
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EntityListeners;
+
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -19,6 +16,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
  * 團課報名。
@@ -27,14 +25,14 @@ import lombok.Data;
  * （直接對 (session_id, member_id) 下 unique 會讓取消後無法重新報名）：
  *
  * CREATE UNIQUE INDEX UX_gcb_session_member
- *     ON group_class_bookings(session_id, member_id)
- *     WHERE status = 'BOOKED';
+ * ON group_class_bookings(session_id, member_id)
+ * WHERE status = 'BOOKED';
  */
 @Entity
 @Table(name = "group_class_bookings")
 @Data
-@EntityListeners(AuditingEntityListener.class)
-public class GroupClassBooking {
+@EqualsAndHashCode(callSuper = false)
+public class GroupClassBooking extends TaipeiTimestampEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -51,8 +49,4 @@ public class GroupClassBooking {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private GroupClassBookingStatus status = GroupClassBookingStatus.BOOKED;
-
-    @CreatedDate
-    @Column(updatable = false, columnDefinition = "datetime2")
-    private LocalDateTime createdAt;
 }

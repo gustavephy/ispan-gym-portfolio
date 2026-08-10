@@ -2,6 +2,7 @@ package tw.com.ispan.gym.common.exception;
 
 import tw.com.ispan.gym.exception.CartItemNotFoundException;
 import tw.com.ispan.gym.exception.ForbiddenCartAccessException;
+import tw.com.ispan.gym.exception.ForbiddenSlotAccessException;
 import tw.com.ispan.gym.exception.InsufficientStockException;
 import tw.com.ispan.gym.exception.InvalidQuantityException;
 import tw.com.ispan.gym.exception.ProductNotFoundException;
@@ -70,5 +71,9 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ApiErrorResponse> response(HttpStatus status, String code, String message) {
         return ResponseEntity.status(status).body(new ApiErrorResponse(code, message, LocalDateTime.now()));
     }
-}
 
+    @ExceptionHandler(ForbiddenSlotAccessException.class)
+    ResponseEntity<ApiErrorResponse> forbiddenSlotAccess(ForbiddenSlotAccessException ex) {
+        return response(HttpStatus.FORBIDDEN, "FORBIDDEN_SLOT_ACCESS", ex.getMessage());
+    }
+}
