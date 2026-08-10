@@ -19,7 +19,6 @@ import tw.com.ispan.gym.dto.coachslot.CreateCoachSlotRequest;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.CoachSlotService;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/trainer")

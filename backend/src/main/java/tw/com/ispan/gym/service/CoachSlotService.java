@@ -15,8 +15,8 @@ import tw.com.ispan.gym.entity.CoachSlot;
 import tw.com.ispan.gym.enums.SlotStatus;
 import tw.com.ispan.gym.exception.ForbiddenSlotAccessException;
 import tw.com.ispan.gym.entity.User;
-import tw.com.ispan.gym.common.exception.BusinessRuleException;
-import tw.com.ispan.gym.common.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.exception.BusinessRuleException;
+import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.CoachSlotRepository;
 import tw.com.ispan.gym.repository.UserRepository;
 
