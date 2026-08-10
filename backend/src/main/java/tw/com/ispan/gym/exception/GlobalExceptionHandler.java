@@ -1,6 +1,8 @@
 package tw.com.ispan.gym.exception;
 
 import java.time.LocalDateTime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticationException;
@@ -10,6 +12,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(ProductNotFoundException.class)
     ResponseEntity<ApiErrorResponse> productNotFound(ProductNotFoundException ex) {
         return response(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", ex.getMessage());
@@ -58,6 +62,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthenticationException.class)
     ResponseEntity<ApiErrorResponse> unauthenticated(AuthenticationException ex) {
         return response(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", ex.getMessage());
+    }
+
+    /**
+     * 兜底：上面沒列舉到的例外都會走這裡，確保前端永遠收到相同的錯誤格式。
+     * 例外細節只寫進 log，回應固定訊息以免洩漏系統內部資訊。
+     */
+    @ExceptionHandler(Exception.class)
+    ResponseEntity<ApiErrorResponse> unexpected(Exception ex) {
+        log.error("未預期的錯誤", ex);
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "系統發生錯誤，請稍後再試");
     }
 
     private ResponseEntity<ApiErrorResponse> response(HttpStatus status, String code, String message) {
