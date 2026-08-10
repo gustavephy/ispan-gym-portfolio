@@ -54,6 +54,9 @@ class JwtSecuritySmokeTest {
         ProbeController.class,
         JwtUtil.class,
         JwtAuthFilter.class,
+        ApiErrorWriter.class,
+        JsonAuthenticationEntryPoint.class,
+        JsonAccessDeniedHandler.class,
         tw.com.ispan.gym.config.SecurityConfig.class
     })
     static class TestApp {}
