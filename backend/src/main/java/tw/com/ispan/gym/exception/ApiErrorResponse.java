@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.common.exception;
+package tw.com.ispan.gym.exception;
 
 import java.time.LocalDateTime;
 

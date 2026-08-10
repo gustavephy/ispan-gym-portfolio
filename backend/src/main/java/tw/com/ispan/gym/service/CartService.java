@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.service;
 
-import tw.com.ispan.gym.common.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.dto.cart.AddCartItemRequest;
 import tw.com.ispan.gym.dto.cart.CartItemResponse;
 import tw.com.ispan.gym.dto.cart.CartResponse;

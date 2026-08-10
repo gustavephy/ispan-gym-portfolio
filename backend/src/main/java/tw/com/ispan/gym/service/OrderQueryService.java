@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tw.com.ispan.gym.common.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.OrderItemResponse;
 import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
