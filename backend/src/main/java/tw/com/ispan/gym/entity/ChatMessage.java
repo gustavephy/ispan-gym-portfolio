@@ -1,18 +1,10 @@
 package tw.com.ispan.gym.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.*;
+import org.hibernate.annotations.Nationalized;
 
 import java.time.LocalDateTime;
 
@@ -25,20 +17,43 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class ChatMessage {
 
+    /**
+     * 對話對象只分員工／AI，一律指向 employee_id（不使用 trainer_id）。
+     * trainer 表只是教練專業檔案的延伸資料，不是登入或訊息收發的身份基礎。
+     */
+    public enum ChatCounterpartType {
+        EMPLOYEE, AI
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    /** 由 synchronizeRoomId() 依兩端使用者 ID 產生。 */
+    @NotNull
+    @Column(name = "member_id", nullable = false)
+    private Integer memberId;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "counterpart_type", nullable = false, length = 20)
+    private ChatCounterpartType counterpartType;
+
+    /** 僅 counterpartType=EMPLOYEE 時有值；AI 時必須為 null。 */
+    @Column(name = "employee_id")
+    private Integer employeeId;
+
+    /** true=這則是學員傳的；false=對方（員工/AI）傳的。不限制誰先開口。 */
+    @Builder.Default
+    @Column(name = "sender_is_member", nullable = false)
+    private boolean senderIsMember = true;
+
+    /** 由 syncRoomIdAndValidate() 自動組出，不開放外部直接指定。 */
     @Column(name = "room_id", nullable = false, length = 64)
     private String roomId;
 
-    @Column(name = "sender_id", nullable = false)
-    private Integer senderId;
-
-    @Column(name = "receiver_id", nullable = false)
-    private Integer receiverId;
-
+    /** 中文內容必須 NVARCHAR，缺 @Nationalized 會建成 varchar，中文全變問號。 */
+    @NotBlank
+    @Nationalized
     @Column(name = "message_content", nullable = false, length = 500)
     private String messageContent;
 
@@ -49,31 +64,56 @@ public class ChatMessage {
     @Column(name = "read_at")
     private LocalDateTime readAt;
 
-    /** 由 SQL Server DEFAULT SYSDATETIME() 產生。 */
-    @Column(name = "created_at", insertable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * ★ Service 層權限守則（Entity 不負責身份驗證，僅列於此提醒）：
+     *   - 學員只能操作自己 memberId 底下的對話
+     *   - 員工只能操作自己 employeeId 底下的對話
+     *   - 只有系統（AiAdvisorService）可寫入 AI 回覆
+     *   - 不可標記非自己收到的訊息為已讀
+     */
     public void markAsRead() {
-        read = true;
-        readAt = LocalDateTime.now();
+        this.read = true;
+        this.readAt = LocalDateTime.now();
     }
 
     @PrePersist
-    @PreUpdate
-    private void synchronizeRoomId() {
-        if (senderId == null || receiverId == null) {
-            throw new IllegalStateException("發送者與接收者不可為空");
+    private void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
         }
-        if (senderId.equals(receiverId)) {
-            throw new IllegalStateException("不可傳送訊息給自己");
+        syncRoomIdAndValidate();
+    }
+
+    @PreUpdate
+    private void onUpdate() {
+        syncRoomIdAndValidate();
+    }
+
+    private void syncRoomIdAndValidate() {
+        if (memberId == null) {
+            throw new IllegalStateException("member_id 不可為空");
         }
         if (messageContent == null || messageContent.trim().isEmpty()) {
             throw new IllegalStateException("訊息內容不可為空白");
         }
+        if (counterpartType == null) {
+            throw new IllegalStateException("counterpart_type 不可為空");
+        }
 
-        int smallerId = Math.min(senderId, receiverId);
-        int largerId = Math.max(senderId, receiverId);
-        roomId = smallerId + "_" + largerId;
+        if (counterpartType == ChatCounterpartType.EMPLOYEE) {
+            if (employeeId == null) {
+                throw new IllegalStateException("counterpart_type=EMPLOYEE 時 employee_id 不可為空");
+            }
+            roomId = "member_" + memberId + "_employee_" + employeeId;
+        } else {
+            if (employeeId != null) {
+                throw new IllegalStateException("counterpart_type=AI 時 employee_id 必須為空");
+            }
+            roomId = "member_" + memberId + "_ai";
+        }
 
         if (!read) {
             readAt = null;
