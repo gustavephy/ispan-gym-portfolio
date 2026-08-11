@@ -10,6 +10,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -43,6 +44,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ApiErrorResponse> accessDenied(AccessDeniedException ex) {
         return response(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "沒有權限執行此操作");
+    }
+
+    /**
+     * 路徑打錯字、對應不到任何 API 時 Spring 會當成找不到的靜態資源丟出這個例外。
+     * 若不單獨列出會被下方的兜底接走，導致本該是 404 的回應變成 500。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    ResponseEntity<ApiErrorResponse> noResourceFound(NoResourceFoundException ex) {
+        return response(HttpStatus.NOT_FOUND, "NOT_FOUND", "找不到此 API 路徑");
     }
 
     /**

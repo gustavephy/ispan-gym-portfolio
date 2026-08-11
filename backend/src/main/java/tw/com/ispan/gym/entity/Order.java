@@ -2,14 +2,18 @@ package tw.com.ispan.gym.entity;
 import tw.com.ispan.gym.enums.OrderStatus;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
+import tw.com.ispan.gym.exception.BusinessRuleException;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "orders", uniqueConstraints = @UniqueConstraint(name = "UQ_orders_mtn", columnNames = "merchant_trade_no"))
 public class Order extends TaipeiTimestampEntity {
+    private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
@@ -66,13 +70,63 @@ public class Order extends TaipeiTimestampEntity {
     private Integer version;
 
     protected Order() {}
+
+    public Order(User user, String merchantTradeNo, String orderNo, BigDecimal originalAmount,
+            BigDecimal discountAmount, BigDecimal subtotalAmount, BigDecimal totalAmount,
+            UserCoupon userCoupon, String receiverName, String receiverPhone, String receiverAddress,
+            String receiverEmail) {
+        this.user = user;
+        this.merchantTradeNo = merchantTradeNo;
+        this.orderNo = orderNo;
+        this.originalAmount = originalAmount;
+        this.discountAmount = discountAmount;
+        this.subtotalAmount = subtotalAmount;
+        this.totalAmount = totalAmount;
+        this.userCoupon = userCoupon;
+        this.receiverName = receiverName;
+        this.receiverPhone = receiverPhone;
+        this.receiverAddress = receiverAddress;
+        this.receiverEmail = receiverEmail;
+        this.status = OrderStatus.UNPAID;
+        this.paymentStatus = OrderStatus.UNPAID.name();
+        this.currency = "TWD";
+    }
+
+    /**
+     * 目前只允許取消未付款的訂單；已付款後的取消需搭配退款流程，待金流串接後再開放。
+     * payment_status 不隨之變動——這筆訂單從未發生過金流事件，維持 UNPAID 即可；
+     * CANCELLED 不是資料庫 CK_orders_payment_status 允許的值。
+     */
+    public void cancel(String reason) {
+        if (status != OrderStatus.UNPAID) {
+            throw new BusinessRuleException("只有未付款的訂單可以取消");
+        }
+        this.status = OrderStatus.CANCELLED;
+        this.cancelledAt = LocalDateTime.now(TAIPEI);
+        this.cancelReason = reason;
+    }
+
     public Long getId() { return id; }
+    public User getUser() { return user; }
     public BigDecimal getTotalAmount() { return totalAmount; }
+    public String getPaymentMethod() { return paymentMethod; }
     public String getMerchantTradeNo() { return merchantTradeNo; }
+    public String getTradeNo() { return tradeNo; }
     public OrderStatus getStatus() { return status; }
+    public LocalDateTime getPaidAt() { return paidAt; }
+    public String getReceiverName() { return receiverName; }
+    public String getReceiverPhone() { return receiverPhone; }
+    public String getReceiverAddress() { return receiverAddress; }
+    public String getReceiverEmail() { return receiverEmail; }
     public UserCoupon getUserCoupon() { return userCoupon; }
+    public BigDecimal getOriginalAmount() { return originalAmount; }
+    public BigDecimal getDiscountAmount() { return discountAmount; }
     public String getOrderNo() { return orderNo; }
     public String getPaymentStatus() { return paymentStatus; }
+    public String getCurrency() { return currency; }
     public BigDecimal getSubtotalAmount() { return subtotalAmount; }
+    public LocalDateTime getCancelledAt() { return cancelledAt; }
+    public String getCancelReason() { return cancelReason; }
+    public Integer getVersion() { return version; }
 }
 
