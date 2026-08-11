@@ -27,7 +27,7 @@ import tw.com.ispan.gym.enums.SubscriptionStatus;
 @Table(name = "subscription")
 @Getter
 @Setter
-@ToString(exclude = {"member","order","subscriptionPlan"})
+@ToString(exclude = {"user","order","subscriptionPlan"})
 @EntityListeners(AuditingEntityListener.class)
 public class Subscription {
 
@@ -35,10 +35,9 @@ public class Subscription {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
 
-	// TODO: 大重構時改為 Member entity；先沿用 User 避免兩套身分表並存
 	@ManyToOne(fetch=FetchType.LAZY)
-	@JoinColumn(name = "member_id", nullable = false)
-	private User member;
+	@JoinColumn(name = "user_id", nullable = false)
+	private User user;
 
 	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "order_id", nullable = false)
