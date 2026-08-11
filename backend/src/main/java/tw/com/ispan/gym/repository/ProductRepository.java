@@ -32,7 +32,9 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
            "WHERE p.status = :status " +
            "AND (:type IS NULL OR p.type = :type) " +
            "AND (:categoryId IS NULL OR p.category.id = :categoryId) " +
-           "AND (:keyword IS NULL OR p.name LIKE %:keyword% OR p.description LIKE %:keyword%)")
+           "AND (:keyword IS NULL OR p.name LIKE %:keyword% OR p.description LIKE %:keyword% " +
+           "OR p.brand LIKE %:keyword% OR p.flavor LIKE %:keyword% OR p.size LIKE %:keyword% " +
+           "OR p.material LIKE %:keyword% OR p.origin LIKE %:keyword% OR p.color LIKE %:keyword%)")
     Page<Product> findProductWithFilters(
     	@Param("type") ProductType type,
     	@Param("status") ProductStatus status,

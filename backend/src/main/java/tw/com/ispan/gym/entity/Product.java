@@ -66,15 +66,28 @@ public class Product {
     @Column(columnDefinition = "NVARCHAR(MAX)")
     private String imageUrl;
 
-    @Column(nullable = false, columnDefinition = "bit default 0")
-    private Boolean isTrial = false;
+    // SKU 層移除後，規格欄位攤平至商品主檔
+    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    private String brand;
 
-    @Column(nullable = false, columnDefinition = "bit default 0")
-    private Boolean isOpenForSubscription = false;
+    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    private String flavor;
 
     @Column(length = 50, columnDefinition = "NVARCHAR(50)")
-    private String classSize;
-    
+    private String size;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal weight;
+
+    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    private String material;
+
+    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    private String origin;
+
+    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
+    private String color;
+
     @ManyToOne(fetch=FetchType.LAZY)
     @JoinColumn(name = "category_id")
     private ProductCategory category;

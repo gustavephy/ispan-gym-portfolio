@@ -6,7 +6,6 @@ import java.util.List;
 import lombok.Data;
 import tw.com.ispan.gym.entity.Course;
 import tw.com.ispan.gym.entity.Product;
-import tw.com.ispan.gym.enums.ProductStatus;
 import tw.com.ispan.gym.enums.ProductType;
 
 @Data
@@ -22,17 +21,20 @@ public class ProductResponse {
     private Integer categoryId;
     private String categoryName;
     private LocalDateTime createdAt;
-    private String classSize;
     private String trainerName;
-    private Boolean isTrial;
     private Integer sessionsPerUnit;
     private String brand;
-    private Double weight;
-    private String specifications;
-    
+    private String flavor;
+    private String size;
+    private BigDecimal weight;
+    private String material;
+    private String origin;
+    private String color;
+
     public static ProductResponse from(Product product) {
         ProductResponse dto = new ProductResponse();
         dto.setId(product.getId());
+        dto.setType(product.getType().name());
         dto.setName(product.getName());
         dto.setDescription(product.getDescription());
         dto.setPrice(product.getPrice());
@@ -42,11 +44,18 @@ public class ProductResponse {
         dto.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
         dto.setCategoryName(product.getCategory() != null ? product.getCategory().getName() : null);
         dto.setCreatedAt(product.getCreatedAt());
-        dto.setClassSize(product.getClassSize());
+        dto.setSessionsPerUnit(product.getSessionsPerUnit());
+        dto.setBrand(product.getBrand());
+        dto.setFlavor(product.getFlavor());
+        dto.setSize(product.getSize());
+        dto.setWeight(product.getWeight());
+        dto.setMaterial(product.getMaterial());
+        dto.setOrigin(product.getOrigin());
+        dto.setColor(product.getColor());
         return dto;
     }
-    
-    public static ProductResponse from(Product product, java.util.List<Course> trainerCourses) {
+
+    public static ProductResponse from(Product product, List<Course> trainerCourses) {
         ProductResponse dto = from(product);
         if (ProductType.COURSE.equals(product.getType()) && trainerCourses != null) {
             trainerCourses.stream()
