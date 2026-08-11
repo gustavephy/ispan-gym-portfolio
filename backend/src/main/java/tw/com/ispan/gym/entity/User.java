@@ -45,6 +45,7 @@ public class User {
 	@Column(name = "email", length = 100, nullable = false)
 	private String email;
 
+	// 註冊表單的電話必填由 RegisterRequest 驗證把關；DB 保持可空（OAuth 帳號無電話）
 	@Column(name = "phone", length = 10)
 	private String phone;
 
