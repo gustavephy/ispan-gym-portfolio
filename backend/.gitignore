@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### 本地設計文件 ###
+docs/
