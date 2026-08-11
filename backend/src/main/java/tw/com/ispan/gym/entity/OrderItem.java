@@ -33,7 +33,17 @@ public class OrderItem {
     private LocalDateTime createdAt;
 
     protected OrderItem() {}
+
+    public OrderItem(Order order, Product product, String productNameAtBuy, BigDecimal priceAtBuy, Long quantity) {
+        this.order = order;
+        this.product = product;
+        this.productNameAtBuy = productNameAtBuy;
+        this.priceAtBuy = priceAtBuy;
+        this.quantity = quantity;
+    }
+
     public Long getId() { return id; }
+    public Order getOrder() { return order; }
     public Product getProduct() { return product; }
     public String getProductNameAtBuy() { return productNameAtBuy; }
     public BigDecimal getPriceAtBuy() { return priceAtBuy; }

@@ -19,4 +19,14 @@ public class OrderStatusHistory {
     @Nationalized @Column(length = 500) private String note;
     @CreatedDate @Column(name = "changed_at", nullable = false, updatable = false) private LocalDateTime changedAt;
     protected OrderStatusHistory() {}
+
+    public OrderStatusHistory(Order order, String fromStatus, String toStatus, User changedBy, String changeSource,
+            String note) {
+        this.order = order;
+        this.fromStatus = fromStatus;
+        this.toStatus = toStatus;
+        this.changedBy = changedBy;
+        this.changeSource = changeSource;
+        this.note = note;
+    }
 }
