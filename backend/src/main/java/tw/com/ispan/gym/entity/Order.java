@@ -40,7 +40,7 @@ public class Order extends TaipeiTimestampEntity {
     /** 本筆訂單消耗掉的那一張已領取優惠券（券種可由 userCoupon.coupon 取得） */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_coupon_id", foreignKey = @ForeignKey(name = "FK_orders_user_coupon"))
-    private UserCoupon userCoupon;
+    private MemberCoupon userCoupon;
     @Column(name = "original_amount", precision = 10, scale = 2)
     private BigDecimal originalAmount;
     @Column(name = "discount_amount", nullable = false, precision = 10, scale = 2)
@@ -69,7 +69,7 @@ public class Order extends TaipeiTimestampEntity {
     public BigDecimal getTotalAmount() { return totalAmount; }
     public String getMerchantTradeNo() { return merchantTradeNo; }
     public OrderStatus getStatus() { return status; }
-    public UserCoupon getUserCoupon() { return userCoupon; }
+    public MemberCoupon getUserCoupon() { return userCoupon; }
     public String getOrderNo() { return orderNo; }
     public String getPaymentStatus() { return paymentStatus; }
     public BigDecimal getSubtotalAmount() { return subtotalAmount; }

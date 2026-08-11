@@ -8,13 +8,14 @@ import lombok.Data;
 import tw.com.ispan.gym.entity.Coupon;
 import tw.com.ispan.gym.enums.CouponApplicableType;
 import tw.com.ispan.gym.enums.CouponStatus;
+import tw.com.ispan.gym.enums.CouponType;
 
 @Data
 public class CouponResponse {
     private Integer id;
     private String code;
     private String name;
-    private String type;
+    private CouponType type;
     private BigDecimal value;
     private BigDecimal minSpend;
     private Integer totalQuantity;
@@ -30,7 +31,7 @@ public class CouponResponse {
         dto.setId(coupon.getId());
         dto.setCode(coupon.getCode());
         dto.setName(coupon.getName());
-        dto.setType(coupon.getType() != null ? coupon.getType().name() : null);
+        dto.setType(coupon.getType());
         dto.setValue(coupon.getValue());
         dto.setMinSpend(coupon.getMinSpend());
         dto.setTotalQuantity(coupon.getTotalQuantity());

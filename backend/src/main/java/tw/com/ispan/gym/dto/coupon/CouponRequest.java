@@ -7,8 +7,11 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 import tw.com.ispan.gym.enums.CouponApplicableType;
+import tw.com.ispan.gym.enums.CouponType;
 
+@Data
 public class CouponRequest {
 
     @NotBlank(message = "優惠券代碼不得為空")
@@ -18,7 +21,7 @@ public class CouponRequest {
     private String name;
 
     @NotBlank(message = "優惠券類型不得為空")
-    private String type; // CASH 或 PERCENT
+    private CouponType type;
 
     @NotNull(message = "折抵值不得為空")
     @DecimalMin(value = "0.01", message = "折抵值必須大於 0")
