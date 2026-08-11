@@ -30,7 +30,8 @@ public class InventoryLog {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Integer id;
+	@Column(name = "inventory_log_id")
+	private Integer inventoryLogId;
 
 	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "product_id")

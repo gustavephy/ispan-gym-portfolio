@@ -8,5 +8,5 @@ import tw.com.ispan.gym.entity.Course;
 
 public interface CourseRepository extends JpaRepository<Course, Integer> {
 //	List<Course> findByTrainerId(Integer trainerId);
-//	List<Course> findByStatus(String status);
+//	List<Course> findByStatus(CourseStatus status);
 }

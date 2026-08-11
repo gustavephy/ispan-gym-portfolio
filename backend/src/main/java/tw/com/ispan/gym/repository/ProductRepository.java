@@ -9,28 +9,28 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import tw.com.ispan.gym.entity.Product;
+import tw.com.ispan.gym.enums.ProductStatus;
+import tw.com.ispan.gym.enums.ProductType;
 
 public interface ProductRepository extends JpaRepository<Product, Integer> {
-    Page<Product> findByStatus(String status, Pageable pageable);
+    Page<Product> findByStatus(ProductStatus status, Pageable pageable);
     
-    Page<Product> findByTypeAndStatus(String type,String status,Pageable pageable);
+    Page<Product> findByTypeAndStatus(ProductType type,ProductStatus status,Pageable pageable);
     
-    List<Product> findByStatus(String status);
+    List<Product> findByStatus(ProductStatus status);
     
-    List<Product> findByTypeAndStatus(String type,String status);
+    List<Product> findByTypeAndStatus(ProductType type,ProductStatus status);
     
-    @Query("SELECT DISTINCT p FROM Product p " +
-           "LEFT JOIN ProductSku s ON s.product.id = p.id " +
+    @Query("SELECT p FROM Product p " +
            "WHERE p.status = :status " +
-           "AND (:type IS NULL OR p.type = :type) " +
-           "AND (:categoryId IS NULL OR p.category.id = :categoryId) " +
+           "AND (:categoryId IS NULL OR p.productCategory.productCategoryId = :categoryId) " +
            "AND (:keyword IS NULL OR p.name LIKE %:keyword% OR p.description LIKE %:keyword% " +
-           "OR s.skuName LIKE %:keyword% OR s.flavor LIKE %:keyword% OR s.size LIKE %:keyword% " +
-           "OR CAST(s.weight AS string) LIKE %:keyword% OR s.material LIKE %:keyword% OR s.origin LIKE %:keyword% " +
-           "OR s.color LIKE %:keyword% OR s.brand LIKE %:keyword%)")
+           "OR p.flavor LIKE %:keyword% OR p.size LIKE %:keyword% " +
+           "OR CAST(p.weight AS string) LIKE %:keyword% OR p.material LIKE %:keyword% OR p.origin LIKE %:keyword% " +
+           "OR p.color LIKE %:keyword% OR p.brand LIKE %:keyword%)")
     Page<Product> findProductWithFilters(
-    	@Param("type") String type,
-    	@Param("status") String status,
+    	@Param("type") ProductType type,
+    	@Param("status") ProductStatus status,
     	@Param("categoryId") Integer categoryId,
     	@Param("keyword") String keyword,
     	Pageable pageable);

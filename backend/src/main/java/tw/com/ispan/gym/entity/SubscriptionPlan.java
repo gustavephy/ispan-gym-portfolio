@@ -24,7 +24,8 @@ public class SubscriptionPlan {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    @Column(name = "subscription_plan_id")
+    private Integer subscriptionPlanId;
 
     @Column(nullable = false, columnDefinition="NVARCHAR(50)")
     private String name;

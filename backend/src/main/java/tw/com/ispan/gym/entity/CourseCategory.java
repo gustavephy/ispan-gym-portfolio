@@ -12,7 +12,8 @@ public class CourseCategory {
 	
 	@Id
 	@GeneratedValue(strategy=GenerationType.IDENTITY)
-	private Integer id;
+	@Column(name = "course_category_id")
+	private Integer courseCategoryId;
 	
 	@Column(nullable=false)
 	private String name;

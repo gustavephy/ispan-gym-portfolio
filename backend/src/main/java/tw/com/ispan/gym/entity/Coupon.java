@@ -32,7 +32,8 @@ import tw.com.ispan.gym.enums.CouponApplicableType;
 public class Coupon {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Integer id;
+	@Column(name = "coupon_id")
+	private Integer couponId;
 	
 	@Column(nullable = false, length = 50, columnDefinition="NVARCHAR(50)")
 	private String name;

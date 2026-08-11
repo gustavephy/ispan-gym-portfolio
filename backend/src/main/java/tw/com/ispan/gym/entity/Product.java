@@ -33,7 +33,8 @@ public class Product {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    @Column(name = "product_id")
+    private Integer productId;
 
     @Column(nullable = false, columnDefinition = "NVARCHAR(50)")
     private String name;
@@ -60,18 +61,30 @@ public class Product {
     @Column(columnDefinition = "NVARCHAR(MAX)")
     private String imageUrl;
 
-    @Column(nullable = false, columnDefinition = "bit default 0")
-    private Boolean isTrial = false;
-
-    @Column(nullable = false, columnDefinition = "bit default 0")
-    private Boolean isOpenForSubscription = false;
+    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    private String flavor;
 
     @Column(length = 50, columnDefinition = "NVARCHAR(50)")
-    private String classSize;
+    private String size;
+
+    @Column(precision = 10, scale = 2)
+    private java.math.BigDecimal weight;
+
+    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    private String material;
+
+    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    private String origin;
+
+    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
+    private String color;
+
+    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    private String brand;
     
     @ManyToOne(fetch=FetchType.LAZY)
-    @JoinColumn(name = "category_id")
-    private ProductCategory category;
+    @JoinColumn(name = "product_category_id")
+    private ProductCategory productCategory;
 
     @CreatedDate
     @Column(updatable = false, columnDefinition = "datetime2")
