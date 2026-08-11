@@ -20,7 +20,7 @@ import lombok.Setter;
 import lombok.ToString;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
-import tw.com.ispan.gym.enums.UserCouponStatus;
+import tw.com.ispan.gym.enums.MemberCouponStatus;
 
 @Entity
 @Table(name = "user_coupons")
@@ -28,7 +28,7 @@ import tw.com.ispan.gym.enums.UserCouponStatus;
 @Setter
 @ToString(exclude = {"user","coupon"})
 @EntityListeners(AuditingEntityListener.class)
-public class UserCoupon {
+public class MemberCoupon {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,8 +43,8 @@ public class UserCoupon {
 	private Coupon coupon;
 
 	@Enumerated(EnumType.STRING)
-	@Column(length = 10)
-	private UserCouponStatus status = UserCouponStatus.UNUSED;
+	@Column(columnDefinition = "VARCHAR(20)")
+	private MemberCouponStatus status = MemberCouponStatus.UNUSED;
 
 	@Column(columnDefinition = "datetime2")
 	private LocalDateTime claimedAt;

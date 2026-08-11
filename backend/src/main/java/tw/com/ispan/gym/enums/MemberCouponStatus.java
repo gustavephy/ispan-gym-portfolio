@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.enums;
 
-public enum UserCouponStatus {
+public enum MemberCouponStatus {
     UNUSED,
     USED,
     EXPIRED

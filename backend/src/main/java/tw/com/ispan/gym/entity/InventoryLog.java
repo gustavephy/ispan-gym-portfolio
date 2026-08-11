@@ -24,7 +24,7 @@ import lombok.ToString;
 @Table(name = "inventory_log")
 @Getter
 @Setter
-@ToString(exclude={"productSku","refOrder","operator"})
+@ToString(exclude={"product","refOrder","operator"})
 @EntityListeners(AuditingEntityListener.class)
 public class InventoryLog {
 
@@ -33,8 +33,8 @@ public class InventoryLog {
 	private Integer id;
 
 	@ManyToOne(fetch=FetchType.LAZY)
-	@JoinColumn(name = "product_sku_id")
-	private ProductSku productSku;
+	@JoinColumn(name = "product_id")
+	private Product product;
 
 	@Column(nullable = false, length = 20)
 	private String changeType;

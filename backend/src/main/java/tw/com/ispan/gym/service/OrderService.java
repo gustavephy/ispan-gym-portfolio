@@ -12,13 +12,13 @@ import tw.com.ispan.gym.entity.OrderItem;
 import tw.com.ispan.gym.entity.OrderStatusHistory;
 import tw.com.ispan.gym.entity.Product;
 import tw.com.ispan.gym.entity.User;
-import tw.com.ispan.gym.entity.UserCoupon;
+import tw.com.ispan.gym.entity.MemberCoupon;
 import tw.com.ispan.gym.enums.CouponApplicableType;
 import tw.com.ispan.gym.enums.CouponStatus;
 import tw.com.ispan.gym.enums.CouponType;
 import tw.com.ispan.gym.enums.ProductStatus;
 import tw.com.ispan.gym.enums.ProductType;
-import tw.com.ispan.gym.enums.UserCouponStatus;
+import tw.com.ispan.gym.enums.MemberCouponStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.DirectCheckoutNotAllowedException;
 import tw.com.ispan.gym.exception.InsufficientStockException;
@@ -98,7 +98,7 @@ public class OrderService {
         String receiverAddress = request == null ? null : request.receiverAddress();
 
         Order order = createOrder(user, lines, couponCode, receiverName, receiverPhone, receiverAddress,
-                CouponApplicableType.GOODS);
+                CouponApplicableType.PRODUCT);
         cartItems.deleteAllByUserId(userId);
         return toDetailResponse(order);
     }
@@ -149,15 +149,15 @@ public class OrderService {
         for (OrderItem item : items) {
             Product product = reloadForUpdate(item.getProduct());
             if (ProductType.GOODS.equals(product.getType())) {
-                product.setStock(product.getStock() + item.getQuantity());
+                product.setStock(Math.toIntExact(product.getStock() + item.getQuantity()));
             }
         }
     }
 
     private void restoreCoupon(Order order) {
-        UserCoupon userCoupon = order.getUserCoupon();
+        MemberCoupon userCoupon = order.getUserCoupon();
         if (userCoupon != null) {
-            userCoupon.setStatus(UserCouponStatus.UNUSED);
+            userCoupon.setStatus(MemberCouponStatus.UNUSED);
             userCoupon.setUsedAt(null);
         }
     }
@@ -177,7 +177,7 @@ public class OrderService {
                 .map(line -> line.product().getPrice().multiply(BigDecimal.valueOf(line.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        UserCoupon userCoupon = null;
+        MemberCoupon userCoupon = null;
         BigDecimal discount = BigDecimal.ZERO;
         if (couponCode != null && !couponCode.isBlank()) {
             Coupon coupon = coupons.findByCode(couponCode)
@@ -199,7 +199,7 @@ public class OrderService {
             Product product = line.product();
             orderItems.save(new OrderItem(order, product, product.getName(), product.getPrice(), line.quantity()));
             if (ProductType.GOODS.equals(product.getType())) {
-                product.setStock(product.getStock() - line.quantity());
+                product.setStock(Math.toIntExact(product.getStock() - line.quantity()));
             }
         }
 
@@ -222,7 +222,7 @@ public class OrderService {
         }
     }
 
-    private UserCoupon redeemCoupon(User user, Coupon coupon, BigDecimal subtotal, CouponApplicableType lineType) {
+    private MemberCoupon redeemCoupon(User user, Coupon coupon, BigDecimal subtotal, CouponApplicableType lineType) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         if (!CouponStatus.ACTIVE.equals(coupon.getStatus())
                 || now.toLocalDate().isBefore(coupon.getStartDate())
@@ -235,15 +235,15 @@ public class OrderService {
         if (subtotal.compareTo(coupon.getMinSpend()) < 0) {
             throw new BusinessRuleException("未達優惠券最低消費金額");
         }
-        UserCoupon userCoupon = userCoupons.findByUserIdAndCouponIdAndStatus(user.getId(), coupon.getId(),
-                UserCouponStatus.UNUSED).orElseThrow(() -> new BusinessRuleException("尚未持有此優惠券或已使用過"));
-        userCoupon.setStatus(UserCouponStatus.USED);
+        MemberCoupon userCoupon = userCoupons.findByUserIdAndCouponIdAndStatus(user.getId(), coupon.getId(),
+                MemberCouponStatus.UNUSED).orElseThrow(() -> new BusinessRuleException("尚未持有此優惠券或已使用過"));
+        userCoupon.setStatus(MemberCouponStatus.USED);
         userCoupon.setUsedAt(now);
         return userCoupon;
     }
 
     private BigDecimal computeDiscount(Coupon coupon, BigDecimal subtotal) {
-        BigDecimal discount = CouponType.PERCENTAGE.equals(coupon.getType())
+        BigDecimal discount = CouponType.PERCENT.equals(coupon.getType())
                 ? subtotal.multiply(coupon.getValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
                 : coupon.getValue();
         return discount.min(subtotal);

@@ -1,15 +1,13 @@
 package tw.com.ispan.gym.repository;
 
-import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import tw.com.ispan.gym.entity.UserCoupon;
-import tw.com.ispan.gym.enums.UserCouponStatus;
+import tw.com.ispan.gym.entity.MemberCoupon;
+import tw.com.ispan.gym.enums.MemberCouponStatus;
 
-public interface UserCouponRepository extends JpaRepository<UserCoupon, Integer> {
-//	List<UserCoupon> findByUserId(Integer userId);
+public interface UserCouponRepository extends JpaRepository<MemberCoupon, Integer> {
 
-	Optional<UserCoupon> findByUserIdAndCouponIdAndStatus(Integer userId, Integer couponId, UserCouponStatus status);
+	Optional<MemberCoupon> findByUserIdAndCouponIdAndStatus(Integer userId, Integer couponId, MemberCouponStatus status);
 }

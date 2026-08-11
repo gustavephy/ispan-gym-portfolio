@@ -28,15 +28,11 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
 
     List<Product> findByTypeAndStatus(ProductType type, ProductStatus status);
 
-    @Query("SELECT DISTINCT p FROM Product p " +
-           "LEFT JOIN ProductSku s ON s.product.id = p.id " +
+    @Query("SELECT p FROM Product p " +
            "WHERE p.status = :status " +
            "AND (:type IS NULL OR p.type = :type) " +
            "AND (:categoryId IS NULL OR p.category.id = :categoryId) " +
-           "AND (:keyword IS NULL OR p.name LIKE %:keyword% OR p.description LIKE %:keyword% " +
-           "OR s.skuName LIKE %:keyword% OR s.flavor LIKE %:keyword% OR s.size LIKE %:keyword% " +
-           "OR CAST(s.weight AS string) LIKE %:keyword% OR s.material LIKE %:keyword% OR s.origin LIKE %:keyword% " +
-           "OR s.color LIKE %:keyword% OR s.brand LIKE %:keyword%)")
+           "AND (:keyword IS NULL OR p.name LIKE %:keyword% OR p.description LIKE %:keyword%)")
     Page<Product> findProductWithFilters(
     	@Param("type") ProductType type,
     	@Param("status") ProductStatus status,

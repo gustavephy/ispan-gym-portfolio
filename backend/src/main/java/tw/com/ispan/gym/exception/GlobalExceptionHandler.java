@@ -5,8 +5,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -28,6 +30,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiErrorResponse> invalidRequest(MethodArgumentNotValidException ex) {
         return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "請確認輸入資料是否正確");
+    }
+
+    /** request body 缺失或 JSON 格式錯誤，Jackson 反序列化失敗時丟出。 */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<ApiErrorResponse> unreadableRequest(HttpMessageNotReadableException ex) {
+        return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "請求主體缺失或格式錯誤，請確認後重試");
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<ApiErrorResponse> methodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        return response(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "不支援的請求方法: " + ex.getMethod());
     }
 
     @ExceptionHandler(AuthenticationException.class)
@@ -69,4 +82,3 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status).body(new ApiErrorResponse(code, message, LocalDateTime.now()));
     }
 }
-
