@@ -104,13 +104,14 @@ public class SchemaFixupRunner implements CommandLineRunner {
                     WHERE user_coupon_id IS NOT NULL
                 """);
 
-        // 同一使用者同一天只能有一筆有效的 InBody 記錄。
+        // 同一會員同一天只能有一筆有效的 InBody 記錄（欄位已改名 member_id）。
         // 本表採軟刪除，限定 deleted_at IS NULL 才能讓「刪除後重新上傳」成立。
-        // 早期版本以一般 UNIQUE CONSTRAINT 表達（擋不住軟刪除重傳），先清掉。
+        // 早期版本以一般 UNIQUE CONSTRAINT／user_id 舊欄名表達，先清掉。
         dropConstraintIfExists("inbody_records", "UQ_inbody_user_date");
-        createFilteredUniqueIndex("UX_inbody_user_date", """
-                CREATE UNIQUE INDEX UX_inbody_user_date
-                    ON inbody_records(user_id, update_date)
+        dropIndexIfExists("inbody_records", "UX_inbody_user_date");
+        createFilteredUniqueIndex("UX_inbody_member_date", """
+                CREATE UNIQUE INDEX UX_inbody_member_date
+                    ON inbody_records(member_id, update_date)
                     WHERE deleted_at IS NULL
                 """);
     }

@@ -1,35 +1,22 @@
 package tw.com.ispan.gym.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Index;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.ForeignKey;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PastOrPresent;
+import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 「同使用者同天不得重複上傳」由篩選唯一索引維護（SchemaFixupRunner）：
+ * member_id 僅存整數，不建立跨模組 JPA 關聯（member 表由其他組員維護）。
+ * 「同會員同天不得重複上傳」由篩選唯一索引維護（SchemaFixupRunner）：
  *
- * CREATE UNIQUE INDEX UX_inbody_user_date
- *     ON inbody_records(user_id, update_date)
+ * CREATE UNIQUE INDEX UX_inbody_member_date
+ *     ON inbody_records(member_id, update_date)
  *     WHERE deleted_at IS NULL;
  *
  * 不能用一般 @UniqueConstraint —— 本表採軟刪除，普通唯一約束
@@ -38,7 +25,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "inbody_records",
-        indexes = @Index(name = "IX_inbody_user_id", columnList = "user_id")
+        indexes = @Index(name = "IX_inbody_member_id", columnList = "member_id")
 )
 @Getter
 @Setter
@@ -51,15 +38,12 @@ public class InbodyRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "user_id", nullable = false)
-    private Integer userId;
+    @NotNull
+    @Column(name = "member_id", nullable = false)
+    private Integer memberId;
 
-    /** 僅用於建立資料庫 FK；寫入時以 userId 維持既有 API 契約。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", insertable = false, updatable = false,
-            foreignKey = @ForeignKey(name = "FK_inbody_user"))
-    private User user;
-
+    @NotNull
+    @PastOrPresent
     @Column(name = "update_date", nullable = false)
     private LocalDate updateDate;
 
@@ -79,7 +63,7 @@ public class InbodyRecord {
     private BigDecimal bodyFat;
 
     @DecimalMin("0.00")
-    @DecimalMax("250.00")
+    @DecimalMax("150.00")
     @Column(name = "muscle_mass", precision = 5, scale = 2)
     private BigDecimal muscleMass;
 
@@ -88,12 +72,15 @@ public class InbodyRecord {
     @Column(precision = 5, scale = 2)
     private BigDecimal bmi;
 
+    /** 軟刪除；不可改用 JPA 的 delete，以保留 AI 課表的量測依據。 */
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    /** 軟刪除；不可改用 JPA 的 delete，以保留 AI 課表的量測依據。 */
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
     public void softDelete() {
-        deletedAt = LocalDateTime.now();
+        this.deletedAt = LocalDateTime.now();
     }
 
     /**
@@ -102,7 +89,18 @@ public class InbodyRecord {
      * 故維持原樣，待接上 controller 時改以 DTO 驗證處理。
      */
     @PrePersist
+    private void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+        validateMeasurement();
+    }
+
     @PreUpdate
+    private void onUpdate() {
+        validateMeasurement();
+    }
+
     private void validateMeasurement() {
         if (height == null && weight == null && bodyFat == null
                 && muscleMass == null && bmi == null) {
