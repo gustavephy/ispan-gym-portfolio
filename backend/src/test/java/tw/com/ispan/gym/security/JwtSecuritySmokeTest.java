@@ -2,6 +2,7 @@ package tw.com.ispan.gym.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Optional;
@@ -16,6 +17,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.mockito.Mockito;
 import tw.com.ispan.gym.entity.Account;
@@ -96,6 +98,16 @@ class JwtSecuritySmokeTest {
         String secured() {
             return "ok";
         }
+
+        @PostMapping("/api/members/register")
+        String register() {
+            return "ok";
+        }
+
+        @GetMapping("/api/accounts/verify-email")
+        String verifyEmail() {
+            return "ok";
+        }
     }
 
     @Autowired MockMvc mockMvc;
@@ -124,6 +136,14 @@ class JwtSecuritySmokeTest {
     @Test
     void 無token時受保護端點回401() throws Exception {
         mockMvc.perform(get("/api/orders")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 註冊與Email驗證端點不需登入() throws Exception {
+        // 兩者都是未登入者才會用到：註冊時還沒有帳號，
+        // 驗證連結則是從信件點進來的。漏開會讓整條註冊流程鎖死。
+        mockMvc.perform(post("/api/members/register")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/accounts/verify-email")).andExpect(status().isOk());
     }
 
     @Test

@@ -53,8 +53,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // 登入 / 註冊 / 忘記密碼等免驗證入口
                         .requestMatchers("/api/auth/**").permitAll()
-                        // 會員註冊與 Email 驗證（見 RegisterController）
-                        .requestMatchers("/api/register/**").permitAll()
+                        // 會員註冊（MemberRegisterController）
+                        .requestMatchers(HttpMethod.POST, "/api/members/register").permitAll()
+                        // Email 驗證連結由信件點入，此時尚未登入（AccountVerificationController）
+                        .requestMatchers(HttpMethod.GET, "/api/accounts/verify-email").permitAll()
                         // 商品瀏覽開放未登入者
                         .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
