@@ -146,7 +146,7 @@ public class OrderService {
         BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
         Order order = orders.save(new Order(user, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount,
                 subtotal, total, memberCoupon, user.getFirstName() + user.getLastName(), user.getPhone(), null,
-                user.getEmail()));
+                user.getAccount().getEmail()));
 
         orderItems.save(new OrderItem(order, course, course.getName(), course.getPrice(), quantity));
         orderStatusHistories.save(new OrderStatusHistory(order, null, order.getStatus().name(), user, "USER",
@@ -223,7 +223,7 @@ public class OrderService {
         String finalReceiverPhone = valueOr(receiverPhone, user.getPhone());
 
         Order order = new Order(user, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount, subtotal,
-                total, memberCoupon, finalReceiverName, finalReceiverPhone, receiverAddress, user.getEmail());
+                total, memberCoupon, finalReceiverName, finalReceiverPhone, receiverAddress, user.getAccount().getEmail());
         order = orders.save(order);
 
         for (OrderLine line : lines) {
@@ -264,7 +264,7 @@ public class OrderService {
         if (subtotal.compareTo(coupon.getMinSpend()) < 0) {
             throw new BusinessRuleException("未達優惠券最低消費金額");
         }
-        MemberCoupon memberCoupon = memberCoupons.findByMemberMemberIdAndCouponCouponIdAndStatus(user.getMemberId(), coupon.getCouponId(),
+        MemberCoupon memberCoupon = memberCoupons.findByMemberMemberIdAndCouponCouponIdAndStatus(user.getId(), coupon.getCouponId(),
                 MemberCouponStatus.UNUSED).orElseThrow(() -> new BusinessRuleException("尚未持有此優惠券或已使用過"));
         memberCoupon.setStatus(MemberCouponStatus.USED);
         memberCoupon.setUsedAt(now);

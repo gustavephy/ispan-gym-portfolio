@@ -12,30 +12,23 @@ import java.util.Map;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import tw.com.ispan.gym.entity.Member;
-import tw.com.ispan.gym.enums.UserType;
+import tw.com.ispan.gym.entity.Account;
 
 /**
  * 簽發與驗證 JWT。
  * 密鑰以 Base64 設定於 app.jwt.secret，長度需至少 256 bits（HS256）。
  *
- * <p>CLAIM_ROLE 目前取自 member.role，是後台端點唯一的 ROLE_ADMIN 來源；
- * 先拔掉 Member.role 會讓 /api/admin/** 沒有任何人進得去，
- * 必須等 employee 登入能簽出帶 ROLE_ADMIN 的 token 之後才能移除。
+ * <p>subject 是 account_id；member 與 employee 以 @MapsId 共享 account 主鍵，
+ * id 空間統一，故不需要身分別 claim 來決定查哪張表。
+ *
+ * <p>權限不放進 token：由 {@link JwtAuthFilter} 每次請求依 account.roles
+ * 與各身分的當下狀態展開，帳號被停權時立即失效，不必等 token 過期。
  */
 @Component
 public class JwtUtil {
 
-    /** 放 email 的自訂 claim；subject 放 id，屬於哪張表由 utype 決定 */
+    /** 放 email 的自訂 claim；subject 放 account id */
     public static final String CLAIM_EMAIL = "email";
-    /** 放角色的自訂 claim，值為 Role enum 名稱（MEMBER / TRAINER / ADMIN） */
-    public static final String CLAIM_ROLE = "role";
-    /**
-     * 標示 subject 屬於哪個 id 空間，值為 UserType 名稱（MEMBER / EMPLOYEE）。
-     * member 與 employee 的 id 各自從 1 開始，沒有這個 claim 就無從得知
-     * subject=5 指的是哪張表的第 5 號，驗證端會認錯人。
-     */
-    public static final String CLAIM_USER_TYPE = "utype";
 
     private final SecretKey key;
     private final Duration accessTokenTtl;
@@ -50,25 +43,16 @@ public class JwtUtil {
         this.issuer = issuer;
     }
 
-    /** 依會員簽發 access token，subject 為 member id */
-    public String generateToken(Member member) {
-        return generateToken(
-                member.getMemberId(),
-                Map.of(
-                        CLAIM_EMAIL, member.getEmail(),
-                        CLAIM_ROLE, member.getRole().name(),
-                        CLAIM_USER_TYPE, UserType.MEMBER.name()));
+    /** 依帳號簽發 access token，subject 為 account id */
+    public String generateToken(Account account) {
+        return generateToken(account.getId(), Map.of(CLAIM_EMAIL, account.getEmail()));
     }
 
-    /**
-     * 低階簽發入口，claims 需自行帶齊——包含 {@link #CLAIM_USER_TYPE}。
-     * 未來新增 employee 登入時請走這裡並填 UserType.EMPLOYEE。
-     */
-    public String generateToken(Integer userId, Map<String, Object> claims) {
+    public String generateToken(Integer accountId, Map<String, Object> claims) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .issuer(issuer)
-                .subject(String.valueOf(userId))
+                .subject(String.valueOf(accountId))
                 .claims(claims)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(accessTokenTtl)))
@@ -100,41 +84,17 @@ public class JwtUtil {
         }
     }
 
-    /** 從 token 取出 user id；token 無效時拋 JwtException */
-    public Integer extractUserId(String token) {
+    /** 從 token 取出 account id；token 無效時拋 JwtException */
+    public Integer extractAccountId(String token) {
         String subject = parseClaims(token).getSubject();
         try {
             return Integer.valueOf(subject);
         } catch (NumberFormatException ex) {
-            throw new JwtException("token subject 不是合法的 user id: " + subject, ex);
+            throw new JwtException("token subject 不是合法的 account id: " + subject, ex);
         }
     }
 
     public String extractEmail(String token) {
         return parseClaims(token).get(CLAIM_EMAIL, String.class);
-    }
-
-    public String extractRole(String token) {
-        return parseClaims(token).get(CLAIM_ROLE, String.class);
-    }
-
-    /**
-     * 取出 subject 所屬的 id 空間。
-     *
-     * <p>舊 token（本 claim 加入前簽發的）沒有這個欄位，一律視為 MEMBER——
-     * 當時系統只簽發得出會員 token，這個預設不會擴大任何權限。
-     *
-     * @throws JwtException token 無效，或 utype 值不是合法的 UserType
-     */
-    public UserType extractUserType(String token) {
-        String raw = parseClaims(token).get(CLAIM_USER_TYPE, String.class);
-        if (raw == null) {
-            return UserType.MEMBER;
-        }
-        try {
-            return UserType.valueOf(raw);
-        } catch (IllegalArgumentException ex) {
-            throw new JwtException("token utype 不是合法的 UserType: " + raw, ex);
-        }
     }
 }

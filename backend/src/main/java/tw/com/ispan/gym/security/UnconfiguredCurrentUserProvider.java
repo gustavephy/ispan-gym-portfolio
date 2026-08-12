@@ -41,7 +41,7 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new DisabledException("此會員帳號目前無法使用");
         }
-        return user.getMemberId();
+        return user.getId();
     }
 
     private Optional<Member> resolveUser(Authentication authentication) {

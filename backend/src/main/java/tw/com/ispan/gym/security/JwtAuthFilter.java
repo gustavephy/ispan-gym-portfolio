@@ -1,12 +1,12 @@
 package tw.com.ispan.gym.security;
 
-import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -15,20 +15,26 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tw.com.ispan.gym.entity.Account;
+import tw.com.ispan.gym.entity.Employee;
 import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.enums.AccountType;
+import tw.com.ispan.gym.enums.EmployeeStatus;
 import tw.com.ispan.gym.enums.UserStatus;
-import tw.com.ispan.gym.enums.UserType;
+import tw.com.ispan.gym.repository.AccountRepository;
+import tw.com.ispan.gym.repository.EmployeeRepository;
 import tw.com.ispan.gym.repository.MemberRepository;
 
 /**
  * 解析每個請求的 Authorization: Bearer …，驗簽通過就寫入 SecurityContext。
  * 沒帶 token 或 token 無效時一律放行，交由 SecurityConfig 的授權規則決定要不要擋。
  *
- * <p>目前只認 utype=MEMBER 的 token。member 與 employee 是兩張獨立的表、
- * id 各自從 1 開始，故驗證前必須先看 utype 決定查哪張表。
+ * <p>JWT 的 subject 是 account_id。member 與 employee 以 @MapsId 共享 account 的
+ * 主鍵，id 空間統一，因此不需要額外的身分別 claim 來決定查哪張表。
  *
- * <p>本類別發出的 ROLE_* 權限目前全部來自 member.role；接上 employee 登入時，
- * 要先讓這裡能依 employee.role 發出 ROLE_ADMIN，才可以移除 Member.role。
+ * <p>權限由 account.roles 展開：具 MEMBER 身分且會員狀態 ACTIVE → ROLE_MEMBER；
+ * 具 EMPLOYEE 身分且員工狀態 ACTIVE → ROLE_ADMIN／ROLE_TRAINER（依 employee.role）。
+ * 一個帳號可同時持有兩種身分。
  */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -37,11 +43,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private static final String PREFIX = "Bearer ";
 
     private final JwtUtil jwtUtil;
+    private final AccountRepository accounts;
     private final MemberRepository members;
+    private final EmployeeRepository employees;
 
-    public JwtAuthFilter(JwtUtil jwtUtil, MemberRepository members) {
+    public JwtAuthFilter(JwtUtil jwtUtil, AccountRepository accounts, MemberRepository members,
+            EmployeeRepository employees) {
         this.jwtUtil = jwtUtil;
+        this.accounts = accounts;
         this.members = members;
+        this.employees = employees;
     }
 
     @Override
@@ -57,41 +68,55 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     private void authenticate(HttpServletRequest request, String token) {
-        Integer subjectId;
-        UserType userType;
+        Integer accountId;
         try {
-            Claims claims = jwtUtil.parseClaims(token);
-            subjectId = Integer.valueOf(claims.getSubject());
-            userType = jwtUtil.extractUserType(token);
+            accountId = Integer.valueOf(jwtUtil.parseClaims(token).getSubject());
         } catch (JwtException | IllegalArgumentException | NullPointerException ex) {
-            // 驗簽失敗、過期、subject 非法或 utype 不合法：維持匿名，讓授權規則回 401
+            // 驗簽失敗、過期或 subject 非法：維持匿名，讓授權規則回 401
             logger.debug("JWT 解析失敗: " + ex.getMessage());
             return;
         }
 
-        // subject 只是個數字，member 與 employee 的 id 空間各自獨立，
-        // 必須先確認 utype 才知道要查哪張表；認錯表就會認錯人。
-        if (userType != UserType.MEMBER) {
-            // TODO 開放員工登入時，在此依 UserType.EMPLOYEE 分流查 EmployeeRepository，
-            // 權限改用 employee.role（ROLE_TRAINER 另需查 trainer 明細表是否存在且未軟刪除）
-            logger.debug("尚未支援的登入身分別: " + userType);
+        // 每次請求重查資料庫，帳號被停權或軟刪除時不必等 token 過期就會失效
+        Account account = accounts.findById(accountId).orElse(null);
+        if (account == null || account.getDeletedAt() != null) {
+            logger.debug("JWT 對應的帳號不存在或已刪除: " + accountId);
             return;
         }
 
-        // 每次請求重查資料庫，帳號被停權時不必等 token 過期就會失效
-        Member member = members.findById(subjectId).orElse(null);
-        if (member == null || member.getStatus() != UserStatus.ACTIVE) {
-            logger.debug("JWT 對應的會員不存在或未啟用: " + subjectId);
+        List<SimpleGrantedAuthority> authorities = resolveAuthorities(account);
+        if (authorities.isEmpty()) {
+            logger.debug("帳號沒有任何已啟用的身分: " + accountId);
             return;
         }
 
-        var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + member.getRole().name()));
-        var authentication = new UsernamePasswordAuthenticationToken(member.getEmail(), null, authorities);
+        var authentication = new UsernamePasswordAuthenticationToken(account.getEmail(), null, authorities);
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
+    }
+
+    /** 依 account.roles 展開權限；未啟用的身分不授予任何權限 */
+    private List<SimpleGrantedAuthority> resolveAuthorities(Account account) {
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+
+        if (account.getRoles().contains(AccountType.MEMBER)) {
+            Member member = members.findById(account.getId()).orElse(null);
+            if (member != null && member.getDeletedAt() == null && member.getStatus() == UserStatus.ACTIVE) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_MEMBER"));
+            }
+        }
+
+        if (account.getRoles().contains(AccountType.EMPLOYEE)) {
+            Employee employee = employees.findById(account.getId()).orElse(null);
+            if (employee != null && employee.getDeletedAt() == null
+                    && employee.getStatus() == EmployeeStatus.ACTIVE) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_" + employee.getRole().name()));
+            }
+        }
+        return authorities;
     }
 
     /** 取出 Authorization: Bearer … 的 token，格式不符回 null */

@@ -20,9 +20,12 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tw.com.ispan.gym.entity.Account;
 import tw.com.ispan.gym.entity.Member;
-import tw.com.ispan.gym.enums.Role;
+import tw.com.ispan.gym.enums.AccountType;
 import tw.com.ispan.gym.enums.UserStatus;
+import tw.com.ispan.gym.repository.AccountRepository;
+import tw.com.ispan.gym.repository.EmployeeRepository;
 import tw.com.ispan.gym.repository.MemberRepository;
 
 /**
@@ -63,8 +66,20 @@ class FilterErrorFormatTest {
     static class TestBeans {
         @Bean
         @Primary
-        MemberRepository userRepository() {
+        AccountRepository accountRepository() {
+            return Mockito.mock(AccountRepository.class);
+        }
+
+        @Bean
+        @Primary
+        MemberRepository memberRepository() {
             return Mockito.mock(MemberRepository.class);
+        }
+
+        @Bean
+        @Primary
+        EmployeeRepository employeeRepository() {
+            return Mockito.mock(EmployeeRepository.class);
         }
 
         @Bean
@@ -89,15 +104,25 @@ class FilterErrorFormatTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired JwtUtil jwtUtil;
-    @Autowired MemberRepository users;
+    @Autowired AccountRepository accounts;
+    @Autowired MemberRepository members;
 
-    private Member member() {
-        Member u = new Member();
-        u.setMemberId(7);
-        u.setEmail("member@example.com");
-        u.setRole(Role.MEMBER);
-        u.setStatus(UserStatus.ACTIVE);
-        return u;
+    /** 只有 MEMBER 身分的帳號：可通過認證，但進不了 /api/admin/** */
+    private Account memberAccount() {
+        Account account = new Account();
+        account.setId(7);
+        account.setEmail("member@example.com");
+        account.setPasswordHash("{noop}irrelevant");
+        account.getRoles().add(AccountType.MEMBER);
+
+        Member member = new Member();
+        member.setAccount(account);
+        member.setId(7);
+        member.setStatus(UserStatus.ACTIVE);
+
+        Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
+        Mockito.when(members.findById(7)).thenReturn(Optional.of(member));
+        return account;
     }
 
     @Test
@@ -112,9 +137,7 @@ class FilterErrorFormatTest {
 
     @Test
     void 權限不足時回傳ApiErrorResponse格式的403() throws Exception {
-        Member user = member();
-        Mockito.when(users.findById(7)).thenReturn(Optional.of(user));
-        String token = jwtUtil.generateToken(user);
+        String token = jwtUtil.generateToken(memberAccount());
 
         mockMvc.perform(get("/api/admin/ping").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden())

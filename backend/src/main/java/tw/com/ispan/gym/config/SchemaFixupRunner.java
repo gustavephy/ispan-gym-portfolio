@@ -429,6 +429,11 @@ public class SchemaFixupRunner implements CommandLineRunner {
     private void dropObsoleteColumns() {
         dropColumnIfExists("orders", "coupon_id");
         dropColumnIfExists("order_items", "line_amount");
+        // 認證三表改綁 account（會員／員工共用登入帳號），舊的 member_id
+        // 是 NOT NULL 且程式不再填值，不清掉的話新資料一律插入失敗
+        dropColumnIfExists("email_verifications", "member_id");
+        dropColumnIfExists("password_reset_tokens", "member_id");
+        dropColumnIfExists("password_history", "member_id");
     }
 
     // === 清除重複的唯一索引 ===================================================

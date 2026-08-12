@@ -94,7 +94,7 @@ public class CartService {
     private CartItem ownedItem(Integer userId, Long cartItemId) {
         CartItem item = cartItems.findById(cartItemId)
                 .orElseThrow(() -> new CartItemNotFoundException(cartItemId));
-        if (!item.getMember().getMemberId().equals(userId)) {
+        if (!item.getMember().getId().equals(userId)) {
             throw new ForbiddenCartAccessException(cartItemId);
         }
         return item;

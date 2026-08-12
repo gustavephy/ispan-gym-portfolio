@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.entity;
+
 import tw.com.ispan.gym.enums.Gender;
-import tw.com.ispan.gym.enums.Role;
 import tw.com.ispan.gym.enums.UserStatus;
 
 import java.time.LocalDate;
@@ -10,27 +10,39 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapsId;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Nationalized;
 
+/**
+ * 會員個人資料；登入用的 email／密碼存於 {@link Account}。
+ *
+ * <p>member_id 與 account_id 是同一個值（@MapsId 共享主鍵），
+ * 因此同一個 account 可同時具備會員與員工身分。
+ */
 @Entity
-@Table(name = "member", uniqueConstraints = @UniqueConstraint(name = "UX_member_email", columnNames = "email"))
+@Table(name = "member")
 @Getter
 @Setter
 public class Member {
 
 	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "member_id")
-	private Integer memberId;
+	private Integer id;
+
+	@OneToOne(fetch = FetchType.LAZY)
+	@MapsId
+	@JoinColumn(name = "member_id", foreignKey = @ForeignKey(name = "FK_member_account_id"))
+	private Account account;
 
 	@Nationalized
 	@Column(name = "first_name", length = 50, nullable = false)
@@ -40,31 +52,19 @@ public class Member {
 	@Column(name = "last_name", length = 50, nullable = false)
 	private String lastName;
 
+	@Column(name = "phone", length = 20, nullable = false)
+	private String phone;
+
 	@Column(name = "dob")
 	private LocalDate dob;
-
-	@Column(name = "email", length = 100, nullable = false)
-	private String email;
-
-	@Column(name = "phone", length = 10, nullable = false)
-	private String phone;
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "gender", length = 10)
 	private Gender gender;
 
-	// 過渡期保留：定案 member 表無 role（教練／管理職移至 employee），
-	// 待 JWT 改為 utype=MEMBER/EMPLOYEE 後連同 Role enum 一併移除
-	@Enumerated(EnumType.STRING)
-	@Column(name = "role", length = 20, nullable = false)
-	private Role role = Role.MEMBER;
-
-	@Column(name = "password_hash", length = 255)
-	private String passwordHash;
-
 	@Enumerated(EnumType.STRING)
 	@Column(name = "status", length = 10, nullable = false)
-	private UserStatus status = UserStatus.ACTIVE;
+	private UserStatus status = UserStatus.PENDING;
 
 	@Column(name = "avatar_url", length = 500)
 	private String avatarUrl;
@@ -91,7 +91,6 @@ public class Member {
 	@Column(name = "address", length = 255)
 	private String address;
 
-	/** 軟刪除時間；刪除帳號不刪列，訂單等歷史資料仍指向本列 */
 	@Column(name = "deleted_at")
 	private LocalDateTime deletedAt;
 
@@ -100,6 +99,10 @@ public class Member {
 
 	@Column(name = "updated_at", nullable = false)
 	private LocalDateTime updatedAt;
+
+	public void softDelete() {
+		deletedAt = LocalDateTime.now();
+	}
 
 	@PrePersist
 	protected void onCreate() {
