@@ -1,4 +1,5 @@
 package tw.com.ispan.gym.entity;
+import tw.com.ispan.gym.enums.GroupClassBookingStatus;
 
 import java.time.LocalDateTime;
 
@@ -45,10 +46,10 @@ public class GroupClassBooking {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "member_id", nullable = false)
-    private User member;
+    private Member member;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 10)
     private GroupClassBookingStatus status = GroupClassBookingStatus.BOOKED;
 
     @CreatedDate

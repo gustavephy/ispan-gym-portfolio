@@ -1,4 +1,5 @@
 package tw.com.ispan.gym.entity;
+import tw.com.ispan.gym.enums.SlotStatus;
 
 import java.time.LocalDateTime;
 
@@ -45,7 +46,7 @@ public class CoachSlot {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "trainer_id", nullable = false)
-    private User trainer;
+    private Trainer trainer;
 
     @Column(name = "start_at", nullable = false, columnDefinition = "datetime2")
     private LocalDateTime startAt;
@@ -54,7 +55,7 @@ public class CoachSlot {
     private LocalDateTime endAt;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 10)
     private SlotStatus status = SlotStatus.AVAILABLE;
 
     @Version

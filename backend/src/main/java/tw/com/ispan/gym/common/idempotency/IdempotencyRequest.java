@@ -3,13 +3,15 @@ package tw.com.ispan.gym.common.idempotency;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.Nationalized;
-import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.Member;
 
 @Entity
-@Table(name = "idempotency_requests")
+@Table(name = "idempotency_requests", uniqueConstraints = @UniqueConstraint(
+        name = "UX_idempotency_member_operation_key",
+        columnNames = { "member_id", "operation_name", "idempotency_key" }))
 public class IdempotencyRequest {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "user_id") private User user;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "member_id") private Member member;
     @Column(name = "operation_name", nullable = false, length = 50) private String operationName;
     @Column(name = "idempotency_key", nullable = false, length = 100) private String idempotencyKey;
     @Column(name = "request_hash", nullable = false, length = 64) private String requestHash;

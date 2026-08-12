@@ -21,7 +21,7 @@ public class CourseCategory {
 	@Column(name = "course_category_id")
 	private Integer courseCategoryId;
 	
-	@Column(nullable=false, columnDefinition="VARCHAR(20)")
+	@Column(nullable=false, columnDefinition="NVARCHAR(20)")
 	private String name;
 	
 	@Column(nullable=false)

@@ -16,7 +16,7 @@ import tw.com.ispan.gym.dto.product.ProductResponse;
 import tw.com.ispan.gym.entity.Product;
 import tw.com.ispan.gym.entity.ProductCategory;
 import tw.com.ispan.gym.enums.ProductStatus;
-import tw.com.ispan.gym.exception.CustomException;
+import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.ProductCategoryRepository;
 import tw.com.ispan.gym.repository.ProductRepository;
 
@@ -50,7 +50,7 @@ public class ProductService {
 	//查詢單一商品
 	public ProductResponse getProductById(Integer productId) {
 		Product product = productRepository.findById(productId)
-				.orElseThrow(() -> new CustomException(HttpStatus.NOT_FOUND,"商品不存在"));
+				.orElseThrow(() -> new ResourceNotFoundException("商品不存在"));
 		return ProductResponse.from(product);
 	}
 	
@@ -72,7 +72,7 @@ public class ProductService {
 		
         if(productRequest.getProductCategoryId() != null) {
         	ProductCategory productCategory = productCategoryRepository.findById(productRequest.getProductCategoryId())
-					.orElseThrow(() -> new CustomException(HttpStatus.NOT_FOUND,"商品分類不存在"));
+					.orElseThrow(() -> new ResourceNotFoundException("商品分類不存在"));
         } else {
 			product.setProductCategory(null);
 		}
@@ -85,7 +85,7 @@ public class ProductService {
 	//修改商品（管理員）
     public ProductResponse updateProduct(Integer id, ProductRequest productRequest) {
         Product product = productRepository.findById(id)
-            .orElseThrow(() -> new CustomException(HttpStatus.NOT_FOUND, "商品不存在"));
+            .orElseThrow(() -> new ResourceNotFoundException("商品不存在"));
         productRequest.setName(productRequest.getName());
         productRequest.setDescription(productRequest.getDescription());
         productRequest.setImageUrl(productRequest.getImageUrl());
@@ -101,7 +101,7 @@ public class ProductService {
 
         if (productRequest.getProductCategoryId() != null) {
             ProductCategory productCategory = productCategoryRepository.findById(productRequest.getProductCategoryId())
-                .orElseThrow(() -> new CustomException(HttpStatus.BAD_REQUEST, "商品分類不存在"));
+                .orElseThrow(() -> new ResourceNotFoundException("商品分類不存在"));
             product.setProductCategory(productCategory);
         } else {
             product.setProductCategory(null);
@@ -119,7 +119,7 @@ public class ProductService {
     //下架商品（軟刪除，status 設為 INACTIVE）
     public void deleteProduct(Integer productId) {
         Product product = productRepository.findById(productId)
-            .orElseThrow(() -> new CustomException(HttpStatus.NOT_FOUND, "商品不存在"));
+            .orElseThrow(() -> new ResourceNotFoundException("商品不存在"));
         product.setStatus(ProductStatus.INACTIVE);
         productRepository.save(product);
         log.info("Successfully soft deleted (deactivated) product: ID={}", productId);

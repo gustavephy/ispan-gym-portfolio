@@ -1,6 +1,9 @@
 package tw.com.ispan.gym.exception;
 
-public class InvalidQuantityException extends RuntimeException {
-    public InvalidQuantityException() { super("商品數量必須大於或等於 1"); }
-}
+import org.springframework.http.HttpStatus;
 
+public class InvalidQuantityException extends ApiException {
+    public InvalidQuantityException() {
+        super(HttpStatus.BAD_REQUEST, "INVALID_QUANTITY", "商品數量必須大於或等於 1");
+    }
+}

@@ -22,8 +22,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
 import tw.com.ispan.gym.enums.MemberCouponStatus;
 
-import tw.com.ispan.gym.entity.Coupon;
-
 @Entity
 @Table(name = "member_coupon")
 @Getter

@@ -18,54 +18,50 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.Data;
 import tw.com.ispan.gym.enums.SubscriptionStatus;
 
 @Entity
-@Table(name = "member_subscription")
-@Getter
-@Setter
-@ToString(exclude = {"member","order"})
+@Table(name = "subscription")
+@Data
 @EntityListeners(AuditingEntityListener.class)
 public class MemberSubscription {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@Column(name = "subscription_id")
-	private Integer memberSubscriptionId;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "subscription_id")
+    private Integer subscriptionId;
 
-	@ManyToOne(fetch=FetchType.LAZY)
-	@JoinColumn(name = "member_id", nullable = false)
-	private Member member;
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id", nullable = false)
+    private Member member;
 
-	@ManyToOne(fetch=FetchType.LAZY)
-	@JoinColumn(name = "order_id", nullable = false)
-	private Order order;
-	
-	@Column(nullable=false, columnDefinition="NVACHAR(100)")
-	private String planName;
-	
-	@ManyToOne(optional=false, fetch=FetchType.LAZY)
-	@JoinColumn(name="subscription_plan_id",nullable=false)
-	private SubscriptionPlan subscriptionPlan;
-	
-	@Column(nullable = false)
-	private LocalDateTime startDate;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id")
+    private Order order;
 
-	@Column(nullable = false)
-	private LocalDateTime endDate;
+    @Column(nullable=false, columnDefinition = "NVARCHAR(100)")
+    private String planName;
 
-	@Column(nullable = false)
-	@Enumerated(EnumType.STRING)
-	private SubscriptionStatus status = SubscriptionStatus.ACTIVE;
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "subscription_plan_id", nullable = false)
+    private SubscriptionPlan subscriptionPlan;
 
-	@CreatedDate
-	@Column(updatable = false, columnDefinition = "datetime2")
-	private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private LocalDateTime startDate;
 
-	@LastModifiedDate
-	@Column(columnDefinition = "datetime2")
-	private LocalDateTime updatedAt;
+    @Column(nullable = false)
+    private LocalDateTime endDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private SubscriptionStatus status = SubscriptionStatus.ACTIVE;
+
+    @CreatedDate
+    @Column(updatable = false, columnDefinition = "datetime2")
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    @Column(columnDefinition = "datetime2")
+    private LocalDateTime updatedAt;
 }

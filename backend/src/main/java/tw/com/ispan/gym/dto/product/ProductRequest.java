@@ -31,7 +31,7 @@ public class ProductRequest {
     private String brand;
 
     private Double weight;
-
+    
     private String flavor;
 
     private String size;

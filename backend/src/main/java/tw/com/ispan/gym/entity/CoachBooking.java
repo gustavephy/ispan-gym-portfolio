@@ -1,4 +1,5 @@
 package tw.com.ispan.gym.entity;
+import tw.com.ispan.gym.enums.CoachBookingStatus;
 
 import java.time.LocalDateTime;
 
@@ -37,10 +38,10 @@ public class CoachBooking {
     /** 預約的會員 */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "member_id", nullable = false)
-    private User member;
+    private Member member;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 10)
     private CoachBookingStatus status = CoachBookingStatus.PENDING;
 
     /** 銷課金鑰，會員產生，教練核銷時輸入比對 */
@@ -53,7 +54,7 @@ public class CoachBooking {
     /** 執行核銷的教練（存 FK，不存姓名字串快照） */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "check_in_approver_id")
-    private User checkInApprover;
+    private Trainer checkInApprover;
 
     @CreatedDate
     @Column(updatable = false, columnDefinition = "datetime2")

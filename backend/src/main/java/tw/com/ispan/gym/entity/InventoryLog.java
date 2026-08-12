@@ -57,9 +57,10 @@ public class InventoryLog {
 	@JoinColumn(name = "ref_order_id")
 	private Order refOrder;
 
+	/** 人工調帳的操作員工；系統自動扣庫存（如成立訂單）時為 null */
 	@ManyToOne(fetch=FetchType.LAZY)
-	@JoinColumn(name = "operator_id")
-	private User operator;
+	@JoinColumn(name = "operator_employee_id")
+	private Employee operator;
 
 	@CreatedDate
 	@Column(updatable = false, columnDefinition = "datetime2")

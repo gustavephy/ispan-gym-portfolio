@@ -32,14 +32,14 @@ import tw.com.ispan.gym.enums.CourseType;
 @Table(name = "course")
 @Getter
 @Setter
-@ToString(exclude = {"trainer","category"})
+@ToString(exclude = {"trainer","courseCategory"})
 @EntityListeners(AuditingEntityListener.class)
 public class Course {
 
 	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "trainer_id", nullable = false)
 	@JsonIgnore
-	private User trainer;
+	private Trainer trainer;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -80,7 +80,7 @@ public class Course {
 	
 	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name="course_category_id")
-	private CourseCategory category;
+	private CourseCategory courseCategory;
 	
 	@CreatedDate
 	@Column(columnDefinition = "datetime2")

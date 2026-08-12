@@ -1,0 +1,631 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< tw.com.ispan:backend >------------------------
+[INFO] Building backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ backend ---
+[INFO] Deleting /Users/atapp/Desktop/ispan-proj-gym/backend/target
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ backend ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Copying 0 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ backend ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 142 source files with javac [debug parameters release 25] to target/classes
+[INFO] Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/entity/MemberSubscription.java:[28,8] class Subscription is public, should be declared in a file named Subscription.java
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/repository/ProductRepository.java:[16,30] cannot find symbol
+  symbol:   class ProductType
+  location: package tw.com.ispan.gym.enums
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[18,34] cannot find symbol
+  symbol:   class CustomException
+  location: package tw.com.ispan.gym.exception
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[21,35] cannot find symbol
+  symbol:   class UserRepository
+  location: package tw.com.ispan.gym.repository
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[29,23] cannot find symbol
+  symbol:   class UserRepository
+  location: class tw.com.ispan.gym.service.CouponService
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/controller/ProductController.java:[20,30] cannot find symbol
+  symbol:   class ProductType
+  location: package tw.com.ispan.gym.enums
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/ProductService.java:[19,34] cannot find symbol
+  symbol:   class CustomException
+  location: package tw.com.ispan.gym.exception
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/controller/ProductController.java:[33,57] cannot find symbol
+  symbol:   class ProductType
+  location: class tw.com.ispan.gym.controller.ProductController
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[82,39] cannot find symbol
+  symbol:   method getDeletedAt()
+  location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[93,77] cannot find symbol
+  symbol:   method getEmail()
+  location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[105,20] cannot find symbol
+  symbol:   method getRoles()
+  location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[106,53] cannot find symbol
+  symbol:   method getId()
+  location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[107,41] cannot find symbol
+  symbol:   method getDeletedAt()
+  location: variable member of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[107,74] cannot find symbol
+  symbol:   method getStatus()
+  location: variable member of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[112,20] cannot find symbol
+  symbol:   method getRoles()
+  location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[113,59] cannot find symbol
+  symbol:   method getId()
+  location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[114,45] cannot find symbol
+  symbol:   method getDeletedAt()
+  location: variable employee of type tw.com.ispan.gym.entity.Employee
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[115,32] cannot find symbol
+  symbol:   method getStatus()
+  location: variable employee of type tw.com.ispan.gym.entity.Employee
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[116,78] cannot find symbol
+  symbol:   method getRole()
+  location: variable employee of type tw.com.ispan.gym.entity.Employee
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtUtil.java:[48,37] cannot find symbol
+  symbol:   method getId()
+  location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtUtil.java:[48,74] cannot find symbol
+  symbol:   method getEmail()
+  location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[97,30] cannot find symbol
+  symbol:   method getId()
+  location: class tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[110,49] cannot find symbol
+  symbol:   method getStatus()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[111,58] cannot find symbol
+  symbol:   method getProductId()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[116,40] cannot find symbol
+  symbol:   method getStock()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[117,57] cannot find symbol
+  symbol:   method getProductId()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[117,100] cannot find symbol
+  symbol:   method getStock()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[123,38] cannot find symbol
+  symbol:   method getPrice()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[124,58] cannot find symbol
+  symbol:   method getProductId()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[124,82] cannot find symbol
+  symbol:   method getName()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[125,24] cannot find symbol
+  symbol:   method getImageUrl()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[125,47] cannot find symbol
+  symbol:   method getPrice()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[34,56] cannot find symbol
+  symbol:   method getCode()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[35,35] cannot find symbol
+  symbol:   class CustomException
+  location: class tw.com.ispan.gym.service.CouponService
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[39,39] cannot find symbol
+  symbol:   method getCode()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[40,39] cannot find symbol
+  symbol:   method getName()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[41,39] cannot find symbol
+  symbol:   method getType()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[42,40] cannot find symbol
+  symbol:   method getValue()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[43,43] cannot find symbol
+  symbol:   method getMinSpend()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[44,48] cannot find symbol
+  symbol:   method getTotalQuantity()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[45,44] cannot find symbol
+  symbol:   method getStartDate()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[46,42] cannot find symbol
+  symbol:   method getEndDate()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[47,23] cannot find symbol
+  symbol:   method setApplicableType(request.ge[...]e.ALL)
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[47,49] cannot find symbol
+  symbol:   method getApplicableType()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[47,87] cannot find symbol
+  symbol:   method getApplicableType()
+  location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[50,17] cannot find symbol
+  symbol:   variable log
+  location: class tw.com.ispan.gym.service.CouponService
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[50,81] cannot find symbol
+  symbol:   method getCode()
+  location: variable saved of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[50,97] cannot find symbol
+  symbol:   method getApplicableType()
+  location: variable saved of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[63,57] cannot find symbol
+  symbol:   method getCode()
+  location: variable c of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[63,99] cannot find symbol
+  symbol:   method getName()
+  location: variable c of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[69,58] cannot find symbol
+  symbol:   method getStartDate()
+  location: variable c of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[31,31] cannot find symbol
+  symbol:   method getCouponId()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[32,27] cannot find symbol
+  symbol:   method getCode()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[33,27] cannot find symbol
+  symbol:   method getName()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[34,27] cannot find symbol
+  symbol:   method getType()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[35,28] cannot find symbol
+  symbol:   method getValue()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[36,31] cannot find symbol
+  symbol:   method getMinSpend()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[37,36] cannot find symbol
+  symbol:   method getTotalQuantity()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[38,38] cannot find symbol
+  symbol:   method getClaimedQuantity()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[39,32] cannot find symbol
+  symbol:   method getStartDate()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[40,30] cannot find symbol
+  symbol:   method getEndDate()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[41,29] cannot find symbol
+  symbol:   method getStatus()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[42,37] cannot find symbol
+  symbol:   method getApplicableType()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[43,32] cannot find symbol
+  symbol:   method getCreatedAt()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderQueryService.java:[35,71] cannot find symbol
+  symbol:   method getProductId()
+  location: class tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderQueryService.java:[36,63] cannot find symbol
+  symbol:   method getCourseId()
+  location: class tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[122,47] cannot find symbol
+  symbol:   method getStatus()
+  location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[123,63] cannot find symbol
+  symbol:   method getCourseId()
+  location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[135,37] cannot find symbol
+  symbol:   method getPrice()
+  location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[148,52] cannot find symbol
+  symbol:   method getFirstName()
+  location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[148,74] cannot find symbol
+  symbol:   method getLastName()
+  location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[148,94] cannot find symbol
+  symbol:   method getPhone()
+  location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[149,21] cannot find symbol
+  symbol:   method getAccount()
+  location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[151,60] cannot find symbol
+  symbol:   method getName()
+  location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[151,78] cannot find symbol
+  symbol:   method getPrice()
+  location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[180,71] cannot find symbol
+  symbol:   method getProductId()
+  location: class tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[184,53] cannot find symbol
+  symbol:   method getStock()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[191,25] cannot find symbol
+  symbol:   method setStatus(tw.com.ispan.gym.enums.MemberCouponStatus)
+  location: variable memberCoupon of type tw.com.ispan.gym.entity.MemberCoupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[192,25] cannot find symbol
+  symbol:   method setUsedAt(<nulltype>)
+  location: variable memberCoupon of type tw.com.ispan.gym.entity.MemberCoupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[200,64] cannot find symbol
+  symbol:   method getProductId()
+  location: class tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[208,44] cannot find symbol
+  symbol:   method getPrice()
+  location: class tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[209,42] incompatible types: invalid method reference
+    incompatible types: java.lang.Object cannot be converted to java.math.BigDecimal
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[222,62] cannot find symbol
+  symbol:   method getFirstName()
+  location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[222,84] cannot find symbol
+  symbol:   method getLastName()
+  location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[223,64] cannot find symbol
+  symbol:   method getPhone()
+  location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[226,98] cannot find symbol
+  symbol:   method getAccount()
+  location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[231,66] cannot find symbol
+  symbol:   method getName()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[231,85] cannot find symbol
+  symbol:   method getPrice()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[232,53] cannot find symbol
+  symbol:   method getStock()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[241,50] cannot find symbol
+  symbol:   method getProductId()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[242,84] cannot find symbol
+  symbol:   method getProductId()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[246,49] cannot find symbol
+  symbol:   method getStatus()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[247,58] cannot find symbol
+  symbol:   method getProductId()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[249,31] cannot find symbol
+  symbol:   method getStock()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[250,57] cannot find symbol
+  symbol:   method getProductId()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[250,91] cannot find symbol
+  symbol:   method getStock()
+  location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[256,47] cannot find symbol
+  symbol:   method getStatus()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[257,53] cannot find symbol
+  symbol:   method getStartDate()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[258,52] cannot find symbol
+  symbol:   method getEndDate()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[261,52] cannot find symbol
+  symbol:   method getApplicableType()
+  location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[INFO] 100 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  1.647 s
+[INFO] Finished at: 2026-08-12T21:10:10+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.15.0:compile (default-compile) on project backend: Compilation failure: Compilation failure: 
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/entity/MemberSubscription.java:[28,8] class Subscription is public, should be declared in a file named Subscription.java
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/repository/ProductRepository.java:[16,30] cannot find symbol
+[ERROR]   symbol:   class ProductType
+[ERROR]   location: package tw.com.ispan.gym.enums
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[18,34] cannot find symbol
+[ERROR]   symbol:   class CustomException
+[ERROR]   location: package tw.com.ispan.gym.exception
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[21,35] cannot find symbol
+[ERROR]   symbol:   class UserRepository
+[ERROR]   location: package tw.com.ispan.gym.repository
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[29,23] cannot find symbol
+[ERROR]   symbol:   class UserRepository
+[ERROR]   location: class tw.com.ispan.gym.service.CouponService
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/controller/ProductController.java:[20,30] cannot find symbol
+[ERROR]   symbol:   class ProductType
+[ERROR]   location: package tw.com.ispan.gym.enums
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/ProductService.java:[19,34] cannot find symbol
+[ERROR]   symbol:   class CustomException
+[ERROR]   location: package tw.com.ispan.gym.exception
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/controller/ProductController.java:[33,57] cannot find symbol
+[ERROR]   symbol:   class ProductType
+[ERROR]   location: class tw.com.ispan.gym.controller.ProductController
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[82,39] cannot find symbol
+[ERROR]   symbol:   method getDeletedAt()
+[ERROR]   location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[93,77] cannot find symbol
+[ERROR]   symbol:   method getEmail()
+[ERROR]   location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[105,20] cannot find symbol
+[ERROR]   symbol:   method getRoles()
+[ERROR]   location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[106,53] cannot find symbol
+[ERROR]   symbol:   method getId()
+[ERROR]   location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[107,41] cannot find symbol
+[ERROR]   symbol:   method getDeletedAt()
+[ERROR]   location: variable member of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[107,74] cannot find symbol
+[ERROR]   symbol:   method getStatus()
+[ERROR]   location: variable member of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[112,20] cannot find symbol
+[ERROR]   symbol:   method getRoles()
+[ERROR]   location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[113,59] cannot find symbol
+[ERROR]   symbol:   method getId()
+[ERROR]   location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[114,45] cannot find symbol
+[ERROR]   symbol:   method getDeletedAt()
+[ERROR]   location: variable employee of type tw.com.ispan.gym.entity.Employee
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[115,32] cannot find symbol
+[ERROR]   symbol:   method getStatus()
+[ERROR]   location: variable employee of type tw.com.ispan.gym.entity.Employee
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtAuthFilter.java:[116,78] cannot find symbol
+[ERROR]   symbol:   method getRole()
+[ERROR]   location: variable employee of type tw.com.ispan.gym.entity.Employee
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtUtil.java:[48,37] cannot find symbol
+[ERROR]   symbol:   method getId()
+[ERROR]   location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/security/JwtUtil.java:[48,74] cannot find symbol
+[ERROR]   symbol:   method getEmail()
+[ERROR]   location: variable account of type tw.com.ispan.gym.entity.Account
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[97,30] cannot find symbol
+[ERROR]   symbol:   method getId()
+[ERROR]   location: class tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[110,49] cannot find symbol
+[ERROR]   symbol:   method getStatus()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[111,58] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[116,40] cannot find symbol
+[ERROR]   symbol:   method getStock()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[117,57] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[117,100] cannot find symbol
+[ERROR]   symbol:   method getStock()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[123,38] cannot find symbol
+[ERROR]   symbol:   method getPrice()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[124,58] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[124,82] cannot find symbol
+[ERROR]   symbol:   method getName()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[125,24] cannot find symbol
+[ERROR]   symbol:   method getImageUrl()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CartService.java:[125,47] cannot find symbol
+[ERROR]   symbol:   method getPrice()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[34,56] cannot find symbol
+[ERROR]   symbol:   method getCode()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[35,35] cannot find symbol
+[ERROR]   symbol:   class CustomException
+[ERROR]   location: class tw.com.ispan.gym.service.CouponService
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[39,39] cannot find symbol
+[ERROR]   symbol:   method getCode()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[40,39] cannot find symbol
+[ERROR]   symbol:   method getName()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[41,39] cannot find symbol
+[ERROR]   symbol:   method getType()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[42,40] cannot find symbol
+[ERROR]   symbol:   method getValue()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[43,43] cannot find symbol
+[ERROR]   symbol:   method getMinSpend()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[44,48] cannot find symbol
+[ERROR]   symbol:   method getTotalQuantity()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[45,44] cannot find symbol
+[ERROR]   symbol:   method getStartDate()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[46,42] cannot find symbol
+[ERROR]   symbol:   method getEndDate()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[47,23] cannot find symbol
+[ERROR]   symbol:   method setApplicableType(request.ge[...]e.ALL)
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[47,49] cannot find symbol
+[ERROR]   symbol:   method getApplicableType()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[47,87] cannot find symbol
+[ERROR]   symbol:   method getApplicableType()
+[ERROR]   location: variable request of type tw.com.ispan.gym.dto.coupon.CouponRequest
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[50,17] cannot find symbol
+[ERROR]   symbol:   variable log
+[ERROR]   location: class tw.com.ispan.gym.service.CouponService
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[50,81] cannot find symbol
+[ERROR]   symbol:   method getCode()
+[ERROR]   location: variable saved of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[50,97] cannot find symbol
+[ERROR]   symbol:   method getApplicableType()
+[ERROR]   location: variable saved of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[63,57] cannot find symbol
+[ERROR]   symbol:   method getCode()
+[ERROR]   location: variable c of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[63,99] cannot find symbol
+[ERROR]   symbol:   method getName()
+[ERROR]   location: variable c of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/CouponService.java:[69,58] cannot find symbol
+[ERROR]   symbol:   method getStartDate()
+[ERROR]   location: variable c of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[31,31] cannot find symbol
+[ERROR]   symbol:   method getCouponId()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[32,27] cannot find symbol
+[ERROR]   symbol:   method getCode()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[33,27] cannot find symbol
+[ERROR]   symbol:   method getName()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[34,27] cannot find symbol
+[ERROR]   symbol:   method getType()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[35,28] cannot find symbol
+[ERROR]   symbol:   method getValue()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[36,31] cannot find symbol
+[ERROR]   symbol:   method getMinSpend()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[37,36] cannot find symbol
+[ERROR]   symbol:   method getTotalQuantity()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[38,38] cannot find symbol
+[ERROR]   symbol:   method getClaimedQuantity()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[39,32] cannot find symbol
+[ERROR]   symbol:   method getStartDate()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[40,30] cannot find symbol
+[ERROR]   symbol:   method getEndDate()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[41,29] cannot find symbol
+[ERROR]   symbol:   method getStatus()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[42,37] cannot find symbol
+[ERROR]   symbol:   method getApplicableType()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/dto/coupon/CouponResponse.java:[43,32] cannot find symbol
+[ERROR]   symbol:   method getCreatedAt()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderQueryService.java:[35,71] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: class tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderQueryService.java:[36,63] cannot find symbol
+[ERROR]   symbol:   method getCourseId()
+[ERROR]   location: class tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[122,47] cannot find symbol
+[ERROR]   symbol:   method getStatus()
+[ERROR]   location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[123,63] cannot find symbol
+[ERROR]   symbol:   method getCourseId()
+[ERROR]   location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[135,37] cannot find symbol
+[ERROR]   symbol:   method getPrice()
+[ERROR]   location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[148,52] cannot find symbol
+[ERROR]   symbol:   method getFirstName()
+[ERROR]   location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[148,74] cannot find symbol
+[ERROR]   symbol:   method getLastName()
+[ERROR]   location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[148,94] cannot find symbol
+[ERROR]   symbol:   method getPhone()
+[ERROR]   location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[149,21] cannot find symbol
+[ERROR]   symbol:   method getAccount()
+[ERROR]   location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[151,60] cannot find symbol
+[ERROR]   symbol:   method getName()
+[ERROR]   location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[151,78] cannot find symbol
+[ERROR]   symbol:   method getPrice()
+[ERROR]   location: variable course of type tw.com.ispan.gym.entity.Course
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[180,71] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: class tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[184,53] cannot find symbol
+[ERROR]   symbol:   method getStock()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[191,25] cannot find symbol
+[ERROR]   symbol:   method setStatus(tw.com.ispan.gym.enums.MemberCouponStatus)
+[ERROR]   location: variable memberCoupon of type tw.com.ispan.gym.entity.MemberCoupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[192,25] cannot find symbol
+[ERROR]   symbol:   method setUsedAt(<nulltype>)
+[ERROR]   location: variable memberCoupon of type tw.com.ispan.gym.entity.MemberCoupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[200,64] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: class tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[208,44] cannot find symbol
+[ERROR]   symbol:   method getPrice()
+[ERROR]   location: class tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[209,42] incompatible types: invalid method reference
+[ERROR]     incompatible types: java.lang.Object cannot be converted to java.math.BigDecimal
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[222,62] cannot find symbol
+[ERROR]   symbol:   method getFirstName()
+[ERROR]   location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[222,84] cannot find symbol
+[ERROR]   symbol:   method getLastName()
+[ERROR]   location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[223,64] cannot find symbol
+[ERROR]   symbol:   method getPhone()
+[ERROR]   location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[226,98] cannot find symbol
+[ERROR]   symbol:   method getAccount()
+[ERROR]   location: variable user of type tw.com.ispan.gym.entity.Member
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[231,66] cannot find symbol
+[ERROR]   symbol:   method getName()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[231,85] cannot find symbol
+[ERROR]   symbol:   method getPrice()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[232,53] cannot find symbol
+[ERROR]   symbol:   method getStock()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[241,50] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[242,84] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[246,49] cannot find symbol
+[ERROR]   symbol:   method getStatus()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[247,58] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[249,31] cannot find symbol
+[ERROR]   symbol:   method getStock()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[250,57] cannot find symbol
+[ERROR]   symbol:   method getProductId()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[250,91] cannot find symbol
+[ERROR]   symbol:   method getStock()
+[ERROR]   location: variable product of type tw.com.ispan.gym.entity.Product
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[256,47] cannot find symbol
+[ERROR]   symbol:   method getStatus()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[257,53] cannot find symbol
+[ERROR]   symbol:   method getStartDate()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[258,52] cannot find symbol
+[ERROR]   symbol:   method getEndDate()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] /Users/atapp/Desktop/ispan-proj-gym/backend/src/main/java/tw/com/ispan/gym/service/OrderService.java:[261,52] cannot find symbol
+[ERROR]   symbol:   method getApplicableType()
+[ERROR]   location: variable coupon of type tw.com.ispan.gym.entity.Coupon
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
