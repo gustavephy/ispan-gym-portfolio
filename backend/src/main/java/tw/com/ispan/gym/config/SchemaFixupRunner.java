@@ -35,12 +35,225 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        renameLegacyTables();
+        renameLegacyColumns();
+        clearLegacyOperatorIds();
+        dropLegacyIdentityArtifacts();
         narrowColumnLengths();
         createFilteredUniqueIndexes();
         backfillExistingRows();
         migrateOauthBindingsToAccountTable();
         dropObsoleteColumns();
         dropDuplicateUniqueIndexes();
+    }
+
+    // === 舊表改名 =============================================================
+    // Entity 重構定案的表改名（users → member 等，見下方清單）。
+    // 本 runner 跑在 Hibernate ddl-auto 之後，屆時 Hibernate 已依新 @Table
+    // 建出一張空的新表（連同指向它的新 FK），必須先把那張空表
+    // 連 FK 一起拆掉，才能把帶資料的舊表改名過去。
+    // 新表已有資料時代表改名早已完成（或狀態不明），一律不動。
+
+    private void renameLegacyTables() {
+        if (renameLegacyTable("users", "member")) {
+            // 舊唯一約束跟著換名，避免出現「舊的被當重複清掉、新的下次啟動才建」
+            // 的空窗期；dropDuplicateUniqueIndexes 之後就無事可做。
+            renameUniqueIndex("member", "UX_users_email", "UX_member_email");
+        }
+        renameLegacyTable("subscription", "member_subscription");
+        renameLegacyTable("user_course_quota", "member_course_quota");
+        renameLegacyTable("user_oauth_accounts", "member_oauth_account");
+    }
+
+    // === 舊欄位改名（user_id → member_id）====================================
+    // 與表改名同理：Hibernate 已先在既有表上補了一個空的 member_id 欄位
+    //（連同指向 member 的新 FK），必須先把空欄位連 FK 拆掉再 sp_rename，
+    // 資料才會留在原欄位裡跟著改名。表改名之後執行，清單用的是新表名。
+
+    private void renameLegacyColumns() {
+        // 主鍵欄名加實體前綴（Java 欄位名見各 entity）
+        renameColumnIfExists("member", "id", "member_id");
+        renameColumnIfExists("products", "id", "product_id");
+        renameColumnIfExists("product_categories", "id", "product_category_id");
+        renameColumnIfExists("coupons", "id", "coupon_id");
+        renameColumnIfExists("user_coupons", "id", "member_coupon_id");
+        renameColumnIfExists("courses", "id", "course_id");
+        renameColumnIfExists("subscription_plan", "id", "subscription_plan_id");
+        renameColumnIfExists("member_subscription", "id", "member_subscription_id");
+        renameColumnIfExists("inventory_log", "id", "inventory_log_id");
+        // orders 指向 user_coupons 的 FK 欄跟著改名
+        renameColumnIfExists("orders", "user_coupon_id", "member_coupon_id");
+        // 操作者欄位改指身分域正確的表：庫存調帳→employee、銷課→trainer。
+        // 舊值是 member id，在新的 id 空間裡對不上，改名後需清值（見下方 clearLegacyOperatorIds）
+        renameColumnIfExists("inventory_log", "operator_id", "operator_employee_id");
+        renameColumnIfExists("session_deduction_logs", "operator_id", "operator_trainer_id");
+        for (String table : new String[] {
+                "cart_items", "orders", "user_coupons", "member_subscription",
+                "member_course_quota", "member_oauth_account", "password_history",
+                "password_reset_tokens", "email_verifications", "session_deduction_logs",
+                "trainer_details", "idempotency_requests" }) {
+            renameColumnIfExists(table, "user_id", "member_id");
+        }
+    }
+
+    private void renameColumnIfExists(String table, String from, String to) {
+        if (!columnExists(table, from)) {
+            return;
+        }
+        if (columnExists(table, to)) {
+            Integer filled = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM " + table + " WHERE " + to + " IS NOT NULL", Integer.class);
+            if (filled != null && filled > 0) {
+                log.warn("{}.{} 與 {} 並存且新欄位已有資料，無法自動改名，請人工處理", table, from, to);
+                return;
+            }
+            if (isPrimaryKeyColumn(table, to)) {
+                // 空表時 ddl-auto 會直接以新欄名建表（含 PK 約束），此時舊欄不存在，
+                // 走不到這裡；真走到代表新舊欄並存且新欄是 PK，非預期狀態。
+                log.warn("{}.{} 是主鍵欄，不自動移除；請確認 {} 的改名狀態", table, to, table);
+                return;
+            }
+            dropForeignKeysOnColumn(table, to);
+            jdbc.execute("ALTER TABLE " + table + " DROP COLUMN " + to);
+            log.info("已移除 Hibernate 先行建立的空欄位 {}.{}", table, to);
+        }
+        jdbc.execute("EXEC sp_rename '" + table + "." + from + "', '" + to + "', 'COLUMN'");
+        log.info("已將欄位 {}.{} 改名為 {}", table, from, to);
+    }
+
+    private boolean isPrimaryKeyColumn(String table, String column) {
+        Integer found = jdbc.queryForObject("""
+                SELECT COUNT(*)
+                    FROM sys.indexes i
+                    JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+                    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+                    WHERE i.object_id = OBJECT_ID(?) AND i.is_primary_key = 1 AND c.name = ?
+                """, Integer.class, table, column);
+        return found != null && found > 0;
+    }
+
+    private void dropForeignKeysOnColumn(String table, String column) {
+        var fks = jdbc.queryForList("""
+                SELECT fk.name AS name
+                    FROM sys.foreign_keys fk
+                    JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+                    JOIN sys.columns c ON c.object_id = fkc.parent_object_id
+                                      AND c.column_id = fkc.parent_column_id
+                    WHERE fk.parent_object_id = OBJECT_ID(?) AND c.name = ?
+                """, table, column);
+        for (var row : fks) {
+            jdbc.execute("ALTER TABLE [" + table + "] DROP CONSTRAINT [" + row.get("name") + "]");
+            log.info("已移除 {}.{} 上的外鍵 {}", table, column, row.get("name"));
+        }
+    }
+
+    private boolean renameLegacyTable(String from, String to) {
+        if (!tableExists(from)) {
+            return false;
+        }
+        if (tableExists(to)) {
+            Integer rows = jdbc.queryForObject("SELECT COUNT(*) FROM " + to, Integer.class);
+            if (rows != null && rows > 0) {
+                log.warn("{} 與 {} 同時存在且 {} 有資料，無法自動改名，請人工處理", from, to, to);
+                return false;
+            }
+            dropForeignKeysReferencing(to);
+            jdbc.execute("DROP TABLE " + to);
+            log.info("已移除 Hibernate 先行建立的空 {} 表", to);
+        }
+        jdbc.execute("EXEC sp_rename '" + from + "', '" + to + "'");
+        log.info("已將資料表 {} 改名為 {}", from, to);
+        return true;
+    }
+
+    private void renameUniqueIndex(String table, String from, String to) {
+        var rows = jdbc.queryForList("""
+                SELECT is_unique_constraint FROM sys.indexes
+                    WHERE object_id = OBJECT_ID(?) AND name = ?
+                """, table, from);
+        if (rows.isEmpty()) {
+            return;
+        }
+        boolean isConstraint = Boolean.TRUE.equals(rows.get(0).get("is_unique_constraint"));
+        if (isConstraint) {
+            jdbc.execute("EXEC sp_rename '" + from + "', '" + to + "', 'OBJECT'");
+        } else {
+            jdbc.execute("EXEC sp_rename '" + table + "." + from + "', '" + to + "', 'INDEX'");
+        }
+        log.info("已將唯一索引 {} 改名為 {}", from, to);
+    }
+
+    private void dropForeignKeysReferencing(String table) {
+        var fks = jdbc.queryForList("""
+                SELECT OBJECT_NAME(parent_object_id) AS parent, name
+                    FROM sys.foreign_keys
+                    WHERE referenced_object_id = OBJECT_ID(?)
+                """, table);
+        for (var row : fks) {
+            jdbc.execute("ALTER TABLE [" + row.get("parent") + "] DROP CONSTRAINT [" + row.get("name") + "]");
+            log.info("已移除 {} 指向 {} 的外鍵 {}", row.get("parent"), table, row.get("name"));
+        }
+    }
+
+    private boolean tableExists(String table) {
+        Integer found = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.tables WHERE name = ?", Integer.class, table);
+        return found != null && found > 0;
+    }
+
+    // === 操作者 id 跨身分域失效清理 ===========================================
+    // operator_id 舊值是 member id；欄位改指 employee／trainer 後，
+    // 同一個數字在新的 id 空間裡是不相干的人（或不存在），留著比清掉更危險：
+    // 會把調帳／銷課的責任掛到錯誤的對象身上，且 Hibernate 補 FK 時也會失敗。
+    // 兩欄都可空（系統操作本來就是 null），清成 NULL 是安全的。
+    // 一次性：清完之後這些欄位只會由新程式寫入正確的 id，重跑影響 0 列。
+
+    private void clearLegacyOperatorIds() {
+        clearOrphanOperatorIds("inventory_log", "operator_employee_id", "employee", "employee_id");
+        clearOrphanOperatorIds("session_deduction_logs", "operator_trainer_id", "trainer", "trainer_id");
+    }
+
+    private void clearOrphanOperatorIds(String table, String column, String refTable, String refColumn) {
+        if (!columnExists(table, column) || !tableExists(refTable)) {
+            return;
+        }
+        backfill(table + "." + column + "（清除跨身分域失效值）", """
+                UPDATE %s SET %s = NULL
+                    WHERE %s IS NOT NULL
+                      AND NOT EXISTS (SELECT 1 FROM %s r WHERE r.%s = %s.%s)
+                """.formatted(table, column, column, refTable, refColumn, table, column));
+    }
+
+    // === 身分域改版清理（2026-08-12 定案：member / employee / trainer）========
+    // trainer 改掛 employee（PK trainer_id、employee_id FK+UK），
+    // 不再與 member 共享主鍵；staff 改名 employee。過渡期產物一律清除：
+    // - 舊 member 制 trainer（有 member_id 欄）：直接砍，讓 ddl-auto 重建新版
+    // - trainer_details：member 制教練資料無法對映到 employee 制，捨棄
+    // - staff：已由 employee 取代；空表直接砍，有資料留警告
+    // 註：courses / coach_slots 既有測試資料的 trainer_id 是舊 member id，
+    // 在新 trainer id 空間裡是孤兒，Hibernate 補 FK 會失敗（僅留 warning，
+    // 不影響啟動）；請清理該兩表資料或重建開發資料庫。
+
+    private void dropLegacyIdentityArtifacts() {
+        if (columnExists("trainer", "member_id")) {
+            dropForeignKeysReferencing("trainer");
+            jdbc.execute("DROP TABLE trainer");
+            log.info("已移除舊 member 制 trainer 表，employee 制新表由 ddl-auto 重建");
+        }
+        if (tableExists("trainer_details")) {
+            jdbc.execute("DROP TABLE trainer_details");
+            log.warn("已移除舊表 trainer_details（member 制教練資料不再適用，未遷移）");
+        }
+        if (tableExists("staff")) {
+            Integer rows = jdbc.queryForObject("SELECT COUNT(*) FROM staff", Integer.class);
+            if (rows != null && rows > 0) {
+                log.warn("staff 已由 employee 取代，但表內有 {} 列資料，請人工處理後移除", rows);
+            } else {
+                dropForeignKeysReferencing("staff");
+                jdbc.execute("DROP TABLE staff");
+                log.info("已移除空的過渡表 staff（由 employee 取代）");
+            }
+        }
     }
 
     // === 欄位長度收斂 =========================================================
@@ -61,16 +274,15 @@ public class SchemaFixupRunner implements CommandLineRunner {
             dropIndexIfExists("group_class_bookings", "UX_gcb_session_member");
         }
 
-        narrowVarchar("users", "gender", 5);
-        narrowVarchar("users", "phone", 10);
-        narrowVarchar("users", "status", 10);
+        narrowVarchar("member", "phone", 10);
+        narrowVarchar("member", "status", 10);
         narrowVarchar("coach_slots", "status", 10);
         narrowVarchar("coach_bookings", "status", 10);
         narrowVarchar("group_class_sessions", "status", 10);
         narrowVarchar("group_class_bookings", "status", 10);
         narrowVarchar("orders", "status", 10);
         narrowVarchar("user_coupons", "status", 10);
-        narrowVarchar("subscription", "status", 10);
+        narrowVarchar("member_subscription", "status", 10);
     }
 
     // === 篩選唯一索引 =========================================================
@@ -98,10 +310,11 @@ public class SchemaFixupRunner implements CommandLineRunner {
         // 一張已領取的優惠券只能用在一筆訂單。
         // 需要 WHERE 是因為大多數訂單沒用券，而 SQL Server 的唯一索引
         // 只允許「一列」為 NULL，不加條件會在第二筆無券訂單就爆掉。
-        createFilteredUniqueIndex("UX_orders_user_coupon", """
-                CREATE UNIQUE INDEX UX_orders_user_coupon
-                    ON orders(user_coupon_id)
-                    WHERE user_coupon_id IS NOT NULL
+        dropIndexIfExists("orders", "UX_orders_user_coupon");
+        createFilteredUniqueIndex("UX_orders_member_coupon", """
+                CREATE UNIQUE INDEX UX_orders_member_coupon
+                    ON orders(member_coupon_id)
+                    WHERE member_coupon_id IS NOT NULL
                 """);
 
         // 同一會員同一天只能有一筆有效的 InBody 記錄（欄位已改名 member_id）。
@@ -122,8 +335,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // 資料庫是空的時候這些 UPDATE 影響 0 列，不會有副作用。
 
     private void backfillExistingRows() {
-        backfill("user_course_quota.version",
-                "UPDATE user_course_quota SET version = 0 WHERE version IS NULL");
+        backfill("member_course_quota.version",
+                "UPDATE member_course_quota SET version = 0 WHERE version IS NULL");
 
         backfill("group_class_sessions.version",
                 "UPDATE group_class_sessions SET version = 0 WHERE version IS NULL");
@@ -149,19 +362,19 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // 其餘略過 —— 那本來就是缺唯一約束造成的髒資料，遷移量請看啟動 log。
 
     private void migrateOauthBindingsToAccountTable() {
-        if (columnExists("users", "oauth_sub")) {
-            backfill("user_oauth_accounts", """
-                    INSERT INTO user_oauth_accounts (user_id, oauth_provider, provider_user_id, created_at)
-                    SELECT u.id, u.oauth_provider, u.oauth_sub, SYSDATETIME()
-                        FROM users u
+        if (columnExists("member", "oauth_sub")) {
+            backfill("member_oauth_account", """
+                    INSERT INTO member_oauth_account (member_id, oauth_provider, provider_user_id, created_at)
+                    SELECT u.member_id, u.oauth_provider, u.oauth_sub, SYSDATETIME()
+                        FROM member u
                         WHERE u.oauth_sub IS NOT NULL AND u.oauth_provider IS NOT NULL
-                          AND NOT EXISTS (SELECT 1 FROM user_oauth_accounts a
+                          AND NOT EXISTS (SELECT 1 FROM member_oauth_account a
                                               WHERE a.oauth_provider = u.oauth_provider
                                                 AND a.provider_user_id = u.oauth_sub)
                     """);
         }
-        dropColumnIfExists("users", "oauth_provider");
-        dropColumnIfExists("users", "oauth_sub");
+        dropColumnIfExists("member", "oauth_provider");
+        dropColumnIfExists("member", "oauth_sub");
     }
 
     // === 清除已淘汰的欄位 =====================================================
@@ -184,10 +397,11 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // 只含該單欄的唯一索引/約束）。
 
     private void dropDuplicateUniqueIndexes() {
-        dropDuplicateUnique("users", "email", "UX_users_email");
+        // 表改名後舊的 UX_users_email 仍掛在 member 上，
+        // 待 Hibernate 建出新的 UX_member_email 後，這裡會把舊的視為重複清掉。
+        dropDuplicateUnique("member", "email", "UX_member_email");
         dropDuplicateUnique("email_verifications", "token", "UX_email_verifications_token");
         dropDuplicateUnique("password_reset_tokens", "token", "UX_password_reset_tokens_token");
-        dropDuplicateUnique("trainer_details", "user_id", "UX_trainer_details_user_id");
     }
 
     private void dropDuplicateUnique(String table, String column, String keepName) {
