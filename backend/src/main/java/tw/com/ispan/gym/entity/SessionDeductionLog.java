@@ -35,12 +35,12 @@ public class SessionDeductionLog {
     /** 對應的會員課程包 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "quota_id", nullable = false)
-    private UserCourseQuota quota;
+    private MemberCourseQuota quota;
 
     /** 對應的學員 */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @JoinColumn(name = "member_id", nullable = false)
+    private Member member;
 
     /** 觸發此異動的私教預約（取消/核銷時有值，購課時為 null） */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -83,10 +83,10 @@ public class SessionDeductionLog {
     @Column(length = 200, columnDefinition = "NVARCHAR(200)")
     private String remark;
 
-    /** 執行此操作的用戶（例如管理員或學員自身） */
+    /** 執行核銷的教練；會員自助訂課／取消與系統發放額度時為 null */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "operator_id", nullable = true)
-    private User operator;
+    @JoinColumn(name = "operator_trainer_id", nullable = true)
+    private Trainer operatorTrainer;
 
     @CreatedDate
     @Column(updatable = false, columnDefinition = "datetime2")

@@ -22,18 +22,18 @@ import tw.com.ispan.gym.exception.BusinessRuleException;
  * 到期沒收 → remaining→0, used+N
  */
 @Entity
-@Table(name = "user_course_quota")
+@Table(name = "member_course_quota")
 @Data
-public class UserCourseQuota {
+public class MemberCourseQuota {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "member_id", nullable = false)
     @JsonIgnore
-    private User user;
+    private Member member;
 
     /**
      * 對應的課程商品（products 表，type=COURSE）

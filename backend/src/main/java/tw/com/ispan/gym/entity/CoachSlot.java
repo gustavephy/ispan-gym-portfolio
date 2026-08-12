@@ -46,7 +46,7 @@ public class CoachSlot {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "trainer_id", nullable = false)
-    private User trainer;
+    private Trainer trainer;
 
     @Column(name = "start_at", nullable = false, columnDefinition = "datetime2")
     private LocalDateTime startAt;

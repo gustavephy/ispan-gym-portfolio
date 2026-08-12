@@ -21,19 +21,19 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "user_oauth_accounts", uniqueConstraints = @UniqueConstraint(name = "UX_user_oauth_accounts_provider", columnNames = {
+@Table(name = "member_oauth_account", uniqueConstraints = @UniqueConstraint(name = "UX_user_oauth_accounts_provider", columnNames = {
 		"oauth_provider", "provider_user_id" }))
 @Getter
 @Setter
-public class UserOauthAccount {
+public class MemberOauthAccount {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "FK_user_oauth_accounts_user_id"))
-	private User user;
+	@JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "FK_user_oauth_accounts_user_id"))
+	private Member member;
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "oauth_provider", length = 20, nullable = false)

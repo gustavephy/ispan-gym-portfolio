@@ -17,6 +17,6 @@ public interface CouponRepository extends JpaRepository<Coupon, Integer> {
 	List<Coupon> findByStatus(CouponStatus status);
 	
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@Query("SELECT c FROM Coupon c WHERE c.id =:id")
+	@Query("SELECT c FROM Coupon c WHERE c.couponId =:id")
 	Optional<Coupon> findByIdForUpdate(@Param("id")Integer id);
 }

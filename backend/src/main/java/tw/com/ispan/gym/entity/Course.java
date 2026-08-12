@@ -36,7 +36,8 @@ public class Course {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Integer id;
+	@Column(name = "course_id")
+	private Integer courseId;
 
 	@Column(nullable = false, length = 100, columnDefinition = "NVARCHAR(100)")
 	private String name;
@@ -61,7 +62,7 @@ public class Course {
 	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "trainer_id", nullable = false)
 	@JsonIgnore
-	private User trainer;
+	private Trainer trainer;
 
 	@Column(nullable = false)
 	private Integer maxCapacity = 15;

@@ -1,4 +1,5 @@
 package tw.com.ispan.gym.entity;
+
 import tw.com.ispan.gym.enums.OrderStatus;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
@@ -19,8 +20,8 @@ public class Order extends TaipeiTimestampEntity {
     @Column(name = "id", nullable = false)
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "FK_orders_user"))
-    private User user;
+    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "FK_orders_user"))
+    private Member member;
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
     @Column(name = "payment_method", length = 20)
@@ -42,10 +43,10 @@ public class Order extends TaipeiTimestampEntity {
     @Nationalized
     @Column(name = "receiver_address", length = 200)
     private String receiverAddress;
-    /** 本筆訂單消耗掉的那一張已領取優惠券（券種可由 userCoupon.coupon 取得） */
+    /** 本筆訂單消耗掉的那一張已領取優惠券（券種可由 memberCoupon.coupon 取得） */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_coupon_id", foreignKey = @ForeignKey(name = "FK_orders_user_coupon"))
-    private MemberCoupon userCoupon;
+    @JoinColumn(name = "member_coupon_id", foreignKey = @ForeignKey(name = "FK_orders_user_coupon"))
+    private MemberCoupon memberCoupon;
     @Column(name = "original_amount", precision = 10, scale = 2)
     private BigDecimal originalAmount;
     @Column(name = "discount_amount", nullable = false, precision = 10, scale = 2)
@@ -69,20 +70,21 @@ public class Order extends TaipeiTimestampEntity {
     @Column(name = "version", nullable = false)
     private Integer version;
 
-    protected Order() {}
+    protected Order() {
+    }
 
-    public Order(User user, String merchantTradeNo, String orderNo, BigDecimal originalAmount,
+    public Order(Member member, String merchantTradeNo, String orderNo, BigDecimal originalAmount,
             BigDecimal discountAmount, BigDecimal subtotalAmount, BigDecimal totalAmount,
-            MemberCoupon userCoupon, String receiverName, String receiverPhone, String receiverAddress,
+            MemberCoupon memberCoupon, String receiverName, String receiverPhone, String receiverAddress,
             String receiverEmail) {
-        this.user = user;
+        this.member = member;
         this.merchantTradeNo = merchantTradeNo;
         this.orderNo = orderNo;
         this.originalAmount = originalAmount;
         this.discountAmount = discountAmount;
         this.subtotalAmount = subtotalAmount;
         this.totalAmount = totalAmount;
-        this.userCoupon = userCoupon;
+        this.memberCoupon = memberCoupon;
         this.receiverName = receiverName;
         this.receiverPhone = receiverPhone;
         this.receiverAddress = receiverAddress;
@@ -106,27 +108,91 @@ public class Order extends TaipeiTimestampEntity {
         this.cancelReason = reason;
     }
 
-    public Long getId() { return id; }
-    public User getUser() { return user; }
-    public BigDecimal getTotalAmount() { return totalAmount; }
-    public String getPaymentMethod() { return paymentMethod; }
-    public String getMerchantTradeNo() { return merchantTradeNo; }
-    public String getTradeNo() { return tradeNo; }
-    public OrderStatus getStatus() { return status; }
-    public LocalDateTime getPaidAt() { return paidAt; }
-    public String getReceiverName() { return receiverName; }
-    public String getReceiverPhone() { return receiverPhone; }
-    public String getReceiverAddress() { return receiverAddress; }
-    public String getReceiverEmail() { return receiverEmail; }
-    public MemberCoupon getUserCoupon() { return userCoupon; }
-    public BigDecimal getOriginalAmount() { return originalAmount; }
-    public BigDecimal getDiscountAmount() { return discountAmount; }
-    public String getOrderNo() { return orderNo; }
-    public String getPaymentStatus() { return paymentStatus; }
-    public String getCurrency() { return currency; }
-    public BigDecimal getSubtotalAmount() { return subtotalAmount; }
-    public LocalDateTime getCancelledAt() { return cancelledAt; }
-    public String getCancelReason() { return cancelReason; }
-    public Integer getVersion() { return version; }
-}
+    public Long getId() {
+        return id;
+    }
 
+    public Member getMember() {
+        return member;
+    }
+
+    public BigDecimal getTotalAmount() {
+        return totalAmount;
+    }
+
+    public String getPaymentMethod() {
+        return paymentMethod;
+    }
+
+    public String getMerchantTradeNo() {
+        return merchantTradeNo;
+    }
+
+    public String getTradeNo() {
+        return tradeNo;
+    }
+
+    public OrderStatus getStatus() {
+        return status;
+    }
+
+    public LocalDateTime getPaidAt() {
+        return paidAt;
+    }
+
+    public String getReceiverName() {
+        return receiverName;
+    }
+
+    public String getReceiverPhone() {
+        return receiverPhone;
+    }
+
+    public String getReceiverAddress() {
+        return receiverAddress;
+    }
+
+    public String getReceiverEmail() {
+        return receiverEmail;
+    }
+
+    public MemberCoupon getMemberCoupon() {
+        return memberCoupon;
+    }
+
+    public BigDecimal getOriginalAmount() {
+        return originalAmount;
+    }
+
+    public BigDecimal getDiscountAmount() {
+        return discountAmount;
+    }
+
+    public String getOrderNo() {
+        return orderNo;
+    }
+
+    public String getPaymentStatus() {
+        return paymentStatus;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public BigDecimal getSubtotalAmount() {
+        return subtotalAmount;
+    }
+
+    public LocalDateTime getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public String getCancelReason() {
+        return cancelReason;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+}

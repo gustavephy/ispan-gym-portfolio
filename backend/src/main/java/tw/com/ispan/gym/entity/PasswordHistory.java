@@ -27,8 +27,8 @@ public class PasswordHistory {
 	private Integer id;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "FK_password_history_user_id"))
-	private User user;
+	@JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "FK_password_history_user_id"))
+	private Member member;
 
 	@Column(name = "password_hash", length = 255, nullable = false)
 	private String passwordHash;

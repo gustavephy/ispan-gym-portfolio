@@ -34,7 +34,8 @@ public class Product {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    @Column(name = "product_id")
+    private Integer productId;
 
     @Column(nullable = false, columnDefinition = "NVARCHAR(50)")
     private String name;
