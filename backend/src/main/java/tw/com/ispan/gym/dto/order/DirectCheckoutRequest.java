@@ -5,6 +5,6 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 public record DirectCheckoutRequest(
-        @NotNull Integer productId,
+        @NotNull Integer courseId,
         @NotNull @Positive Long quantity,
         @Size(max = 30) String couponCode) {}

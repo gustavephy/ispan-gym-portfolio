@@ -17,7 +17,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.product.ProductRequest;
 import tw.com.ispan.gym.dto.product.ProductResponse;
-import tw.com.ispan.gym.enums.ProductType;
 import tw.com.ispan.gym.service.ProductService;
 
 @RestController
@@ -30,13 +29,12 @@ public class ProductController {
 	//查詢商品列表
 	@GetMapping("/api/products")
 	public ResponseEntity<Page<ProductResponse>> getProducts(
-			@RequestParam(required = false) ProductType type,
 			@RequestParam(required = false) Integer categoryId,
 			@RequestParam(required = false) String keyword,
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "10") int size){
-		log.info("Request to get products with type={}, categoryId={}, keyword={}, page={}, size={}", type, categoryId, keyword, page, size);
-		return ResponseEntity.ok(productService.getProducts(type,categoryId,keyword,page,size));
+		log.info("Request to get products with categoryId={}, keyword={}, page={}, size={}", categoryId, keyword, page, size);
+		return ResponseEntity.ok(productService.getProducts(categoryId,keyword,page,size));
 	}
 
 	//查詢單一商品詳情

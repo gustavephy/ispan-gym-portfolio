@@ -10,6 +10,7 @@ import tw.com.ispan.gym.entity.Coupon;
 import tw.com.ispan.gym.entity.Order;
 import tw.com.ispan.gym.entity.OrderItem;
 import tw.com.ispan.gym.entity.OrderStatusHistory;
+import tw.com.ispan.gym.entity.Course;
 import tw.com.ispan.gym.entity.Product;
 import tw.com.ispan.gym.entity.Member;
 import tw.com.ispan.gym.entity.MemberCoupon;
@@ -17,7 +18,7 @@ import tw.com.ispan.gym.enums.CouponApplicableType;
 import tw.com.ispan.gym.enums.CouponStatus;
 import tw.com.ispan.gym.enums.CouponType;
 import tw.com.ispan.gym.enums.ProductStatus;
-import tw.com.ispan.gym.enums.ProductType;
+import tw.com.ispan.gym.enums.CourseStatus;
 import tw.com.ispan.gym.enums.MemberCouponStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.DirectCheckoutNotAllowedException;
@@ -31,6 +32,7 @@ import tw.com.ispan.gym.repository.CouponRepository;
 import tw.com.ispan.gym.repository.OrderItemRepository;
 import tw.com.ispan.gym.repository.OrderRepository;
 import tw.com.ispan.gym.repository.OrderStatusHistoryRepository;
+import tw.com.ispan.gym.repository.CourseRepository;
 import tw.com.ispan.gym.repository.ProductRepository;
 import tw.com.ispan.gym.repository.MemberCouponRepository;
 import tw.com.ispan.gym.repository.MemberRepository;
@@ -61,6 +63,7 @@ public class OrderService {
 
     private final CartItemRepository cartItems;
     private final ProductRepository products;
+    private final CourseRepository courses;
     private final MemberRepository users;
     private final CouponRepository coupons;
     private final MemberCouponRepository memberCoupons;
@@ -68,11 +71,13 @@ public class OrderService {
     private final OrderItemRepository orderItems;
     private final OrderStatusHistoryRepository orderStatusHistories;
 
-    public OrderService(CartItemRepository cartItems, ProductRepository products, MemberRepository users,
-            CouponRepository coupons, MemberCouponRepository memberCoupons, OrderRepository orders,
-            OrderItemRepository orderItems, OrderStatusHistoryRepository orderStatusHistories) {
+    public OrderService(CartItemRepository cartItems, ProductRepository products, CourseRepository courses,
+            MemberRepository users, CouponRepository coupons, MemberCouponRepository memberCoupons,
+            OrderRepository orders, OrderItemRepository orderItems,
+            OrderStatusHistoryRepository orderStatusHistories) {
         this.cartItems = cartItems;
         this.products = products;
+        this.courses = courses;
         this.users = users;
         this.coupons = coupons;
         this.memberCoupons = memberCoupons;
@@ -104,7 +109,7 @@ public class OrderService {
     }
 
     /**
-     * 課程略過購物車，直接以 productId + quantity 結帳。會員訂閱的直接結帳流程待資料模型確定後再補上。
+     * 課程略過購物車，直接以 courseId + quantity 結帳。會員訂閱的直接結帳流程待資料模型確定後再補上。
      */
     @Transactional
     public OrderDetailResponse createDirectOrder(Integer userId, DirectCheckoutRequest request) {
@@ -112,15 +117,41 @@ public class OrderService {
             throw new InvalidQuantityException();
         }
         Member user = users.findById(userId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
-        Product product = products.findById(request.productId())
-                .orElseThrow(() -> new ProductNotFoundException(request.productId()));
-        if (!ProductType.COURSE.equals(product.getType())) {
-            throw new DirectCheckoutNotAllowedException(product.getProductId());
+        Course course = courses.findById(request.courseId())
+                .orElseThrow(() -> new ResourceNotFoundException("找不到課程：" + request.courseId()));
+        if (!CourseStatus.ACTIVE.equals(course.getStatus())) {
+            throw new DirectCheckoutNotAllowedException(course.getCourseId());
         }
 
-        Order order = createOrder(user, List.of(new ProductQuantity(product, request.quantity())),
-                request.couponCode(), null, null, null, CouponApplicableType.COURSE);
+        Order order = createCourseOrder(user, course, request.quantity(), request.couponCode());
         return toDetailResponse(order);
+    }
+
+    /**
+     * 課程訂單：不涉庫存，明細以 course_id 記錄。
+     * 履約（發放堂數額度）待 MemberCourseQuota 服務接上後補。
+     */
+    private Order createCourseOrder(Member user, Course course, long quantity, String couponCode) {
+        BigDecimal subtotal = course.getPrice().multiply(BigDecimal.valueOf(quantity));
+
+        MemberCoupon memberCoupon = null;
+        BigDecimal discount = BigDecimal.ZERO;
+        if (couponCode != null && !couponCode.isBlank()) {
+            Coupon coupon = coupons.findByCode(couponCode)
+                    .orElseThrow(() -> new ResourceNotFoundException("找不到優惠券：" + couponCode));
+            memberCoupon = redeemCoupon(user, coupon, subtotal, CouponApplicableType.COURSE);
+            discount = computeDiscount(coupon, subtotal);
+        }
+
+        BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
+        Order order = orders.save(new Order(user, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount,
+                subtotal, total, memberCoupon, user.getFirstName() + user.getLastName(), user.getPhone(), null,
+                user.getEmail()));
+
+        orderItems.save(new OrderItem(order, course, course.getName(), course.getPrice(), quantity));
+        orderStatusHistories.save(new OrderStatusHistory(order, null, order.getStatus().name(), user, "USER",
+                "CHECKOUT"));
+        return order;
     }
 
     /**
@@ -142,15 +173,15 @@ public class OrderService {
         return toDetailResponse(order);
     }
 
+    /** 只有商品明細需要還原庫存；課程明細（course_id 非空）不涉庫存 */
     private void restoreStock(Order order) {
         List<OrderItem> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
+                .filter(item -> !item.isCourseItem())
                 .sorted(Comparator.comparing(item -> item.getProduct().getProductId()))
                 .toList();
         for (OrderItem item : items) {
             Product product = reloadForUpdate(item.getProduct());
-            if (ProductType.GOODS.equals(product.getType())) {
-                product.setStock(Math.toIntExact(product.getStock() + item.getQuantity()));
-            }
+            product.setStock(Math.toIntExact(product.getStock() + item.getQuantity()));
         }
     }
 
@@ -198,9 +229,7 @@ public class OrderService {
         for (OrderLine line : lines) {
             Product product = line.product();
             orderItems.save(new OrderItem(order, product, product.getName(), product.getPrice(), line.quantity()));
-            if (ProductType.GOODS.equals(product.getType())) {
-                product.setStock(Math.toIntExact(product.getStock() - line.quantity()));
-            }
+            product.setStock(Math.toIntExact(product.getStock() - line.quantity()));
         }
 
         orderStatusHistories.save(new OrderStatusHistory(order, null, order.getStatus().name(), user, "USER",
@@ -217,7 +246,7 @@ public class OrderService {
         if (!ProductStatus.ACTIVE.equals(product.getStatus())) {
             throw new ProductUnavailableException(product.getProductId());
         }
-        if (ProductType.GOODS.equals(product.getType()) && quantity > product.getStock()) {
+        if (quantity > product.getStock()) {
             throw new InsufficientStockException(product.getProductId(), quantity, product.getStock());
         }
     }
@@ -268,7 +297,9 @@ public class OrderService {
     private OrderDetailResponse toDetailResponse(Order order) {
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
                 .sorted(Comparator.comparing(OrderItem::getId))
-                .map(item -> new OrderItemResponse(item.getId(), item.getProduct().getProductId(),
+                .map(item -> new OrderItemResponse(item.getId(),
+                        item.isCourseItem() ? null : item.getProduct().getProductId(),
+                        item.isCourseItem() ? item.getCourse().getCourseId() : null,
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
                         item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
                 .toList();

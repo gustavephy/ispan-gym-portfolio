@@ -23,7 +23,6 @@ import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 import tw.com.ispan.gym.enums.ProductStatus;
-import tw.com.ispan.gym.enums.ProductType;
 
 @Entity
 @Table(name = "products")
@@ -49,20 +48,12 @@ public class Product {
     @Column(nullable=false)
     private Integer stock;
 
-    @Column(nullable = false)
-    private Integer sessionsPerUnit = 0;
-
     @Version
     private Integer version = 0;
 
     @Column(nullable = false, columnDefinition = "VARCHAR(20)")
     @Enumerated(EnumType.STRING)
     private ProductStatus status = ProductStatus.ACTIVE;
-
-    // 商品/課程分流依據；待課程域拆為獨立資料表後再移除
-    @Column(nullable = false, columnDefinition = "VARCHAR(20)")
-    @Enumerated(EnumType.STRING)
-    private ProductType type = ProductType.GOODS;
 
     @Column(columnDefinition = "NVARCHAR(MAX)")
     private String imageUrl;

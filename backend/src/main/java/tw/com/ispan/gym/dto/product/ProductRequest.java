@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-import tw.com.ispan.gym.enums.ProductType;
 
 @Data
 public class ProductRequest {
@@ -15,9 +14,6 @@ public class ProductRequest {
 	private String name;
 
 	private String description;
-
-	@NotNull(message="商品類型不得為空")
-	private ProductType type;
 
 	@NotNull(message="價格不得為空")
 	@DecimalMin(value="0.01",message="價格必須大於 0")
@@ -45,5 +41,4 @@ public class ProductRequest {
 
     private String color;
 
-    private Integer sessionsPerUnit = 1;
 }

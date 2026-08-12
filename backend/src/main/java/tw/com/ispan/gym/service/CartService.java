@@ -9,9 +9,7 @@ import tw.com.ispan.gym.entity.CartItem;
 import tw.com.ispan.gym.entity.Product;
 import tw.com.ispan.gym.entity.Member;
 import tw.com.ispan.gym.enums.ProductStatus;
-import tw.com.ispan.gym.enums.ProductType;
 import tw.com.ispan.gym.exception.CartItemNotFoundException;
-import tw.com.ispan.gym.exception.CartItemTypeNotAllowedException;
 import tw.com.ispan.gym.exception.ForbiddenCartAccessException;
 import tw.com.ispan.gym.exception.InsufficientStockException;
 import tw.com.ispan.gym.exception.InvalidQuantityException;
@@ -53,7 +51,8 @@ public class CartService {
                 .orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
         Product product = products.findById(request.productId())
                 .orElseThrow(() -> new ProductNotFoundException(request.productId()));
-        validateCartable(product);
+        // 購物車只裝商品；課程走直接結帳（createDirectOrder），
+        // 課程獨立成表後，products 表本身就不會出現課程，無需再檢查型別。
         validateAvailable(product);
 
         CartItem item;
@@ -113,17 +112,8 @@ public class CartService {
         }
     }
 
-    /**
-     * 購物車僅接受一般商品（GOODS）；課程與會員訂閱一律走直接結帳流程，不進購物車。
-     */
-    private void validateCartable(Product product) {
-        if (!ProductType.GOODS.equals(product.getType())) {
-            throw new CartItemTypeNotAllowedException(product.getProductId());
-        }
-    }
-
     private void validateStock(Product product, long requestedQuantity) {
-        if (ProductType.GOODS.equals(product.getType()) && requestedQuantity > product.getStock()) {
+        if (requestedQuantity > product.getStock()) {
             throw new InsufficientStockException(product.getProductId(), requestedQuantity, product.getStock());
         }
     }
@@ -131,7 +121,7 @@ public class CartService {
     private CartItemResponse toResponse(CartItem item) {
         Product product = item.getProduct();
         BigDecimal subtotal = product.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
-        return new CartItemResponse(item.getId(), product.getProductId(), product.getType().name(), product.getName(),
+        return new CartItemResponse(item.getId(), product.getProductId(), product.getName(),
                 product.getImageUrl(), product.getPrice(), item.getQuantity(), subtotal);
     }
 }

@@ -39,6 +39,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         renameLegacyColumns();
         clearLegacyOperatorIds();
         dropLegacyIdentityArtifacts();
+        migrateCourseDomainSplit();
         narrowColumnLengths();
         createFilteredUniqueIndexes();
         backfillExistingRows();
@@ -230,9 +231,6 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // - 舊 member 制 trainer（有 member_id 欄）：直接砍，讓 ddl-auto 重建新版
     // - trainer_details：member 制教練資料無法對映到 employee 制，捨棄
     // - staff：已由 employee 取代；空表直接砍，有資料留警告
-    // 註：courses / coach_slots 既有測試資料的 trainer_id 是舊 member id，
-    // 在新 trainer id 空間裡是孤兒，Hibernate 補 FK 會失敗（僅留 warning，
-    // 不影響啟動）；請清理該兩表資料或重建開發資料庫。
 
     private void dropLegacyIdentityArtifacts() {
         if (columnExists("trainer", "member_id")) {
@@ -257,9 +255,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
     }
 
     // === 欄位長度收斂 =========================================================
-    // 狀態類欄位值域封閉,長度收斂為 10;gender 有 OTHER 兜底,收為 5;
-    // phone 依台灣門號格式收為 10。分類類欄位(role、oauth_provider、
-    // products.type)值域會隨業務擴充,保留 20 不動。
+    // 狀態類欄位值域封閉,長度收斂為 10;phone 依台灣門號格式收為 10。
+    // role 之類值域會隨業務擴充的分類欄位保留 20 不動。
     // ddl-auto 不會縮既有欄位,必須自己 ALTER;縮之前檢查既有資料長度,
     // 超過目標寬度就略過並留警告,絕不截斷資料。
     // coach_slots.status / group_class_bookings.status 被篩選唯一索引的
@@ -285,8 +282,54 @@ public class SchemaFixupRunner implements CommandLineRunner {
         narrowVarchar("member_subscription", "status", 10);
     }
 
+    // === 課程域自商品域獨立 ===================================================
+    // courses 不再掛 product_id，價格與堂數改存自己的欄位；
+    // order_items 改為 product_id ⊕ course_id 雙 FK 多型，
+    // 兩者恰好一個非空由 CHECK 約束把關（JPA 無法表達）。
+    // products 的 type / sessions_per_unit 是課程寄生時期的欄位，一併移除。
+
+    private void migrateCourseDomainSplit() {
+        dropColumnIfExists("courses", "product_id");
+        dropColumnIfExists("products", "type");
+        dropColumnIfExists("products", "sessions_per_unit");
+
+        // 既有明細都是商品，course_id 為 NULL；product_id 由 NOT NULL 放寬為可空
+        if (columnExists("order_items", "product_id")) {
+            alterColumnNullable("order_items", "product_id", "int");
+        }
+        createCheckIfAbsent("order_items", "CK_oi_exactly_one_ref", """
+                ALTER TABLE order_items ADD CONSTRAINT CK_oi_exactly_one_ref CHECK (
+                    (product_id IS NOT NULL AND course_id IS NULL)
+                 OR (product_id IS NULL AND course_id IS NOT NULL))
+                """);
+    }
+
+    private void alterColumnNullable(String table, String column, String type) {
+        Boolean nullable = jdbc.queryForObject("""
+                SELECT is_nullable FROM sys.columns
+                    WHERE object_id = OBJECT_ID(?) AND name = ?
+                """, Boolean.class, table, column);
+        if (Boolean.TRUE.equals(nullable)) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE " + table + " ALTER COLUMN " + column + " " + type + " NULL");
+        log.info("已將 {}.{} 放寬為可空", table, column);
+    }
+
+    private void createCheckIfAbsent(String table, String constraint, String ddl) {
+        Integer found = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM sys.check_constraints
+                    WHERE name = ? AND parent_object_id = OBJECT_ID(?)
+                """, Integer.class, constraint, table);
+        if (found != null && found > 0) {
+            return;
+        }
+        jdbc.execute(ddl);
+        log.info("已建立 CHECK 約束 {}", constraint);
+    }
+
     // === 篩選唯一索引 =========================================================
-    // 這三個都帶 WHERE 條件，UNIQUE CONSTRAINT 語法上做不到，
+    // 這些都帶 WHERE 條件，UNIQUE CONSTRAINT 語法上做不到，
     // 因此無法用 JPA 的 @UniqueConstraint 表達。
 
     private void createFilteredUniqueIndexes() {
@@ -357,12 +400,11 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 """);
     }
 
-    // === OAuth 綁定回歸 user_oauth_accounts ===================================
-    // users.oauth_provider / oauth_sub 是整併重複 User entity 時混入的第二套
-    // 設計，缺唯一約束。綁定資料遷回原設計的 user_oauth_accounts
-    //（有 UX_user_oauth_accounts_provider 複合唯一約束）後，
-    // 移除 users 上的兩個欄位。
-    // 註：若歷史資料中兩個 user 共用同一組 (provider, sub)，只有第一筆會遷入，
+    // === OAuth 綁定回歸 member_oauth_account ==================================
+    // member 表上的 oauth_provider / oauth_sub 是整併重複 entity 時混入的
+    // 第二套設計，缺唯一約束。綁定資料遷回 member_oauth_account
+    //（有複合唯一約束）後，移除 member 上的兩個欄位。
+    // 註：若歷史資料中兩個會員共用同一組 (provider, sub)，只有第一筆會遷入，
     // 其餘略過 —— 那本來就是缺唯一約束造成的髒資料，遷移量請看啟動 log。
 
     private void migrateOauthBindingsToAccountTable() {
@@ -382,10 +424,6 @@ public class SchemaFixupRunner implements CommandLineRunner {
     }
 
     // === 清除已淘汰的欄位 =====================================================
-    // orders.coupon_id 已由 orders.user_coupon_id 取代（改指向 user_coupons，
-    // 才能標記「這張券用掉了」並保證一張券只用一次）。
-    // order_items.line_amount 原設計是 DB 計算欄位，但從未真正建立，
-    // 一直是 NULL；小計已由查詢端以 price_at_buy * quantity 現算。
     // Hibernate 的 update 模式永遠不會刪欄位，只能自己來。
 
     private void dropObsoleteColumns() {
@@ -401,8 +439,6 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // 只含該單欄的唯一索引/約束）。
 
     private void dropDuplicateUniqueIndexes() {
-        // 表改名後舊的 UX_users_email 仍掛在 member 上，
-        // 待 Hibernate 建出新的 UX_member_email 後，這裡會把舊的視為重複清掉。
         dropDuplicateUnique("member", "email", "UX_member_email");
         dropDuplicateUnique("email_verifications", "token", "UX_email_verifications_token");
         dropDuplicateUnique("password_reset_tokens", "token", "UX_password_reset_tokens_token");

@@ -11,7 +11,6 @@ import tw.com.ispan.gym.dto.product.ProductResponse;
 import tw.com.ispan.gym.entity.Product;
 import tw.com.ispan.gym.entity.ProductCategory;
 import tw.com.ispan.gym.enums.ProductStatus;
-import tw.com.ispan.gym.enums.ProductType;
 import tw.com.ispan.gym.exception.ProductNotFoundException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.ProductCategoryRepository;
@@ -29,11 +28,11 @@ public class ProductService {
         this.productCategories = productCategories;
     }
 
-    /** 前台商品列表：只回上架中的商品，可依類型／分類／關鍵字（含規格欄位）篩選 */
-    public Page<ProductResponse> getProducts(ProductType type, Integer categoryId, String keyword, int page, int size) {
+    /** 前台商品列表：只回上架中的商品，可依分類／關鍵字（含規格欄位）篩選 */
+    public Page<ProductResponse> getProducts(Integer categoryId, String keyword, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         String kw = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
-        return products.findProductWithFilters(type, ProductStatus.ACTIVE, categoryId, kw, pageable)
+        return products.findProductWithFilters(ProductStatus.ACTIVE, categoryId, kw, pageable)
                 .map(ProductResponse::from);
     }
 
@@ -68,11 +67,9 @@ public class ProductService {
     private void applyRequest(Product product, ProductRequest request) {
         product.setName(request.getName());
         product.setDescription(request.getDescription());
-        product.setType(request.getType());
         product.setPrice(request.getPrice());
         product.setStock(request.getStock());
         product.setImageUrl(request.getImageUrl());
-        product.setSessionsPerUnit(request.getSessionsPerUnit());
         product.setBrand(request.getBrand());
         product.setFlavor(request.getFlavor());
         product.setSize(request.getSize());
