@@ -11,7 +11,9 @@ import java.time.ZoneId;
 import org.hibernate.annotations.Nationalized;
 
 @Entity
-@Table(name = "orders", uniqueConstraints = @UniqueConstraint(name = "UQ_orders_mtn", columnNames = "merchant_trade_no"))
+@Table(name = "orders", uniqueConstraints = {
+        @UniqueConstraint(name = "UQ_orders_mtn", columnNames = "merchant_trade_no"),
+        @UniqueConstraint(name = "UX_orders_order_no", columnNames = "order_no") })
 public class Order extends TaipeiTimestampEntity {
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
 
@@ -68,7 +70,7 @@ public class Order extends TaipeiTimestampEntity {
     private String cancelReason;
     @Version
     @Column(name = "version", nullable = false)
-    private Integer version;
+    private Integer version = 0;
 
     protected Order() {
     }

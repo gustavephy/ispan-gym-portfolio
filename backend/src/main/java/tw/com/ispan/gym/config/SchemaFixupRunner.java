@@ -335,20 +335,24 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // 資料庫是空的時候這些 UPDATE 影響 0 列，不會有副作用。
 
     private void backfillExistingRows() {
-        backfill("member_course_quota.version",
-                "UPDATE member_course_quota SET version = 0 WHERE version IS NULL");
-
-        backfill("group_class_sessions.version",
-                "UPDATE group_class_sessions SET version = 0 WHERE version IS NULL");
+        // 所有帶 @Version 的表都要補；漏一張，該表的舊列第一次被更新時就會炸
+        for (String table : new String[] {
+                "member_course_quota", "group_class_sessions", "orders", "cart_items",
+                "payment_transactions", "payment_refunds", "products" }) {
+            if (columnExists(table, "version")) {
+                backfill(table + ".version",
+                        "UPDATE " + table + " SET version = 0 WHERE version IS NULL");
+            }
+        }
 
         backfill("group_class_sessions.booked_count",
                 "UPDATE group_class_sessions SET booked_count = 0 WHERE booked_count IS NULL");
 
-        // 場次容量沿用所屬課程的預設值
+        // 場次容量沿用所屬課程的預設值（courses PK 欄名已改為 course_id）
         backfill("group_class_sessions.capacity", """
                 UPDATE s SET s.capacity = c.max_capacity
                     FROM group_class_sessions s
-                    JOIN courses c ON c.id = s.course_id
+                    JOIN courses c ON c.course_id = s.course_id
                     WHERE s.capacity IS NULL
                 """);
     }

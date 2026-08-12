@@ -23,7 +23,7 @@ public class CartItem extends TaipeiTimestampEntity {
     private BigDecimal unitPriceSnapshot;
     @Version
     @Column(name = "version", nullable = false)
-    private Integer version;
+    private Integer version = 0;
 
     protected CartItem() {}
     public CartItem(Member member, Product product, long quantity) {

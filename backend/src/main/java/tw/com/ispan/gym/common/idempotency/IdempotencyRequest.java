@@ -6,7 +6,9 @@ import org.hibernate.annotations.Nationalized;
 import tw.com.ispan.gym.entity.Member;
 
 @Entity
-@Table(name = "idempotency_requests")
+@Table(name = "idempotency_requests", uniqueConstraints = @UniqueConstraint(
+        name = "UX_idempotency_member_operation_key",
+        columnNames = { "member_id", "operation_name", "idempotency_key" }))
 public class IdempotencyRequest {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "member_id") private Member member;

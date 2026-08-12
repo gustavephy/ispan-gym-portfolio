@@ -10,7 +10,8 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
-@Table(name = "payment_transactions")
+@Table(name = "payment_transactions", uniqueConstraints = @UniqueConstraint(
+        name = "UX_payment_transactions_mtn", columnNames = "merchant_trade_no"))
 @EntityListeners(AuditingEntityListener.class)
 public class PaymentTransaction {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
@@ -32,6 +33,6 @@ public class PaymentTransaction {
     @CreatedDate @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
     @LastModifiedDate @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
     @Column(name = "paid_at") private LocalDateTime paidAt;
-    @Version @Column(nullable = false) private Integer version;
+    @Version @Column(nullable = false) private Integer version = 0;
     protected PaymentTransaction() {}
 }

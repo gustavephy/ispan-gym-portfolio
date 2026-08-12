@@ -9,7 +9,8 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
-@Table(name = "payment_refunds")
+@Table(name = "payment_refunds", uniqueConstraints = @UniqueConstraint(
+        name = "UX_payment_refunds_refund_no", columnNames = "refund_no"))
 @EntityListeners(AuditingEntityListener.class)
 public class PaymentRefund {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
@@ -23,6 +24,6 @@ public class PaymentRefund {
     @CreatedDate @Column(name = "requested_at", nullable = false, updatable = false) private LocalDateTime requestedAt;
     @Column(name = "completed_at") private LocalDateTime completedAt;
     @LastModifiedDate @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
-    @Version @Column(nullable = false) private Integer version;
+    @Version @Column(nullable = false) private Integer version = 0;
     protected PaymentRefund() {}
 }
