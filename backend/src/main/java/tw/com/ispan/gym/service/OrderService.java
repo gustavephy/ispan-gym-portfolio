@@ -11,7 +11,7 @@ import tw.com.ispan.gym.entity.Order;
 import tw.com.ispan.gym.entity.OrderItem;
 import tw.com.ispan.gym.entity.OrderStatusHistory;
 import tw.com.ispan.gym.entity.Product;
-import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.Member;
 import tw.com.ispan.gym.entity.MemberCoupon;
 import tw.com.ispan.gym.enums.CouponApplicableType;
 import tw.com.ispan.gym.enums.CouponStatus;
@@ -32,8 +32,8 @@ import tw.com.ispan.gym.repository.OrderItemRepository;
 import tw.com.ispan.gym.repository.OrderRepository;
 import tw.com.ispan.gym.repository.OrderStatusHistoryRepository;
 import tw.com.ispan.gym.repository.ProductRepository;
-import tw.com.ispan.gym.repository.UserCouponRepository;
-import tw.com.ispan.gym.repository.UserRepository;
+import tw.com.ispan.gym.repository.MemberCouponRepository;
+import tw.com.ispan.gym.repository.MemberRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -61,21 +61,21 @@ public class OrderService {
 
     private final CartItemRepository cartItems;
     private final ProductRepository products;
-    private final UserRepository users;
+    private final MemberRepository users;
     private final CouponRepository coupons;
-    private final UserCouponRepository userCoupons;
+    private final MemberCouponRepository memberCoupons;
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
     private final OrderStatusHistoryRepository orderStatusHistories;
 
-    public OrderService(CartItemRepository cartItems, ProductRepository products, UserRepository users,
-            CouponRepository coupons, UserCouponRepository userCoupons, OrderRepository orders,
+    public OrderService(CartItemRepository cartItems, ProductRepository products, MemberRepository users,
+            CouponRepository coupons, MemberCouponRepository memberCoupons, OrderRepository orders,
             OrderItemRepository orderItems, OrderStatusHistoryRepository orderStatusHistories) {
         this.cartItems = cartItems;
         this.products = products;
         this.users = users;
         this.coupons = coupons;
-        this.userCoupons = userCoupons;
+        this.memberCoupons = memberCoupons;
         this.orders = orders;
         this.orderItems = orderItems;
         this.orderStatusHistories = orderStatusHistories;
@@ -83,12 +83,12 @@ public class OrderService {
 
     @Transactional
     public OrderDetailResponse createOrderFromCart(Integer userId, CreateOrderRequest request) {
-        List<CartItem> items = cartItems.findAllByUserIdOrderByCreatedAtAsc(userId);
+        List<CartItem> items = cartItems.findAllByMemberMemberIdOrderByCreatedAtAsc(userId);
         if (items.isEmpty()) {
             throw new BusinessRuleException("購物車是空的，無法建立訂單");
         }
 
-        User user = users.findById(userId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
+        Member user = users.findById(userId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
         List<ProductQuantity> lines = items.stream()
                 .map(ci -> new ProductQuantity(ci.getProduct(), ci.getQuantity()))
                 .toList();
@@ -99,7 +99,7 @@ public class OrderService {
 
         Order order = createOrder(user, lines, couponCode, receiverName, receiverPhone, receiverAddress,
                 CouponApplicableType.PRODUCT);
-        cartItems.deleteAllByUserId(userId);
+        cartItems.deleteAllByMemberMemberId(userId);
         return toDetailResponse(order);
     }
 
@@ -111,11 +111,11 @@ public class OrderService {
         if (request.quantity() == null || request.quantity() < 1) {
             throw new InvalidQuantityException();
         }
-        User user = users.findById(userId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
+        Member user = users.findById(userId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
         Product product = products.findById(request.productId())
                 .orElseThrow(() -> new ProductNotFoundException(request.productId()));
         if (!ProductType.COURSE.equals(product.getType())) {
-            throw new DirectCheckoutNotAllowedException(product.getId());
+            throw new DirectCheckoutNotAllowedException(product.getProductId());
         }
 
         Order order = createOrder(user, List.of(new ProductQuantity(product, request.quantity())),
@@ -129,7 +129,7 @@ public class OrderService {
      */
     @Transactional
     public OrderDetailResponse cancelOrder(Integer userId, Long orderId, CancelOrderRequest request) {
-        Order order = orders.findByIdAndUserId(orderId, userId)
+        Order order = orders.findByIdAndMemberMemberId(orderId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         String fromStatus = order.getStatus().name();
         order.cancel(request == null ? null : request.reason());
@@ -137,14 +137,14 @@ public class OrderService {
         restoreStock(order);
         restoreCoupon(order);
 
-        orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(), order.getUser(),
+        orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(), order.getMember(),
                 "USER", "CANCEL"));
         return toDetailResponse(order);
     }
 
     private void restoreStock(Order order) {
         List<OrderItem> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
-                .sorted(Comparator.comparing(item -> item.getProduct().getId()))
+                .sorted(Comparator.comparing(item -> item.getProduct().getProductId()))
                 .toList();
         for (OrderItem item : items) {
             Product product = reloadForUpdate(item.getProduct());
@@ -155,18 +155,18 @@ public class OrderService {
     }
 
     private void restoreCoupon(Order order) {
-        MemberCoupon userCoupon = order.getUserCoupon();
-        if (userCoupon != null) {
-            userCoupon.setStatus(MemberCouponStatus.UNUSED);
-            userCoupon.setUsedAt(null);
+        MemberCoupon memberCoupon = order.getMemberCoupon();
+        if (memberCoupon != null) {
+            memberCoupon.setStatus(MemberCouponStatus.UNUSED);
+            memberCoupon.setUsedAt(null);
         }
     }
 
-    private Order createOrder(User user, List<ProductQuantity> productLines, String couponCode,
+    private Order createOrder(Member user, List<ProductQuantity> productLines, String couponCode,
             String receiverName, String receiverPhone, String receiverAddress, CouponApplicableType lineType) {
         // 依 productId 排序後才逐一鎖定，避免不同結帳請求互相持有對方需要的鎖而死結。
         List<OrderLine> lines = productLines.stream()
-                .sorted(Comparator.comparing(pq -> pq.product().getId()))
+                .sorted(Comparator.comparing(pq -> pq.product().getProductId()))
                 .map(pq -> new OrderLine(reloadForUpdate(pq.product()), pq.quantity()))
                 .toList();
         for (OrderLine line : lines) {
@@ -177,12 +177,12 @@ public class OrderService {
                 .map(line -> line.product().getPrice().multiply(BigDecimal.valueOf(line.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        MemberCoupon userCoupon = null;
+        MemberCoupon memberCoupon = null;
         BigDecimal discount = BigDecimal.ZERO;
         if (couponCode != null && !couponCode.isBlank()) {
             Coupon coupon = coupons.findByCode(couponCode)
                     .orElseThrow(() -> new ResourceNotFoundException("找不到優惠券：" + couponCode));
-            userCoupon = redeemCoupon(user, coupon, subtotal, lineType);
+            memberCoupon = redeemCoupon(user, coupon, subtotal, lineType);
             discount = computeDiscount(coupon, subtotal);
         }
 
@@ -192,7 +192,7 @@ public class OrderService {
         String finalReceiverPhone = valueOr(receiverPhone, user.getPhone());
 
         Order order = new Order(user, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount, subtotal,
-                total, userCoupon, finalReceiverName, finalReceiverPhone, receiverAddress, user.getEmail());
+                total, memberCoupon, finalReceiverName, finalReceiverPhone, receiverAddress, user.getEmail());
         order = orders.save(order);
 
         for (OrderLine line : lines) {
@@ -209,20 +209,20 @@ public class OrderService {
     }
 
     private Product reloadForUpdate(Product product) {
-        return products.findByIdForUpdate(product.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("找不到商品：" + product.getId()));
+        return products.findByIdForUpdate(product.getProductId())
+                .orElseThrow(() -> new ResourceNotFoundException("找不到商品：" + product.getProductId()));
     }
 
     private void validateAvailableAndInStock(Product product, long quantity) {
         if (!ProductStatus.ACTIVE.equals(product.getStatus())) {
-            throw new ProductUnavailableException(product.getId());
+            throw new ProductUnavailableException(product.getProductId());
         }
         if (ProductType.GOODS.equals(product.getType()) && quantity > product.getStock()) {
-            throw new InsufficientStockException(product.getId(), quantity, product.getStock());
+            throw new InsufficientStockException(product.getProductId(), quantity, product.getStock());
         }
     }
 
-    private MemberCoupon redeemCoupon(User user, Coupon coupon, BigDecimal subtotal, CouponApplicableType lineType) {
+    private MemberCoupon redeemCoupon(Member user, Coupon coupon, BigDecimal subtotal, CouponApplicableType lineType) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         if (!CouponStatus.ACTIVE.equals(coupon.getStatus())
                 || now.toLocalDate().isBefore(coupon.getStartDate())
@@ -235,11 +235,11 @@ public class OrderService {
         if (subtotal.compareTo(coupon.getMinSpend()) < 0) {
             throw new BusinessRuleException("未達優惠券最低消費金額");
         }
-        MemberCoupon userCoupon = userCoupons.findByUserIdAndCouponIdAndStatus(user.getId(), coupon.getId(),
+        MemberCoupon memberCoupon = memberCoupons.findByMemberMemberIdAndCouponCouponIdAndStatus(user.getMemberId(), coupon.getCouponId(),
                 MemberCouponStatus.UNUSED).orElseThrow(() -> new BusinessRuleException("尚未持有此優惠券或已使用過"));
-        userCoupon.setStatus(MemberCouponStatus.USED);
-        userCoupon.setUsedAt(now);
-        return userCoupon;
+        memberCoupon.setStatus(MemberCouponStatus.USED);
+        memberCoupon.setUsedAt(now);
+        return memberCoupon;
     }
 
     private BigDecimal computeDiscount(Coupon coupon, BigDecimal subtotal) {
@@ -268,7 +268,7 @@ public class OrderService {
     private OrderDetailResponse toDetailResponse(Order order) {
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
                 .sorted(Comparator.comparing(OrderItem::getId))
-                .map(item -> new OrderItemResponse(item.getId(), item.getProduct().getId(),
+                .map(item -> new OrderItemResponse(item.getId(), item.getProduct().getProductId(),
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
                         item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
                 .toList();

@@ -2,7 +2,7 @@ package tw.com.ispan.gym.dto.user;
 
 import java.time.LocalDateTime;
 
-import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.Member;
 
 public record RegisterResponse(
         Integer id,
@@ -14,9 +14,9 @@ public record RegisterResponse(
         String status,
         LocalDateTime createdAt
 ) {
-    public static RegisterResponse from(User user) {
+    public static RegisterResponse from(Member user) {
         return new RegisterResponse(
-                user.getId(),
+                user.getMemberId(),
                 user.getFirstName(),
                 user.getLastName(),
                 user.getEmail(),

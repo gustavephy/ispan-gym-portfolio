@@ -28,7 +28,7 @@ public class CouponResponse {
      
     public static CouponResponse from(Coupon coupon) {
         CouponResponse dto = new CouponResponse();
-        dto.setId(coupon.getId());
+        dto.setId(coupon.getCouponId());
         dto.setCode(coupon.getCode());
         dto.setName(coupon.getName());
         dto.setType(coupon.getType());

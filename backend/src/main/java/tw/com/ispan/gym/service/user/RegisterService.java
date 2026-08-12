@@ -14,23 +14,23 @@ import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.dto.user.RegisterRequest;
 import tw.com.ispan.gym.dto.user.RegisterResponse;
 import tw.com.ispan.gym.entity.EmailVerification;
-import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.Member;
 import tw.com.ispan.gym.enums.UserStatus;
 import tw.com.ispan.gym.repository.EmailVerificationRepository;
-import tw.com.ispan.gym.repository.UserRepository;
+import tw.com.ispan.gym.repository.MemberRepository;
 
 @Service
 @Transactional(readOnly = true)
 public class RegisterService {
 
-    private final UserRepository users;
+    private final MemberRepository users;
     private final EmailVerificationRepository emailVerifications;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
     private final long verificationTokenTtlHours;
 
     public RegisterService(
-            UserRepository users,
+            MemberRepository users,
             EmailVerificationRepository emailVerifications,
             PasswordEncoder passwordEncoder,
             MailService mailService,
@@ -52,7 +52,7 @@ public class RegisterService {
             throw new BusinessRuleException("此 Email 已被註冊");
         }
 
-        User user = new User();
+        Member user = new Member();
         user.setFirstName(request.getFirstName().trim());
         user.setLastName(request.getLastName().trim());
         user.setEmail(email);
@@ -64,11 +64,11 @@ public class RegisterService {
         );
         user.setStatus(UserStatus.PENDING);
 
-        User savedUser = users.save(user);
+        Member savedUser = users.save(user);
 
         UUID token = UUID.randomUUID();
         EmailVerification verification = new EmailVerification();
-        verification.setUser(savedUser);
+        verification.setMember(savedUser);
         verification.setToken(token);
         verification.setExpiresAt(LocalDateTime.now().plusHours(verificationTokenTtlHours));
         emailVerifications.save(verification);
@@ -93,7 +93,7 @@ public class RegisterService {
 
         verification.setVerifiedAt(LocalDateTime.now());
 
-        User user = verification.getUser();
+        Member user = verification.getMember();
         user.setStatus(UserStatus.ACTIVE);
     }
 }

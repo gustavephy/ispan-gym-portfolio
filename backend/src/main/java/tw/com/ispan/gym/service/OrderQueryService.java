@@ -24,14 +24,14 @@ public class OrderQueryService {
     }
 
     public List<OrderSummaryResponse> findMine(Integer userId) {
-        return orders.findAllByUserIdOrderByCreatedAtDesc(userId).stream().map(this::summary).toList();
+        return orders.findAllByMemberMemberIdOrderByCreatedAtDesc(userId).stream().map(this::summary).toList();
     }
 
     public OrderDetailResponse findMineById(Integer userId, Long orderId) {
-        Order order = orders.findByIdAndUserId(orderId, userId)
+        Order order = orders.findByIdAndMemberMemberId(orderId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
-                .map(item -> new OrderItemResponse(item.getId(), item.getProduct().getId(),
+                .map(item -> new OrderItemResponse(item.getId(), item.getProduct().getProductId(),
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
                         item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
                 .toList();

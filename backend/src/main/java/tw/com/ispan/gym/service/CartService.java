@@ -7,7 +7,7 @@ import tw.com.ispan.gym.dto.cart.CartResponse;
 import tw.com.ispan.gym.dto.cart.UpdateCartItemRequest;
 import tw.com.ispan.gym.entity.CartItem;
 import tw.com.ispan.gym.entity.Product;
-import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.Member;
 import tw.com.ispan.gym.enums.ProductStatus;
 import tw.com.ispan.gym.enums.ProductType;
 import tw.com.ispan.gym.exception.CartItemNotFoundException;
@@ -19,7 +19,7 @@ import tw.com.ispan.gym.exception.ProductNotFoundException;
 import tw.com.ispan.gym.exception.ProductUnavailableException;
 import tw.com.ispan.gym.repository.CartItemRepository;
 import tw.com.ispan.gym.repository.ProductRepository;
-import tw.com.ispan.gym.repository.UserRepository;
+import tw.com.ispan.gym.repository.MemberRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -30,14 +30,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class CartService {
     private final CartItemRepository cartItems;
     private final ProductRepository products;
-    private final UserRepository users;
+    private final MemberRepository users;
 
-    public CartService(CartItemRepository cartItems, ProductRepository products, UserRepository users) {
+    public CartService(CartItemRepository cartItems, ProductRepository products, MemberRepository users) {
         this.cartItems = cartItems; this.products = products; this.users = users;
     }
 
     public CartResponse getCart(Integer userId) {
-        List<CartItemResponse> items = cartItems.findAllByUserIdOrderByCreatedAtAsc(userId)
+        List<CartItemResponse> items = cartItems.findAllByMemberMemberIdOrderByCreatedAtAsc(userId)
                 .stream().map(this::toResponse).toList();
         BigDecimal total = items.stream().map(CartItemResponse::subtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -49,7 +49,7 @@ public class CartService {
         validateQuantity(request.quantity());
         // Locking the owning user serializes concurrent additions for the same cart and
         // prevents two requests from racing against UX_cart_user_product.
-        User user = users.findByIdForUpdate(userId)
+        Member user = users.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
         Product product = products.findById(request.productId())
                 .orElseThrow(() -> new ProductNotFoundException(request.productId()));
@@ -57,7 +57,7 @@ public class CartService {
         validateAvailable(product);
 
         CartItem item;
-        var existingItem = cartItems.findByUserIdAndProductId(userId, request.productId());
+        var existingItem = cartItems.findByMemberMemberIdAndProductProductId(userId, request.productId());
         if (existingItem.isPresent()) {
             item = existingItem.get();
             try {
@@ -89,13 +89,13 @@ public class CartService {
 
     @Transactional
     public void clearCart(Integer userId) {
-        cartItems.deleteAllByUserId(userId);
+        cartItems.deleteAllByMemberMemberId(userId);
     }
 
     private CartItem ownedItem(Integer userId, Long cartItemId) {
         CartItem item = cartItems.findById(cartItemId)
                 .orElseThrow(() -> new CartItemNotFoundException(cartItemId));
-        if (!item.getUser().getId().equals(userId)) {
+        if (!item.getMember().getMemberId().equals(userId)) {
             throw new ForbiddenCartAccessException(cartItemId);
         }
         return item;
@@ -109,7 +109,7 @@ public class CartService {
 
     private void validateAvailable(Product product) {
         if (!ProductStatus.ACTIVE.equals(product.getStatus())) {
-            throw new ProductUnavailableException(product.getId());
+            throw new ProductUnavailableException(product.getProductId());
         }
     }
 
@@ -118,20 +118,20 @@ public class CartService {
      */
     private void validateCartable(Product product) {
         if (!ProductType.GOODS.equals(product.getType())) {
-            throw new CartItemTypeNotAllowedException(product.getId());
+            throw new CartItemTypeNotAllowedException(product.getProductId());
         }
     }
 
     private void validateStock(Product product, long requestedQuantity) {
         if (ProductType.GOODS.equals(product.getType()) && requestedQuantity > product.getStock()) {
-            throw new InsufficientStockException(product.getId(), requestedQuantity, product.getStock());
+            throw new InsufficientStockException(product.getProductId(), requestedQuantity, product.getStock());
         }
     }
 
     private CartItemResponse toResponse(CartItem item) {
         Product product = item.getProduct();
         BigDecimal subtotal = product.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
-        return new CartItemResponse(item.getId(), product.getId(), product.getType().name(), product.getName(),
+        return new CartItemResponse(item.getId(), product.getProductId(), product.getType().name(), product.getName(),
                 product.getImageUrl(), product.getPrice(), item.getQuantity(), subtotal);
     }
 }

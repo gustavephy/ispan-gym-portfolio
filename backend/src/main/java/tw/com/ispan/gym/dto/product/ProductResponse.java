@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.Data;
 import tw.com.ispan.gym.entity.Course;
+import tw.com.ispan.gym.entity.Employee;
 import tw.com.ispan.gym.entity.Product;
 import tw.com.ispan.gym.enums.ProductType;
 
@@ -33,7 +34,7 @@ public class ProductResponse {
 
     public static ProductResponse from(Product product) {
         ProductResponse dto = new ProductResponse();
-        dto.setId(product.getId());
+        dto.setId(product.getProductId());
         dto.setType(product.getType().name());
         dto.setName(product.getName());
         dto.setDescription(product.getDescription());
@@ -41,7 +42,7 @@ public class ProductResponse {
         dto.setStock(product.getStock());
         dto.setStatus(product.getStatus().name());
         dto.setImageUrl(product.getImageUrl());
-        dto.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
+        dto.setCategoryId(product.getCategory() != null ? product.getCategory().getProductCategoryId() : null);
         dto.setCategoryName(product.getCategory() != null ? product.getCategory().getName() : null);
         dto.setCreatedAt(product.getCreatedAt());
         dto.setSessionsPerUnit(product.getSessionsPerUnit());
@@ -60,15 +61,16 @@ public class ProductResponse {
         if (ProductType.COURSE.equals(product.getType()) && trainerCourses != null) {
             trainerCourses.stream()
                 // 多重安全比對防線：ID 比對或名稱模糊比對
-                .filter(tc -> (tc.getProductId() != null && tc.getProductId().equals(product.getId()))
-                           || (tc.getProduct() != null && tc.getProduct().getId().equals(product.getId()))
+                .filter(tc -> (tc.getProductId() != null && tc.getProductId().equals(product.getProductId()))
+                           || (tc.getProduct() != null && tc.getProduct().getProductId().equals(product.getProductId()))
                            || product.getName().trim().startsWith(tc.getName().trim())
                            || tc.getName().trim().startsWith(product.getName().trim()))
                 .findFirst()
                 .ifPresent(tc -> {
                     if (tc.getTrainer() != null) {
-                        // 組合教練姓名並寫入 DTO
-                        dto.setTrainerName(tc.getTrainer().getLastName() + tc.getTrainer().getFirstName());
+                        // 組合教練姓名並寫入 DTO（姓名存於 trainer 對應的 employee 主檔）
+                        Employee trainerEmployee = tc.getTrainer().getEmployee();
+                        dto.setTrainerName(trainerEmployee.getLastName() + trainerEmployee.getFirstName());
                     }
                 });
         }

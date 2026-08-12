@@ -16,7 +16,7 @@ public class MemberCouponResponse {
 
     public static MemberCouponResponse from(MemberCoupon mc) {
         MemberCouponResponse dto = new MemberCouponResponse();
-        dto.setId(mc.getId());
+        dto.setId(mc.getMemberCouponId());
         dto.setCoupon(CouponResponse.from(mc.getCoupon()));
         dto.setStatus(mc.getStatus());
         dto.setClaimedAt(mc.getClaimedAt());

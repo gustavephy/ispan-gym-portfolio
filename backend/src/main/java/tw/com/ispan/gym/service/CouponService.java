@@ -17,16 +17,16 @@ import tw.com.ispan.gym.enums.CouponApplicableType;
 import tw.com.ispan.gym.enums.CouponQueryStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.repository.CouponRepository;
-import tw.com.ispan.gym.repository.UserCouponRepository;
-import tw.com.ispan.gym.repository.UserRepository;
+import tw.com.ispan.gym.repository.MemberCouponRepository;
+import tw.com.ispan.gym.repository.MemberRepository;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CouponService {
 	private final CouponRepository couponRepository;
-	private final UserCouponRepository userCouponRepository;
-	private final UserRepository userRepository;
+	private final MemberCouponRepository memberCouponRepository;
+	private final MemberRepository userRepository;
 	
 	//建立優惠券(管理員)
 	@Transactional
