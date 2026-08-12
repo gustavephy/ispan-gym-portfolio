@@ -10,15 +10,18 @@ import org.springframework.stereotype.Component;
 /**
  * Hibernate ddl-auto 做不到的 schema 設定。
  *
- * <p>執行時機：context 啟動完成之後（原本是 data.sql，由
+ * <p>
+ * 執行時機：context 啟動完成之後（原本是 data.sql，由
  * defer-datasource-initialization 保證排在 Hibernate 建表之後）。
  * 目前沒有任何 &#64;PostConstruct 或 &#64;Scheduled 會在這之前碰資料庫，
  * 所以延後到這裡執行是安全的。
  *
- * <p>規則：這裡所有敘述都必須是冪等的（重複執行安全），因為每次啟動都會跑，
+ * <p>
+ * 規則：這裡所有敘述都必須是冪等的（重複執行安全），因為每次啟動都會跑，
  * 開了 devtools 的話每次熱重啟也會跑。一次性的資料遷移不要放這裡。
  *
- * <p>&#64;Order(0) 是為了讓之後的 seeder 用更大的數字排在後面 ——
+ * <p>
+ * &#64;Order(0) 是為了讓之後的 seeder 用更大的數字排在後面 ——
  * 資料要等 schema 補完才進得去。
  */
 @Component
@@ -95,6 +98,17 @@ public class SchemaFixupRunner implements CommandLineRunner {
                     WHERE status <> 'CANCELLED'
                 """);
 
+        // 同一個時段，最多只能有一筆有效（非取消）的預約。
+        // PENDING（已預約待上課）與 COMPLETED（已核銷）都算佔用中，
+        // 只有 CANCELLED 才釋放這個時段，讓別的會員可以重新預約。
+        // 這是應用層樂觀鎖（CoachSlot.version）之外，資料庫層獨立的第二道防護，
+        // 就算應用層邏輯有漏洞，也不可能真的塞進兩筆有效預約。
+        createFilteredUniqueIndex("UX_coach_bookings_active_slot", """
+                CREATE UNIQUE INDEX UX_coach_bookings_active_slot
+                    ON coach_bookings(coach_slot_id)
+                    WHERE status <> 'CANCELLED'
+                """);
+
         // 一張已領取的優惠券只能用在一筆訂單。
         // 需要 WHERE 是因為大多數訂單沒用券，而 SQL Server 的唯一索引
         // 只允許「一列」為 NULL，不加條件會在第二筆無券訂單就爆掉。
@@ -142,7 +156,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // === OAuth 綁定回歸 user_oauth_accounts ===================================
     // users.oauth_provider / oauth_sub 是整併重複 User entity 時混入的第二套
     // 設計，缺唯一約束。綁定資料遷回原設計的 user_oauth_accounts
-    //（有 UX_user_oauth_accounts_provider 複合唯一約束）後，
+    // （有 UX_user_oauth_accounts_provider 複合唯一約束）後，
     // 移除 users 上的兩個欄位。
     // 註：若歷史資料中兩個 user 共用同一組 (provider, sub)，只有第一筆會遷入，
     // 其餘略過 —— 那本來就是缺唯一約束造成的髒資料，遷移量請看啟動 log。

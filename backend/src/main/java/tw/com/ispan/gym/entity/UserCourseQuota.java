@@ -30,7 +30,7 @@ public class UserCourseQuota {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @JsonIgnore
     private User user;
@@ -47,6 +47,11 @@ public class UserCourseQuota {
 
     @Column(name = "product_id", insertable = false, updatable = false)
     private Integer productId;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "trainer_id", nullable = false)
+    @JsonIgnore
+    private User trainer;
 
     /** 關聯的訂單明細，用於追蹤額度來源 */
     @ManyToOne(fetch = FetchType.LAZY)

@@ -1,9 +1,8 @@
 package tw.com.ispan.gym.entity;
 
-import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
-import tw.com.ispan.gym.enums.CoachBookingStatus;
-
 import java.time.LocalDateTime;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,6 +17,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
+import tw.com.ispan.gym.enums.CoachBookingStatus;
 
 @Entity
 @Table(name = "coach_bookings")
@@ -38,6 +39,11 @@ public class CoachBooking extends TaipeiTimestampEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "member_id", nullable = false)
     private User member;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "quota_id", nullable = false)
+    @JsonIgnore
+    private UserCourseQuota quota;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
