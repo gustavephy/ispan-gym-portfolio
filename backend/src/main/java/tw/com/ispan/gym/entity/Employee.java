@@ -1,18 +1,18 @@
 package tw.com.ispan.gym.entity;
-import tw.com.ispan.gym.enums.Gender;
-import tw.com.ispan.gym.enums.Role;
-import tw.com.ispan.gym.enums.UserStatus;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -20,16 +20,25 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Nationalized;
+import tw.com.ispan.gym.enums.EmployeeRole;
+import tw.com.ispan.gym.enums.EmployeeStatus;
 
+/**
+ * 員工：獨立帳號表，與 member 是不同的 id 空間，兩表無關聯。
+ * 教練＝role=TRAINER 的員工，專業資料另存 trainer 明細表。
+ * 新帳號 status=PENDING，由管理者核准（approved_by）後轉 ACTIVE；
+ * 始祖管理帳號無人核准，approved_by 為 NULL。
+ */
 @Entity
-@Table(name = "users", uniqueConstraints = @UniqueConstraint(name = "UX_users_email", columnNames = "email"))
+@Table(name = "employee", uniqueConstraints = @UniqueConstraint(name = "UX_employee_email", columnNames = "email"))
 @Getter
 @Setter
-public class User {
+public class Employee {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Integer id;
+	@Column(name = "employee_id")
+	private Integer employeeId;
 
 	@Nationalized
 	@Column(name = "first_name", length = 50, nullable = false)
@@ -39,40 +48,34 @@ public class User {
 	@Column(name = "last_name", length = 50, nullable = false)
 	private String lastName;
 
-	@Column(name = "dob")
-	private LocalDate dob;
-
 	@Column(name = "email", length = 100, nullable = false)
 	private String email;
 
-	// 註冊表單的電話必填由 RegisterRequest 驗證把關；DB 保持可空（OAuth 帳號無電話）
-	@Column(name = "phone", length = 10)
+	@Column(name = "phone", length = 10, nullable = false)
 	private String phone;
 
-	@Enumerated(EnumType.STRING)
-	@Column(name = "gender", length = 5)
-	private Gender gender;
-
-	@Enumerated(EnumType.STRING)
-	@Column(name = "role", length = 20, nullable = false)
-	private Role role = Role.MEMBER;
-
-	@Column(name = "password_hash", length = 255)
+	@Column(name = "password_hash", length = 255, nullable = false)
 	private String passwordHash;
 
 	@Enumerated(EnumType.STRING)
+	@Column(name = "role", length = 20, nullable = false)
+	private EmployeeRole role;
+
+	@Enumerated(EnumType.STRING)
 	@Column(name = "status", length = 10, nullable = false)
-	private UserStatus status = UserStatus.ACTIVE;
+	private EmployeeStatus status = EmployeeStatus.PENDING;
 
-	@Column(name = "avatar_url", length = 500)
-	private String avatarUrl;
+	@Column(name = "hire_date", nullable = false, columnDefinition = "datetime2")
+	private LocalDateTime hireDate;
 
-	@Nationalized
-	@Column(name = "emergency_contact", length = 50)
-	private String emergencyContact;
+	/** 核准此帳號的管理者；始祖帳號無人核准，維持 NULL */
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "approved_by", foreignKey = @ForeignKey(name = "FK_employee_approved_by"))
+	private Employee approvedBy;
 
-	@Column(name = "emergency_phone", length = 20)
-	private String emergencyPhone;
+	/** 軟刪除時間；離職／停用不刪列 */
+	@Column(name = "deleted_at")
+	private LocalDateTime deletedAt;
 
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
