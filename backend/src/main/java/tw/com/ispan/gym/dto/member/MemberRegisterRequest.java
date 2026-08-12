@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.dto.user;
+package tw.com.ispan.gym.dto.member;
 
 import java.time.LocalDate;
 
@@ -15,7 +15,7 @@ import tw.com.ispan.gym.enums.Gender;
 @Getter
 @Setter
 @ToString
-public class RegisterRequest {
+public class MemberRegisterRequest {
 
     @NotBlank(message = "名字為必填")
     @Size(max = 50, message = "名字不可超過50個字元")
@@ -42,6 +42,6 @@ public class RegisterRequest {
 
     @Past(message = "生日是過去日期")
     private LocalDate dob;
-    private Gender gender;
 
+    private Gender gender;
 }
