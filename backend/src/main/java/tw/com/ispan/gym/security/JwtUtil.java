@@ -12,19 +12,30 @@ import java.util.Map;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.enums.UserType;
 
 /**
  * 簽發與驗證 JWT。
  * 密鑰以 Base64 設定於 app.jwt.secret，長度需至少 256 bits（HS256）。
+ *
+ * <p>CLAIM_ROLE 目前取自 member.role，是後台端點唯一的 ROLE_ADMIN 來源；
+ * 先拔掉 Member.role 會讓 /api/admin/** 沒有任何人進得去，
+ * 必須等 employee 登入能簽出帶 ROLE_ADMIN 的 token 之後才能移除。
  */
 @Component
 public class JwtUtil {
 
-    /** 放 email 的自訂 claim；subject 固定放 user id */
+    /** 放 email 的自訂 claim；subject 放 id，屬於哪張表由 utype 決定 */
     public static final String CLAIM_EMAIL = "email";
     /** 放角色的自訂 claim，值為 Role enum 名稱（MEMBER / TRAINER / ADMIN） */
     public static final String CLAIM_ROLE = "role";
+    /**
+     * 標示 subject 屬於哪個 id 空間，值為 UserType 名稱（MEMBER / EMPLOYEE）。
+     * member 與 employee 的 id 各自從 1 開始，沒有這個 claim 就無從得知
+     * subject=5 指的是哪張表的第 5 號，驗證端會認錯人。
+     */
+    public static final String CLAIM_USER_TYPE = "utype";
 
     private final SecretKey key;
     private final Duration accessTokenTtl;
@@ -39,15 +50,20 @@ public class JwtUtil {
         this.issuer = issuer;
     }
 
-    /** 依會員簽發 access token，subject 為 user id */
-    public String generateToken(User user) {
+    /** 依會員簽發 access token，subject 為 member id */
+    public String generateToken(Member member) {
         return generateToken(
-                user.getId(),
+                member.getMemberId(),
                 Map.of(
-                        CLAIM_EMAIL, user.getEmail(),
-                        CLAIM_ROLE, user.getRole().name()));
+                        CLAIM_EMAIL, member.getEmail(),
+                        CLAIM_ROLE, member.getRole().name(),
+                        CLAIM_USER_TYPE, UserType.MEMBER.name()));
     }
 
+    /**
+     * 低階簽發入口，claims 需自行帶齊——包含 {@link #CLAIM_USER_TYPE}。
+     * 未來新增 employee 登入時請走這裡並填 UserType.EMPLOYEE。
+     */
     public String generateToken(Integer userId, Map<String, Object> claims) {
         Instant now = Instant.now();
         return Jwts.builder()
@@ -100,5 +116,25 @@ public class JwtUtil {
 
     public String extractRole(String token) {
         return parseClaims(token).get(CLAIM_ROLE, String.class);
+    }
+
+    /**
+     * 取出 subject 所屬的 id 空間。
+     *
+     * <p>舊 token（本 claim 加入前簽發的）沒有這個欄位，一律視為 MEMBER——
+     * 當時系統只簽發得出會員 token，這個預設不會擴大任何權限。
+     *
+     * @throws JwtException token 無效，或 utype 值不是合法的 UserType
+     */
+    public UserType extractUserType(String token) {
+        String raw = parseClaims(token).get(CLAIM_USER_TYPE, String.class);
+        if (raw == null) {
+            return UserType.MEMBER;
+        }
+        try {
+            return UserType.valueOf(raw);
+        } catch (IllegalArgumentException ex) {
+            throw new JwtException("token utype 不是合法的 UserType: " + raw, ex);
+        }
     }
 }

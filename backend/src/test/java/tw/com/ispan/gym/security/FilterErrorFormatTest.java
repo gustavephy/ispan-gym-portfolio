@@ -20,14 +20,14 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.Member;
 import tw.com.ispan.gym.enums.Role;
 import tw.com.ispan.gym.enums.UserStatus;
-import tw.com.ispan.gym.repository.UserRepository;
+import tw.com.ispan.gym.repository.MemberRepository;
 
 /**
  * 驗證 filter 層的 401／403 與 controller 層回傳相同的 ApiErrorResponse 格式。
- * 不連資料庫，UserRepository 以 mock 取代。
+ * 不連資料庫，MemberRepository 以 mock 取代。
  */
 @SpringBootTest(
         classes = {FilterErrorFormatTest.TestApp.class},
@@ -63,14 +63,14 @@ class FilterErrorFormatTest {
     static class TestBeans {
         @Bean
         @Primary
-        UserRepository userRepository() {
-            return Mockito.mock(UserRepository.class);
+        MemberRepository userRepository() {
+            return Mockito.mock(MemberRepository.class);
         }
 
         @Bean
         @Primary
-        tw.com.ispan.gym.repository.UserOauthAccountRepository userOauthAccountRepository() {
-            return Mockito.mock(tw.com.ispan.gym.repository.UserOauthAccountRepository.class);
+        tw.com.ispan.gym.repository.MemberOauthAccountRepository userOauthAccountRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.MemberOauthAccountRepository.class);
         }
     }
 
@@ -89,11 +89,11 @@ class FilterErrorFormatTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired JwtUtil jwtUtil;
-    @Autowired UserRepository users;
+    @Autowired MemberRepository users;
 
-    private User member() {
-        User u = new User();
-        u.setId(7);
+    private Member member() {
+        Member u = new Member();
+        u.setMemberId(7);
         u.setEmail("member@example.com");
         u.setRole(Role.MEMBER);
         u.setStatus(UserStatus.ACTIVE);
@@ -112,7 +112,7 @@ class FilterErrorFormatTest {
 
     @Test
     void 權限不足時回傳ApiErrorResponse格式的403() throws Exception {
-        User user = member();
+        Member user = member();
         Mockito.when(users.findById(7)).thenReturn(Optional.of(user));
         String token = jwtUtil.generateToken(user);
 

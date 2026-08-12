@@ -12,18 +12,18 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Component;
 import tw.com.ispan.gym.enums.OAuthProvider;
-import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.Member;
 import tw.com.ispan.gym.enums.UserStatus;
-import tw.com.ispan.gym.repository.UserOauthAccountRepository;
-import tw.com.ispan.gym.repository.UserRepository;
+import tw.com.ispan.gym.repository.MemberOauthAccountRepository;
+import tw.com.ispan.gym.repository.MemberRepository;
 
 @Component
 @Profile("!dev")
 public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
-    private final UserRepository users;
-    private final UserOauthAccountRepository oauthAccounts;
+    private final MemberRepository users;
+    private final MemberOauthAccountRepository oauthAccounts;
 
-    public UnconfiguredCurrentUserProvider(UserRepository users, UserOauthAccountRepository oauthAccounts) {
+    public UnconfiguredCurrentUserProvider(MemberRepository users, MemberOauthAccountRepository oauthAccounts) {
         this.users = users;
         this.oauthAccounts = oauthAccounts;
     }
@@ -36,18 +36,18 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
             throw new AuthenticationCredentialsNotFoundException("請先登入後再執行此操作");
         }
 
-        User user = resolveUser(authentication)
+        Member user = resolveUser(authentication)
                 .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("找不到登入資訊對應的會員帳號"));
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new DisabledException("此會員帳號目前無法使用");
         }
-        return user.getId();
+        return user.getMemberId();
     }
 
-    private Optional<User> resolveUser(Authentication authentication) {
+    private Optional<Member> resolveUser(Authentication authentication) {
         Object principal = authentication.getPrincipal();
         if (principal instanceof OAuth2User oauth2User) {
-            Optional<User> bound = resolveByProviderBinding(authentication, oauth2User);
+            Optional<Member> bound = resolveByProviderBinding(authentication, oauth2User);
             if (bound.isPresent()) return bound;
             String email = oauth2User.getAttribute("email");
             if (email != null && !email.isBlank()) return users.findByEmailIgnoreCase(email);
@@ -60,7 +60,7 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
     }
 
     /** 以 (provider, sub) 查 user_oauth_accounts 綁定表；sub 只在同一 provider 內唯一 */
-    private Optional<User> resolveByProviderBinding(Authentication authentication, OAuth2User oauth2User) {
+    private Optional<Member> resolveByProviderBinding(Authentication authentication, OAuth2User oauth2User) {
         if (!(authentication instanceof OAuth2AuthenticationToken token)) {
             return Optional.empty();
         }
@@ -75,6 +75,6 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
         if (subject == null || subject.isBlank()) {
             return Optional.empty();
         }
-        return oauthAccounts.findUserByProviderAndSubject(provider, subject);
+        return oauthAccounts.findMemberByProviderAndSubject(provider, subject);
     }
 }

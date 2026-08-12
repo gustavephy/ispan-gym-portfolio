@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,14 +19,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.mockito.Mockito;
-import tw.com.ispan.gym.entity.User;
+import tw.com.ispan.gym.entity.Member;
 import tw.com.ispan.gym.enums.Role;
 import tw.com.ispan.gym.enums.UserStatus;
-import tw.com.ispan.gym.repository.UserRepository;
+import tw.com.ispan.gym.enums.UserType;
+import tw.com.ispan.gym.repository.MemberRepository;
 
 /**
  * 驗證 JwtUtil / JwtAuthFilter / SecurityConfig 三者串起來的行為。
- * 不連資料庫，UserRepository 以 mock 取代。
+ * 不連資料庫，MemberRepository 以 mock 取代。
  */
 @SpringBootTest(
         classes = {JwtSecuritySmokeTest.TestApp.class},
@@ -65,14 +67,14 @@ class JwtSecuritySmokeTest {
     static class TestBeans {
         @Bean
         @Primary
-        UserRepository userRepository() {
-            return Mockito.mock(UserRepository.class);
+        MemberRepository userRepository() {
+            return Mockito.mock(MemberRepository.class);
         }
 
         @Bean
         @Primary
-        tw.com.ispan.gym.repository.UserOauthAccountRepository userOauthAccountRepository() {
-            return Mockito.mock(tw.com.ispan.gym.repository.UserOauthAccountRepository.class);
+        tw.com.ispan.gym.repository.MemberOauthAccountRepository userOauthAccountRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.MemberOauthAccountRepository.class);
         }
     }
 
@@ -86,11 +88,11 @@ class JwtSecuritySmokeTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired JwtUtil jwtUtil;
-    @Autowired UserRepository users;
+    @Autowired MemberRepository users;
 
-    private User activeUser() {
-        User u = new User();
-        u.setId(7);
+    private Member activeUser() {
+        Member u = new Member();
+        u.setMemberId(7);
         u.setEmail("member@example.com");
         u.setRole(Role.MEMBER);
         u.setStatus(UserStatus.ACTIVE);
@@ -104,14 +106,43 @@ class JwtSecuritySmokeTest {
 
     @Test
     void 帶有效token時放行並解析出會員() throws Exception {
-        User user = activeUser();
+        Member user = activeUser();
         Mockito.when(users.findById(7)).thenReturn(Optional.of(user));
 
         String token = jwtUtil.generateToken(user);
         assertThat(jwtUtil.extractUserId(token)).isEqualTo(7);
         assertThat(jwtUtil.extractRole(token)).isEqualTo("MEMBER");
+        assertThat(jwtUtil.extractUserType(token)).isEqualTo(UserType.MEMBER);
 
         mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void utype為EMPLOYEE的token不會被當成同號會員() throws Exception {
+        // employee 與 member 的 id 空間各自獨立：employee_id=7 不是 member_id=7 那個人。
+        // 員工登入尚未開放，這種 token 必須整個拒絕，不能落到 member 查詢。
+        Member member = activeUser();
+        Mockito.when(users.findById(7)).thenReturn(Optional.of(member));
+
+        String employeeToken = jwtUtil.generateToken(
+                7, Map.of(JwtUtil.CLAIM_EMAIL, "staff@example.com",
+                        JwtUtil.CLAIM_USER_TYPE, UserType.EMPLOYEE.name()));
+
+        assertThat(jwtUtil.extractUserType(employeeToken)).isEqualTo(UserType.EMPLOYEE);
+        mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + employeeToken))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 缺utype的舊token仍視為會員() throws Exception {
+        Member member = activeUser();
+        Mockito.when(users.findById(7)).thenReturn(Optional.of(member));
+
+        String legacyToken = jwtUtil.generateToken(7, Map.of(JwtUtil.CLAIM_EMAIL, member.getEmail()));
+
+        assertThat(jwtUtil.extractUserType(legacyToken)).isEqualTo(UserType.MEMBER);
+        mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + legacyToken))
                 .andExpect(status().isOk());
     }
 
@@ -131,7 +162,7 @@ class JwtSecuritySmokeTest {
 
     @Test
     void 會員被停權時即使token有效也回401() throws Exception {
-        User user = activeUser();
+        Member user = activeUser();
         String token = jwtUtil.generateToken(user);
 
         user.setStatus(UserStatus.SUSPENDED);
