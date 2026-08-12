@@ -9,16 +9,19 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import tw.com.ispan.gym.enums.InventoryChangeType;
 
 @Entity
 @Table(name = "inventory_log")
@@ -37,8 +40,9 @@ public class InventoryLog {
 	@JoinColumn(name = "product_id")
 	private Product product;
 
+	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
-	private String changeType;
+	private InventoryChangeType changeType;
 
 	@Column(nullable = false)
 	private Integer quantity;

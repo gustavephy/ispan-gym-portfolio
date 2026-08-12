@@ -12,7 +12,7 @@ import tw.com.ispan.gym.enums.CouponType;
 
 @Data
 public class CouponResponse {
-    private Integer id;
+    private Integer couponId;
     private String code;
     private String name;
     private CouponType type;
@@ -28,7 +28,7 @@ public class CouponResponse {
      
     public static CouponResponse from(Coupon coupon) {
         CouponResponse dto = new CouponResponse();
-        dto.setId(coupon.getId());
+        dto.setCouponId(coupon.getCouponId());
         dto.setCode(coupon.getCode());
         dto.setName(coupon.getName());
         dto.setType(coupon.getType());

@@ -25,21 +25,21 @@ import tw.com.ispan.gym.enums.MemberCouponStatus;
 import tw.com.ispan.gym.entity.Coupon;
 
 @Entity
-@Table(name = "user_coupons")
+@Table(name = "member_coupon")
 @Getter
 @Setter
-@ToString(exclude = {"user","coupon"})
+@ToString(exclude = {"member","coupon"})
 @EntityListeners(AuditingEntityListener.class)
 public class MemberCoupon {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@Column(name = "user_coupon_id")
-	private Integer userCouponId;
+	@Column(name = "member_coupon_id")
+	private Integer memberCouponId;
 
 	@ManyToOne(fetch=FetchType.LAZY)
-	@JoinColumn(name = "user_id", nullable = false)
-	private User user;
+	@JoinColumn(name = "member_id", nullable = false)
+	private Member member;
 
 	@ManyToOne(fetch=FetchType.LAZY)
 	@JoinColumn(name = "coupon_id", nullable = false)

@@ -24,7 +24,7 @@ import tw.com.ispan.gym.enums.CouponType;
 import tw.com.ispan.gym.enums.CouponApplicableType;
 
 @Entity
-@Table(name = "coupons", uniqueConstraints = @UniqueConstraint(name = "UX_coupons_code", columnNames = "code"))
+@Table(name = "coupon", uniqueConstraints = @UniqueConstraint(name = "UX_coupons_code", columnNames = "code"))
 @Getter
 @Setter
 @ToString

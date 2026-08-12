@@ -29,7 +29,7 @@ import tw.com.ispan.gym.enums.CourseStatus;
 import tw.com.ispan.gym.enums.CourseType;
 
 @Entity
-@Table(name = "courses")
+@Table(name = "course")
 @Getter
 @Setter
 @ToString(exclude = {"trainer","category"})

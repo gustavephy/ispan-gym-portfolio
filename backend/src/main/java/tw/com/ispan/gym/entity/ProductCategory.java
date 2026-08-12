@@ -6,10 +6,12 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.Data;
 import tw.com.ispan.gym.enums.CategoryStatus;
 
 @Entity
-@Table(name="product_categories")
+@Table(name="product_category")
+@Data
 public class ProductCategory {
 	
 	@Id

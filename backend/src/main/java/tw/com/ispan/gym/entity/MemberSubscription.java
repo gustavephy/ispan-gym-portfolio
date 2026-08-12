@@ -24,10 +24,10 @@ import lombok.ToString;
 import tw.com.ispan.gym.enums.SubscriptionStatus;
 
 @Entity
-@Table(name = "subscription")
+@Table(name = "member_subscription")
 @Getter
 @Setter
-@ToString(exclude = {"user","order"})
+@ToString(exclude = {"member","order"})
 @EntityListeners(AuditingEntityListener.class)
 public class MemberSubscription {
 

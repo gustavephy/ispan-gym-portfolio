@@ -25,72 +25,68 @@ import lombok.Setter;
 import tw.com.ispan.gym.enums.ProductStatus;
 
 @Entity
-@Table(name = "products")
+@Table(name = "product")
 @Getter
 @Setter
 @EntityListeners(AuditingEntityListener.class)
 public class Product {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "product_id")
-    private Integer productId;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "product_id")
+	private Integer productId;
 
-    @Column(nullable = false, columnDefinition = "NVARCHAR(50)")
-    private String name;
+	@Column(nullable = false, length = 50, columnDefinition = "NVARCHAR(50)")
+	private String name;
 
-    @Column(nullable = false, precision = 10, scale = 2)
-    private BigDecimal price;
-    
-    @Column(length = 500, columnDefinition = "NVARCHAR(500)")
-    private String description;
-    
-    @Column(nullable=false)
-    private Integer stock;
+	@Column(nullable = false, precision = 10, scale = 2)
+	private BigDecimal price;
 
-    @Column(nullable = false)
-    private Integer sessionsPerUnit = 0;
+	@Column(columnDefinition = "NVARCHAR(500)")
+	private String description;
 
-    @Version
-    private Integer version = 0;
+	@Column(nullable = false)
+	private Integer stock;
 
-    @Column(nullable = false, columnDefinition = "VARCHAR(20)")
-    @Enumerated(EnumType.STRING)
-    private ProductStatus status = ProductStatus.ACTIVE;
+	@Version
+	private Integer version = 0;
 
-    @Column(columnDefinition = "NVARCHAR(MAX)")
-    private String imageUrl;
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
+	private ProductStatus status = ProductStatus.ACTIVE;
 
-    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
-    private String flavor;
+	@Column(columnDefinition = "NVARCHAR(1000)")
+	private String imageUrl;
 
-    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
-    private String size;
+	@Column(length = 50, columnDefinition = "NVARCHAR(50)")
+	private String brand;
 
-    @Column(precision = 10, scale = 2)
-    private java.math.BigDecimal weight;
+	private Double weight;
 
-    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
-    private String material;
+	@Column(length = 50, columnDefinition = "NVARCHAR(50)")
+	private String flavor;
 
-    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
-    private String origin;
+	@Column(length = 50, columnDefinition = "NVARCHAR(50)")
+	private String size;
 
-    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
-    private String color;
+	@Column(length = 50, columnDefinition = "NVARCHAR(50)")
+	private String color;
 
-    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
-    private String brand;
-    
-    @ManyToOne(fetch=FetchType.LAZY)
-    @JoinColumn(name = "product_category_id")
-    private ProductCategory productCategory;
+	@Column(length = 50, columnDefinition = "NVARCHAR(50)")
+	private String material;
 
-    @CreatedDate
-    @Column(updatable = false, columnDefinition = "datetime2")
-    private LocalDateTime createdAt;
+	@Column(length = 50, columnDefinition = "NVARCHAR(50)")
+	private String origin;
 
-    @LastModifiedDate
-    @Column(columnDefinition = "datetime2")
-    private LocalDateTime updatedAt;
+	@jakarta.persistence.ManyToOne
+	@jakarta.persistence.JoinColumn(name = "category_id")
+	private ProductCategory productCategory;
+
+	@CreatedDate
+	@Column(updatable = false, columnDefinition = "datetime2")
+	private LocalDateTime createdAt;
+
+	@LastModifiedDate
+	@Column(columnDefinition = "datetime2")
+	private LocalDateTime updatedAt;
 }

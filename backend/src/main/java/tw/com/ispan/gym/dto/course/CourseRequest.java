@@ -9,8 +9,6 @@ import tw.com.ispan.gym.enums.CourseType;
 @Data
 public class CourseRequest {
     private String name;
-    private Integer maxCapacity;
-    private Integer sessionsPerUnit;
     private BigDecimal price;
     private String description;
     private String imageUrl;
@@ -19,4 +17,6 @@ public class CourseRequest {
     private CourseType courseType; 
     private CourseStatus status; 
     private Integer trainerId;
+    private Integer maxCapacity; 
+    private Integer sessionsPerUnit;
 }

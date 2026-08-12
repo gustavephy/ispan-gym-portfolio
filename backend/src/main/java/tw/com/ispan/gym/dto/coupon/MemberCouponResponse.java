@@ -8,7 +8,7 @@ import tw.com.ispan.gym.enums.MemberCouponStatus;
 
 @Data
 public class MemberCouponResponse {
-	private Integer id;
+	private Integer memberCouponId;
     private CouponResponse coupon;
     private MemberCouponStatus status;
     private LocalDateTime claimedAt;
@@ -16,7 +16,7 @@ public class MemberCouponResponse {
 
     public static MemberCouponResponse from(MemberCoupon mc) {
         MemberCouponResponse dto = new MemberCouponResponse();
-        dto.setId(mc.getId());
+        dto.setMemberCouponId(mc.getMemberCouponId());
         dto.setCoupon(CouponResponse.from(mc.getCoupon()));
         dto.setStatus(mc.getStatus());
         dto.setClaimedAt(mc.getClaimedAt());

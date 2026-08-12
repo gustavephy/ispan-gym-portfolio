@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
 import tw.com.ispan.gym.entity.Coupon;
+import tw.com.ispan.gym.enums.CouponStatus;
 
 public interface CouponRepository extends JpaRepository<Coupon, Integer> {
 	Optional<Coupon> findByCode(String code);
