@@ -49,6 +49,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
         splitCourseEntity();
         narrowColumnLengths();
         createFilteredUniqueIndexes();
+        createChatUnreadIndexes();
+        addForeignKeys();
         backfillExistingRows();
         migrateOauthBindingsToAccountTable();
         rebindOauthToAccount();
@@ -656,6 +658,35 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 """);
     }
 
+    // === 聊天未讀篩選索引 =====================================================
+    // 未讀數查詢只關心 is_read = 0 的列，篩選索引可大幅縮小掃描範圍；
+    // 帶 WHERE 條件，JPA @Index 無法表達，因此放在這裡建立。
+
+    private void createChatUnreadIndexes() {
+        createFilteredIndex("IX_chat_unread_member", """
+                CREATE INDEX IX_chat_unread_member
+                    ON chat_message(member_id, is_read)
+                    WHERE is_read = 0
+                """);
+        createFilteredIndex("IX_chat_unread_emp", """
+                CREATE INDEX IX_chat_unread_emp
+                    ON chat_message(employee_id, is_read)
+                    WHERE is_read = 0
+                """);
+    }
+
+    // === AI 課表外鍵 ==========================================================
+    // ai_health_plan.inbody_record_id 在 entity 只是純整數欄位（刻意不建 JPA
+    // 關聯），ddl-auto 不會自動生成這個外鍵，必須自己補。
+
+    private void addForeignKeys() {
+        addForeignKeyIfMissing("FK_plan_inbody", """
+                ALTER TABLE ai_health_plan
+                    ADD CONSTRAINT FK_plan_inbody FOREIGN KEY (inbody_record_id)
+                        REFERENCES inbody_record(id)
+                """);
+    }
+
     // === 既有資料回填 =========================================================
     // ddl-auto=update 新增欄位時一律建成 nullable，既有列會是 NULL。
     // @Version 欄位若為 NULL，Hibernate 更新該實體時會出錯，必須補 0。
@@ -825,6 +856,28 @@ public class SchemaFixupRunner implements CommandLineRunner {
         }
         jdbc.execute(ddl);
         log.info("已建立篩選唯一索引 {}", indexName);
+    }
+
+    private void createFilteredIndex(String indexName, String ddl) {
+        Integer found = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.indexes WHERE name = ?", Integer.class, indexName);
+        if (found != null && found > 0) {
+            log.debug("索引 {} 已存在，略過", indexName);
+            return;
+        }
+        jdbc.execute(ddl);
+        log.info("已建立篩選索引 {}", indexName);
+    }
+
+    private void addForeignKeyIfMissing(String constraintName, String ddl) {
+        Integer found = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = ?", Integer.class, constraintName);
+        if (found != null && found > 0) {
+            log.debug("外鍵 {} 已存在，略過", constraintName);
+            return;
+        }
+        jdbc.execute(ddl);
+        log.info("已建立外鍵 {}", constraintName);
     }
 
     private void backfill(String target, String sql) {
