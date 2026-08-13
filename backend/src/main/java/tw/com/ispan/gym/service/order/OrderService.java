@@ -20,8 +20,12 @@ import tw.com.ispan.gym.entity.payment.PaymentRefund;
 import tw.com.ispan.gym.entity.payment.PaymentTransaction;
 import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.entity.member.Member;
-import tw.com.ispan.gym.entity.coupon.MemberCoupon;
-import tw.com.ispan.gym.entity.subscription.MemberSubscription;
+// 【合併時的修改說明】MemberCoupon／MemberSubscription 實體與其 repository 依
+// feat/coupon-controller 的分包設計搬到 member 套件（會員名下的資料歸 member），
+// SubscriptionRepository 同時更名為 MemberSubscriptionRepository 與實體對齊，
+// 這裡只有 import 路徑與型別名稱跟著改，訂單邏輯本身沒動。
+import tw.com.ispan.gym.entity.member.MemberCoupon;
+import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 import tw.com.ispan.gym.enums.coupon.CouponApplicableType;
 import tw.com.ispan.gym.enums.coupon.CouponStatus;
@@ -29,7 +33,7 @@ import tw.com.ispan.gym.enums.coupon.CouponType;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.enums.product.ProductStatus;
 import tw.com.ispan.gym.enums.course.CourseStatus;
-import tw.com.ispan.gym.enums.coupon.MemberCouponStatus;
+import tw.com.ispan.gym.enums.member.MemberCouponStatus;
 import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.DirectCheckoutNotAllowedException;
@@ -48,10 +52,10 @@ import tw.com.ispan.gym.repository.course.PrivateCourseRepository;
 import tw.com.ispan.gym.repository.payment.PaymentRefundRepository;
 import tw.com.ispan.gym.repository.payment.PaymentTransactionRepository;
 import tw.com.ispan.gym.repository.product.ProductRepository;
-import tw.com.ispan.gym.repository.coupon.MemberCouponRepository;
+import tw.com.ispan.gym.repository.member.MemberCouponRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.subscription.SubscriptionPlanRepository;
-import tw.com.ispan.gym.repository.subscription.SubscriptionRepository;
+import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -91,7 +95,7 @@ public class OrderService {
     private final OrderItemRepository orderItems;
     private final OrderStatusHistoryRepository orderStatusHistories;
     private final SubscriptionPlanRepository subscriptionPlans;
-    private final SubscriptionRepository subscriptions;
+    private final MemberSubscriptionRepository subscriptions;
     private final MemberCourseQuotaRepository courseQuotas;
     private final PaymentTransactionRepository paymentTransactions;
     private final PaymentRefundRepository paymentRefunds;
@@ -100,7 +104,7 @@ public class OrderService {
             MemberRepository users, CouponRepository coupons, MemberCouponRepository memberCoupons,
             OrderRepository orders, OrderItemRepository orderItems,
             OrderStatusHistoryRepository orderStatusHistories, SubscriptionPlanRepository subscriptionPlans,
-            SubscriptionRepository subscriptions, MemberCourseQuotaRepository courseQuotas,
+            MemberSubscriptionRepository subscriptions, MemberCourseQuotaRepository courseQuotas,
             PaymentTransactionRepository paymentTransactions, PaymentRefundRepository paymentRefunds) {
         this.cartItems = cartItems;
         this.products = products;

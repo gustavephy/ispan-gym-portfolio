@@ -1,0 +1,90 @@
+package tw.com.ispan.gym.controller.coupon;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import tw.com.ispan.gym.dto.coupon.CouponRequest;
+import tw.com.ispan.gym.dto.coupon.CouponResponse;
+import tw.com.ispan.gym.service.coupon.EmployeeCouponService;
+
+@RestController
+@RequestMapping("/api/employee/coupons")
+@PreAuthorize("hasRole('EMPLOYEE')")
+@RequiredArgsConstructor
+@Slf4j
+public class EmployeeCouponController {
+	// 【合併時的修改說明】原本注入的是 MemberCouponService，但本類呼叫的
+	// getAllCoupons／createCoupon／updateCoupon／deleteCoupon／distribute 系列
+	// 全是員工端方法，都定義在 EmployeeCouponService，注入對象跟著改過來，否則無法編譯。
+	private final EmployeeCouponService couponService;
+
+	// 查詢所有優惠券(管理員)
+	@GetMapping
+	public ResponseEntity<List<CouponResponse>> getAllCoupons(@RequestParam(required = false) String keyword,
+			@RequestParam(required = false) String status, @RequestParam(required = false) LocalDate startDate,
+			@RequestParam(required = false) LocalDate endDate) {
+		log.info("Request to get all coupons: keyword={}, status={}, startDate={}, endDate={}", keyword, status,
+				startDate, endDate);
+		return ResponseEntity.ok(couponService.getAllCoupons(keyword, status, startDate, endDate));
+	}
+
+	// 新增優惠券(管理員)
+	@PostMapping
+	public ResponseEntity<CouponResponse> createCoupon(@Valid @RequestBody CouponRequest couponRequest) {
+		log.info("Employee request to create coupon: {}", couponRequest.getCode());
+		return ResponseEntity.ok(couponService.createCoupon(couponRequest));
+	}
+
+	// 更新優惠券(管理員)
+	@PutMapping("/{couponId}")
+	public ResponseEntity<CouponResponse> updateCoupon(@PathVariable Integer couponId,
+			@Valid @RequestBody CouponRequest couponRequest) {
+		log.info("Employee request to update coupon: {}", couponId);
+		return ResponseEntity.ok(couponService.updateCoupon(couponId, couponRequest));
+	}
+
+	// 下架優惠券(管理員)
+	@DeleteMapping("/{couponId}")
+	public ResponseEntity<String> deleteCoupon(@PathVariable Integer couponId) {
+		log.info("Employee request to delete/deactivate coupon: {}", couponId);
+		couponService.deleteCoupon(couponId);
+		return ResponseEntity.ok("優惠券已下架");
+	}
+
+	// 群發優惠券(管理員)
+	@PostMapping("/{couponId}/distribute-all")
+	public ResponseEntity<Map<String, Object>> distributeToAll(@PathVariable Integer couponId) {
+		log.info("Employee request to distribute coupon {} to all active members: {}", couponId);
+		int count = couponService.distributeCouponToAllMembers(couponId);
+		return ResponseEntity
+				.ok(Map.of("success", true, "distributedCount", count, "messsage", "成功發放給" + count + "位會員"));
+
+	}
+
+	// 發給指定會員
+	@PostMapping("/{id}/distribute")
+	public ResponseEntity<Map<String, Object>> distributeToMembers(@PathVariable Integer id,
+			@RequestBody List<Integer> memberIds) {
+		log.info("Employee request to distribute coupon {} to member list: {}", id, memberIds);
+		int count = couponService.distributeToUsers(id, memberIds);
+		return ResponseEntity
+				.ok(Map.of("success", true, "distributedCount", count, "message", "成功發放給 " + count + " 位會員"));
+	}
+
+}

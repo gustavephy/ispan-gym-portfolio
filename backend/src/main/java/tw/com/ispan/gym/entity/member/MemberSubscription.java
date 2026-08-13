@@ -1,7 +1,7 @@
-package tw.com.ispan.gym.entity.subscription;
+package tw.com.ispan.gym.entity.member;
 
 import tw.com.ispan.gym.entity.order.Order;
-import tw.com.ispan.gym.entity.member.Member;
+import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 
 import java.time.LocalDateTime;
 
