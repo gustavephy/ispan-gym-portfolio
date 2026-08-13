@@ -36,7 +36,7 @@ public class MemberSubscription {
 	@Column(name = "member_subscription_id")
 	private Integer memberSubscriptionId;
 
-	@ManyToOne(fetch=FetchType.LAZY)
+	@ManyToOne(optional = false, fetch = FetchType.LAZY)
 	@JoinColumn(name = "member_id", nullable = false)
 	private Member member;
 

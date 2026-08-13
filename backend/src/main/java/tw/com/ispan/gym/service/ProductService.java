@@ -1,8 +1,11 @@
 package tw.com.ispan.gym.service;
 
+import java.math.BigDecimal;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,11 +31,13 @@ public class ProductService {
         this.productCategories = productCategories;
     }
 
-    /** 前台商品列表：只回上架中的商品，可依分類／關鍵字（含規格欄位）篩選 */
-    public Page<ProductResponse> getProducts(Integer categoryId, String keyword, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+    /** 前台商品列表：只回上架中的商品，可依分類／關鍵字／品牌／口味／尺寸／價格區間篩選 */
+    public Page<ProductResponse> getProducts(Integer productCategoryId, String keyword, String brand,
+            String flavor, String size, BigDecimal minPrice, BigDecimal maxPrice, int page, int pageSize) {
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         String kw = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
-        return products.findProductWithFilters(ProductStatus.ACTIVE, categoryId, kw, pageable)
+        return products.findProductsWithFilters(ProductStatus.ACTIVE, productCategoryId, kw,
+                        brand, flavor, size, minPrice, maxPrice, pageable)
                 .map(ProductResponse::from);
     }
 
@@ -77,12 +82,12 @@ public class ProductService {
         product.setMaterial(request.getMaterial());
         product.setOrigin(request.getOrigin());
         product.setColor(request.getColor());
-        if (request.getCategoryId() != null) {
-            ProductCategory category = productCategories.findById(request.getCategoryId())
-                    .orElseThrow(() -> new ResourceNotFoundException("找不到商品分類：" + request.getCategoryId()));
-            product.setCategory(category);
+        if (request.getProductCategoryId() != null) {
+            ProductCategory category = productCategories.findById(request.getProductCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("找不到商品分類：" + request.getProductCategoryId()));
+            product.setProductCategory(category);
         } else {
-            product.setCategory(null);
+            product.setProductCategory(null);
         }
     }
 }

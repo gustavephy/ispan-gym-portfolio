@@ -55,34 +55,33 @@ public class Product {
     @Enumerated(EnumType.STRING)
     private ProductStatus status = ProductStatus.ACTIVE;
 
-    @Column(columnDefinition = "NVARCHAR(MAX)")
+    @Column(columnDefinition = "NVARCHAR(1000)")
     private String imageUrl;
 
     // SKU 層移除後，規格欄位攤平至商品主檔
-    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
     private String brand;
 
-    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
+    private Double weight;
+
+    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
     private String flavor;
 
     @Column(length = 50, columnDefinition = "NVARCHAR(50)")
     private String size;
 
-    @Column(precision = 10, scale = 2)
-    private BigDecimal weight;
-
-    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
-    private String material;
-
-    @Column(length = 100, columnDefinition = "NVARCHAR(100)")
-    private String origin;
-
     @Column(length = 50, columnDefinition = "NVARCHAR(50)")
     private String color;
 
+    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
+    private String material;
+
+    @Column(length = 50, columnDefinition = "NVARCHAR(50)")
+    private String origin;
+
     @ManyToOne(fetch=FetchType.LAZY)
     @JoinColumn(name = "category_id")
-    private ProductCategory category;
+    private ProductCategory productCategory;
 
     @CreatedDate
     @Column(updatable = false, columnDefinition = "datetime2")
