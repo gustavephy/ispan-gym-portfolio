@@ -4,8 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import lombok.Data;
-import tw.com.ispan.gym.entity.Product;
-import tw.com.ispan.gym.enums.ProductStatus;
+import tw.com.ispan.gym.entity.product.Product;
+import tw.com.ispan.gym.enums.product.ProductStatus;
 
 @Data
 public class ProductResponse {

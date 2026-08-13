@@ -3,8 +3,8 @@ package tw.com.ispan.gym.dto.course;
 import java.math.BigDecimal;
 
 import lombok.Data;
-import tw.com.ispan.gym.enums.CourseStatus;
-import tw.com.ispan.gym.enums.CourseType;
+import tw.com.ispan.gym.enums.course.CourseStatus;
+import tw.com.ispan.gym.enums.course.CourseType;
 
 @Data
 public class CourseRequest {

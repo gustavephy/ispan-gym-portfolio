@@ -1,8 +1,8 @@
 package tw.com.ispan.gym.dto.product;
 
 import lombok.Data;
-import tw.com.ispan.gym.entity.ProductCategory;
-import tw.com.ispan.gym.enums.CategoryStatus;
+import tw.com.ispan.gym.entity.product.ProductCategory;
+import tw.com.ispan.gym.enums.common.CategoryStatus;
 
 @Data
 public class ProductCategoryDto {

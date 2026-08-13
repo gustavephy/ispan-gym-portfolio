@@ -3,8 +3,8 @@ package tw.com.ispan.gym.dto.coupon;
 import java.time.LocalDateTime;
 
 import lombok.Data;
-import tw.com.ispan.gym.entity.MemberCoupon;
-import tw.com.ispan.gym.enums.MemberCouponStatus;
+import tw.com.ispan.gym.entity.member.MemberCoupon;
+import tw.com.ispan.gym.enums.member.MemberCouponStatus;
 
 @Data
 public class MemberCouponResponse {
