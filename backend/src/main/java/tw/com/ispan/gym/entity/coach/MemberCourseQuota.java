@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.entity.coach;
 
-import tw.com.ispan.gym.entity.course.Course;
+import tw.com.ispan.gym.entity.course.PrivateCourse;
 
 import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.entity.order.OrderItem;
@@ -42,16 +42,16 @@ public class MemberCourseQuota {
     private Member member;
 
     /**
-     * 對應的課程（courses 表）。課程域已自商品域獨立，
-     * 額度來源是購買 PRIVATE 型課程，故直接以 course FK 表達，
+     * 對應的私教課（private_course 表）。額度來源是購買私教課，
+     * 課程域已拆分後直接以 PrivateCourse FK 表達，
      * nullable = true 相容舊資料（歷史列僅剩 courseName 快照可辨識）
      */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "course_id", nullable = true)
+    @JoinColumn(name = "private_course_id", nullable = true)
     @JsonIgnore
-    private Course course;
+    private PrivateCourse course;
 
-    @Column(name = "course_id", insertable = false, updatable = false)
+    @Column(name = "private_course_id", insertable = false, updatable = false)
     private Integer courseId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

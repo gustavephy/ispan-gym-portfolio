@@ -12,7 +12,7 @@ import tw.com.ispan.gym.entity.coupon.Coupon;
 import tw.com.ispan.gym.entity.order.Order;
 import tw.com.ispan.gym.entity.order.OrderItem;
 import tw.com.ispan.gym.entity.order.OrderStatusHistory;
-import tw.com.ispan.gym.entity.course.Course;
+import tw.com.ispan.gym.entity.course.PrivateCourse;
 import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.entity.coupon.MemberCoupon;
@@ -34,7 +34,7 @@ import tw.com.ispan.gym.repository.CouponRepository;
 import tw.com.ispan.gym.repository.OrderItemRepository;
 import tw.com.ispan.gym.repository.OrderRepository;
 import tw.com.ispan.gym.repository.OrderStatusHistoryRepository;
-import tw.com.ispan.gym.repository.CourseRepository;
+import tw.com.ispan.gym.repository.PrivateCourseRepository;
 import tw.com.ispan.gym.repository.ProductRepository;
 import tw.com.ispan.gym.repository.MemberCouponRepository;
 import tw.com.ispan.gym.repository.MemberRepository;
@@ -65,7 +65,7 @@ public class OrderService {
 
     private final CartItemRepository cartItems;
     private final ProductRepository products;
-    private final CourseRepository courses;
+    private final PrivateCourseRepository courses;
     private final MemberRepository users;
     private final CouponRepository coupons;
     private final MemberCouponRepository memberCoupons;
@@ -73,7 +73,7 @@ public class OrderService {
     private final OrderItemRepository orderItems;
     private final OrderStatusHistoryRepository orderStatusHistories;
 
-    public OrderService(CartItemRepository cartItems, ProductRepository products, CourseRepository courses,
+    public OrderService(CartItemRepository cartItems, ProductRepository products, PrivateCourseRepository courses,
             MemberRepository users, CouponRepository coupons, MemberCouponRepository memberCoupons,
             OrderRepository orders, OrderItemRepository orderItems,
             OrderStatusHistoryRepository orderStatusHistories) {
@@ -111,7 +111,7 @@ public class OrderService {
     }
 
     /**
-     * 課程略過購物車，直接以 courseId + quantity 結帳。會員訂閱的直接結帳流程待資料模型確定後再補上。
+     * 私教課略過購物車，直接以 privateCourseId + quantity 結帳（團課憑訂閱參加，不走購買）。會員訂閱的直接結帳流程待資料模型確定後再補上。
      */
     @Transactional
     public OrderDetailResponse createDirectOrder(Integer userId, DirectCheckoutRequest request) {
@@ -119,10 +119,10 @@ public class OrderService {
             throw new InvalidQuantityException();
         }
         Member user = users.findById(userId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
-        Course course = courses.findById(request.courseId())
-                .orElseThrow(() -> new ResourceNotFoundException("找不到課程：" + request.courseId()));
+        PrivateCourse course = courses.findById(request.privateCourseId())
+                .orElseThrow(() -> new ResourceNotFoundException("找不到私教課：" + request.privateCourseId()));
         if (!CourseStatus.ACTIVE.equals(course.getStatus())) {
-            throw new DirectCheckoutNotAllowedException(course.getCourseId());
+            throw new DirectCheckoutNotAllowedException(course.getId());
         }
 
         Order order = createCourseOrder(user, course, request.quantity(), request.couponCode());
@@ -130,10 +130,10 @@ public class OrderService {
     }
 
     /**
-     * 課程訂單：不涉庫存，明細以 course_id 記錄。
+     * 私教課訂單：不涉庫存，明細以 private_course_id 記錄。
      * 履約（發放堂數額度）待 MemberCourseQuota 服務接上後補。
      */
-    private Order createCourseOrder(Member user, Course course, long quantity, String couponCode) {
+    private Order createCourseOrder(Member user, PrivateCourse course, long quantity, String couponCode) {
         BigDecimal subtotal = course.getPrice().multiply(BigDecimal.valueOf(quantity));
 
         MemberCoupon memberCoupon = null;
@@ -175,7 +175,7 @@ public class OrderService {
         return toDetailResponse(order);
     }
 
-    /** 只有商品明細需要還原庫存；課程明細（course_id 非空）不涉庫存 */
+    /** 只有商品明細需要還原庫存；私教課明細（private_course_id 非空）不涉庫存 */
     private void restoreStock(Order order) {
         List<OrderItem> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
                 .filter(item -> !item.isCourseItem())
@@ -301,7 +301,7 @@ public class OrderService {
                 .sorted(Comparator.comparing(OrderItem::getId))
                 .map(item -> new OrderItemResponse(item.getId(),
                         item.isCourseItem() ? null : item.getProduct().getProductId(),
-                        item.isCourseItem() ? item.getCourse().getCourseId() : null,
+                        item.isCourseItem() ? item.getCourse().getId() : null,
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
                         item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
                 .toList();

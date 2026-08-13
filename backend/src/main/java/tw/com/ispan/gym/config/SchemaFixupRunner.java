@@ -46,6 +46,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropLegacyIdentityArtifacts();
         migrateLoginColumnsToAccount();
         migrateCourseDomainSplit();
+        splitCourseEntity();
         narrowColumnLengths();
         createFilteredUniqueIndexes();
         backfillExistingRows();
@@ -468,15 +469,87 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropForeignKeysOnColumn("member_course_quota", "product_id");
         dropColumnIfExists("member_course_quota", "product_id");
 
-        // 既有明細都是商品，course_id 為 NULL；product_id 由 NOT NULL 放寬為可空
+        // 既有明細都是商品，課程 FK 為 NULL；product_id 由 NOT NULL 放寬為可空
         if (columnExists("order_items", "product_id")) {
             alterColumnNullable("order_items", "product_id", "int");
         }
-        createCheckIfAbsent("order_items", "CK_oi_exactly_one_ref", """
-                ALTER TABLE order_items ADD CONSTRAINT CK_oi_exactly_one_ref CHECK (
-                    (product_id IS NOT NULL AND course_id IS NULL)
-                 OR (product_id IS NULL AND course_id IS NOT NULL))
-                """);
+        // 雙 FK 互斥 CHECK 由 splitCourseEntity() 以拆分後的欄名建立
+    }
+
+    // === 課程域拆分：courses → private_course／group_course =====================
+    // 2026-08-13 定案：單一 Course 拆為私教課（可購買、綁教練）與團課
+    //（憑訂閱參加、主檔不綁教練）。既有 courses 資料依 course_type 分流搬遷，
+    // id 原值保留（IDENTITY_INSERT），指向它的 FK 欄改名後資料依然有效：
+    // order_items.course_id → private_course_id（團課不可購買）
+    // member_course_quota.course_id → private_course_id（額度僅來自私教課）
+    // group_class_sessions.course_id → group_course_id（場次屬團課）
+
+    private void splitCourseEntity() {
+        // 1. 既有資料分流搬遷（id 保留原值，兩張新表的 id 空間彼此獨立不衝突）
+        if (tableExists("courses")) {
+            Integer rows = jdbc.queryForObject("SELECT COUNT(*) FROM courses", Integer.class);
+            if (rows != null && rows > 0) {
+                if (!columnExists("courses", "course_type")) {
+                    log.warn("courses 有 {} 列但缺 course_type 欄，無法自動分流，請人工處理", rows);
+                    return;
+                }
+                // SET IDENTITY_INSERT 與 INSERT 必須同一批次執行，走 execute 而非 update
+                jdbc.execute("""
+                        SET IDENTITY_INSERT private_course ON;
+                        INSERT INTO private_course (private_course_id, name, description, image_url,
+                                price, session_per_unit, trainer_id, course_category_id,
+                                max_capacity, is_trial, status, created_at, updated_at)
+                        SELECT course_id, name, description, image_url,
+                                price, session_per_unit, trainer_id, course_category_id,
+                                max_capacity, is_trial, status, created_at, updated_at
+                            FROM courses c
+                            WHERE c.course_type = 'PRIVATE'
+                              AND NOT EXISTS (SELECT 1 FROM private_course p
+                                                  WHERE p.private_course_id = c.course_id);
+                        SET IDENTITY_INSERT private_course OFF;
+                        """);
+                log.info("已將 courses 的 PRIVATE 列分流至 private_course");
+                jdbc.execute("""
+                        SET IDENTITY_INSERT group_course ON;
+                        INSERT INTO group_course (group_course_id, name, description, image_url,
+                                course_category_id, max_capacity, is_trial,
+                                is_open_for_subscription, status, created_at, updated_at)
+                        SELECT course_id, name, description, image_url,
+                                course_category_id, max_capacity, is_trial,
+                                is_open_for_subscription, status, created_at, updated_at
+                            FROM courses c
+                            WHERE c.course_type = 'GROUP'
+                              AND NOT EXISTS (SELECT 1 FROM group_course g
+                                                  WHERE g.group_course_id = c.course_id);
+                        SET IDENTITY_INSERT group_course OFF;
+                        """);
+                log.info("已將 courses 的 GROUP 列分流至 group_course（教練改由場次承載、價格捨棄）");
+            }
+        }
+
+        // 2. FK 欄位改名（renameColumnIfExists 會先拆掉 Hibernate 預建的空新欄）。
+        //    order_items 的舊互斥 CHECK 綁著 course_id，須先卸掉
+        dropConstraintIfExists("order_items", "CK_oi_exactly_one_ref");
+        renameColumnIfExists("order_items", "course_id", "private_course_id");
+        renameColumnIfExists("member_course_quota", "course_id", "private_course_id");
+        renameColumnIfExists("group_class_sessions", "course_id", "group_course_id");
+
+        // 3. 以拆分後的欄名重建互斥 CHECK
+        if (columnExists("order_items", "private_course_id")) {
+            createCheckIfAbsent("order_items", "CK_oi_exactly_one_ref", """
+                    ALTER TABLE order_items ADD CONSTRAINT CK_oi_exactly_one_ref CHECK (
+                        (product_id IS NOT NULL AND private_course_id IS NULL)
+                     OR (product_id IS NULL AND private_course_id IS NOT NULL))
+                    """);
+        }
+
+        // 4. 分流完成後移除舊表（FK 欄改名後仍指向 courses 的殘留外鍵一併拆掉，
+        //    指向新表的 FK 由 ddl-auto 下次啟動補建）
+        if (tableExists("courses")) {
+            dropForeignKeysReferencing("courses");
+            jdbc.execute("DROP TABLE courses");
+            log.info("已移除舊 courses 表（資料已分流至 private_course／group_course）");
+        }
     }
 
     private void alterColumnNullable(String table, String column, String type) {
@@ -577,13 +650,15 @@ public class SchemaFixupRunner implements CommandLineRunner {
         backfill("group_class_sessions.booked_count",
                 "UPDATE group_class_sessions SET booked_count = 0 WHERE booked_count IS NULL");
 
-        // 場次容量沿用所屬課程的預設值（courses PK 欄名已改為 course_id）
-        backfill("group_class_sessions.capacity", """
-                UPDATE s SET s.capacity = c.max_capacity
-                    FROM group_class_sessions s
-                    JOIN courses c ON c.course_id = s.course_id
-                    WHERE s.capacity IS NULL
-                """);
+        // 場次容量沿用所屬團課的預設值（課程域拆分後場次改指 group_course）
+        if (columnExists("group_class_sessions", "group_course_id") && tableExists("group_course")) {
+            backfill("group_class_sessions.capacity", """
+                    UPDATE s SET s.capacity = c.max_capacity
+                        FROM group_class_sessions s
+                        JOIN group_course c ON c.group_course_id = s.group_course_id
+                        WHERE s.capacity IS NULL
+                    """);
+        }
     }
 
     // === OAuth 綁定回歸 member_oauth_account ==================================

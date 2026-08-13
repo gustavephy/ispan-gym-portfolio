@@ -1,6 +1,5 @@
 package tw.com.ispan.gym.service.course;
 
-import tw.com.ispan.gym.entity.course.Course;
 
 import java.util.List;
 import java.util.stream.Collectors;

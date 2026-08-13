@@ -1,12 +1,10 @@
 package tw.com.ispan.gym.dto.order;
 
-import tw.com.ispan.gym.entity.order.Order;
-
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 public record DirectCheckoutRequest(
-        @NotNull Integer courseId,
+        @NotNull Integer privateCourseId,
         @NotNull @Positive Long quantity,
         @Size(max = 30) String couponCode) {}

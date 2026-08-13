@@ -1,7 +1,7 @@
 package tw.com.ispan.gym.entity.order;
 
 import tw.com.ispan.gym.entity.product.Product;
-import tw.com.ispan.gym.entity.course.Course;
+import tw.com.ispan.gym.entity.course.PrivateCourse;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -13,7 +13,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 /**
  * 訂單明細——全系統唯一的雙 FK 多型點。
  *
- * <p>product_id 與 course_id 恰好一個非空，履約流程據此分流：
+ * <p>product_id 與 private_course_id 恰好一個非空，履約流程據此分流：
  * 商品扣庫存、課程發放堂數額度。互斥性由 DB CHECK 約束把關
  * （CK_oi_exactly_one_ref，見 SchemaFixupRunner），JPA 無法表達。
  */
@@ -32,10 +32,10 @@ public class OrderItem {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", foreignKey = @ForeignKey(name = "FK_oi_product"))
     private Product product;
-    /** 買課程時有值，買商品時為 null */
+    /** 買私教課時有值，買商品時為 null（團課不走購買，憑訂閱參加） */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "course_id", foreignKey = @ForeignKey(name = "FK_oi_course"))
-    private Course course;
+    @JoinColumn(name = "private_course_id", foreignKey = @ForeignKey(name = "FK_oi_private_course"))
+    private PrivateCourse course;
     /** 購買當下的品項名稱快照；商品名或課程名 */
     @Nationalized
     @Column(name = "product_name_at_buy", nullable = false, length = 50)
@@ -59,8 +59,8 @@ public class OrderItem {
         this.quantity = quantity;
     }
 
-    /** 課程明細 */
-    public OrderItem(Order order, Course course, String courseNameAtBuy, BigDecimal priceAtBuy, Long quantity) {
+    /** 私教課明細 */
+    public OrderItem(Order order, PrivateCourse course, String courseNameAtBuy, BigDecimal priceAtBuy, Long quantity) {
         this.order = order;
         this.course = course;
         this.productNameAtBuy = courseNameAtBuy;
@@ -71,7 +71,7 @@ public class OrderItem {
     public Long getId() { return id; }
     public Order getOrder() { return order; }
     public Product getProduct() { return product; }
-    public Course getCourse() { return course; }
+    public PrivateCourse getCourse() { return course; }
     public String getProductNameAtBuy() { return productNameAtBuy; }
     public BigDecimal getPriceAtBuy() { return priceAtBuy; }
     public Long getQuantity() { return quantity; }

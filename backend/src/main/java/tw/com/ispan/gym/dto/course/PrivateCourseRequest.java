@@ -1,24 +1,20 @@
 package tw.com.ispan.gym.dto.course;
 
-import tw.com.ispan.gym.entity.course.Course;
-
 import java.math.BigDecimal;
 
 import lombok.Data;
 import tw.com.ispan.gym.enums.CourseStatus;
-import tw.com.ispan.gym.enums.CourseType;
 
 @Data
-public class CourseRequest {
+public class PrivateCourseRequest {
     private String name;
     private BigDecimal price;
     private String description;
     private String imageUrl;
     private Boolean isTrial;
-    private Boolean isOpenForSubscription;
-    private CourseType courseType; 
-    private CourseStatus status; 
+    private CourseStatus status;
     private Integer trainerId;
-    private Integer maxCapacity; 
-    private Integer sessionsPerUnit;
+    private Integer maxCapacity;
+    private Integer sessionPerUnit;
+    private Integer courseCategoryId;
 }

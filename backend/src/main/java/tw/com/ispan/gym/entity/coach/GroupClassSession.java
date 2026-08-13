@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.entity.coach;
 
-import tw.com.ispan.gym.entity.course.Course;
+import tw.com.ispan.gym.entity.course.GroupCourse;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
@@ -40,8 +40,8 @@ public class GroupClassSession extends TaipeiTimestampEntity {
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "course_id", nullable = false)
-    private Course course;
+    @JoinColumn(name = "group_course_id", nullable = false)
+    private GroupCourse course;
 
     @Column(name = "room_name", length = 100, columnDefinition = "NVARCHAR(100)")
     private String roomName;
@@ -56,7 +56,7 @@ public class GroupClassSession extends TaipeiTimestampEntity {
     @Column(nullable = false, length = 10)
     private GroupClassSessionStatus status = GroupClassSessionStatus.SCHEDULED;
 
-    /** 本場次可容納人數。建立時由 Course.maxCapacity 帶入，之後可依實際教室調整 */
+    /** 本場次可容納人數。建立時由 GroupCourse.maxCapacity 帶入，之後可依實際教室調整 */
     @Column(nullable = false)
     private Integer capacity;
 

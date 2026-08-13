@@ -28,26 +28,26 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import tw.com.ispan.gym.enums.CourseStatus;
-import tw.com.ispan.gym.enums.CourseType;
 
 /**
- * 課程主檔（團課與私教課）。
+ * 私教課主檔（2026-08-13 定案：課程域拆為私教課／團課兩實體，取代單一 Course）。
  *
- * <p>課程已自商品域獨立：不再需要一筆對應的 Product，價格與堂數改存本表。
- * 訂單明細以 order_item 的 course_id 指向本表（與 product_id 互斥）。
+ * <p>私教課是「可購買」的一方：order_item 的 private_course_id 指向本表
+ * （與 product_id 互斥），購買後發放 MemberCourseQuota 堂數額度，
+ * 再由會員預約教練時段核銷。教練為必填——私教課必定綁定授課教練。
  */
 @Entity
-@Table(name = "courses")
+@Table(name = "private_course")
 @Getter
 @Setter
 @ToString(exclude = { "trainer", "category" })
 @EntityListeners(AuditingEntityListener.class)
-public class Course {
+public class PrivateCourse {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@Column(name = "course_id")
-	private Integer courseId;
+	@Column(name = "private_course_id")
+	private Integer id;
 
 	@Column(nullable = false, length = 100, columnDefinition = "NVARCHAR(100)")
 	private String name;
@@ -61,32 +61,25 @@ public class Course {
 	@Column(nullable = false, precision = 10, scale = 2)
 	private BigDecimal price;
 
-	/** 購買一單位可得的堂數；團課憑訂閱參加，故恆為 1 */
+	/** 購買一單位可得的堂數 */
 	@Column(name = "session_per_unit", nullable = false)
 	private Integer sessionPerUnit = 1;
 
-	/** 團課或私教課 */
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
-	private CourseType courseType;
-
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "trainer_id", nullable = false, foreignKey = @ForeignKey(name = "FK_courses_trainer"))
+	@JoinColumn(name = "trainer_id", nullable = false, foreignKey = @ForeignKey(name = "FK_private_course_trainer"))
 	@JsonIgnore
 	private Trainer trainer;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "course_category_id", foreignKey = @ForeignKey(name = "FK_courses_course_category"))
+	@JoinColumn(name = "course_category_id", foreignKey = @ForeignKey(name = "FK_private_course_course_category"))
 	private CourseCategory category;
 
+	/** 私教課以一對一為預設；小班制私教可放寬 */
 	@Column(nullable = false)
-	private Integer maxCapacity = 15;
+	private Integer maxCapacity = 1;
 
 	@Column(nullable = false, columnDefinition = "bit default 0")
 	private Boolean isTrial = false;
-
-	@Column(nullable = false, columnDefinition = "bit default 0")
-	private Boolean isOpenForSubscription = false;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
