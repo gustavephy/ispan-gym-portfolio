@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
  *   此檢查屬於 Service 層職責，Entity 本身不做身份驗證。
  */
 @Entity
-@Table(name = "ai_health_plans")
+@Table(name = "ai_health_plan")
 @Getter
 @Setter
 @Builder

@@ -18,7 +18,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
  * （CK_oi_exactly_one_ref，見 SchemaFixupRunner），JPA 無法表達。
  */
 @Entity
-@Table(name = "order_items")
+@Table(name = "order_item")
 @EntityListeners(AuditingEntityListener.class)
 public class OrderItem {
     @Id

@@ -25,7 +25,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(
-        name = "inbody_records",
+        name = "inbody_record",
         indexes = @Index(name = "IX_inbody_member_id", columnList = "member_id")
 )
 @Getter

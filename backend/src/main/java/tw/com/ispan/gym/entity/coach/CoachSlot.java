@@ -22,7 +22,7 @@ import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
 import tw.com.ispan.gym.enums.coach.SlotStatus;
 
 @Entity
-@Table(name = "coach_slots")
+@Table(name = "coach_slot")
 @Data
 @EqualsAndHashCode(callSuper = false)
 public class CoachSlot extends TaipeiTimestampEntity {

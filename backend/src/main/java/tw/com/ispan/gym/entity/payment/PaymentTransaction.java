@@ -12,8 +12,8 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
-@Table(name = "payment_transactions", uniqueConstraints = @UniqueConstraint(
-        name = "UX_payment_transactions_mtn", columnNames = "merchant_trade_no"))
+@Table(name = "payment_transaction", uniqueConstraints = @UniqueConstraint(
+        name = "UX_payment_transaction_mtn", columnNames = "merchant_trade_no"))
 @EntityListeners(AuditingEntityListener.class)
 public class PaymentTransaction {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;

@@ -30,7 +30,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 @Entity
-@Table(name = "group_class_sessions")
+@Table(name = "group_class_session")
 @Data
 @EqualsAndHashCode(callSuper = false)
 public class GroupClassSession extends TaipeiTimestampEntity {

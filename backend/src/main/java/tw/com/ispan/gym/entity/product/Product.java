@@ -25,7 +25,7 @@ import lombok.Setter;
 import tw.com.ispan.gym.enums.ProductStatus;
 
 @Entity
-@Table(name = "products")
+@Table(name = "product")
 @Getter
 @Setter
 @EntityListeners(AuditingEntityListener.class)

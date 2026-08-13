@@ -28,7 +28,7 @@ import java.time.LocalDateTime;
  * CREDIT → 購課後發放額度（remaining+N）
  */
 @Entity
-@Table(name = "session_deduction_logs")
+@Table(name = "session_deduction_log")
 @Data
 @EntityListeners(AuditingEntityListener.class)
 public class SessionDeductionLog {

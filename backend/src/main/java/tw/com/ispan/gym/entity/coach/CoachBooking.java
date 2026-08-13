@@ -26,7 +26,7 @@ import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
 import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 
 @Entity
-@Table(name = "coach_bookings")
+@Table(name = "coach_booking")
 @Data
 @EqualsAndHashCode(callSuper = false)
 public class CoachBooking extends TaipeiTimestampEntity {

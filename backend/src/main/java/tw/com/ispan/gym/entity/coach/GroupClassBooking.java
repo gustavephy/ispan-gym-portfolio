@@ -31,7 +31,7 @@ import lombok.EqualsAndHashCode;
  * WHERE status = 'BOOKED';
  */
 @Entity
-@Table(name = "group_class_bookings")
+@Table(name = "group_class_booking")
 @Data
 @EqualsAndHashCode(callSuper = false)
 public class GroupClassBooking extends TaipeiTimestampEntity {

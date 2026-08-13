@@ -250,7 +250,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
     private void clearLegacyOperatorIds() {
         clearOrphanOperatorIds("inventory_log", "operator_employee_id", "employee", "employee_id");
-        clearOrphanOperatorIds("session_deduction_logs", "operator_trainer_id", "trainer", "trainer_id");
+        clearOrphanOperatorIds("session_deduction_log", "operator_trainer_id", "trainer", "trainer_id");
     }
 
     private void clearOrphanOperatorIds(String table, String column, String refTable, String refColumn) {
@@ -303,21 +303,21 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // 重建 —— 因此本方法必須排在建索引之前執行。
 
     private void narrowColumnLengths() {
-        if (varcharWiderThan("coach_slots", "status", 10)) {
-            dropIndexIfExists("coach_slots", "UX_coach_slots_trainer_start");
+        if (varcharWiderThan("coach_slot", "status", 10)) {
+            dropIndexIfExists("coach_slot", "UX_coach_slot_trainer_start");
         }
-        if (varcharWiderThan("group_class_bookings", "status", 10)) {
-            dropIndexIfExists("group_class_bookings", "UX_gcb_session_member");
+        if (varcharWiderThan("group_class_booking", "status", 10)) {
+            dropIndexIfExists("group_class_booking", "UX_gcb_session_member");
         }
 
         narrowVarchar("member", "phone", 10);
         narrowVarchar("member", "status", 10);
-        narrowVarchar("coach_slots", "status", 10);
-        narrowVarchar("coach_bookings", "status", 10);
-        narrowVarchar("group_class_sessions", "status", 10);
-        narrowVarchar("group_class_bookings", "status", 10);
+        narrowVarchar("coach_slot", "status", 10);
+        narrowVarchar("coach_booking", "status", 10);
+        narrowVarchar("group_class_session", "status", 10);
+        narrowVarchar("group_class_booking", "status", 10);
         narrowVarchar("orders", "status", 10);
-        narrowVarchar("user_coupons", "status", 10);
+        narrowVarchar("member_coupon", "status", 10);
         narrowVarchar("member_subscription", "status", 10);
     }
 
@@ -539,9 +539,9 @@ public class SchemaFixupRunner implements CommandLineRunner {
         renameColumnIfExists("group_class_sessions", "course_id", "group_course_id");
 
         // 3. 以拆分後的欄名重建互斥 CHECK
-        if (columnExists("order_items", "private_course_id")) {
-            createCheckIfAbsent("order_items", "CK_oi_exactly_one_ref", """
-                    ALTER TABLE order_items ADD CONSTRAINT CK_oi_exactly_one_ref CHECK (
+        if (columnExists("order_item", "private_course_id")) {
+            createCheckIfAbsent("order_item", "CK_oi_exactly_one_ref", """
+                    ALTER TABLE order_item ADD CONSTRAINT CK_oi_exactly_one_ref CHECK (
                         (product_id IS NOT NULL AND private_course_id IS NULL)
                      OR (product_id IS NULL AND private_course_id IS NOT NULL))
                     """);
@@ -610,16 +610,16 @@ public class SchemaFixupRunner implements CommandLineRunner {
         // 限定 status = 'BOOKED' 才能讓「取消後重新報名」成立。
         createFilteredUniqueIndex("UX_gcb_session_member", """
                 CREATE UNIQUE INDEX UX_gcb_session_member
-                    ON group_class_bookings(session_id, member_id)
+                    ON group_class_booking(session_id, member_id)
                     WHERE status = 'BOOKED'
                 """);
 
         // 同一位教練、同一個開始時間只能有一個有效時段。
         // 已取消的時段應允許在同一時間重新開放，故排除 CANCELLED。
         // 註：只擋開始時間完全相同者，部分重疊仍須由 service 層檢查。
-        createFilteredUniqueIndex("UX_coach_slots_trainer_start", """
-                CREATE UNIQUE INDEX UX_coach_slots_trainer_start
-                    ON coach_slots(trainer_id, start_at)
+        createFilteredUniqueIndex("UX_coach_slot_trainer_start", """
+                CREATE UNIQUE INDEX UX_coach_slot_trainer_start
+                    ON coach_slot(trainer_id, start_at)
                     WHERE status <> 'CANCELLED'
                 """);
 
@@ -628,9 +628,9 @@ public class SchemaFixupRunner implements CommandLineRunner {
         // 只有 CANCELLED 才釋放這個時段，讓別的會員可以重新預約。
         // 這是應用層樂觀鎖（CoachSlot.version）之外，資料庫層獨立的第二道防護，
         // 就算應用層邏輯有漏洞，也不可能真的塞進兩筆有效預約。
-        createFilteredUniqueIndex("UX_coach_bookings_active_slot", """
-                CREATE UNIQUE INDEX UX_coach_bookings_active_slot
-                    ON coach_bookings(coach_slot_id)
+        createFilteredUniqueIndex("UX_coach_booking_active_slot", """
+                CREATE UNIQUE INDEX UX_coach_booking_active_slot
+                    ON coach_booking(coach_slot_id)
                     WHERE status <> 'CANCELLED'
                 """);
 
@@ -647,11 +647,11 @@ public class SchemaFixupRunner implements CommandLineRunner {
         // 同一會員同一天只能有一筆有效的 InBody 記錄（欄位已改名 member_id）。
         // 本表採軟刪除，限定 deleted_at IS NULL 才能讓「刪除後重新上傳」成立。
         // 早期版本以一般 UNIQUE CONSTRAINT／user_id 舊欄名表達，先清掉。
-        dropConstraintIfExists("inbody_records", "UQ_inbody_user_date");
-        dropIndexIfExists("inbody_records", "UX_inbody_user_date");
+        dropConstraintIfExists("inbody_record", "UQ_inbody_user_date");
+        dropIndexIfExists("inbody_record", "UX_inbody_user_date");
         createFilteredUniqueIndex("UX_inbody_member_date", """
                 CREATE UNIQUE INDEX UX_inbody_member_date
-                    ON inbody_records(member_id, update_date)
+                    ON inbody_record(member_id, update_date)
                     WHERE deleted_at IS NULL
                 """);
     }
@@ -664,22 +664,22 @@ public class SchemaFixupRunner implements CommandLineRunner {
     private void backfillExistingRows() {
         // 所有帶 @Version 的表都要補；漏一張，該表的舊列第一次被更新時就會炸
         for (String table : new String[] {
-                "member_course_quota", "group_class_sessions", "orders", "cart_items",
-                "payment_transactions", "payment_refunds", "products" }) {
+                "member_course_quota", "group_class_session", "orders", "cart_item",
+                "payment_transaction", "payment_refund", "product" }) {
             if (columnExists(table, "version")) {
                 backfill(table + ".version",
                         "UPDATE " + table + " SET version = 0 WHERE version IS NULL");
             }
         }
 
-        backfill("group_class_sessions.booked_count",
-                "UPDATE group_class_sessions SET booked_count = 0 WHERE booked_count IS NULL");
+        backfill("group_class_session.booked_count",
+                "UPDATE group_class_session SET booked_count = 0 WHERE booked_count IS NULL");
 
         // 場次容量沿用所屬團課的預設值（課程域拆分後場次改指 group_course）
-        if (columnExists("group_class_sessions", "group_course_id") && tableExists("group_course")) {
-            backfill("group_class_sessions.capacity", """
+        if (columnExists("group_class_session", "group_course_id") && tableExists("group_course")) {
+            backfill("group_class_session.capacity", """
                     UPDATE s SET s.capacity = c.max_capacity
-                        FROM group_class_sessions s
+                        FROM group_class_session s
                         JOIN group_course c ON c.group_course_id = s.group_course_id
                         WHERE s.capacity IS NULL
                     """);
@@ -761,7 +761,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
     private void dropObsoleteColumns() {
         dropColumnIfExists("orders", "coupon_id");
-        dropColumnIfExists("order_items", "line_amount");
+        dropColumnIfExists("order_item", "line_amount");
         // 認證三表改綁 account（會員／員工共用登入帳號），舊的 member_id
         // 是 NOT NULL 且程式不再填值，不清掉的話新資料一律插入失敗
         dropColumnIfExists("email_verification", "member_id");

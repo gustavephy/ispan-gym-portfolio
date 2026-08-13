@@ -7,8 +7,8 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
-@Table(name = "payment_webhooks", uniqueConstraints = @UniqueConstraint(
-        name = "UX_payment_webhooks_provider_event", columnNames = { "provider", "event_key" }))
+@Table(name = "payment_webhook", uniqueConstraints = @UniqueConstraint(
+        name = "UX_payment_webhook_provider_event", columnNames = { "provider", "event_key" }))
 @EntityListeners(AuditingEntityListener.class)
 public class PaymentWebhook {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;

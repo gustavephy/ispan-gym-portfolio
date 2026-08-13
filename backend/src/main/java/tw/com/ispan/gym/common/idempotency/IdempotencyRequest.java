@@ -6,7 +6,7 @@ import org.hibernate.annotations.Nationalized;
 import tw.com.ispan.gym.entity.member.Member;
 
 @Entity
-@Table(name = "idempotency_requests", uniqueConstraints = @UniqueConstraint(
+@Table(name = "idempotency_request", uniqueConstraints = @UniqueConstraint(
         name = "UX_idempotency_member_operation_key",
         columnNames = { "member_id", "operation_name", "idempotency_key" }))
 public class IdempotencyRequest {

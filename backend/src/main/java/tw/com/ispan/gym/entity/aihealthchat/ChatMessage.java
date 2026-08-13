@@ -13,7 +13,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "chat_messages")
+@Table(name = "chat_message")
 @Getter
 @Setter
 @Builder
