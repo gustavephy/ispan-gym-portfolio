@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.entity.ai;
+package tw.com.ispan.gym.entity.AiHealthChat;
 
 
 import jakarta.persistence.*;
