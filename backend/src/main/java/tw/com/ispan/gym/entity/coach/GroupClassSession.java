@@ -1,7 +1,9 @@
-package tw.com.ispan.gym.entity.course;
+package tw.com.ispan.gym.entity.coach;
+
+import tw.com.ispan.gym.entity.course.Course;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
-import tw.com.ispan.gym.enums.GroupClassSessionStatus;
+import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 
 import java.time.LocalDateTime;

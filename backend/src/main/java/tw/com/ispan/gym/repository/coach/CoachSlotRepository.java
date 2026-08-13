@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.repository;
+package tw.com.ispan.gym.repository.coach;
 
 
 import java.time.LocalDateTime;
@@ -8,8 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import tw.com.ispan.gym.entity.trainer.CoachSlot;
-import tw.com.ispan.gym.enums.SlotStatus;
+import tw.com.ispan.gym.entity.coach.CoachSlot;
+import tw.com.ispan.gym.enums.coach.SlotStatus;
 
 public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
 

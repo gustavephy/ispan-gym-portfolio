@@ -1,4 +1,5 @@
-package tw.com.ispan.gym.service.trainer;
+package tw.com.ispan.gym.service.coach;
+
 
 import tw.com.ispan.gym.entity.employee.Employee;
 
@@ -10,17 +11,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import tw.com.ispan.gym.dto.trainer.CoachSlotResponse;
-import tw.com.ispan.gym.dto.trainer.CreateCoachSlotRequest;
-import tw.com.ispan.gym.dto.trainer.UpdateCoachSlotRequest;
-import tw.com.ispan.gym.entity.trainer.CoachSlot;
+import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
+import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
+import tw.com.ispan.gym.dto.coach.UpdateCoachSlotRequest;
+import tw.com.ispan.gym.entity.coach.CoachSlot;
 import tw.com.ispan.gym.entity.trainer.Trainer;
-import tw.com.ispan.gym.enums.SlotStatus;
+import tw.com.ispan.gym.enums.coach.SlotStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ConfirmationRequiredException;
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
-import tw.com.ispan.gym.repository.CoachSlotRepository;
+import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.EmployeeRepository;
 import tw.com.ispan.gym.repository.TrainerRepository;
 

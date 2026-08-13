@@ -1,10 +1,10 @@
-package tw.com.ispan.gym.dto.reservation;
+package tw.com.ispan.gym.dto.coach;
 
 import java.time.LocalDateTime;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import tw.com.ispan.gym.enums.CoachBookingStatus;
+import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 
 /**
  * 預約成功後回傳給前端的資料。

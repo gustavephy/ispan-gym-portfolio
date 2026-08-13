@@ -1,9 +1,9 @@
-package tw.com.ispan.gym.entity.reservation;
+package tw.com.ispan.gym.entity.coach;
 
-import tw.com.ispan.gym.entity.course.MemberCourseQuota;
+import tw.com.ispan.gym.entity.coach.MemberCourseQuota;
 import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.entity.member.Member;
-import tw.com.ispan.gym.entity.trainer.CoachSlot;
+import tw.com.ispan.gym.entity.coach.CoachSlot;
 
 import java.time.LocalDateTime;
 
@@ -23,7 +23,7 @@ import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
-import tw.com.ispan.gym.enums.CoachBookingStatus;
+import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 
 @Entity
 @Table(name = "coach_bookings")

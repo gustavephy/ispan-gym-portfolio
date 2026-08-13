@@ -1,8 +1,8 @@
-package tw.com.ispan.gym.entity.course;
+package tw.com.ispan.gym.entity.coach;
 
 import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.entity.member.Member;
-import tw.com.ispan.gym.entity.reservation.CoachBooking;
+import tw.com.ispan.gym.entity.coach.CoachBooking;
 
 import jakarta.persistence.*;
 import lombok.Data;

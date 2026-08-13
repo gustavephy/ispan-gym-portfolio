@@ -1,6 +1,6 @@
-package tw.com.ispan.gym.service.reservation;
+package tw.com.ispan.gym.service.coach;
 
-import tw.com.ispan.gym.service.trainer.CoachSlotService;
+import tw.com.ispan.gym.service.coach.CoachSlotService;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -12,20 +12,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import tw.com.ispan.gym.dto.reservation.CoachBookingResponse;
-import tw.com.ispan.gym.entity.reservation.CoachBooking;
-import tw.com.ispan.gym.entity.trainer.CoachSlot;
+import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
+import tw.com.ispan.gym.entity.coach.CoachBooking;
+import tw.com.ispan.gym.entity.coach.CoachSlot;
 import tw.com.ispan.gym.entity.member.Member;
-import tw.com.ispan.gym.entity.course.MemberCourseQuota;
-import tw.com.ispan.gym.enums.CoachBookingStatus;
-import tw.com.ispan.gym.enums.SlotStatus;
+import tw.com.ispan.gym.entity.coach.MemberCourseQuota;
+import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ConfirmationRequiredException;
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
-import tw.com.ispan.gym.repository.CoachBookingRepository;
-import tw.com.ispan.gym.repository.CoachSlotRepository;
-import tw.com.ispan.gym.repository.MemberCourseQuotaRepository;
+import tw.com.ispan.gym.repository.coach.CoachBookingRepository;
+import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
+import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
 import tw.com.ispan.gym.repository.MemberRepository;
 
 @Service

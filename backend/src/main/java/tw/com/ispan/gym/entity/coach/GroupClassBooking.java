@@ -1,9 +1,9 @@
-package tw.com.ispan.gym.entity.course;
+package tw.com.ispan.gym.entity.coach;
 
 import tw.com.ispan.gym.entity.member.Member;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
-import tw.com.ispan.gym.enums.GroupClassBookingStatus;
+import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

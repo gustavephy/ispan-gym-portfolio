@@ -1,6 +1,5 @@
-package tw.com.ispan.gym.dto.trainer;
+package tw.com.ispan.gym.dto.coach;
 
-import tw.com.ispan.gym.entity.trainer.Trainer;
 
 import java.time.LocalDateTime;
 
