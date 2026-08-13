@@ -65,6 +65,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/members/register").permitAll()
                         // Email 驗證連結由信件點入，此時尚未登入（AccountVerificationController）
                         .requestMatchers(HttpMethod.GET, "/api/accounts/verify-email").permitAll()
+                        // 重寄驗證信，同樣是註冊/重新啟用流程的一部分，尚未登入（AccountVerificationController）
+                        .requestMatchers(HttpMethod.POST, "/api/accounts/resend-verification-email").permitAll()
                         // 商品瀏覽開放未登入者
                         .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
                         // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）

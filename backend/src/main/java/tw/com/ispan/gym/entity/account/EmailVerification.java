@@ -1,6 +1,7 @@
 package tw.com.ispan.gym.entity.account;
 
 import tw.com.ispan.gym.enums.account.AccountType;
+import tw.com.ispan.gym.enums.account.VerificationPurpose;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -40,6 +41,15 @@ public class EmailVerification {
 	@Enumerated(EnumType.STRING)
 	@Column(name = "target_role", length = 20, nullable = false)
 	private AccountType targetRole;
+
+	/**
+	 * 這把 key 原本要開哪一道門：REGISTRATION（新註冊）或 REACTIVATION（軟刪除帳號重新啟用）。
+	 * 建立當下就固定，verifyEmail() 依此決定要跑哪個分支——但門現在能不能開，仍要另外檢查
+	 * 當下的 deleted_at／status，purpose 不能取代這層即時檢查。
+	 */
+	@Enumerated(EnumType.STRING)
+	@Column(name = "purpose", length = 20, nullable = false)
+	private VerificationPurpose purpose;
 
 	@Column(name = "token", nullable = false)
 	private UUID token;
