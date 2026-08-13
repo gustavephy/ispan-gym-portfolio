@@ -20,9 +20,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.mockito.Mockito;
-import tw.com.ispan.gym.entity.Account;
-import tw.com.ispan.gym.entity.Employee;
-import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.entity.account.Account;
+import tw.com.ispan.gym.entity.employee.Employee;
+import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.AccountType;
 import tw.com.ispan.gym.enums.EmployeeRole;
 import tw.com.ispan.gym.enums.EmployeeStatus;
@@ -87,8 +87,8 @@ class JwtSecuritySmokeTest {
 
         @Bean
         @Primary
-        tw.com.ispan.gym.repository.MemberOauthAccountRepository memberOauthAccountRepository() {
-            return Mockito.mock(tw.com.ispan.gym.repository.MemberOauthAccountRepository.class);
+        tw.com.ispan.gym.repository.OauthAccountRepository oauthAccountRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.OauthAccountRepository.class);
         }
     }
 
@@ -128,7 +128,7 @@ class JwtSecuritySmokeTest {
     private Member activeMember(Account account) {
         Member member = new Member();
         member.setAccount(account);
-        member.setId(account.getId());
+        member.setId(70); // member_id 與 account_id 已脫鉤，刻意不同號
         member.setStatus(UserStatus.ACTIVE);
         return member;
     }
@@ -150,7 +150,7 @@ class JwtSecuritySmokeTest {
     void 帶有效token時放行並解析出帳號() throws Exception {
         Account account = memberAccount();
         Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
-        Mockito.when(members.findById(7)).thenReturn(Optional.of(activeMember(account)));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
 
         String token = jwtUtil.generateToken(account);
         assertThat(jwtUtil.extractAccountId(token)).isEqualTo(7);
@@ -168,13 +168,13 @@ class JwtSecuritySmokeTest {
 
         Employee employee = new Employee();
         employee.setAccount(account);
-        employee.setId(account.getId());
+        employee.setId(71); // employee_id 與 account_id 已脫鉤，刻意不同號
         employee.setRole(EmployeeRole.ADMIN);
         employee.setStatus(EmployeeStatus.ACTIVE);
 
         Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
-        Mockito.when(members.findById(7)).thenReturn(Optional.of(activeMember(account)));
-        Mockito.when(employees.findById(7)).thenReturn(Optional.of(employee));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
+        Mockito.when(employees.findByAccountId(7)).thenReturn(Optional.of(employee));
 
         mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + jwtUtil.generateToken(account)))
                 .andExpect(status().isOk());
@@ -214,7 +214,7 @@ class JwtSecuritySmokeTest {
         Member suspended = activeMember(account);
         suspended.setStatus(UserStatus.SUSPENDED);
         Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
-        Mockito.when(members.findById(7)).thenReturn(Optional.of(suspended));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(suspended));
 
         mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized());

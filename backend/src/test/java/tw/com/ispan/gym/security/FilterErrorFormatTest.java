@@ -20,8 +20,8 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-import tw.com.ispan.gym.entity.Account;
-import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.entity.account.Account;
+import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.AccountType;
 import tw.com.ispan.gym.enums.UserStatus;
 import tw.com.ispan.gym.repository.AccountRepository;
@@ -84,8 +84,8 @@ class FilterErrorFormatTest {
 
         @Bean
         @Primary
-        tw.com.ispan.gym.repository.MemberOauthAccountRepository userOauthAccountRepository() {
-            return Mockito.mock(tw.com.ispan.gym.repository.MemberOauthAccountRepository.class);
+        tw.com.ispan.gym.repository.OauthAccountRepository oauthAccountRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.OauthAccountRepository.class);
         }
     }
 
@@ -117,11 +117,11 @@ class FilterErrorFormatTest {
 
         Member member = new Member();
         member.setAccount(account);
-        member.setId(7);
+        member.setId(70); // member_id 與 account_id 已脫鉤，刻意不同號
         member.setStatus(UserStatus.ACTIVE);
 
         Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
-        Mockito.when(members.findById(7)).thenReturn(Optional.of(member));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(member));
         return account;
     }
 

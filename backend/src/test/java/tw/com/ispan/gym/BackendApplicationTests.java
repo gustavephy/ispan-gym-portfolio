@@ -8,7 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import jakarta.transaction.Transactional;
 import tw.com.ispan.gym.dto.product.ProductResponse;
-import tw.com.ispan.gym.entity.Product;
+import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.repository.ProductRepository;
 
 @SpringBootTest
