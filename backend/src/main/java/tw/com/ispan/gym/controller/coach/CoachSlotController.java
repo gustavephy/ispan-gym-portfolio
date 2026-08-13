@@ -16,10 +16,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import tw.com.ispan.gym.dto.coach.CheckInRequest;
+import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
 import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
 import tw.com.ispan.gym.dto.coach.UpdateCoachSlotRequest;
 import tw.com.ispan.gym.security.CurrentUserProvider;
+import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
 import org.springframework.web.bind.annotation.GetMapping;
 
@@ -35,6 +38,7 @@ public class CoachSlotController {
 
     private final CoachSlotService coachSlotService;
     private final CurrentUserProvider currentUserProvider;
+    private final CoachBookingService coachBookingService;
 
     /** 建立新時段，成功回 201（新建立了一個資源）。 */
     @PostMapping("/schedules")
@@ -56,8 +60,8 @@ public class CoachSlotController {
     public ResponseEntity<CoachSlotResponse> cancelSlot(@PathVariable("slotId") Integer slotId,
             @RequestParam(defaultValue = "false") boolean acknowledgeExistingBooking) {
         Integer accountId = currentUserProvider.requireCurrentUserId();
-        CoachSlotResponse resp = coachSlotService.cancelSlot(accountId, slotId, acknowledgeExistingBooking);
-
+        CoachSlotResponse resp = coachBookingService.cancelSlotWithCascade(accountId, slotId,
+                acknowledgeExistingBooking);
         return ResponseEntity.status(HttpStatus.OK).body(resp);
     }
 
@@ -82,6 +86,15 @@ public class CoachSlotController {
             @Valid @RequestBody UpdateCoachSlotRequest request) {
         Integer accountId = currentUserProvider.requireCurrentUserId();
         CoachSlotResponse resp = coachSlotService.updateSlot(accountId, slotId, request);
+        return ResponseEntity.status(HttpStatus.OK).body(resp);
+    }
+
+    @PutMapping("/schedules/{bookingId}/checkin")
+    @PreAuthorize("hasRole('TRAINER')")
+    public ResponseEntity<CoachBookingResponse> checkIn(@PathVariable("bookingId") Integer bookingId,
+            @RequestBody CheckInRequest request) {
+        Integer accountId = currentUserProvider.requireCurrentUserId();
+        CoachBookingResponse resp = coachBookingService.checkIn(accountId, bookingId, request.getCheckInKey());
         return ResponseEntity.status(HttpStatus.OK).body(resp);
     }
 }

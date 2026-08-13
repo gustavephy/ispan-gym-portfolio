@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  * 會員預約教練私教課的對外 API。
@@ -66,13 +68,6 @@ public class CoachBookingController {
      * 與 CoachSlotController 的 acknowledgeExistingBooking 是同一套 409 確認機制，
      * 但確認的內容不同，因此參數名稱刻意不同，避免混淆。
      */
-    /**
-     * 取消指定的預約，成功回 200（更新既有資源狀態，不是新建立）。
-     * acknowledgeConsumption 透過 query string 傳遞（DELETE 慣例上不帶 body），
-     * 預設 false，語意是「確認取消會消耗這堂額度、不予退還」——
-     * 與 CoachSlotController 的 acknowledgeExistingBooking 是同一套 409 確認機制，
-     * 但確認的內容不同，因此參數名稱刻意不同，避免混淆。
-     */
     @DeleteMapping("/schedules/{bookingId}/cancel")
     @PreAuthorize("hasRole('MEMBER')")
     public ResponseEntity<CoachBookingResponse> cancelBooking(@PathVariable("bookingId") Integer bookingId,
@@ -82,5 +77,4 @@ public class CoachBookingController {
 
         return ResponseEntity.status(HttpStatus.OK).body(resp);
     }
-
 }

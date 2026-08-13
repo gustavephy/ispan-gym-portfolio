@@ -20,5 +20,6 @@ public class CoachBookingResponse {
     private LocalDateTime startAt;
     private LocalDateTime endAt;
     private CoachBookingStatus status;
+    private String checkInKey;
     private Integer remainingCourse;
 }
