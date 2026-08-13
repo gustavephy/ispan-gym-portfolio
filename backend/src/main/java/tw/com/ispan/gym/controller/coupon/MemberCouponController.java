@@ -27,6 +27,9 @@ public class MemberCouponController {
     // （教練排班、AI 健康等 controller 都用它），這裡跟著改用同一套；
     // @AuthenticationPrincipal UserDetails 參數因此不再需要。
     // 另外移除了誤匯入主程式的 MockMvcResultHandlers.log（測試專用），log 走 @Slf4j。
+    // 取 id 用 requireCurrentMemberId()（member 表主鍵）而非 requireCurrentUserId()（account id）：
+    // 兩者是各自獨立的流水號，優惠券的 member_coupon.member_id 外鍵掛的是 member id，
+    // 與購物車／訂單等會員域 controller 同一套用法。
     private final MemberCouponService memberCouponService;
     private final CurrentUserProvider currentUserProvider;
 
@@ -36,7 +39,7 @@ public class MemberCouponController {
      */
     @GetMapping("/available")
     public ResponseEntity<List<CouponResponse>> getAvailableCoupons() {
-        Integer memberId = currentUserProvider.requireCurrentUserId();
+        Integer memberId = currentUserProvider.requireCurrentMemberId();
         log.info("Member {} request to get available coupons for claim", memberId);
         return ResponseEntity.ok(memberCouponService.getAvailableCouponsForClaim(memberId));
     }
@@ -48,7 +51,7 @@ public class MemberCouponController {
     @PostMapping("/claim/{couponId}")
     public ResponseEntity<MemberCouponResponse> claimCoupon(
             @PathVariable Integer couponId) {
-        Integer memberId = currentUserProvider.requireCurrentUserId();
+        Integer memberId = currentUserProvider.requireCurrentMemberId();
         log.info("Member {} request to claim coupon: {}", memberId, couponId);
         return ResponseEntity.ok(memberCouponService.claimCoupon(memberId, couponId));
     }
@@ -59,7 +62,7 @@ public class MemberCouponController {
      */
     @GetMapping("/my")
     public ResponseEntity<List<MemberCouponResponse>> getMyCoupons() {
-        Integer memberId = currentUserProvider.requireCurrentUserId();
+        Integer memberId = currentUserProvider.requireCurrentMemberId();
         log.info("Member {} request to get own coupons list", memberId);
         return ResponseEntity.ok(memberCouponService.getMyCoupons(memberId));
     }
@@ -71,7 +74,7 @@ public class MemberCouponController {
      */
     @GetMapping("/my-unused")
     public ResponseEntity<List<MemberCouponResponse>> getMyUnusedCoupons() {
-        Integer memberId = currentUserProvider.requireCurrentUserId();
+        Integer memberId = currentUserProvider.requireCurrentMemberId();
         log.info("Member {} request to get unused coupons for checkout", memberId);
         return ResponseEntity.ok(memberCouponService.getMyUnusedCoupons(memberId));
     }
