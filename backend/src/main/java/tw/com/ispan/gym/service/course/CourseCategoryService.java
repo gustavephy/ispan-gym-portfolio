@@ -20,7 +20,7 @@ public class CourseCategoryService {
 	private final CourseCategoryRespository courseCategoryRepository;
 	
 	//查詢所有課程類別
-	private List<CourseCategoryDto> getAllCourseCategories(){
+	public List<CourseCategoryDto> getAllCourseCategories(){
 		log.info("Fetching all course categories");
 		return courseCategoryRepository.findAll().stream()
 				.map(entity -> CourseCategoryDto.fromEntity(entity))

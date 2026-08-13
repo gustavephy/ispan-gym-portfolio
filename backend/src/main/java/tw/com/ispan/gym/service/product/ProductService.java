@@ -60,8 +60,8 @@ public class ProductService {
 		product.setName(productRequest.getName());
 		product.setDescription(productRequest.getDescription());
 		product.setImageUrl(productRequest.getImageUrl());
-		product.setPrice(productRequest.getPrice());
-		product.setStock(productRequest.getStock());
+		product.setPrice(productRequest.getPrice() != null ? productRequest.getPrice() : BigDecimal.ZERO);
+		product.setStock(productRequest.getStock() != null ? productRequest.getStock().intValue() : 0);
 		product.setBrand(productRequest.getBrand());
 		product.setWeight(productRequest.getWeight());
         product.setFlavor(productRequest.getFlavor());

@@ -26,6 +26,7 @@ public class ProductCategoryService {
 				.collect(Collectors.toList());
 	}
 	
+	//新增商品分類
     public ProductCategoryDto createProductCategory(ProductCategoryDto dto) {
         log.info("Creating product category: name={}", dto.getName());
         CategoryStatus status = dto.getStatus() != null ? dto.getStatus() : CategoryStatus.ACTIVE;
@@ -38,11 +39,13 @@ public class ProductCategoryService {
         return ProductCategoryDto.from(productCategoryRepository.save(cat));
     }
 
+    //刪除商品分類
     public void deleteProductCategory(Integer id) {
         log.info("Deleting product category: id={}", id);
         productCategoryRepository.deleteById(id);
     }
 
+    //檢查商品分類是否存在
     public boolean existsById(Integer id) {
         return productCategoryRepository.existsById(id);
     }
