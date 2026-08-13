@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.controller;
+package tw.com.ispan.gym.controller.order;
 
 
 import tw.com.ispan.gym.dto.order.CancelOrderRequest;

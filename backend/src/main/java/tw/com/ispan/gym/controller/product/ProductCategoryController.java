@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.controller;
+package tw.com.ispan.gym.controller.product;
 
 
 import java.util.List;
