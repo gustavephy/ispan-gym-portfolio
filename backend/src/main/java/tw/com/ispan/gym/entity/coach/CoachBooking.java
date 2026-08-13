@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.entity;
+package tw.com.ispan.gym.entity.coach;
 
 import java.time.LocalDateTime;
 
@@ -18,7 +18,9 @@ import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
-import tw.com.ispan.gym.enums.CoachBookingStatus;
+import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.entity.Trainer;
+import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 
 @Entity
 @Table(name = "coach_bookings")

@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.controller;
+package tw.com.ispan.gym.controller.coach;
 
 import java.util.List;
 
@@ -16,11 +16,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import tw.com.ispan.gym.dto.coachslot.CoachSlotResponse;
-import tw.com.ispan.gym.dto.coachslot.CreateCoachSlotRequest;
-import tw.com.ispan.gym.dto.coachslot.UpdateCoachSlotRequest;
+import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
+import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
+import tw.com.ispan.gym.dto.coach.UpdateCoachSlotRequest;
 import tw.com.ispan.gym.security.CurrentUserProvider;
-import tw.com.ispan.gym.service.CoachSlotService;
+import tw.com.ispan.gym.service.coach.CoachSlotService;
 import org.springframework.web.bind.annotation.GetMapping;
 
 /**

@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.dto.coachslot;
+package tw.com.ispan.gym.dto.coach;
 
 import java.time.LocalDateTime;
 

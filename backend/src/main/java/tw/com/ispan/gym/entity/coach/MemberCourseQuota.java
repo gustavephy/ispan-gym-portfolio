@@ -1,9 +1,13 @@
-package tw.com.ispan.gym.entity;
+package tw.com.ispan.gym.entity.coach;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
+import tw.com.ispan.gym.entity.Course;
+import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.entity.OrderItem;
+import tw.com.ispan.gym.entity.Trainer;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 
 /**

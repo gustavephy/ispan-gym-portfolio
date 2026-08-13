@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.entity;
+package tw.com.ispan.gym.entity.coach;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -6,6 +6,9 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+
+import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.entity.Trainer;
 
 /**
  * 銷課紀錄日誌（session_deduction_logs）
