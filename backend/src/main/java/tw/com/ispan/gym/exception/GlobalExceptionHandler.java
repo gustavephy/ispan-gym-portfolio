@@ -3,6 +3,7 @@ package tw.com.ispan.gym.exception;
 import java.time.LocalDateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -68,6 +69,12 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.NOT_FOUND, "NOT_FOUND", "找不到此 API 路徑");
     }
 
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ResponseEntity<ApiErrorResponse> concurrentUpdateConflict(OptimisticLockingFailureException ex) {
+        log.warn("樂觀鎖版本衝突: {}", ex.getMessage());
+        return response(HttpStatus.CONFLICT, "CONCURRENT_UPDATE_CONFLICT", "資料已被其他人同時修改，請重新整理後再試一次");
+    }
+
     /**
      * 兜底：上面沒列舉到的例外都會走這裡，確保前端永遠收到相同的錯誤格式。
      * 例外細節只寫進 log，回應固定訊息以免洩漏系統內部資訊。
@@ -81,4 +88,5 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ApiErrorResponse> response(HttpStatus status, String code, String message) {
         return ResponseEntity.status(status).body(new ApiErrorResponse(code, message, LocalDateTime.now()));
     }
+
 }

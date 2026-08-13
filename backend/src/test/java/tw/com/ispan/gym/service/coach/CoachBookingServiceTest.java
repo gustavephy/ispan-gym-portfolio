@@ -31,6 +31,7 @@ import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.coach.CoachBookingRepository;
 import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
+import tw.com.ispan.gym.repository.coach.SessionDeductionLogRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 
 /**
@@ -58,7 +59,12 @@ class CoachBookingServiceTest {
     private final CoachBookingRepository bookings = mock(CoachBookingRepository.class);
     private final MemberRepository members = mock(MemberRepository.class);
     private final CoachSlotService slotService = mock(CoachSlotService.class);
-    private final CoachBookingService service = new CoachBookingService(slots, quotas, bookings, members, slotService);
+    // 【合併時的修改說明】feat/coach-schedule-entity 給 service 加了稽核紀錄用的
+    // SessionDeductionLogRepository 欄位，@RequiredArgsConstructor 生成的建構子因此多一個參數，
+    // 這裡跟著補一個 mock；save() 不需要 stub 行為，稽核紀錄寫入成功與否不是這批測試的驗證目標。
+    private final SessionDeductionLogRepository deductionLogs = mock(SessionDeductionLogRepository.class);
+    private final CoachBookingService service = new CoachBookingService(slots, quotas, bookings, members, slotService,
+            deductionLogs);
 
     // === 共用測試資料 ========================================================
 

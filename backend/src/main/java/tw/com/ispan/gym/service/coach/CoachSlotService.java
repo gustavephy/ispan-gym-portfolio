@@ -1,8 +1,5 @@
 package tw.com.ispan.gym.service.coach;
 
-
-import tw.com.ispan.gym.entity.employee.Employee;
-
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -45,7 +42,13 @@ public class CoachSlotService {
         private final EmployeeRepository employeeRepository;
 
         /** 由登入者的帳號 id 解析出教練資料（account → employee → trainer 兩段查詢） */
-        private Trainer requireTrainerByAccount(Integer accountId) {
+        // 【合併時的修改說明】分支版本是 trainerRepository.findByEmployeeId(accountId) 一段查詢，
+        // 前提是「Account／Employee 以 @MapsId 共享主鍵」——這個前提在 dev 上已經不成立：
+        // account／employee／trainer 現在各有獨立流水號，帳號 id 不能直接當 employee id 用，
+        // 直接查會查不到人（或更糟，查到編號剛好相同的別人），所以查詢邏輯保留 dev 的兩段版本。
+        // 可視性則採分支的 public（原 dev 是 private）：新的 CoachBookingService.checkIn（教練核銷）
+        // 需要跨類別呼叫這個身分解析，這是分支把它改成 public 的原因，予以保留。
+        public Trainer requireTrainerByAccount(Integer accountId) {
                 return employeeRepository.findByAccountId(accountId)
                                 .flatMap(employee -> trainerRepository.findByEmployeeId(employee.getId()))
                                 .orElseThrow(() -> new ForbiddenAccessException("目前帳號沒有教練身分"));
