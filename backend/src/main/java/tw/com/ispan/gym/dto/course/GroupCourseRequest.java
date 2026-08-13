@@ -6,7 +6,7 @@ import tw.com.ispan.gym.enums.CourseStatus;
 @Data
 public class GroupCourseRequest {
     private String name;
-    /** 預設授課教練；實際授課者以場次為準 */
+    /** 授課教練 */
     private Integer trainerId;
     private String description;
     private String imageUrl;
