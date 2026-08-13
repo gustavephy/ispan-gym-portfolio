@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.controller;
 
+
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.product.ProductCategoryDto;
-import tw.com.ispan.gym.service.ProductCategoryService;
+import tw.com.ispan.gym.service.product.ProductCategoryService;
 
 @RestController
 @RequiredArgsConstructor

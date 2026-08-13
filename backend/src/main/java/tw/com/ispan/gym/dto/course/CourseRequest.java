@@ -1,5 +1,7 @@
 package tw.com.ispan.gym.dto.course;
 
+import tw.com.ispan.gym.entity.course.Course;
+
 import java.math.BigDecimal;
 
 import lombok.Data;

@@ -2,7 +2,7 @@ package tw.com.ispan.gym.dto.member;
 
 import java.time.LocalDateTime;
 
-import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.entity.member.Member;
 
 public record MemberRegisterResponse(
         Integer id,

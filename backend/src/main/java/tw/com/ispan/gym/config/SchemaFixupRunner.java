@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.config;
 
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -42,11 +43,13 @@ public class SchemaFixupRunner implements CommandLineRunner {
         renameLegacyColumns();
         clearLegacyOperatorIds();
         dropLegacyIdentityArtifacts();
+        migrateLoginColumnsToAccount();
         migrateCourseDomainSplit();
         narrowColumnLengths();
         createFilteredUniqueIndexes();
         backfillExistingRows();
         migrateOauthBindingsToAccountTable();
+        rebindOauthToAccount();
         dropObsoleteColumns();
         dropDuplicateUniqueIndexes();
     }
@@ -67,6 +70,33 @@ public class SchemaFixupRunner implements CommandLineRunner {
         renameLegacyTable("subscription", "member_subscription");
         renameLegacyTable("user_course_quota", "member_course_quota");
         renameLegacyTable("user_oauth_accounts", "member_oauth_account");
+
+        // 附屬表命名統一單數（2026-08-13 定案，跟進 feat/member-register-verify）。
+        // 唯一索引與 FK 約束跟著換名，讓名稱與 entity 宣告一致，
+        // Hibernate 之後才不會再建出一套同功能的重複約束。
+        if (renameLegacyTable("email_verifications", "email_verification")) {
+            renameUniqueIndex("email_verification", "UX_email_verifications_token", "UX_email_verification_token");
+            renameConstraint("FK_email_verifications_account_id", "FK_email_verification_account_id");
+        }
+        if (renameLegacyTable("password_reset_tokens", "password_reset_token")) {
+            renameUniqueIndex("password_reset_token", "UX_password_reset_tokens_token", "UX_password_reset_token_token");
+            renameConstraint("FK_password_reset_tokens_account_id", "FK_password_reset_token_account_id");
+        }
+        if (renameLegacyTable("account_roles", "account_role")) {
+            renameUniqueIndex("account_role", "UX_account_roles_account_id_role", "UX_account_role_account_id_role");
+            renameConstraint("FK_account_roles_account_id", "FK_account_role_account_id");
+        }
+    }
+
+    /** 以 sp_rename OBJECT 改名 FK 等具名約束；來源不存在就跳過 */
+    private void renameConstraint(String from, String to) {
+        Integer found = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.objects WHERE name = ?", Integer.class, from);
+        if (found == null || found == 0) {
+            return;
+        }
+        jdbc.execute("EXEC sp_rename '" + from + "', '" + to + "', 'OBJECT'");
+        log.info("已將約束 {} 改名為 {}", from, to);
     }
 
     // === 舊欄位改名（user_id → member_id）====================================
@@ -85,7 +115,10 @@ public class SchemaFixupRunner implements CommandLineRunner {
         renameColumnIfExists("subscription_plan", "id", "subscription_plan_id");
         renameColumnIfExists("member_subscription", "id", "member_subscription_id");
         renameColumnIfExists("inventory_log", "id", "inventory_log_id");
-        // orders 指向 user_coupons 的 FK 欄跟著改名
+        // orders 指向 user_coupons 的 FK 欄跟著改名。
+        // 舊篩選唯一索引的 WHERE 條件綁著 user_coupon_id，sp_rename 會被擋（5074），
+        // 先卸掉，改名後由 createFilteredUniqueIndexes 以新名重建
+        dropIndexIfExists("orders", "UX_orders_user_coupon");
         renameColumnIfExists("orders", "user_coupon_id", "member_coupon_id");
         // 操作者欄位改指身分域正確的表：庫存調帳→employee、銷課→trainer。
         // 舊值是 member id，在新的 id 空間裡對不上，改名後需清值（見下方 clearLegacyOperatorIds）
@@ -94,7 +127,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         for (String table : new String[] {
                 "cart_items", "orders", "user_coupons", "member_subscription",
                 "member_course_quota", "member_oauth_account", "password_history",
-                "password_reset_tokens", "email_verifications", "session_deduction_logs",
+                "password_reset_token", "email_verification", "session_deduction_logs",
                 "trainer_details", "idempotency_requests" }) {
             renameColumnIfExists(table, "user_id", "member_id");
         }
@@ -118,6 +151,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 return;
             }
             dropForeignKeysOnColumn(table, to);
+            dropIndexesOnColumn(table, to); // 空欄位上可能已掛了 Hibernate 建的索引（5074 會擋 DROP COLUMN）
             jdbc.execute("ALTER TABLE " + table + " DROP COLUMN " + to);
             log.info("已移除 Hibernate 先行建立的空欄位 {}.{}", table, to);
         }
@@ -285,6 +319,137 @@ public class SchemaFixupRunner implements CommandLineRunner {
         narrowVarchar("member_subscription", "status", 10);
     }
 
+    // === 登入資料上移 account（2026-08 定案：獨立流水號 + account_id 唯一 FK）==
+    // member／employee 的主鍵本來就是 IDENTITY 流水號，捨棄 @MapsId 共享主鍵後
+    // 不需重建表、既有 id 與所有指向它們的 FK 資料全部保留。要做的是：
+    // 1. 把舊制留在身分表上的登入欄位（email／password_hash）搬上 account
+    // 2. 以 email 回填 account_id（會員與員工同 email 時共用同一個 account，正是新制語意）
+    // 3. 在 account_role 補上對應身分
+    // 4. 清掉身分表上的舊登入欄位；member 的 role 欄是 users 時代的產物一併移除
+    //    （新制身分由 account_role 表達；舊 ADMIN 使用者請改走員工建檔流程）
+    // 5. 全部回填成功後把 account_id 收成 NOT NULL + 唯一索引
+    // 全新資料庫由 ddl-auto 直接建出新 schema，這裡每一步都會因欄位不存在而跳過。
+
+    private void migrateLoginColumnsToAccount() {
+        if (!tableExists("account")) {
+            return; // ddl-auto 尚未建出 account（非預期），留給下次啟動再試
+        }
+        liftLoginColumnsToAccount("member", "MEMBER");
+        liftLoginColumnsToAccount("employee", "EMPLOYEE");
+        dropColumnIfExists("member", "role");
+        finalizeAccountLink("member", "UX_member_account_id");
+        finalizeAccountLink("employee", "UX_employee_account_id");
+    }
+
+    private void liftLoginColumnsToAccount(String table, String role) {
+        if (!tableExists(table) || !columnExists(table, "email")) {
+            return; // 已遷移過，或全新資料庫直接以新 schema 建表
+        }
+        if (!columnExists(table, "account_id")) {
+            // entity 宣告 nullable=false，ddl-auto 對非空表加不了 NOT NULL 欄位
+            //（SQL Server 限制），這裡先以可空型態補上，回填後由 finalizeAccountLink 收緊
+            jdbc.execute("ALTER TABLE " + table + " ADD account_id int NULL");
+            log.info("已為 {} 補上 account_id 欄位（暫為可空，回填後收 NOT NULL）", table);
+        }
+        backfill("account（自 " + table + " 搬移登入資料）", """
+                INSERT INTO account (email, password_hash, created_at, updated_at)
+                SELECT t.email, t.password_hash, SYSDATETIME(), SYSDATETIME()
+                    FROM %s t
+                    WHERE t.account_id IS NULL
+                      AND NOT EXISTS (SELECT 1 FROM account a WHERE a.email = t.email)
+                """.formatted(table));
+        backfill(table + ".account_id", """
+                UPDATE t SET account_id = a.account_id
+                    FROM %s t JOIN account a ON a.email = t.email
+                    WHERE t.account_id IS NULL
+                """.formatted(table));
+        backfill("account_role（" + role + "）", """
+                INSERT INTO account_role (account_id, role)
+                SELECT t.account_id, '%s' FROM %s t
+                    WHERE t.account_id IS NOT NULL
+                      AND NOT EXISTS (SELECT 1 FROM account_role r
+                                          WHERE r.account_id = t.account_id AND r.role = '%s')
+                """.formatted(role, table, role));
+        dropColumnIfExists(table, "email");
+        dropColumnIfExists(table, "password_hash");
+    }
+
+    /** 回填完成後把 account_id 收成 NOT NULL，並補上 ddl-auto 建不出來的唯一索引 */
+    private void finalizeAccountLink(String table, String uniqueIndex) {
+        if (!tableExists(table) || !columnExists(table, "account_id")) {
+            return;
+        }
+        Integer nulls = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM " + table + " WHERE account_id IS NULL", Integer.class);
+        if (nulls != null && nulls > 0) {
+            log.warn("{} 還有 {} 列 account_id 為 NULL，暫不收 NOT NULL 與唯一索引，請人工處理", table, nulls);
+            return;
+        }
+        Boolean nullable = jdbc.queryForObject("""
+                SELECT is_nullable FROM sys.columns
+                    WHERE object_id = OBJECT_ID(?) AND name = 'account_id'
+                """, Boolean.class, table);
+        if (Boolean.TRUE.equals(nullable)) {
+            jdbc.execute("ALTER TABLE " + table + " ALTER COLUMN account_id int NOT NULL");
+            log.info("已將 {}.account_id 收為 NOT NULL", table);
+        }
+        // 加欄那次啟動 account_id 全為 NULL，SQL Server 唯一約束建不起來
+        //（Hibernate 只默默記一筆錯誤），這裡在回填後補建，名稱與 entity 宣告一致
+        createFilteredUniqueIndex(uniqueIndex,
+                "CREATE UNIQUE INDEX " + uniqueIndex + " ON " + table + "(account_id)");
+        // account_id 欄是 runner 自己補的，Hibernate 要到下次啟動才會補 FK，這裡直接建齊
+        createForeignKeyIfAbsent(table, "FK_" + table + "_account_id",
+                "ALTER TABLE " + table + " ADD CONSTRAINT FK_" + table + "_account_id"
+                        + " FOREIGN KEY (account_id) REFERENCES account(account_id)");
+    }
+
+    private void createForeignKeyIfAbsent(String table, String name, String ddl) {
+        Integer found = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM sys.foreign_keys
+                    WHERE name = ? AND parent_object_id = OBJECT_ID(?)
+                """, Integer.class, name, table);
+        if (found != null && found > 0) {
+            return;
+        }
+        jdbc.execute(ddl);
+        log.info("已建立外鍵 {}", name);
+    }
+
+    private void dropIndexesOnColumn(String table, String column) {
+        var indexes = jdbc.queryForList("""
+                SELECT DISTINCT i.name AS name, i.is_unique_constraint AS is_constraint
+                    FROM sys.indexes i
+                    JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+                    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+                    WHERE i.object_id = OBJECT_ID(?) AND c.name = ?
+                      AND i.name IS NOT NULL AND i.is_primary_key = 0
+                """, table, column);
+        for (var row : indexes) {
+            String name = (String) row.get("name");
+            if (Boolean.TRUE.equals(row.get("is_constraint"))) {
+                jdbc.execute("ALTER TABLE [" + table + "] DROP CONSTRAINT [" + name + "]");
+            } else {
+                jdbc.execute("DROP INDEX [" + name + "] ON [" + table + "]");
+            }
+            log.info("已移除 {}.{} 上的索引 {}", table, column, name);
+        }
+    }
+
+    /** 移除欄位上的 CHECK 或 DEFAULT 約束（兩張系統表結構相同，共用一段） */
+    private void dropColumnConstraints(String table, String column, String catalogView) {
+        var constraints = jdbc.queryForList("""
+                SELECT cc.name AS name
+                    FROM %s cc
+                    JOIN sys.columns c ON c.object_id = cc.parent_object_id
+                                      AND c.column_id = cc.parent_column_id
+                    WHERE cc.parent_object_id = OBJECT_ID(?) AND c.name = ?
+                """.formatted(catalogView), table, column);
+        for (var row : constraints) {
+            jdbc.execute("ALTER TABLE [" + table + "] DROP CONSTRAINT [" + row.get("name") + "]");
+            log.info("已移除 {}.{} 上的約束 {}", table, column, row.get("name"));
+        }
+    }
+
     // === 課程域自商品域獨立 ===================================================
     // courses 不再掛 product_id，價格與堂數改存自己的欄位；
     // order_items 改為 product_id ⊕ course_id 雙 FK 多型，
@@ -443,6 +608,53 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropColumnIfExists("member", "oauth_sub");
     }
 
+    // === OAuth 綁定改掛 account（2026-08-13 跟進 feat/member-register-verify）==
+    // OAuth 是登入方式，屬帳號域：綁定表由 member_oauth_account（member_id FK）
+    // 改為 oauth_account（account_id FK），員工帳號同樣能走 OAuth 登入。
+    // 舊綁定以 member.account_id 換算；換算不到的孤兒綁定直接刪除
+    //（沒有對應會員的綁定本來就登不進任何帳號）。
+
+    private void rebindOauthToAccount() {
+        if (tableExists("member_oauth_account")) {
+            if (columnExists("member_oauth_account", "member_id") && columnExists("member", "account_id")) {
+                if (!columnExists("member_oauth_account", "account_id")) {
+                    jdbc.execute("ALTER TABLE member_oauth_account ADD account_id int NULL");
+                    log.info("已為 member_oauth_account 補上 account_id 欄位");
+                }
+                backfill("member_oauth_account.account_id", """
+                        UPDATE moa SET account_id = m.account_id
+                            FROM member_oauth_account moa JOIN member m ON m.member_id = moa.member_id
+                            WHERE moa.account_id IS NULL
+                        """);
+                backfill("member_oauth_account（清除孤兒綁定）",
+                        "DELETE FROM member_oauth_account WHERE account_id IS NULL");
+                dropColumnIfExists("member_oauth_account", "member_id");
+            }
+            renameColumnIfExists("member_oauth_account", "id", "oauth_account_id");
+            if (renameLegacyTable("member_oauth_account", "oauth_account")) {
+                renameUniqueIndex("oauth_account", "UX_user_oauth_accounts_provider", "UX_oauth_account_provider");
+            }
+        }
+        // 收緊（冪等）：account_id 無 NULL 才收 NOT NULL，FK 名稱與 entity 宣告一致
+        if (tableExists("oauth_account") && columnExists("oauth_account", "account_id")) {
+            Integer nulls = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM oauth_account WHERE account_id IS NULL", Integer.class);
+            if (nulls != null && nulls == 0) {
+                Boolean nullable = jdbc.queryForObject("""
+                        SELECT is_nullable FROM sys.columns
+                            WHERE object_id = OBJECT_ID('oauth_account') AND name = 'account_id'
+                        """, Boolean.class);
+                if (Boolean.TRUE.equals(nullable)) {
+                    jdbc.execute("ALTER TABLE oauth_account ALTER COLUMN account_id int NOT NULL");
+                    log.info("已將 oauth_account.account_id 收為 NOT NULL");
+                }
+                createForeignKeyIfAbsent("oauth_account", "FK_oauth_account_account_id",
+                        "ALTER TABLE oauth_account ADD CONSTRAINT FK_oauth_account_account_id"
+                                + " FOREIGN KEY (account_id) REFERENCES account(account_id)");
+            }
+        }
+    }
+
     // === 清除已淘汰的欄位 =====================================================
     // Hibernate 的 update 模式永遠不會刪欄位，只能自己來。
 
@@ -451,8 +663,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropColumnIfExists("order_items", "line_amount");
         // 認證三表改綁 account（會員／員工共用登入帳號），舊的 member_id
         // 是 NOT NULL 且程式不再填值，不清掉的話新資料一律插入失敗
-        dropColumnIfExists("email_verifications", "member_id");
-        dropColumnIfExists("password_reset_tokens", "member_id");
+        dropColumnIfExists("email_verification", "member_id");
+        dropColumnIfExists("password_reset_token", "member_id");
         dropColumnIfExists("password_history", "member_id");
     }
 
@@ -465,8 +677,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
     private void dropDuplicateUniqueIndexes() {
         dropDuplicateUnique("member", "email", "UX_member_email");
-        dropDuplicateUnique("email_verifications", "token", "UX_email_verifications_token");
-        dropDuplicateUnique("password_reset_tokens", "token", "UX_password_reset_tokens_token");
+        dropDuplicateUnique("email_verification", "token", "UX_email_verification_token");
+        dropDuplicateUnique("password_reset_token", "token", "UX_password_reset_token_token");
     }
 
     private void dropDuplicateUnique(String table, String column, String keepName) {
@@ -571,10 +783,15 @@ public class SchemaFixupRunner implements CommandLineRunner {
         log.info("已移除約束 {}.{}", table, constraint);
     }
 
+    /** 先拆掉欄位上所有依附物（FK／索引／CHECK／DEFAULT，任一都會以 5074 擋 DROP）再移除欄位 */
     private void dropColumnIfExists(String table, String column) {
-        if (!columnExists(table, column)) {
+        if (!tableExists(table) || !columnExists(table, column)) {
             return;
         }
+        dropForeignKeysOnColumn(table, column);
+        dropIndexesOnColumn(table, column);
+        dropColumnConstraints(table, column, "sys.check_constraints");
+        dropColumnConstraints(table, column, "sys.default_constraints");
         jdbc.execute("ALTER TABLE " + table + " DROP COLUMN " + column);
         log.info("已移除淘汰欄位 {}.{}", table, column);
     }

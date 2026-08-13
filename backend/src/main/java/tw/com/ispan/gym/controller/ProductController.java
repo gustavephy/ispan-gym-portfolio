@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.controller;
 
+
 import java.math.BigDecimal;
 
 import org.springframework.data.domain.Page;
@@ -19,7 +20,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.product.ProductRequest;
 import tw.com.ispan.gym.dto.product.ProductResponse;
-import tw.com.ispan.gym.service.ProductService;
+import tw.com.ispan.gym.service.product.ProductService;
 
 @RestController
 @RequiredArgsConstructor

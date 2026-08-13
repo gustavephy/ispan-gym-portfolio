@@ -1,6 +1,7 @@
 package tw.com.ispan.gym.repository;
 
-import tw.com.ispan.gym.entity.OrderItem;
+
+import tw.com.ispan.gym.entity.order.OrderItem;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 

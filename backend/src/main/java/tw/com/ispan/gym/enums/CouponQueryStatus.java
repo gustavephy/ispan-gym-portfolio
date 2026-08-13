@@ -2,7 +2,7 @@ package tw.com.ispan.gym.enums;
 
 import java.time.LocalDate;
 
-import tw.com.ispan.gym.entity.Coupon;
+import tw.com.ispan.gym.entity.coupon.Coupon;
 
 public enum CouponQueryStatus {
 	ONGOING {

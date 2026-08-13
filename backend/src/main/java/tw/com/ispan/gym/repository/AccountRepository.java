@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.repository;
 
-import tw.com.ispan.gym.entity.Account;
+import tw.com.ispan.gym.entity.account.Account;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.Lock;

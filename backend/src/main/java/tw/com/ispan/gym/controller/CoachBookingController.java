@@ -1,15 +1,16 @@
 package tw.com.ispan.gym.controller;
 
+
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
-import tw.com.ispan.gym.dto.coachbooking.CoachBookingResponse;
-import tw.com.ispan.gym.dto.coachslot.CoachSlotResponse;
+import tw.com.ispan.gym.dto.reservation.CoachBookingResponse;
+import tw.com.ispan.gym.dto.trainer.CoachSlotResponse;
 import tw.com.ispan.gym.security.CurrentUserProvider;
-import tw.com.ispan.gym.service.CoachBookingService;
-import tw.com.ispan.gym.service.CoachSlotService;
+import tw.com.ispan.gym.service.reservation.CoachBookingService;
+import tw.com.ispan.gym.service.trainer.CoachSlotService;
 
 import java.util.List;
 
@@ -40,7 +41,7 @@ public class CoachBookingController {
     @PostMapping("/schedules/{slotId}/booking")
     @PreAuthorize("hasRole('MEMBER')")
     public ResponseEntity<CoachBookingResponse> createBooking(@PathVariable Integer slotId) {
-        Integer memberId = currentUserProvider.requireCurrentUserId();
+        Integer memberId = currentUserProvider.requireCurrentMemberId();
         CoachBookingResponse resp = coachBookingService.createBooking(memberId, slotId);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(resp);
@@ -77,7 +78,7 @@ public class CoachBookingController {
     @PreAuthorize("hasRole('MEMBER')")
     public ResponseEntity<CoachBookingResponse> cancelBooking(@PathVariable("bookingId") Integer bookingId,
             @RequestParam(defaultValue = "false") boolean acknowledgeConsumption) {
-        Integer memberId = currentUserProvider.requireCurrentUserId();
+        Integer memberId = currentUserProvider.requireCurrentMemberId();
         CoachBookingResponse resp = coachBookingService.cancelBooking(memberId, bookingId, acknowledgeConsumption);
 
         return ResponseEntity.status(HttpStatus.OK).body(resp);

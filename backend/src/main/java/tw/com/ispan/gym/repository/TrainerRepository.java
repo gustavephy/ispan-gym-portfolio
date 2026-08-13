@@ -5,7 +5,7 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import tw.com.ispan.gym.entity.Trainer;
+import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.enums.TrainerStatus;
 
 public interface TrainerRepository extends JpaRepository<Trainer, Integer> {

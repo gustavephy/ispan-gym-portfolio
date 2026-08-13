@@ -1,12 +1,13 @@
 package tw.com.ispan.gym.repository;
 
+
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import tw.com.ispan.gym.entity.MemberCourseQuota;
+import tw.com.ispan.gym.entity.course.MemberCourseQuota;
 
 public interface MemberCourseQuotaRepository extends JpaRepository<MemberCourseQuota, Integer> {
     /**

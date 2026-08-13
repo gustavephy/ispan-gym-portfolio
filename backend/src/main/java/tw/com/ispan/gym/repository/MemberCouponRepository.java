@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.repository;
 
+
 import java.util.List;
 import java.util.Optional;
 
@@ -7,12 +8,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import tw.com.ispan.gym.entity.MemberCoupon;
+import tw.com.ispan.gym.entity.coupon.MemberCoupon;
 import tw.com.ispan.gym.enums.MemberCouponStatus;
 
 public interface MemberCouponRepository extends JpaRepository<MemberCoupon, Integer> {
 
-	Optional<MemberCoupon> findByMemberMemberIdAndCouponCouponIdAndStatus(Integer userId, Integer couponId, MemberCouponStatus status);
+	Optional<MemberCoupon> findByMemberIdAndCouponCouponIdAndStatus(Integer userId, Integer couponId, MemberCouponStatus status);
 
 	@Query("select mc from MemberCoupon mc where mc.member.id = :memberId")
 	List<MemberCoupon> findByMemberId(@Param("memberId") Integer memberId);

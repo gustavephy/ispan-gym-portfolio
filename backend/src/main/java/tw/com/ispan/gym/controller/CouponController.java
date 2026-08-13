@@ -1,10 +1,11 @@
 package tw.com.ispan.gym.controller;
 
+
 import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import tw.com.ispan.gym.service.CouponService;
+import tw.com.ispan.gym.service.coupon.CouponService;
 
 
 @RestController

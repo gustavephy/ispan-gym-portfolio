@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.repository;
 
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -13,7 +14,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
-import tw.com.ispan.gym.entity.Product;
+import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.enums.ProductStatus;
 
 public interface ProductRepository extends JpaRepository<Product, Integer> {

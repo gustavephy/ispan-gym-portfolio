@@ -1,12 +1,13 @@
 package tw.com.ispan.gym.controller;
 
+
 import tw.com.ispan.gym.dto.order.CancelOrderRequest;
 import tw.com.ispan.gym.dto.order.CreateOrderRequest;
 import tw.com.ispan.gym.dto.order.DirectCheckoutRequest;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
-import tw.com.ispan.gym.service.OrderQueryService;
-import tw.com.ispan.gym.service.OrderService;
+import tw.com.ispan.gym.service.order.OrderQueryService;
+import tw.com.ispan.gym.service.order.OrderService;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -29,18 +30,18 @@ public class OrderController {
 
     @GetMapping
     public List<OrderSummaryResponse> findMine() {
-        return orderQueryService.findMine(currentUser.requireCurrentUserId());
+        return orderQueryService.findMine(currentUser.requireCurrentMemberId());
     }
 
     @GetMapping("/{orderId}")
     public OrderDetailResponse findMineById(@PathVariable Long orderId) {
-        return orderQueryService.findMineById(currentUser.requireCurrentUserId(), orderId);
+        return orderQueryService.findMineById(currentUser.requireCurrentMemberId(), orderId);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public OrderDetailResponse checkoutFromCart(@Valid @RequestBody(required = false) CreateOrderRequest request) {
-        return orderService.createOrderFromCart(currentUser.requireCurrentUserId(), request);
+        return orderService.createOrderFromCart(currentUser.requireCurrentMemberId(), request);
     }
 
     /**
@@ -49,7 +50,7 @@ public class OrderController {
     @PostMapping("/direct")
     @ResponseStatus(HttpStatus.CREATED)
     public OrderDetailResponse checkoutDirect(@Valid @RequestBody DirectCheckoutRequest request) {
-        return orderService.createDirectOrder(currentUser.requireCurrentUserId(), request);
+        return orderService.createDirectOrder(currentUser.requireCurrentMemberId(), request);
     }
 
     /**
@@ -58,7 +59,7 @@ public class OrderController {
     @PostMapping("/{orderId}/cancel")
     public OrderDetailResponse cancelOrder(@PathVariable Long orderId,
             @Valid @RequestBody(required = false) CancelOrderRequest request) {
-        return orderService.cancelOrder(currentUser.requireCurrentUserId(), orderId, request);
+        return orderService.cancelOrder(currentUser.requireCurrentMemberId(), orderId, request);
     }
 }
 

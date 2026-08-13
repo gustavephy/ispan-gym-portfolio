@@ -1,9 +1,11 @@
 package tw.com.ispan.gym.dto.coupon;
 
+import tw.com.ispan.gym.entity.coupon.Coupon;
+
 import java.time.LocalDateTime;
 
 import lombok.Data;
-import tw.com.ispan.gym.entity.MemberCoupon;
+import tw.com.ispan.gym.entity.coupon.MemberCoupon;
 import tw.com.ispan.gym.enums.MemberCouponStatus;
 
 @Data

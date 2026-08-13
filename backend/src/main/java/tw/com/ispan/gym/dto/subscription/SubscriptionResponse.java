@@ -3,7 +3,7 @@ package tw.com.ispan.gym.dto.subscription;
 import java.time.LocalDateTime;
 
 import lombok.Data;
-import tw.com.ispan.gym.entity.MemberSubscription;
+import tw.com.ispan.gym.entity.subscription.MemberSubscription;
 import tw.com.ispan.gym.enums.SubscriptionStatus;
 
 @Data

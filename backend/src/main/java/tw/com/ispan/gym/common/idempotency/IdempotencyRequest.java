@@ -3,7 +3,7 @@ package tw.com.ispan.gym.common.idempotency;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.Nationalized;
-import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.entity.member.Member;
 
 @Entity
 @Table(name = "idempotency_requests", uniqueConstraints = @UniqueConstraint(

@@ -1,5 +1,7 @@
 package tw.com.ispan.gym.controller.account;
 
+import tw.com.ispan.gym.entity.account.Account;
+
 import java.util.UUID;
 
 import org.springframework.web.bind.annotation.GetMapping;

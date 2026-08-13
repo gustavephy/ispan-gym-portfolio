@@ -4,7 +4,7 @@ import tw.com.ispan.gym.dto.cart.AddCartItemRequest;
 import tw.com.ispan.gym.dto.cart.CartItemResponse;
 import tw.com.ispan.gym.dto.cart.CartResponse;
 import tw.com.ispan.gym.dto.cart.UpdateCartItemRequest;
-import tw.com.ispan.gym.service.CartService;
+import tw.com.ispan.gym.service.cart.CartService;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -21,30 +21,30 @@ public class CartController {
     }
 
     @GetMapping
-    public CartResponse getCart() { return cartService.getCart(currentUser.requireCurrentUserId()); }
+    public CartResponse getCart() { return cartService.getCart(currentUser.requireCurrentMemberId()); }
 
     @PostMapping("/items")
     @ResponseStatus(HttpStatus.CREATED)
     public CartItemResponse addItem(@Valid @RequestBody AddCartItemRequest request) {
-        return cartService.addItem(currentUser.requireCurrentUserId(), request);
+        return cartService.addItem(currentUser.requireCurrentMemberId(), request);
     }
 
     @PutMapping("/items/{cartItemId}")
     public CartItemResponse updateItem(@PathVariable Long cartItemId,
                                        @Valid @RequestBody UpdateCartItemRequest request) {
-        return cartService.updateQuantity(currentUser.requireCurrentUserId(), cartItemId, request);
+        return cartService.updateQuantity(currentUser.requireCurrentMemberId(), cartItemId, request);
     }
 
     @DeleteMapping("/items/{cartItemId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeItem(@PathVariable Long cartItemId) {
-        cartService.removeItem(currentUser.requireCurrentUserId(), cartItemId);
+        cartService.removeItem(currentUser.requireCurrentMemberId(), cartItemId);
     }
 
     @DeleteMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void clearCart() {
-        cartService.clearCart(currentUser.requireCurrentUserId());
+        cartService.clearCart(currentUser.requireCurrentMemberId());
     }
 }
 

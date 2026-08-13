@@ -1,0 +1,44 @@
+package tw.com.ispan.gym.entity.cart;
+
+import tw.com.ispan.gym.entity.product.Product;
+import tw.com.ispan.gym.entity.member.Member;
+
+import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
+import jakarta.persistence.*;
+import java.math.BigDecimal;
+
+@Entity
+@Table(name = "cart_items", uniqueConstraints = @UniqueConstraint(name = "UX_cart_user_product", columnNames = {"member_id", "product_id"}))
+public class CartItem extends TaipeiTimestampEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
+    private Long id;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "FK_cart_user"))
+    private Member member;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "product_id", nullable = false, foreignKey = @ForeignKey(name = "FK_cart_product"))
+    private Product product;
+    @Column(name = "quantity", nullable = false)
+    private Long quantity;
+    @Column(name = "unit_price_snapshot", precision = 10, scale = 2)
+    private BigDecimal unitPriceSnapshot;
+    @Version
+    @Column(name = "version", nullable = false)
+    private Integer version = 0;
+
+    protected CartItem() {}
+    public CartItem(Member member, Product product, long quantity) {
+        this.member = member; this.product = product; this.quantity = quantity;
+    }
+    public void increaseBy(long amount) { this.quantity = Math.addExact(quantity, amount); }
+    public void changeQuantity(long quantity) { this.quantity = quantity; }
+    public Long getId() { return id; }
+    public Member getMember() { return member; }
+    public Product getProduct() { return product; }
+    public Long getQuantity() { return quantity; }
+    public BigDecimal getUnitPriceSnapshot() { return unitPriceSnapshot; }
+    public Integer getVersion() { return version; }
+}
+

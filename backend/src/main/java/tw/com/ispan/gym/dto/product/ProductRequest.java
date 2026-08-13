@@ -1,5 +1,7 @@
 package tw.com.ispan.gym.dto.product;
 
+import tw.com.ispan.gym.entity.product.Product;
+
 import java.math.BigDecimal;
 
 import jakarta.validation.constraints.DecimalMin;

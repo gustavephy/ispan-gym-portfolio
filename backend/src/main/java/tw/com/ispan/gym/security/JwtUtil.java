@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.security;
 
+
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -12,14 +13,14 @@ import java.util.Map;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import tw.com.ispan.gym.entity.Account;
+import tw.com.ispan.gym.entity.account.Account;
 
 /**
  * 簽發與驗證 JWT。
  * 密鑰以 Base64 設定於 app.jwt.secret，長度需至少 256 bits（HS256）。
  *
- * <p>subject 是 account_id；member 與 employee 以 @MapsId 共享 account 主鍵，
- * id 空間統一，故不需要身分別 claim 來決定查哪張表。
+ * <p>subject 是 account_id；member 與 employee 各有獨立流水號主鍵，
+ * 使用端一律以 account_id 反查各身分表（findByAccountId），不可直接當成該表主鍵。
  *
  * <p>權限不放進 token：由 {@link JwtAuthFilter} 每次請求依 account.roles
  * 與各身分的當下狀態展開，帳號被停權時立即失效，不必等 token 過期。

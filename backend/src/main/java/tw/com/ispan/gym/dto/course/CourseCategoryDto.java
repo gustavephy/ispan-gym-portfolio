@@ -1,7 +1,9 @@
 package tw.com.ispan.gym.dto.course;
 
+import tw.com.ispan.gym.entity.course.Course;
+
 import lombok.Data;
-import tw.com.ispan.gym.entity.CourseCategory;
+import tw.com.ispan.gym.entity.course.CourseCategory;
 import tw.com.ispan.gym.enums.CategoryStatus;
 
 @Data	

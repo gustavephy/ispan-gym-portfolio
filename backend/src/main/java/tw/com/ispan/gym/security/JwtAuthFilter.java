@@ -15,9 +15,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import tw.com.ispan.gym.entity.Account;
-import tw.com.ispan.gym.entity.Employee;
-import tw.com.ispan.gym.entity.Member;
+import tw.com.ispan.gym.entity.account.Account;
+import tw.com.ispan.gym.entity.employee.Employee;
+import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.AccountType;
 import tw.com.ispan.gym.enums.EmployeeStatus;
 import tw.com.ispan.gym.enums.UserStatus;
@@ -29,8 +29,8 @@ import tw.com.ispan.gym.repository.MemberRepository;
  * 解析每個請求的 Authorization: Bearer …，驗簽通過就寫入 SecurityContext。
  * 沒帶 token 或 token 無效時一律放行，交由 SecurityConfig 的授權規則決定要不要擋。
  *
- * <p>JWT 的 subject 是 account_id。member 與 employee 以 @MapsId 共享 account 的
- * 主鍵，id 空間統一，因此不需要額外的身分別 claim 來決定查哪張表。
+ * <p>JWT 的 subject 是 account_id。member 與 employee 各有獨立流水號主鍵，
+ * 一律以 account_id 反查各身分表，不把 account_id 當成 member／employee id 用。
  *
  * <p>權限由 account.roles 展開：具 MEMBER 身分且會員狀態 ACTIVE → ROLE_MEMBER；
  * 具 EMPLOYEE 身分且員工狀態 ACTIVE → ROLE_ADMIN／ROLE_TRAINER（依 employee.role）。
@@ -103,14 +103,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         List<SimpleGrantedAuthority> authorities = new ArrayList<>();
 
         if (account.getRoles().contains(AccountType.MEMBER)) {
-            Member member = members.findById(account.getId()).orElse(null);
+            Member member = members.findByAccountId(account.getId()).orElse(null);
             if (member != null && member.getDeletedAt() == null && member.getStatus() == UserStatus.ACTIVE) {
                 authorities.add(new SimpleGrantedAuthority("ROLE_MEMBER"));
             }
         }
 
         if (account.getRoles().contains(AccountType.EMPLOYEE)) {
-            Employee employee = employees.findById(account.getId()).orElse(null);
+            Employee employee = employees.findByAccountId(account.getId()).orElse(null);
             if (employee != null && employee.getDeletedAt() == null
                     && employee.getStatus() == EmployeeStatus.ACTIVE) {
                 authorities.add(new SimpleGrantedAuthority("ROLE_" + employee.getRole().name()));

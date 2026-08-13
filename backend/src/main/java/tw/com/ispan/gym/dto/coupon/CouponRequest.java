@@ -1,5 +1,7 @@
 package tw.com.ispan.gym.dto.coupon;
 
+import tw.com.ispan.gym.entity.coupon.Coupon;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
