@@ -478,7 +478,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
     // === 課程域拆分：courses → private_course／group_course =====================
     // 2026-08-13 定案：單一 Course 拆為私教課（可購買、綁教練）與團課
-    //（憑訂閱參加、主檔不綁教練）。既有 courses 資料依 course_type 分流搬遷，
+    //（憑訂閱參加、主檔綁預設教練，實際授課者以場次為準）。
+    // 既有 courses 資料依 course_type 分流搬遷，
     // id 原值保留（IDENTITY_INSERT），指向它的 FK 欄改名後資料依然有效：
     // order_items.course_id → private_course_id（團課不可購買）
     // member_course_quota.course_id → private_course_id（額度僅來自私教課）
@@ -511,10 +512,10 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 log.info("已將 courses 的 PRIVATE 列分流至 private_course");
                 jdbc.execute("""
                         SET IDENTITY_INSERT group_course ON;
-                        INSERT INTO group_course (group_course_id, name, description, image_url,
+                        INSERT INTO group_course (group_course_id, trainer_id, name, description, image_url,
                                 course_category_id, max_capacity, is_trial,
                                 is_open_for_subscription, status, created_at, updated_at)
-                        SELECT course_id, name, description, image_url,
+                        SELECT course_id, trainer_id, name, description, image_url,
                                 course_category_id, max_capacity, is_trial,
                                 is_open_for_subscription, status, created_at, updated_at
                             FROM courses c
@@ -523,14 +524,17 @@ public class SchemaFixupRunner implements CommandLineRunner {
                                                   WHERE g.group_course_id = c.course_id);
                         SET IDENTITY_INSERT group_course OFF;
                         """);
-                log.info("已將 courses 的 GROUP 列分流至 group_course（教練改由場次承載、價格捨棄）");
+                log.info("已將 courses 的 GROUP 列分流至 group_course（主檔綁預設教練、價格捨棄）");
             }
         }
 
         // 2. FK 欄位改名（renameColumnIfExists 會先拆掉 Hibernate 預建的空新欄）。
-        //    order_items 的舊互斥 CHECK 綁著 course_id，須先卸掉
-        dropConstraintIfExists("order_items", "CK_oi_exactly_one_ref");
-        renameColumnIfExists("order_items", "course_id", "private_course_id");
+        //    order_items 的舊互斥 CHECK 綁著 course_id，改名前須先卸掉；
+        //    只在改名尚未發生時動作，避免每次啟動都拆建一輪
+        if (columnExists("order_items", "course_id")) {
+            dropConstraintIfExists("order_items", "CK_oi_exactly_one_ref");
+            renameColumnIfExists("order_items", "course_id", "private_course_id");
+        }
         renameColumnIfExists("member_course_quota", "course_id", "private_course_id");
         renameColumnIfExists("group_class_sessions", "course_id", "group_course_id");
 
@@ -550,6 +554,27 @@ public class SchemaFixupRunner implements CommandLineRunner {
             jdbc.execute("DROP TABLE courses");
             log.info("已移除舊 courses 表（資料已分流至 private_course／group_course）");
         }
+
+        // 5. image_url 對齊 1000 字元（採課程模組組員的設計；ddl-auto 不會加寬既有欄位）
+        widenNvarchar("group_course", "image_url", 1000);
+    }
+
+    /** 加寬 nvarchar 欄位（僅在現寬不足時動作；ddl-auto 的 update 模式不會改欄寬） */
+    private void widenNvarchar(String table, String column, int length) {
+        if (!tableExists(table) || !columnExists(table, column)) {
+            return;
+        }
+        Integer maxLen = jdbc.queryForObject("""
+                SELECT c.max_length FROM sys.columns c
+                    JOIN sys.types t ON t.user_type_id = c.user_type_id
+                    WHERE c.object_id = OBJECT_ID(?) AND c.name = ? AND t.name = 'nvarchar'
+                """, Integer.class, table, column);
+        // sys.columns 的 max_length 是位元組數（nvarchar 每字元 2 bytes）；-1 代表 MAX
+        if (maxLen == null || maxLen == -1 || maxLen >= length * 2) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE " + table + " ALTER COLUMN " + column + " nvarchar(" + length + ") NULL");
+        log.info("已將 {}.{} 加寬為 nvarchar({})", table, column, length);
     }
 
     private void alterColumnNullable(String table, String column, String type) {

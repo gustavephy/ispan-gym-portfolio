@@ -1,6 +1,10 @@
 package tw.com.ispan.gym.entity.course;
 
+import tw.com.ispan.gym.entity.trainer.Trainer;
+
 import java.time.LocalDateTime;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -27,7 +31,9 @@ import tw.com.ispan.gym.enums.CourseStatus;
 /**
  * 團體課主檔（2026-08-13 定案：課程域拆為私教課／團課兩實體，取代單一 Course）。
  *
- * <p>主檔不綁教練——教練綁在場次（GroupClassSession.trainer），以支援代課。
+ * <p>主檔綁「預設授課教練」（2026-08-13 修訂 08-12 定案，採課程模組組員的設計）；
+ * 場次（GroupClassSession.trainer）另記實際授課者——開場次時預設帶入主檔教練，
+ * 代課時改掉場次教練即可，兩者並存不衝突。
  * 團課不走購買流程（無價格），會員憑有效訂閱報名場次；
  * isOpenForSubscription 控制是否開放訂閱者報名。
  */
@@ -35,7 +41,7 @@ import tw.com.ispan.gym.enums.CourseStatus;
 @Table(name = "group_course")
 @Getter
 @Setter
-@ToString(exclude = { "category" })
+@ToString(exclude = { "trainer", "category" })
 @EntityListeners(AuditingEntityListener.class)
 public class GroupCourse {
 
@@ -44,13 +50,19 @@ public class GroupCourse {
 	@Column(name = "group_course_id")
 	private Integer id;
 
+	/** 預設授課教練；實際授課者以場次為準（代課支援） */
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "trainer_id", nullable = false, foreignKey = @ForeignKey(name = "FK_group_course_trainer"))
+	@JsonIgnore
+	private Trainer trainer;
+
 	@Column(nullable = false, length = 100, columnDefinition = "NVARCHAR(100)")
 	private String name;
 
 	@Column(length = 500, columnDefinition = "NVARCHAR(500)")
 	private String description;
 
-	@Column(length = 500, columnDefinition = "NVARCHAR(500)")
+	@Column(length = 1000, columnDefinition = "NVARCHAR(1000)")
 	private String imageUrl;
 
 	@ManyToOne(fetch = FetchType.LAZY)

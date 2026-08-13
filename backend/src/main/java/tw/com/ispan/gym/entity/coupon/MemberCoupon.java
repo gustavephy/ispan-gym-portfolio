@@ -46,7 +46,8 @@ public class MemberCoupon {
 	private Coupon coupon;
 
 	@Enumerated(EnumType.STRING)
-	@Column(columnDefinition = "VARCHAR(20)")
+	/** 狀態欄位值域封閉，依規範收斂為 10；與 SchemaFixupRunner.narrowColumnLengths 一致 */
+	@Column(columnDefinition = "VARCHAR(10)")
 	private MemberCouponStatus status = MemberCouponStatus.UNUSED;
 
 	@Column(columnDefinition = "datetime2")

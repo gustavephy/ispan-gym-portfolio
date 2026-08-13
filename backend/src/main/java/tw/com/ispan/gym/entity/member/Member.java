@@ -56,7 +56,8 @@ public class Member {
 	@Column(name = "last_name", length = 50, nullable = false)
 	private String lastName;
 
-	@Column(name = "phone", length = 20, nullable = false)
+	/** 依台灣門號格式收斂為 10；與 SchemaFixupRunner.narrowColumnLengths 一致，避免每次啟動互相改寬度 */
+	@Column(name = "phone", length = 10, nullable = false)
 	private String phone;
 
 	@Column(name = "dob")

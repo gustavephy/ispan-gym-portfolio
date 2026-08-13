@@ -9,6 +9,9 @@ import tw.com.ispan.gym.enums.CourseStatus;
 
 public interface GroupCourseRepository extends JpaRepository<GroupCourse, Integer> {
 
+	/** 某教練掛名（預設授課）的團課；Trainer 主鍵欄位叫 trainerId，路徑須寫全名 */
+	List<GroupCourse> findByTrainerTrainerId(Integer trainerId);
+
 	List<GroupCourse> findByStatus(CourseStatus status);
 
 	/** 開放訂閱者報名的團課列表 */
