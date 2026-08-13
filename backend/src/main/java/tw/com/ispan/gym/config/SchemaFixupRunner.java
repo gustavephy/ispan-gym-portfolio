@@ -296,6 +296,12 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropColumnIfExists("products", "type");
         dropColumnIfExists("products", "sessions_per_unit");
 
+        // 私教課額度改連 courses：course_id 由 ddl-auto 新增，
+        // 舊 product_id 連同 FK 移除，不做 id 對應（與本節其他遷移一致），
+        // 歷史列靠 course_name 快照辨識課程。
+        dropForeignKeysOnColumn("member_course_quota", "product_id");
+        dropColumnIfExists("member_course_quota", "product_id");
+
         // 既有明細都是商品，course_id 為 NULL；product_id 由 NOT NULL 放寬為可空
         if (columnExists("order_items", "product_id")) {
             alterColumnNullable("order_items", "product_id", "int");

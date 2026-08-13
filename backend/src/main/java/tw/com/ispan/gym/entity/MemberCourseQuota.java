@@ -36,17 +36,17 @@ public class MemberCourseQuota {
     private Member member;
 
     /**
-     * 對應的課程商品（products 表，type=COURSE）
-     * 以 product FK 取代舊有的 courseName 字串匹配，解決改名後對不上的問題
-     * nullable = true 相容舊資料
+     * 對應的課程（courses 表）。課程域已自商品域獨立，
+     * 額度來源是購買 PRIVATE 型課程，故直接以 course FK 表達，
+     * nullable = true 相容舊資料（歷史列僅剩 courseName 快照可辨識）
      */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = true)
+    @JoinColumn(name = "course_id", nullable = true)
     @JsonIgnore
-    private Product product;
+    private Course course;
 
-    @Column(name = "product_id", insertable = false, updatable = false)
-    private Integer productId;
+    @Column(name = "course_id", insertable = false, updatable = false)
+    private Integer courseId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "trainer_id", nullable = false)
@@ -59,7 +59,7 @@ public class MemberCourseQuota {
     @JsonIgnore
     private OrderItem orderItem;
 
-    /** 課程顯示名稱（來自 product.name，僅供顯示用） */
+    /** 課程顯示名稱（來自 course.name，僅供顯示用） */
     @Column(name = "course_name", nullable = false, length = 100, columnDefinition = "NVARCHAR(100)")
     private String courseName;
 
