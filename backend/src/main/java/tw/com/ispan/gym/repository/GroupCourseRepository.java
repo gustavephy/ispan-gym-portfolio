@@ -13,7 +13,4 @@ public interface GroupCourseRepository extends JpaRepository<GroupCourse, Intege
 	List<GroupCourse> findByTrainerTrainerId(Integer trainerId);
 
 	List<GroupCourse> findByStatus(CourseStatus status);
-
-	/** 開放訂閱者報名的團課列表 */
-	List<GroupCourse> findByStatusAndIsOpenForSubscriptionTrue(CourseStatus status);
 }

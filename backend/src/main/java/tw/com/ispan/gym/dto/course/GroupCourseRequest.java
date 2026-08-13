@@ -11,7 +11,6 @@ public class GroupCourseRequest {
     private String description;
     private String imageUrl;
     private Boolean isTrial;
-    private Boolean isOpenForSubscription;
     private CourseStatus status;
     private Integer maxCapacity;
     private Integer courseCategoryId;

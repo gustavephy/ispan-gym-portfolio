@@ -33,8 +33,8 @@ import tw.com.ispan.gym.enums.CourseStatus;
  *
  * <p>授課教練綁在主檔（2026-08-13 修訂 08-12 定案，採課程模組組員的設計；
  * 場次不另記教練，代課設計已捨棄——換教練即改主檔或另開課程）。
- * 團課不走購買流程（無價格），會員憑有效訂閱報名場次；
- * isOpenForSubscription 控制是否開放訂閱者報名。
+ * 團課不走購買流程（無價格），會員憑有效訂閱報名場次：
+ * status = ACTIVE 即開放報名（體驗課由 isTrial 另行判斷），不設額外開關。
  */
 @Entity
 @Table(name = "group_course")
@@ -74,9 +74,6 @@ public class GroupCourse {
 
 	@Column(nullable = false, columnDefinition = "bit default 0")
 	private Boolean isTrial = false;
-
-	@Column(nullable = false, columnDefinition = "bit default 0")
-	private Boolean isOpenForSubscription = false;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")

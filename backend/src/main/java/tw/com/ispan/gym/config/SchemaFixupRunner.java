@@ -514,10 +514,10 @@ public class SchemaFixupRunner implements CommandLineRunner {
                         SET IDENTITY_INSERT group_course ON;
                         INSERT INTO group_course (group_course_id, trainer_id, name, description, image_url,
                                 course_category_id, max_capacity, is_trial,
-                                is_open_for_subscription, status, created_at, updated_at)
+                                status, created_at, updated_at)
                         SELECT course_id, trainer_id, name, description, image_url,
                                 course_category_id, max_capacity, is_trial,
-                                is_open_for_subscription, status, created_at, updated_at
+                                status, created_at, updated_at
                             FROM courses c
                             WHERE c.course_type = 'GROUP'
                               AND NOT EXISTS (SELECT 1 FROM group_course g
@@ -767,6 +767,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropColumnIfExists("email_verification", "member_id");
         dropColumnIfExists("password_reset_token", "member_id");
         dropColumnIfExists("password_history", "member_id");
+        // 團課報名資格決議只看 status（體驗課由 is_trial 判斷），訂閱開關欄位捨棄
+        dropColumnIfExists("group_course", "is_open_for_subscription");
     }
 
     // === 清除重複的唯一索引 ===================================================
