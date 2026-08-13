@@ -1,0 +1,87 @@
+package tw.com.ispan.gym.controller;
+
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import tw.com.ispan.gym.dto.coachslot.CoachSlotResponse;
+import tw.com.ispan.gym.dto.coachslot.CreateCoachSlotRequest;
+import tw.com.ispan.gym.dto.coachslot.UpdateCoachSlotRequest;
+import tw.com.ispan.gym.security.CurrentUserProvider;
+import tw.com.ispan.gym.service.CoachSlotService;
+import org.springframework.web.bind.annotation.GetMapping;
+
+/**
+ * 教練排班（私教課時段）的對外 API，路徑統一在 /api/trainer/schedules 底下。
+ * 所有端點都限定 TRAINER 角色，登入者帳號 id 一律從 {@link CurrentUserProvider} 取得
+ * （service 層再解析為 Trainer），不接受前端自己傳教練身分，避免偽造別的教練操作。
+ */
+@RestController
+@RequestMapping("/api/trainer")
+@RequiredArgsConstructor
+public class CoachSlotController {
+
+    private final CoachSlotService coachSlotService;
+    private final CurrentUserProvider currentUserProvider;
+
+    /** 建立新時段，成功回 201（新建立了一個資源）。 */
+    @PostMapping("/schedules")
+    @PreAuthorize("hasRole('TRAINER')")
+    public ResponseEntity<CoachSlotResponse> createSlot(@Valid @RequestBody CreateCoachSlotRequest request) {
+        Integer accountId = currentUserProvider.requireCurrentUserId();
+        CoachSlotResponse resp = coachSlotService.createSlot(accountId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(resp);
+    }
+
+    /**
+     * 取消（軟刪除）時段，成功回 200。
+     * acknowledgeExistingBooking 透過 query string 傳遞（DELETE 慣例上不帶 body），
+     * 預設 false：前端沒特別加這個參數時，一律視為「尚未確認」，
+     * 這樣才能真正擋住已預約的時段被誤刪，不會因為前端忘記帶參數就被自動放行。
+     */
+    @DeleteMapping("/schedules/{slotId}")
+    @PreAuthorize("hasRole('TRAINER')")
+    public ResponseEntity<CoachSlotResponse> cancelSlot(@PathVariable("slotId") Integer slotId,
+            @RequestParam(defaultValue = "false") boolean acknowledgeExistingBooking) {
+        Integer accountId = currentUserProvider.requireCurrentUserId();
+        CoachSlotResponse resp = coachSlotService.cancelSlot(accountId, slotId, acknowledgeExistingBooking);
+
+        return ResponseEntity.status(HttpStatus.OK).body(resp);
+    }
+
+    /** 查詢自己的所有時段（含已取消的舊紀錄）。 */
+    @GetMapping("/schedules")
+    @PreAuthorize("hasRole('TRAINER')")
+    public ResponseEntity<List<CoachSlotResponse>> getMySlots() {
+        Integer accountId = currentUserProvider.requireCurrentUserId();
+        List<CoachSlotResponse> slots = coachSlotService.getMySlots(accountId);
+
+        return ResponseEntity.status(HttpStatus.OK).body(slots);
+    }
+
+    /**
+     * 修改一筆既有時段的時間，成功回 200（修改既有資源，不是新建，所以不是 201）。
+     * acknowledgeExistingBooking 這次是 request body 裡的欄位（PUT 有 body 可以用），
+     * 跟 cancelSlot 用 query string 的方式不同，是因為兩者能承載資料的管道天生不一樣。
+     */
+    @PutMapping("/schedules/{slotId}")
+    @PreAuthorize("hasRole('TRAINER')")
+    public ResponseEntity<CoachSlotResponse> updateSlot(@PathVariable("slotId") Integer slotId,
+            @Valid @RequestBody UpdateCoachSlotRequest request) {
+        Integer accountId = currentUserProvider.requireCurrentUserId();
+        CoachSlotResponse resp = coachSlotService.updateSlot(accountId, slotId, request);
+        return ResponseEntity.status(HttpStatus.OK).body(resp);
+    }
+}

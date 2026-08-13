@@ -4,6 +4,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
@@ -21,9 +22,16 @@ import tw.com.ispan.gym.security.JsonAccessDeniedHandler;
 import tw.com.ispan.gym.security.JsonAuthenticationEntryPoint;
 import tw.com.ispan.gym.security.JwtAuthFilter;
 
+/**
+ * 正式（非 dev）安全設定：JWT 驗證 + 方法層級授權。
+ * dev profile 時整類停用，改由 security.DevSecurityConfig 的全放行 chain
+ * 搭配 DevCurrentUserProvider（app.dev-current-user-id）提供固定登入者，
+ * 方便本機不帶 token 測試；兩者以 @Profile 互斥，不會同時存在兩條 filter chain。
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@Profile("!dev")
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
