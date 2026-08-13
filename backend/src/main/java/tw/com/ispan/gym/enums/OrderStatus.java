@@ -1,4 +1,4 @@
 package tw.com.ispan.gym.enums;
 
-public enum OrderStatus { UNPAID, PAID, SHIPPED, COMPLETED, CANCELLED, FAILED }
+public enum OrderStatus { UNPAID, PAID, SHIPPED, COMPLETED, CANCELLED, FAILED, REFUNDED }
 

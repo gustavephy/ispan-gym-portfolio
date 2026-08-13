@@ -13,7 +13,7 @@ import lombok.Setter;
 import tw.com.ispan.gym.enums.CategoryStatus;
 
 @Entity
-@Table(name="product_categories")
+@Table(name="product_category")
 @Getter
 @Setter
 public class ProductCategory {

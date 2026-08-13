@@ -2,14 +2,18 @@ package tw.com.ispan.gym.entity.payment;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.Setter;
 import org.hibernate.annotations.Nationalized;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
-@Table(name = "payment_webhooks", uniqueConstraints = @UniqueConstraint(
-        name = "UX_payment_webhooks_provider_event", columnNames = { "provider", "event_key" }))
+@Table(name = "payment_webhook", uniqueConstraints = @UniqueConstraint(
+        name = "UX_payment_webhook_provider_event", columnNames = { "provider", "event_key" }))
 @EntityListeners(AuditingEntityListener.class)
+@Getter
+@Setter
 public class PaymentWebhook {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(nullable = false, length = 20) private String provider;
@@ -23,4 +27,15 @@ public class PaymentWebhook {
     @CreatedDate @Column(name = "received_at", nullable = false, updatable = false) private LocalDateTime receivedAt;
     @Column(name = "processed_at") private LocalDateTime processedAt;
     protected PaymentWebhook() {}
+
+    public PaymentWebhook(String provider, String eventKey, String merchantTradeNo, String tradeNo, String payload,
+            boolean checkMacValid) {
+        this.provider = provider;
+        this.eventKey = eventKey;
+        this.merchantTradeNo = merchantTradeNo;
+        this.tradeNo = tradeNo;
+        this.payload = payload;
+        this.checkMacValid = checkMacValid;
+        this.processingStatus = "RECEIVED";
+    }
 }

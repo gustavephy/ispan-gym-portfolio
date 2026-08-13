@@ -6,6 +6,7 @@ import tw.com.ispan.gym.dto.order.CreateOrderRequest;
 import tw.com.ispan.gym.dto.order.DirectCheckoutRequest;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
+import tw.com.ispan.gym.dto.order.SubscriptionCheckoutRequest;
 import tw.com.ispan.gym.service.order.OrderQueryService;
 import tw.com.ispan.gym.service.order.OrderService;
 import tw.com.ispan.gym.security.CurrentUserProvider;
@@ -54,7 +55,17 @@ public class OrderController {
     }
 
     /**
-     * 目前僅支援取消未付款訂單；已付款訂單的取消需搭配退款流程，待金流串接後再開放。
+     * 會員訂閱略過購物車直接結帳；課程請改用 {@link #checkoutDirect}。
+     */
+    @PostMapping("/direct/subscription")
+    @ResponseStatus(HttpStatus.CREATED)
+    public OrderDetailResponse checkoutDirectSubscription(@Valid @RequestBody SubscriptionCheckoutRequest request) {
+        return orderService.createSubscriptionOrder(currentUser.requireCurrentMemberId(), request);
+    }
+
+    /**
+     * 未付款訂單直接取消並還原庫存/優惠券；已付款訂單改為建立一筆待處理退款，
+     * 訂單狀態維持 PAID，實際退款由後台完成（見 AdminOrderController）。
      */
     @PostMapping("/{orderId}/cancel")
     public OrderDetailResponse cancelOrder(@PathVariable Long orderId,

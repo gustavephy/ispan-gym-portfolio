@@ -8,7 +8,7 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "cart_items", uniqueConstraints = @UniqueConstraint(name = "UX_cart_user_product", columnNames = {"member_id", "product_id"}))
+@Table(name = "cart_item", uniqueConstraints = @UniqueConstraint(name = "UX_cart_member_product", columnNames = {"member_id", "product_id"}))
 public class CartItem extends TaipeiTimestampEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

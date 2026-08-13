@@ -6,5 +6,6 @@ import tw.com.ispan.gym.entity.course.Course;
 public enum CouponApplicableType {
     ALL,
     PRODUCT,
-    COURSE
+    COURSE,
+    SUBSCRIPTION
 }

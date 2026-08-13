@@ -25,7 +25,7 @@ import jakarta.persistence.EnumType;
 import tw.com.ispan.gym.enums.MemberCouponStatus;
 
 @Entity
-@Table(name = "user_coupons")
+@Table(name = "member_coupon")
 @Getter
 @Setter
 @ToString(exclude = {"member","coupon"})

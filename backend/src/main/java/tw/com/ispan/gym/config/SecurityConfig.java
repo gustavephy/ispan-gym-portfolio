@@ -67,6 +67,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/accounts/verify-email").permitAll()
                         // 商品瀏覽開放未登入者
                         .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
+                        // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）
+                        .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

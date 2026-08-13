@@ -13,17 +13,17 @@ import tw.com.ispan.gym.repository.ProductRepository;
 
 @SpringBootTest
 class BackendApplicationTests {
-	
+
 	@Autowired
 	private ProductRepository productRepository;
-	
+
 	@Test
 	void contextLoads() {
 	}
 
 	@Test
 	@Transactional
-	void testEntityDtoRepoCorrectness(){
+	void testEntityDtoRepoCorrectness() {
 		System.out.println("------ Running testEntityDtoRepoCorrectness ------");
 		System.out.println("1. 測試 Repository 查詢商品列表");
 		List<Product> products = productRepository.findAll();

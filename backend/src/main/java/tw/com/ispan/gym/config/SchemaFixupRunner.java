@@ -52,6 +52,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         migrateOauthBindingsToAccountTable();
         rebindOauthToAccount();
         dropObsoleteColumns();
+        widenOrderStatusCheck();
         dropDuplicateUniqueIndexes();
     }
 
@@ -316,7 +317,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         narrowVarchar("group_class_sessions", "status", 10);
         narrowVarchar("group_class_bookings", "status", 10);
         narrowVarchar("orders", "status", 10);
-        narrowVarchar("user_coupons", "status", 10);
+        narrowVarchar("member_coupon", "status", 10);
         narrowVarchar("member_subscription", "status", 10);
     }
 
@@ -469,11 +470,11 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropColumnIfExists("member_course_quota", "product_id");
 
         // 既有明細都是商品，course_id 為 NULL；product_id 由 NOT NULL 放寬為可空
-        if (columnExists("order_items", "product_id")) {
-            alterColumnNullable("order_items", "product_id", "int");
+        if (columnExists("order_item", "product_id")) {
+            alterColumnNullable("order_item", "product_id", "int");
         }
-        createCheckIfAbsent("order_items", "CK_oi_exactly_one_ref", """
-                ALTER TABLE order_items ADD CONSTRAINT CK_oi_exactly_one_ref CHECK (
+        createCheckIfAbsent("order_item", "CK_oi_exactly_one_ref", """
+                ALTER TABLE order_item ADD CONSTRAINT CK_oi_exactly_one_ref CHECK (
                     (product_id IS NOT NULL AND course_id IS NULL)
                  OR (product_id IS NULL AND course_id IS NOT NULL))
                 """);
@@ -566,8 +567,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
     private void backfillExistingRows() {
         // 所有帶 @Version 的表都要補；漏一張，該表的舊列第一次被更新時就會炸
         for (String table : new String[] {
-                "member_course_quota", "group_class_sessions", "orders", "cart_items",
-                "payment_transactions", "payment_refunds", "products" }) {
+                "member_course_quota", "group_class_sessions", "orders", "cart_item",
+                "payment_transaction", "payment_refund", "product" }) {
             if (columnExists(table, "version")) {
                 backfill(table + ".version",
                         "UPDATE " + table + " SET version = 0 WHERE version IS NULL");
@@ -661,12 +662,40 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
     private void dropObsoleteColumns() {
         dropColumnIfExists("orders", "coupon_id");
-        dropColumnIfExists("order_items", "line_amount");
+        dropColumnIfExists("order_item", "line_amount");
         // 認證三表改綁 account（會員／員工共用登入帳號），舊的 member_id
         // 是 NOT NULL 且程式不再填值，不清掉的話新資料一律插入失敗
         dropColumnIfExists("email_verification", "member_id");
         dropColumnIfExists("password_reset_token", "member_id");
         dropColumnIfExists("password_history", "member_id");
+    }
+
+    // === 訂單狀態值域擴充（新增 REFUNDED）======================================
+    // orders.status 上有一個 Hibernate 建表當時自動產生、雜湊命名的 CHECK 約束，
+    // 值域鎖死當時的 OrderStatus 列舉值。ddl-auto=update 不會回頭更新既有表的
+    // CHECK 約束，新增 REFUNDED 前必須手動換成涵蓋新值域、具名可辨識的版本，
+    // 否則退款完成時的狀態更新會直接違反約束。
+
+    private void widenOrderStatusCheck() {
+        dropOtherCheckConstraintsOnColumn("orders", "status", "CK_orders_status");
+        createCheckIfAbsent("orders", "CK_orders_status", """
+                ALTER TABLE orders ADD CONSTRAINT CK_orders_status CHECK (
+                    status IN ('UNPAID','PAID','SHIPPED','COMPLETED','CANCELLED','FAILED','REFUNDED'))
+                """);
+    }
+
+    private void dropOtherCheckConstraintsOnColumn(String table, String column, String keepName) {
+        var checks = jdbc.queryForList("""
+                SELECT cc.name AS name
+                    FROM sys.check_constraints cc
+                    WHERE cc.parent_object_id = OBJECT_ID(?)
+                      AND cc.parent_column_id = COLUMNPROPERTY(OBJECT_ID(?), ?, 'ColumnId')
+                      AND cc.name <> ?
+                """, table, table, column, keepName);
+        for (var row : checks) {
+            jdbc.execute("ALTER TABLE [" + table + "] DROP CONSTRAINT [" + row.get("name") + "]");
+            log.info("已移除 {}.{} 上的舊 CHECK 約束 {}", table, column, row.get("name"));
+        }
     }
 
     // === 清除重複的唯一索引 ===================================================

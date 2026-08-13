@@ -2,6 +2,7 @@ package tw.com.ispan.gym.entity.order;
 
 import tw.com.ispan.gym.entity.coupon.MemberCoupon;
 import tw.com.ispan.gym.entity.member.Member;
+import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 
 import tw.com.ispan.gym.enums.OrderStatus;
 
@@ -52,6 +53,14 @@ public class Order extends TaipeiTimestampEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_coupon_id", foreignKey = @ForeignKey(name = "FK_orders_user_coupon"))
     private MemberCoupon memberCoupon;
+    /**
+     * 有值代表這是一筆訂閱方案購買。訂閱不像商品/課程走 order_items 多型
+     * （product_id ⊕ course_id 的 CK_oi_exactly_one_ref 互斥），直接在 Order 上標記，
+     * 履約（建立訂閱）待付款成功後才執行，見 OrderService#fulfillPaidOrder。
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "subscription_plan_id", foreignKey = @ForeignKey(name = "FK_orders_subscription_plan"))
+    private SubscriptionPlan subscriptionPlan;
     @Column(name = "original_amount", precision = 10, scale = 2)
     private BigDecimal originalAmount;
     @Column(name = "discount_amount", nullable = false, precision = 10, scale = 2)
@@ -111,6 +120,40 @@ public class Order extends TaipeiTimestampEntity {
         this.status = OrderStatus.CANCELLED;
         this.cancelledAt = LocalDateTime.now(TAIPEI);
         this.cancelReason = reason;
+    }
+
+    /** ECPay 通知付款成功：UNPAID → PAID。paymentStatus 維持既有值不動，理由同 {@link #cancel} */
+    public void markPaid(String paymentMethod, String tradeNo) {
+        if (status != OrderStatus.UNPAID) {
+            throw new BusinessRuleException("只有未付款的訂單可以標記為已付款");
+        }
+        this.status = OrderStatus.PAID;
+        this.paymentMethod = paymentMethod;
+        this.tradeNo = tradeNo;
+        this.paidAt = LocalDateTime.now(TAIPEI);
+    }
+
+    /** ECPay 通知付款失敗：UNPAID → FAILED */
+    public void markFailed() {
+        if (status != OrderStatus.UNPAID) {
+            throw new BusinessRuleException("只有未付款的訂單可以標記為付款失敗");
+        }
+        this.status = OrderStatus.FAILED;
+    }
+
+    /** 已付款訂單申請退款前的資格檢查；通過後由 OrderService 建立 PaymentRefund（PENDING），訂單狀態維持 PAID 直到後台實際完成退款 */
+    public void assertRefundable() {
+        if (status != OrderStatus.PAID) {
+            throw new BusinessRuleException("只有已付款的訂單可以申請退款");
+        }
+    }
+
+    /** 後台完成退款：PAID → REFUNDED */
+    public void markRefunded() {
+        if (status != OrderStatus.PAID) {
+            throw new BusinessRuleException("只有已付款的訂單可以標記為已退款");
+        }
+        this.status = OrderStatus.REFUNDED;
     }
 
     public Long getId() {
@@ -199,5 +242,13 @@ public class Order extends TaipeiTimestampEntity {
 
     public Integer getVersion() {
         return version;
+    }
+
+    public SubscriptionPlan getSubscriptionPlan() {
+        return subscriptionPlan;
+    }
+
+    public void setSubscriptionPlan(SubscriptionPlan subscriptionPlan) {
+        this.subscriptionPlan = subscriptionPlan;
     }
 }
