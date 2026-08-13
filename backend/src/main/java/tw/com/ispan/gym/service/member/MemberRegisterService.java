@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,8 @@ import tw.com.ispan.gym.service.account.MailService;
 @Service
 @Transactional(readOnly = true)
 public class MemberRegisterService {
+
+    private static final Logger log = LoggerFactory.getLogger(MemberRegisterService.class);
 
     private final AccountRepository accounts;
     private final MemberRepository members;
@@ -99,7 +103,13 @@ public class MemberRegisterService {
         verification.setExpiresAt(LocalDateTime.now().plusHours(verificationTokenTtlHours));
         emailVerifications.save(verification);
 
-        mailService.sendVerificationEmail(account.getEmail(), token);
+        // 寄信失敗不應中斷註冊——帳號與驗證 token 已經寫入，會員仍可透過重寄驗證信或
+        // 直接查 token 完成驗證；本機未設定 MAIL_USERNAME/PASSWORD 時預期會走到這裡。
+        try {
+            mailService.sendVerificationEmail(account.getEmail(), token);
+        } catch (Exception ex) {
+            log.warn("驗證信寄送失敗，account={}", account.getId(), ex);
+        }
 
         return MemberRegisterResponse.from(savedMember);
     }

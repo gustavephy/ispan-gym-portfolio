@@ -55,6 +55,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         migrateOauthBindingsToAccountTable();
         rebindOauthToAccount();
         dropObsoleteColumns();
+        widenOrderStatusCheck();
         dropDuplicateUniqueIndexes();
     }
 
@@ -800,6 +801,34 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropColumnIfExists("password_history", "member_id");
         // 團課報名資格決議只看 status（體驗課由 is_trial 判斷），訂閱開關欄位捨棄
         dropColumnIfExists("group_course", "is_open_for_subscription");
+    }
+
+    // === 訂單狀態值域擴充（新增 REFUNDED）======================================
+    // orders.status 上有一個 Hibernate 建表當時自動產生、雜湊命名的 CHECK 約束，
+    // 值域鎖死當時的 OrderStatus 列舉值。ddl-auto=update 不會回頭更新既有表的
+    // CHECK 約束，新增 REFUNDED 前必須手動換成涵蓋新值域、具名可辨識的版本，
+    // 否則退款完成時的狀態更新會直接違反約束。
+
+    private void widenOrderStatusCheck() {
+        dropOtherCheckConstraintsOnColumn("orders", "status", "CK_orders_status");
+        createCheckIfAbsent("orders", "CK_orders_status", """
+                ALTER TABLE orders ADD CONSTRAINT CK_orders_status CHECK (
+                    status IN ('UNPAID','PAID','SHIPPED','COMPLETED','CANCELLED','FAILED','REFUNDED'))
+                """);
+    }
+
+    private void dropOtherCheckConstraintsOnColumn(String table, String column, String keepName) {
+        var checks = jdbc.queryForList("""
+                SELECT cc.name AS name
+                    FROM sys.check_constraints cc
+                    WHERE cc.parent_object_id = OBJECT_ID(?)
+                      AND cc.parent_column_id = COLUMNPROPERTY(OBJECT_ID(?), ?, 'ColumnId')
+                      AND cc.name <> ?
+                """, table, table, column, keepName);
+        for (var row : checks) {
+            jdbc.execute("ALTER TABLE [" + table + "] DROP CONSTRAINT [" + row.get("name") + "]");
+            log.info("已移除 {}.{} 上的舊 CHECK 約束 {}", table, column, row.get("name"));
+        }
     }
 
     // === 清除重複的唯一索引 ===================================================

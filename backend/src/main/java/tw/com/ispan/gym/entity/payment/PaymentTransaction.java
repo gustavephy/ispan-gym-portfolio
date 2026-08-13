@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.Setter;
 import org.hibernate.annotations.Nationalized;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -15,6 +17,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 @Table(name = "payment_transaction", uniqueConstraints = @UniqueConstraint(
         name = "UX_payment_transaction_mtn", columnNames = "merchant_trade_no"))
 @EntityListeners(AuditingEntityListener.class)
+@Getter
+@Setter
 public class PaymentTransaction {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "order_id") private Order order;
@@ -37,4 +41,15 @@ public class PaymentTransaction {
     @Column(name = "paid_at") private LocalDateTime paidAt;
     @Version @Column(nullable = false) private Integer version = 0;
     protected PaymentTransaction() {}
+
+    public PaymentTransaction(Order order, String provider, String merchantTradeNo, BigDecimal amount,
+            String currency) {
+        this.order = order;
+        this.provider = provider;
+        this.merchantTradeNo = merchantTradeNo;
+        this.amount = amount;
+        this.currency = currency;
+        this.status = "PENDING";
+        this.simulatePaid = false;
+    }
 }
