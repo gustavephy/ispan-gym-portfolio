@@ -22,7 +22,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
-import tw.com.ispan.gym.enums.ProductStatus;
+import tw.com.ispan.gym.enums.product.ProductStatus;
 
 @Entity
 @Table(name = "product")

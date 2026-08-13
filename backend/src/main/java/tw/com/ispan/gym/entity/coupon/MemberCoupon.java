@@ -22,7 +22,7 @@ import lombok.Setter;
 import lombok.ToString;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
-import tw.com.ispan.gym.enums.MemberCouponStatus;
+import tw.com.ispan.gym.enums.coupon.MemberCouponStatus;
 
 @Entity
 @Table(name = "member_coupon")

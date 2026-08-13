@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import tw.com.ispan.gym.entity.subscription.MemberSubscription;
-import tw.com.ispan.gym.enums.SubscriptionStatus;
+import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
 
 public interface SubscriptionRepository extends JpaRepository<MemberSubscription, Integer> {
 	List<MemberSubscription> findByMemberId(Integer memberId);

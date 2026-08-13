@@ -15,7 +15,7 @@ import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
 import tw.com.ispan.gym.entity.product.Product;
-import tw.com.ispan.gym.enums.ProductStatus;
+import tw.com.ispan.gym.enums.product.ProductStatus;
 
 public interface ProductRepository extends JpaRepository<Product, Integer> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)

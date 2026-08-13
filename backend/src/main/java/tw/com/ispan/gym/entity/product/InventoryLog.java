@@ -24,7 +24,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
-import tw.com.ispan.gym.enums.InventoryChangeType;
+import tw.com.ispan.gym.enums.product.InventoryChangeType;
 
 @Entity
 @Table(name = "inventory_log")

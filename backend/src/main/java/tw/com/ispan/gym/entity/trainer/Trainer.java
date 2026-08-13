@@ -23,7 +23,7 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Nationalized;
-import tw.com.ispan.gym.enums.TrainerStatus;
+import tw.com.ispan.gym.enums.trainer.TrainerStatus;
 
 /**
  * 教練明細：role=TRAINER 的員工一人一筆，存專業資料。

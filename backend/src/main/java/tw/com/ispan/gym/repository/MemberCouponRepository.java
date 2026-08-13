@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import tw.com.ispan.gym.entity.coupon.MemberCoupon;
-import tw.com.ispan.gym.enums.MemberCouponStatus;
+import tw.com.ispan.gym.enums.coupon.MemberCouponStatus;
 
 public interface MemberCouponRepository extends JpaRepository<MemberCoupon, Integer> {
 

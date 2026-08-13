@@ -3,7 +3,7 @@ package tw.com.ispan.gym.entity.order;
 import tw.com.ispan.gym.entity.coupon.MemberCoupon;
 import tw.com.ispan.gym.entity.member.Member;
 
-import tw.com.ispan.gym.enums.OrderStatus;
+import tw.com.ispan.gym.enums.order.OrderStatus;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
 import tw.com.ispan.gym.exception.BusinessRuleException;

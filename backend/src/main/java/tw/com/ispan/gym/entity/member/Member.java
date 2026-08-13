@@ -2,8 +2,8 @@ package tw.com.ispan.gym.entity.member;
 
 import tw.com.ispan.gym.entity.account.Account;
 
-import tw.com.ispan.gym.enums.Gender;
-import tw.com.ispan.gym.enums.UserStatus;
+import tw.com.ispan.gym.enums.member.Gender;
+import tw.com.ispan.gym.enums.member.UserStatus;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

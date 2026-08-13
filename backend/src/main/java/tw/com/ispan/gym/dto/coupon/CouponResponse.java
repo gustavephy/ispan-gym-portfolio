@@ -6,9 +6,9 @@ import java.time.LocalDateTime;
 
 import lombok.Data;
 import tw.com.ispan.gym.entity.coupon.Coupon;
-import tw.com.ispan.gym.enums.CouponApplicableType;
-import tw.com.ispan.gym.enums.CouponStatus;
-import tw.com.ispan.gym.enums.CouponType;
+import tw.com.ispan.gym.enums.coupon.CouponApplicableType;
+import tw.com.ispan.gym.enums.coupon.CouponStatus;
+import tw.com.ispan.gym.enums.coupon.CouponType;
 
 @Data
 public class CouponResponse {

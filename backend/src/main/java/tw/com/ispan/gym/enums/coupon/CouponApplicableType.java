@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.enums;
+package tw.com.ispan.gym.enums.coupon;
 
 
 public enum CouponApplicableType {

@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 import lombok.Data;
 import tw.com.ispan.gym.entity.subscription.MemberSubscription;
-import tw.com.ispan.gym.enums.SubscriptionStatus;
+import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
 
 @Data
 public class SubscriptionResponse {

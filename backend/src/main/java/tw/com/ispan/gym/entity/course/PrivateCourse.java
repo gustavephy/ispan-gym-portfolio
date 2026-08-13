@@ -27,7 +27,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
-import tw.com.ispan.gym.enums.CourseStatus;
+import tw.com.ispan.gym.enums.course.CourseStatus;
 
 /**
  * 私教課主檔（2026-08-13 定案：課程域拆為私教課／團課兩實體，取代單一 Course）。

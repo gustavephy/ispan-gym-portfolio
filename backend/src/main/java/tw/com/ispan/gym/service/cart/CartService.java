@@ -8,7 +8,7 @@ import tw.com.ispan.gym.dto.cart.UpdateCartItemRequest;
 import tw.com.ispan.gym.entity.cart.CartItem;
 import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.entity.member.Member;
-import tw.com.ispan.gym.enums.ProductStatus;
+import tw.com.ispan.gym.enums.product.ProductStatus;
 import tw.com.ispan.gym.exception.CartItemNotFoundException;
 import tw.com.ispan.gym.exception.ForbiddenCartAccessException;
 import tw.com.ispan.gym.exception.InsufficientStockException;

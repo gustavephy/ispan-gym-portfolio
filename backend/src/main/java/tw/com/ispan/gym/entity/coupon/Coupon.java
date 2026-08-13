@@ -19,9 +19,9 @@ import lombok.Setter;
 import lombok.ToString;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
-import tw.com.ispan.gym.enums.CouponStatus;
-import tw.com.ispan.gym.enums.CouponType;
-import tw.com.ispan.gym.enums.CouponApplicableType;
+import tw.com.ispan.gym.enums.coupon.CouponStatus;
+import tw.com.ispan.gym.enums.coupon.CouponType;
+import tw.com.ispan.gym.enums.coupon.CouponApplicableType;
 
 @Entity
 @Table(name = "coupon", uniqueConstraints = @UniqueConstraint(name = "UX_coupon_code", columnNames = "code"))

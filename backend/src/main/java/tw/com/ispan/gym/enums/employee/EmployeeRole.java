@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.enums;
+package tw.com.ispan.gym.enums.employee;
 
 import tw.com.ispan.gym.entity.trainer.Trainer;
 

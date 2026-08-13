@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.enums;
+package tw.com.ispan.gym.enums.product;
 
 public enum ProductStatus {
     ACTIVE,

@@ -10,7 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
-import tw.com.ispan.gym.enums.CategoryStatus;
+import tw.com.ispan.gym.enums.common.CategoryStatus;
 
 /** 課程分類；與商品分類（product_categories）各自獨立 */
 @Entity

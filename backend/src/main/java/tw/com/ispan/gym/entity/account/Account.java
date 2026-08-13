@@ -1,7 +1,7 @@
 package tw.com.ispan.gym.entity.account;
 
 
-import tw.com.ispan.gym.enums.AccountType;
+import tw.com.ispan.gym.enums.account.AccountType;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;

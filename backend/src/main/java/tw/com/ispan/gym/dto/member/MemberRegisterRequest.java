@@ -12,7 +12,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
-import tw.com.ispan.gym.enums.Gender;
+import tw.com.ispan.gym.enums.member.Gender;
 
 @Getter
 @Setter

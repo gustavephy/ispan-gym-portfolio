@@ -1,7 +1,7 @@
 package tw.com.ispan.gym.entity.account;
 
 
-import tw.com.ispan.gym.enums.OAuthProvider;
+import tw.com.ispan.gym.enums.account.OAuthProvider;
 
 import java.time.LocalDateTime;
 

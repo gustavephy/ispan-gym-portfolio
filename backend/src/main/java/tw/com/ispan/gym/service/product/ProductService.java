@@ -13,7 +13,7 @@ import tw.com.ispan.gym.dto.product.ProductRequest;
 import tw.com.ispan.gym.dto.product.ProductResponse;
 import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.entity.product.ProductCategory;
-import tw.com.ispan.gym.enums.ProductStatus;
+import tw.com.ispan.gym.enums.product.ProductStatus;
 import tw.com.ispan.gym.exception.ProductNotFoundException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.ProductCategoryRepository;

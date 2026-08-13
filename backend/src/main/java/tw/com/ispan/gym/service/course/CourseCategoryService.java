@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.course.CourseCategoryDto;
 import tw.com.ispan.gym.entity.course.CourseCategory;
-import tw.com.ispan.gym.enums.CategoryStatus;
+import tw.com.ispan.gym.enums.common.CategoryStatus;
 import tw.com.ispan.gym.repository.CourseCategoryRespository;
 
 

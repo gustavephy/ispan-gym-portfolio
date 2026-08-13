@@ -3,7 +3,7 @@ package tw.com.ispan.gym.dto.course;
 import java.math.BigDecimal;
 
 import lombok.Data;
-import tw.com.ispan.gym.enums.CourseStatus;
+import tw.com.ispan.gym.enums.course.CourseStatus;
 
 @Data
 public class PrivateCourseRequest {

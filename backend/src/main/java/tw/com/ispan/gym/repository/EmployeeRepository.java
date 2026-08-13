@@ -6,8 +6,8 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import tw.com.ispan.gym.entity.employee.Employee;
-import tw.com.ispan.gym.enums.EmployeeRole;
-import tw.com.ispan.gym.enums.EmployeeStatus;
+import tw.com.ispan.gym.enums.employee.EmployeeRole;
+import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 
 public interface EmployeeRepository extends JpaRepository<Employee, Integer> {
 

@@ -7,7 +7,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import tw.com.ispan.gym.entity.account.EmailVerification;
-import tw.com.ispan.gym.enums.AccountType;
+import tw.com.ispan.gym.enums.account.AccountType;
 
 public interface EmailVerificationRepository extends JpaRepository<EmailVerification, Integer> {
     Optional<EmailVerification> findByToken(UUID token);
