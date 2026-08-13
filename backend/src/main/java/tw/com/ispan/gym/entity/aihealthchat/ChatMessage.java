@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.entity.AiHealthChat;
+package tw.com.ispan.gym.entity.aihealthchat;
 
 import tw.com.ispan.gym.entity.employee.Employee;
 
