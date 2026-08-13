@@ -15,9 +15,9 @@ import tw.com.ispan.gym.enums.account.OAuthProvider;
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.member.UserStatus;
-import tw.com.ispan.gym.repository.AccountRepository;
-import tw.com.ispan.gym.repository.MemberRepository;
-import tw.com.ispan.gym.repository.OauthAccountRepository;
+import tw.com.ispan.gym.repository.account.AccountRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.account.OauthAccountRepository;
 
 /**
  * 登入身分一律先解析到 {@link Account}（email 或 OAuth 綁定皆屬帳號域），

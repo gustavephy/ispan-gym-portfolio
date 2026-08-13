@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.repository;
+package tw.com.ispan.gym.repository.employee;
 
 import java.util.List;
 import java.util.Optional;

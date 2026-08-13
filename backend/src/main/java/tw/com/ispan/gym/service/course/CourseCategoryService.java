@@ -11,14 +11,14 @@ import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.course.CourseCategoryDto;
 import tw.com.ispan.gym.entity.course.CourseCategory;
 import tw.com.ispan.gym.enums.common.CategoryStatus;
-import tw.com.ispan.gym.repository.CourseCategoryRespository;
+import tw.com.ispan.gym.repository.course.CourseCategoryRepository;
 
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CourseCategoryService {
-	private final CourseCategoryRespository courseCategoryRepository;
+	private final CourseCategoryRepository courseCategoryRepository;
 	
 	//查詢所有課程類別
 	private List<CourseCategoryDto> getAllCourseCategories(){

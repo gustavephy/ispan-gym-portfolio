@@ -25,7 +25,7 @@ import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.coach.CoachBookingRepository;
 import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
-import tw.com.ispan.gym.repository.MemberRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
 
 @Service
 @RequiredArgsConstructor

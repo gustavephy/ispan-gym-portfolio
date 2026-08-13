@@ -24,9 +24,9 @@ import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.account.AccountType;
 import tw.com.ispan.gym.enums.member.UserStatus;
-import tw.com.ispan.gym.repository.AccountRepository;
-import tw.com.ispan.gym.repository.EmployeeRepository;
-import tw.com.ispan.gym.repository.MemberRepository;
+import tw.com.ispan.gym.repository.account.AccountRepository;
+import tw.com.ispan.gym.repository.employee.EmployeeRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
 
 /**
  * 驗證 filter 層的 401／403 與 controller 層回傳相同的 ApiErrorResponse 格式。
@@ -84,8 +84,8 @@ class FilterErrorFormatTest {
 
         @Bean
         @Primary
-        tw.com.ispan.gym.repository.OauthAccountRepository oauthAccountRepository() {
-            return Mockito.mock(tw.com.ispan.gym.repository.OauthAccountRepository.class);
+        tw.com.ispan.gym.repository.account.OauthAccountRepository oauthAccountRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.account.OauthAccountRepository.class);
         }
     }
 

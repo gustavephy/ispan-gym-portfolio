@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.repository;
+package tw.com.ispan.gym.repository.trainer;
 
 import java.util.List;
 import java.util.Optional;

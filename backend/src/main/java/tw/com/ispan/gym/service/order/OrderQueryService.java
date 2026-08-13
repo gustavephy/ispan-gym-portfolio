@@ -9,8 +9,8 @@ import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.OrderItemResponse;
 import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
 import tw.com.ispan.gym.entity.order.Order;
-import tw.com.ispan.gym.repository.OrderItemRepository;
-import tw.com.ispan.gym.repository.OrderRepository;
+import tw.com.ispan.gym.repository.order.OrderItemRepository;
+import tw.com.ispan.gym.repository.order.OrderRepository;
 
 @Service
 @Transactional(readOnly = true)

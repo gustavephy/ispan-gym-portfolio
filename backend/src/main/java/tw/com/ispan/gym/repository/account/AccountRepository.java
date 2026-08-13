@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.repository;
+package tw.com.ispan.gym.repository.account;
 
 import tw.com.ispan.gym.entity.account.Account;
 import jakarta.persistence.LockModeType;

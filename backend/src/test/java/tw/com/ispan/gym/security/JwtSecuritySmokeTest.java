@@ -27,9 +27,9 @@ import tw.com.ispan.gym.enums.account.AccountType;
 import tw.com.ispan.gym.enums.employee.EmployeeRole;
 import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
-import tw.com.ispan.gym.repository.AccountRepository;
-import tw.com.ispan.gym.repository.EmployeeRepository;
-import tw.com.ispan.gym.repository.MemberRepository;
+import tw.com.ispan.gym.repository.account.AccountRepository;
+import tw.com.ispan.gym.repository.employee.EmployeeRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
 
 /**
  * 驗證 JwtUtil / JwtAuthFilter / SecurityConfig 三者串起來的行為。
@@ -87,8 +87,8 @@ class JwtSecuritySmokeTest {
 
         @Bean
         @Primary
-        tw.com.ispan.gym.repository.OauthAccountRepository oauthAccountRepository() {
-            return Mockito.mock(tw.com.ispan.gym.repository.OauthAccountRepository.class);
+        tw.com.ispan.gym.repository.account.OauthAccountRepository oauthAccountRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.account.OauthAccountRepository.class);
         }
     }
 

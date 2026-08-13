@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.repository;
+package tw.com.ispan.gym.repository.subscription;
 
 import java.time.LocalDateTime;
 import java.util.List;

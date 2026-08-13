@@ -16,8 +16,8 @@ import tw.com.ispan.gym.entity.product.ProductCategory;
 import tw.com.ispan.gym.enums.product.ProductStatus;
 import tw.com.ispan.gym.exception.ProductNotFoundException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
-import tw.com.ispan.gym.repository.ProductCategoryRepository;
-import tw.com.ispan.gym.repository.ProductRepository;
+import tw.com.ispan.gym.repository.product.ProductCategoryRepository;
+import tw.com.ispan.gym.repository.product.ProductRepository;
 
 @Service
 @Transactional(readOnly = true)

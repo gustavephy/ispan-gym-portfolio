@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.product.ProductCategoryDto;
 import tw.com.ispan.gym.entity.product.ProductCategory;
 import tw.com.ispan.gym.enums.common.CategoryStatus;
-import tw.com.ispan.gym.repository.ProductCategoryRepository;
+import tw.com.ispan.gym.repository.product.ProductCategoryRepository;
 
 @Service
 @RequiredArgsConstructor

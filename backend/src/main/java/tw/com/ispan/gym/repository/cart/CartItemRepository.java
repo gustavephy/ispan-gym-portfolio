@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.repository;
+package tw.com.ispan.gym.repository.cart;
 
 import tw.com.ispan.gym.entity.cart.CartItem;
 import java.util.List;

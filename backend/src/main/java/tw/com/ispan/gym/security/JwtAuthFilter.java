@@ -21,9 +21,9 @@ import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.account.AccountType;
 import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
-import tw.com.ispan.gym.repository.AccountRepository;
-import tw.com.ispan.gym.repository.EmployeeRepository;
-import tw.com.ispan.gym.repository.MemberRepository;
+import tw.com.ispan.gym.repository.account.AccountRepository;
+import tw.com.ispan.gym.repository.employee.EmployeeRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
 
 /**
  * 解析每個請求的 Authorization: Bearer …，驗簽通過就寫入 SecurityContext。

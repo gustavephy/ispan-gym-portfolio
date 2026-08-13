@@ -18,9 +18,9 @@ import tw.com.ispan.gym.enums.account.AccountType;
 import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
-import tw.com.ispan.gym.repository.AccountRepository;
-import tw.com.ispan.gym.repository.EmailVerificationRepository;
-import tw.com.ispan.gym.repository.MemberRepository;
+import tw.com.ispan.gym.repository.account.AccountRepository;
+import tw.com.ispan.gym.repository.account.EmailVerificationRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.service.account.MailService;
 
 @Service

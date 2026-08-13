@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.repository;
+package tw.com.ispan.gym.repository.account;
 
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;

@@ -22,8 +22,8 @@ import tw.com.ispan.gym.exception.ConfirmationRequiredException;
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
-import tw.com.ispan.gym.repository.EmployeeRepository;
-import tw.com.ispan.gym.repository.TrainerRepository;
+import tw.com.ispan.gym.repository.employee.EmployeeRepository;
+import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * 教練排班（私教課時段）的商業邏輯，涵蓋建立／查詢／修改／取消四個功能，

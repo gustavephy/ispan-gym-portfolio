@@ -23,9 +23,9 @@ import tw.com.ispan.gym.enums.coupon.MemberCouponStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
-import tw.com.ispan.gym.repository.CouponRepository;
-import tw.com.ispan.gym.repository.MemberCouponRepository;
-import tw.com.ispan.gym.repository.MemberRepository;
+import tw.com.ispan.gym.repository.coupon.CouponRepository;
+import tw.com.ispan.gym.repository.coupon.MemberCouponRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
 
 @Service
 @RequiredArgsConstructor
