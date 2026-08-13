@@ -11,6 +11,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
+
 /**
  * 銷課紀錄日誌（session_deduction_logs）
  *
