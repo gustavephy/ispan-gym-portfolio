@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.entity;
+package tw.com.ispan.gym.entity.AiHealthChat;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
