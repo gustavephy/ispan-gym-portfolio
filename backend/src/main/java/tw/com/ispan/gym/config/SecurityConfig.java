@@ -1,7 +1,5 @@
 package tw.com.ispan.gym.config;
 
-import java.util.List;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -15,9 +13,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tw.com.ispan.gym.security.JsonAccessDeniedHandler;
 import tw.com.ispan.gym.security.JsonAuthenticationEntryPoint;
 import tw.com.ispan.gym.security.JwtAuthFilter;
@@ -37,10 +32,6 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final JsonAuthenticationEntryPoint authenticationEntryPoint;
     private final JsonAccessDeniedHandler accessDeniedHandler;
-
-    /** 允許的前端來源，多個以逗號分隔 */
-    @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:3000}")
-    private List<String> allowedOrigins;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter,
             JsonAuthenticationEntryPoint authenticationEntryPoint,
@@ -97,21 +88,7 @@ public class SecurityConfig {
         return http.build();
     }
 
-    @Bean
-    CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(allowedOrigins);
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
-
-    // PasswordEncoder bean 定義於 PasswordEncoderConfig
+    // CORS 設定移至 CorsConfig（dev／非 dev 共用）；PasswordEncoder bean 定義於 PasswordEncoderConfig
 
     @Bean
     AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
