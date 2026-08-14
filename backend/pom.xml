@@ -85,6 +85,13 @@
 			<artifactId>mssql-jdbc</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+		<!-- AI 課表 PDF 匯出（2.3）；package 為 org.openpdf.text.*，CJK cmap 資源已內建，
+		     不需另加 openpdf-fonts-extra（該 artifact 只含 Latin 字型）。 -->
+		<dependency>
+			<groupId>com.github.librepdf</groupId>
+			<artifactId>openpdf</artifactId>
+			<version>3.0.5</version>
+		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
