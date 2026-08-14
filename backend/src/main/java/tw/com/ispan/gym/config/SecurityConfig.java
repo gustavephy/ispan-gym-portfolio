@@ -58,6 +58,10 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // @Async controller（如 AiPlanController 回 CompletableFuture）完成後的
+                        // ASYNC dispatch 不會重跑 JwtAuthFilter，SecurityContext 是空的；
+                        // 授權已在原始 REQUEST dispatch 做過，這裡放行以免被二次攔成 401
+                        .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // 登入 / 註冊 / 忘記密碼等免驗證入口
                         .requestMatchers("/api/auth/**").permitAll()
@@ -65,8 +69,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/members/register").permitAll()
                         // Email 驗證連結由信件點入，此時尚未登入（AccountVerificationController）
                         .requestMatchers(HttpMethod.GET, "/api/accounts/verify-email").permitAll()
-                        // 商品/課程分類瀏覽開放未登入者（前台選單用）
-                        .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
+                        // 商品/分類瀏覽開放未登入者（前台選單用）。
+                        // 注意路徑要與 controller 實際值一致：商品分類是 /api/product-categories
+                        //（曾寫成 /api/categories/** 放了空砲，匿名瀏覽分類一直是 401）
+                        .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/product-categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/course-categories").permitAll()
                         // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）
                         .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
