@@ -6,7 +6,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -16,14 +15,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tw.com.ispan.gym.entity.account.Account;
-import tw.com.ispan.gym.entity.employee.Employee;
-import tw.com.ispan.gym.entity.member.Member;
-import tw.com.ispan.gym.enums.account.AccountType;
-import tw.com.ispan.gym.enums.employee.EmployeeStatus;
-import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.repository.account.AccountRepository;
-import tw.com.ispan.gym.repository.employee.EmployeeRepository;
-import tw.com.ispan.gym.repository.member.MemberRepository;
 
 /**
  * 解析每個請求的 Authorization: Bearer …，驗簽通過就寫入 SecurityContext。
@@ -32,12 +24,8 @@ import tw.com.ispan.gym.repository.member.MemberRepository;
  * <p>JWT 的 subject 是 account_id。member 與 employee 各有獨立流水號主鍵，
  * 一律以 account_id 反查各身分表，不把 account_id 當成 member／employee id 用。
  *
- * <p>權限由 account.roles 展開：具 MEMBER 身分且會員狀態 ACTIVE → ROLE_MEMBER；
- * 具 EMPLOYEE 身分且員工狀態 ACTIVE → ROLE_EMPLOYEE（基底：是員工）＋
- * ROLE_ADMIN／ROLE_TRAINER（職位，依 employee.role）——身分與職位分兩層，
- * 「員工皆可」的端點寫 hasRole('EMPLOYEE')，收緊到職位才寫 ADMIN/TRAINER，
- * 新增職位時不必回頭修改任何 hasRole('EMPLOYEE') 端點。
- * 一個帳號可同時持有兩種身分。
+ * <p>權限展開規則見 {@link AccountAuthorityResolver}（與登入回應的 roles 欄位共用）。
+ * 一個帳號可同時持有會員與員工身分。
  */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -47,15 +35,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final AccountRepository accounts;
-    private final MemberRepository members;
-    private final EmployeeRepository employees;
+    private final AccountAuthorityResolver authorityResolver;
 
-    public JwtAuthFilter(JwtUtil jwtUtil, AccountRepository accounts, MemberRepository members,
-            EmployeeRepository employees) {
+    public JwtAuthFilter(JwtUtil jwtUtil, AccountRepository accounts, AccountAuthorityResolver authorityResolver) {
         this.jwtUtil = jwtUtil;
         this.accounts = accounts;
-        this.members = members;
-        this.employees = employees;
+        this.authorityResolver = authorityResolver;
     }
 
     @Override
@@ -87,7 +72,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        List<SimpleGrantedAuthority> authorities = resolveAuthorities(account);
+        List<SimpleGrantedAuthority> authorities = authorityResolver.resolve(account);
         if (authorities.isEmpty()) {
             logger.debug("帳號沒有任何已啟用的身分: " + accountId);
             return;
@@ -99,29 +84,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
-    }
-
-    /** 依 account.roles 展開權限；未啟用的身分不授予任何權限 */
-    private List<SimpleGrantedAuthority> resolveAuthorities(Account account) {
-        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
-
-        if (account.getRoles().contains(AccountType.MEMBER)) {
-            Member member = members.findByAccountId(account.getId()).orElse(null);
-            if (member != null && member.getDeletedAt() == null && member.getStatus() == UserStatus.ACTIVE) {
-                authorities.add(new SimpleGrantedAuthority("ROLE_MEMBER"));
-            }
-        }
-
-        if (account.getRoles().contains(AccountType.EMPLOYEE)) {
-            Employee employee = employees.findByAccountId(account.getId()).orElse(null);
-            if (employee != null && employee.getDeletedAt() == null
-                    && employee.getStatus() == EmployeeStatus.ACTIVE) {
-                // 基底角色＋職位角色兩層：見類別 javadoc
-                authorities.add(new SimpleGrantedAuthority("ROLE_EMPLOYEE"));
-                authorities.add(new SimpleGrantedAuthority("ROLE_" + employee.getRole().name()));
-            }
-        }
-        return authorities;
     }
 
     /** 取出 Authorization: Bearer … 的 token，格式不符回 null */

@@ -4,6 +4,7 @@ import tw.com.ispan.gym.dto.account.LoginRequest;
 import tw.com.ispan.gym.dto.account.LoginResponse;
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.repository.account.AccountRepository;
+import tw.com.ispan.gym.security.AccountAuthorityResolver;
 import tw.com.ispan.gym.security.JwtUtil;
 
 import jakarta.validation.Valid;
@@ -22,11 +23,14 @@ public class AuthController {
     private final AccountRepository accounts;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final AccountAuthorityResolver authorityResolver;
 
-    public AuthController(AccountRepository accounts, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public AuthController(AccountRepository accounts, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+            AccountAuthorityResolver authorityResolver) {
         this.accounts = accounts;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.authorityResolver = authorityResolver;
     }
 
     @PostMapping("/login")
@@ -37,6 +41,8 @@ public class AuthController {
         if (!passwordEncoder.matches(request.password(), account.getPasswordHash())) {
             throw new BadCredentialsException("帳號或密碼錯誤");
         }
-        return new LoginResponse(jwtUtil.generateToken(account), account.getId(), account.getEmail());
+        // roles＝展開後的有效權限（與 JwtAuthFilter 同一套規則），供前端導流
+        return new LoginResponse(jwtUtil.generateToken(account), account.getId(), account.getEmail(),
+                authorityResolver.resolveRoleNames(account));
     }
 }

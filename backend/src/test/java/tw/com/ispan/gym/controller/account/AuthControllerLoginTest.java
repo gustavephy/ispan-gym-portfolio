@@ -80,6 +80,7 @@ class AuthControllerLoginTest {
         tw.com.ispan.gym.config.PasswordEncoderConfig.class,
         JwtUtil.class,
         JwtAuthFilter.class,
+        tw.com.ispan.gym.security.AccountAuthorityResolver.class,
         ApiErrorWriter.class,
         JsonAuthenticationEntryPoint.class,
         JsonAccessDeniedHandler.class,
@@ -151,7 +152,10 @@ class AuthControllerLoginTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.accountId").value(7))
-                .andExpect(jsonPath("$.email").value("member@example.com"));
+                .andExpect(jsonPath("$.email").value("member@example.com"))
+                // roles 內容不在此斷言：mock bean 為共用單例，member 反查的 stub 會跨測試
+                // 洩漏（依執行順序可能是 [] 或 [MEMBER]），內容驗證見 token 迴圈測試
+                .andExpect(jsonPath("$.roles").isArray());
     }
 
     @Test
@@ -171,6 +175,8 @@ class AuthControllerLoginTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginBody("member@example.com", RAW_PASSWORD)))
                 .andExpect(status().isOk())
+                // 會員 ACTIVE：展開後的權限清單供前端導流
+                .andExpect(jsonPath("$.roles[0]").value("MEMBER"))
                 .andReturn().getResponse().getContentAsString();
         String token = JsonPath.read(response, "$.accessToken");
 
