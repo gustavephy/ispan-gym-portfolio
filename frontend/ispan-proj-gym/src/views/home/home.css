@@ -1,0 +1,188 @@
+main { padding-top: 0; }
+@media (max-width: 900px) {
+  main { padding-top: 60px; }
+}
+
+
+.hero {
+  min-height: calc(100vh - 68px);
+  background: url("@/assets/luxury_gym_hero.png") no-repeat center center;
+  background-size: cover;
+  display: flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(60, 48, 43, 0.75);
+  z-index: 0;
+}
+.hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+  color: #fff;
+}
+.hero-tag {
+  display: inline-block;
+  background: rgba(255,255,255,0.15);
+  padding: 0.3rem 1rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(4px);
+}
+.hero-title {
+  font-size: clamp(2.2rem, 6vw, 4rem);
+  font-weight: 900;
+  line-height: 1.2;
+  margin-bottom: 1.2rem;
+}
+.hero-highlight {
+  color: #e9c49f;
+  display: block;
+}
+.hero-desc {
+  font-size: 1.05rem;
+  line-height: 1.8;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 2.5rem;
+  max-width: 520px;
+}
+.hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 3rem; }
+.hero-btn { padding: 0.85rem 2rem; font-size: 1rem; }
+.hero-stats {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+.stat { text-align: center; }
+.stat-n { display: block; font-size: 1.8rem; font-weight: 900; }
+.stat-l { font-size: 0.82rem; color: rgba(255,255,255,0.7); }
+.stat-divider { width: 1px; height: 40px; background: rgba(255,255,255,0.2); }
+.features-section {
+  background: var(--bg-section);
+  padding: 0;
+  margin-top: -2px;
+}
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  padding: 0;
+}
+.feature-card {
+  padding: 2.5rem 2rem;
+  text-align: center;
+  border-right: 1px solid var(--border);
+  transition: var(--transition);
+}
+.feature-card:last-child { border-right: none; }
+.feature-card:hover { background: var(--bg-soft); }
+.feature-icon { font-size: 2.5rem; margin-bottom: 1rem; }
+.feature-card h3 { font-size: 1.1rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 0.6rem; }
+.feature-card p { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.7; }
+
+.section { padding: 1.5rem 0; }
+.section .page-container {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.bg-white { background: var(--bg-section); }
+.bg-soft { background: var(--bg-soft); }
+
+/* Courses block styles */
+.courses-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+.course-card-clickable {
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: var(--transition);
+}
+.course-card-clickable:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-hover);
+}
+.course-image-container {
+  position: relative;
+  height: 200px;
+  overflow: hidden;
+}
+.course-coach-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.course-icon-badge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  color: #fff;
+  border: 2px solid #fff;
+}
+.course-info {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.course-info h3 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+}
+.course-info p {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+  height: 4.5em;
+  overflow: hidden;
+}
+.course-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.course-action-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.action-text {
+  color: var(--text-secondary);
+}
+.action-arrow {
+  color: var(--accent);
+}
+
+.empty-state { text-align: center; padding: 4rem 0; color: var(--text-secondary); }
+.shop-cta { text-align: center; }
