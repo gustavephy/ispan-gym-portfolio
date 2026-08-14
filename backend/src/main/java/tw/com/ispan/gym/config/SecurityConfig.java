@@ -69,6 +69,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/members/register").permitAll()
                         // Email 驗證連結由信件點入，此時尚未登入（AccountVerificationController）
                         .requestMatchers(HttpMethod.GET, "/api/accounts/verify-email").permitAll()
+                        // 重寄驗證信，同樣是註冊/重新啟用流程的一部分，尚未登入（AccountVerificationController）
+                        .requestMatchers(HttpMethod.POST, "/api/accounts/resend-verification-email").permitAll()
                         // 商品/分類瀏覽開放未登入者（前台選單用）。
                         // 注意路徑要與 controller 實際值一致：商品分類是 /api/product-categories
                         //（曾寫成 /api/categories/** 放了空砲，匿名瀏覽分類一直是 401）

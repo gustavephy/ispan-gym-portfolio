@@ -14,4 +14,8 @@ public interface EmailVerificationRepository extends JpaRepository<EmailVerifica
 
     /** 重新註冊時清掉同帳號同身分、尚未驗證的舊驗證信，避免多封有效連結並存 */
     void deleteByAccountIdAndTargetRoleAndVerifiedAtIsNull(Integer accountId, AccountType targetRole);
+
+    /** 重寄冷卻判斷：同帳號同身分目前這封尚未驗證的信是什麼時候發的 */
+    Optional<EmailVerification> findTopByAccountIdAndTargetRoleAndVerifiedAtIsNullOrderByCreatedAtDesc(
+            Integer accountId, AccountType targetRole);
 }

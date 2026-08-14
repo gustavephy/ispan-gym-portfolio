@@ -17,6 +17,7 @@ import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.account.EmailVerification;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.account.AccountType;
+import tw.com.ispan.gym.enums.account.VerificationPurpose;
 import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
@@ -36,7 +37,8 @@ public class MemberRegisterService {
     private final EmailVerificationRepository emailVerifications;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
-    private final long verificationTokenTtlHours;
+    private final long verificationTokenTtlMinutes;
+    private final long resendCooldownMinutes;
 
     public MemberRegisterService(
             AccountRepository accounts,
@@ -44,78 +46,93 @@ public class MemberRegisterService {
             EmailVerificationRepository emailVerifications,
             PasswordEncoder passwordEncoder,
             MailService mailService,
-            @Value("${app.mail.verification-token-ttl-hours}") long verificationTokenTtlHours) {
+            @Value("${app.mail.verification-token-ttl-minutes}") long verificationTokenTtlMinutes,
+            @Value("${app.mail.verification-resend-cooldown-minutes}") long resendCooldownMinutes) {
         this.accounts = accounts;
         this.members = members;
         this.emailVerifications = emailVerifications;
         this.passwordEncoder = passwordEncoder;
         this.mailService = mailService;
-        this.verificationTokenTtlHours = verificationTokenTtlHours;
+        this.verificationTokenTtlMinutes = verificationTokenTtlMinutes;
+        this.resendCooldownMinutes = resendCooldownMinutes;
     }
 
     @Transactional
     public MemberRegisterResponse register(MemberRegisterRequest request) {
-        String email = request.getEmail()
-                .trim()
-                .toLowerCase(Locale.ROOT);
-
+        String email = normalizeEmail(request.getEmail());
         Account account = accounts.findByEmailIgnoreCase(email).orElse(null);
-        Member member;
 
         if (account == null) {
-            account = new Account();
-            account.setEmail(email);
-            account.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-            account.getRoles().add(AccountType.MEMBER);
-            account = accounts.save(account);
+            createAccountAndMember(request, email);
+            return MemberRegisterResponse.of(email, "註冊成功，請查收驗證信完成帳號啟用。");
+        }
 
-            member = new Member();
-            member.setAccount(account);
-        } else if (account.getDeletedAt() != null) {
-            // 軟刪除的帳號重新註冊：復活原帳號並更新密碼
-            account.setDeletedAt(null);
-            account.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-            account.getRoles().add(AccountType.MEMBER);
+        // 帳號已存在但沒有 Member 身分（例如純員工帳號）：匿名表單不能順手幫它加身分，
+        // 訊息刻意不透露對方實際擁有哪種身分，只說「已有帳號」
+        Member member = members.findByAccountId(account.getId()).orElse(null);
+        if (member == null) {
+            throw new BusinessRuleException("此 Email 已有帳號，請改用登入。");
+        }
 
-            member = members.findByAccountId(account.getId()).orElseGet(Member::new);
-            member.setAccount(account);
-            member.setDeletedAt(null);
-        } else {
+        // SUSPENDED 是硬性關卡，不論有沒有被軟刪除，都不可能透過任何自助流程繞過
+        if (member.getStatus() == UserStatus.SUSPENDED) {
             throw new BusinessRuleException("此 Email 已被註冊");
         }
 
-        member.setFirstName(request.getFirstName().trim());
-        member.setLastName(request.getLastName().trim());
-        member.setPhone(request.getPhone().trim());
-        member.setDob(request.getDob());
-        member.setGender(request.getGender());
-        member.setStatus(UserStatus.PENDING);
-        Member savedMember = members.save(member);
-
-        // 重新註冊（軟刪復活）時作廢先前未驗證的驗證信，確保同時只有一封有效連結
-        emailVerifications.deleteByAccountIdAndTargetRoleAndVerifiedAtIsNull(account.getId(), AccountType.MEMBER);
-
-        UUID token = UUID.randomUUID();
-        EmailVerification verification = new EmailVerification();
-        verification.setAccount(account);
-        verification.setTargetRole(AccountType.MEMBER);
-        verification.setToken(token);
-        verification.setExpiresAt(LocalDateTime.now().plusHours(verificationTokenTtlHours));
-        emailVerifications.save(verification);
-
-        // 寄信失敗不應中斷註冊——帳號與驗證 token 已經寫入，會員仍可透過重寄驗證信或
-        // 直接查 token 完成驗證；本機未設定 MAIL_USERNAME/PASSWORD 時預期會走到這裡。
-        try {
-            mailService.sendVerificationEmail(account.getEmail(), token);
-        } catch (Exception ex) {
-            log.warn("驗證信寄送失敗，account={}", account.getId(), ex);
+        boolean isDeleted = account.getDeletedAt() != null || member.getDeletedAt() != null;
+        if (isDeleted) {
+            // 重新啟用：這裡只重寄驗證信，不動密碼／個人資料——
+            // 要等使用者真的點了信裡的連結、證明自己還控制這個信箱，才會真正復活帳號
+            lockAndEnsureCooldownElapsed(account.getId());
+            issueVerificationToken(account, VerificationPurpose.REACTIVATION);
+            return MemberRegisterResponse.of(email, "此帳號已停用，我們已寄出重新啟用的驗證信，請查收。");
         }
 
-        return MemberRegisterResponse.from(savedMember);
+        if (member.getStatus() == UserStatus.PENDING) {
+            // 尚未驗證就重新送出註冊表單：只重寄驗證信，絕不覆蓋密碼／個人資料——
+            // 否則等於讓任何人都能拿別人還沒驗證的 email 搶先把密碼換成自己的
+            lockAndEnsureCooldownElapsed(account.getId());
+            issueVerificationToken(account, VerificationPurpose.REGISTRATION);
+            return MemberRegisterResponse.of(email, "此帳號尚待驗證，我們已重新寄出驗證信，請查收。");
+        }
+
+        throw new BusinessRuleException("此 Email 已被註冊");
+    }
+
+    /** 匿名重寄驗證信；不論該 email 是否存在、是否有東西可寄，一律回傳一樣的結果，避免被拿來枚舉帳號 */
+    @Transactional
+    public void resendVerification(String rawEmail) {
+        String email = normalizeEmail(rawEmail);
+        Account account = accounts.findByEmailIgnoreCase(email).orElse(null);
+        if (account == null) {
+            return;
+        }
+
+        Member member = members.findByAccountId(account.getId()).orElse(null);
+        if (member == null || member.getStatus() == UserStatus.SUSPENDED) {
+            return;
+        }
+
+        VerificationPurpose purpose;
+        if (account.getDeletedAt() != null || member.getDeletedAt() != null) {
+            purpose = VerificationPurpose.REACTIVATION;
+        } else if (member.getStatus() == UserStatus.PENDING) {
+            purpose = VerificationPurpose.REGISTRATION;
+        } else {
+            return; // 已經是 ACTIVE，沒有東西需要重寄
+        }
+
+        // 用悲觀鎖鎖住同一個 account，避免併發的重寄請求在彼此都提交前一起通過冷卻檢查
+        accounts.findByIdForUpdate(account.getId());
+        if (isWithinResendCooldown(account.getId())) {
+            return;
+        }
+
+        issueVerificationToken(account, purpose);
     }
 
     @Transactional
-    public void verifyEmail(UUID token) {
+    public VerificationPurpose verifyEmail(UUID token) {
         EmailVerification verification = emailVerifications.findByToken(token)
                 .orElseThrow(() -> new ResourceNotFoundException("驗證連結無效"));
 
@@ -124,19 +141,122 @@ public class MemberRegisterService {
             throw new BusinessRuleException("此驗證連結不適用於會員帳號");
         }
 
-        // 重複點擊驗證連結視為成功，不報錯
+        VerificationPurpose purpose = verification.getPurpose();
+        if (purpose == null) {
+            // 這個欄位是後補的，理論上只有遷移前就存在的舊資料才可能是 null
+            // （Hibernate ddl-auto=update 幫既有資料表加欄位時一律先建成可為 NULL）；
+            // 放在「重複點擊」判斷之前，連已驗證過的舊資料也一併擋下，不讓 null 流到下面的 switch
+            throw new BusinessRuleException("驗證連結已失效，請重新註冊或申請重寄驗證信");
+        }
+
+        // 重複點擊視為成功，不報錯、也不重新觸發任何狀態變更
         if (verification.getVerifiedAt() != null) {
-            return;
+            return purpose;
         }
 
         if (verification.getExpiresAt().isBefore(LocalDateTime.now())) {
             throw new BusinessRuleException("驗證連結已過期，請重新註冊或申請重寄驗證信");
         }
 
-        verification.setVerifiedAt(LocalDateTime.now());
-
-        Member member = members.findByAccountId(verification.getAccount().getId())
+        Account account = verification.getAccount();
+        Member member = members.findByAccountId(account.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到對應的會員資料"));
-        member.setStatus(UserStatus.ACTIVE);
+
+        // purpose 決定這把 key 原本要開哪道門；當下的狀態決定這道門現在還開不開得了，兩者缺一不可
+        if (member.getStatus() == UserStatus.SUSPENDED) {
+            throw new BusinessRuleException("此帳號已被停權，請聯繫客服");
+        }
+
+        switch (purpose) {
+            case REGISTRATION -> {
+                if (member.getStatus() != UserStatus.PENDING
+                        || member.getDeletedAt() != null
+                        || account.getDeletedAt() != null) {
+                    throw new BusinessRuleException("此驗證連結已失效");
+                }
+                member.setStatus(UserStatus.ACTIVE);
+            }
+            case REACTIVATION -> {
+                if (member.getDeletedAt() == null && account.getDeletedAt() == null) {
+                    throw new BusinessRuleException("此驗證連結已失效");
+                }
+                member.restore();
+                if (account.getDeletedAt() != null) {
+                    account.restore();
+                }
+                // 不論剛剛是 account 還是只有 member 被刪除，恢復成功後都固定確保 MEMBER 角色在——
+                // Set 不會重複新增，無條件執行比只在 account 曾被刪除時才補更保險
+                account.getRoles().add(AccountType.MEMBER);
+                member.setStatus(UserStatus.ACTIVE);
+            }
+        }
+
+        verification.setVerifiedAt(LocalDateTime.now());
+        return purpose;
+    }
+
+    private void createAccountAndMember(MemberRegisterRequest request, String email) {
+        Account account = new Account();
+        account.setEmail(email);
+        account.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        account.getRoles().add(AccountType.MEMBER);
+        account = accounts.save(account);
+
+        Member member = new Member();
+        member.setAccount(account);
+        member.setFirstName(request.getFirstName().trim());
+        member.setLastName(request.getLastName().trim());
+        member.setPhone(request.getPhone().trim());
+        member.setDob(request.getDob());
+        member.setGender(request.getGender());
+        member.setStatus(UserStatus.PENDING);
+        members.save(member);
+
+        issueVerificationToken(account, VerificationPurpose.REGISTRATION);
+    }
+
+    /** 新註冊／重新啟用／PENDING 重送共用：作廢同帳號同身分尚未驗證的舊 token，再發一封新的 */
+    private void issueVerificationToken(Account account, VerificationPurpose purpose) {
+        emailVerifications.deleteByAccountIdAndTargetRoleAndVerifiedAtIsNull(account.getId(), AccountType.MEMBER);
+
+        UUID token = UUID.randomUUID();
+        EmailVerification verification = new EmailVerification();
+        verification.setAccount(account);
+        verification.setTargetRole(AccountType.MEMBER);
+        verification.setPurpose(purpose);
+        verification.setToken(token);
+        verification.setExpiresAt(LocalDateTime.now().plusMinutes(verificationTokenTtlMinutes));
+        emailVerifications.save(verification);
+
+        // 寄信失敗不應中斷流程——帳號與驗證 token 已經寫入，使用者仍可透過重寄驗證信或
+        // 直接查 token 完成驗證；本機未設定 MAIL_USERNAME/PASSWORD 時預期會走到這裡。
+        try {
+            mailService.sendVerificationEmail(account.getEmail(), token, verificationTokenTtlMinutes, purpose);
+        } catch (Exception ex) {
+            log.warn("驗證信寄送失敗，account={}", account.getId(), ex);
+        }
+    }
+
+    /**
+     * 重寄/重新啟用發信前的併發防護：先用悲觀鎖鎖住這個 account，
+     * 讓冷卻檢查與發新信變成同一個原子操作，避免兩個同時送出的請求
+     * 都讀到「還沒過冷卻」之前的狀態、一起通過檢查。
+     */
+    private void lockAndEnsureCooldownElapsed(Integer accountId) {
+        accounts.findByIdForUpdate(accountId);
+        if (isWithinResendCooldown(accountId)) {
+            throw new BusinessRuleException("請稍後再試，前一封驗證信仍在有效範圍內");
+        }
+    }
+
+    private boolean isWithinResendCooldown(Integer accountId) {
+        return emailVerifications
+                .findTopByAccountIdAndTargetRoleAndVerifiedAtIsNullOrderByCreatedAtDesc(accountId, AccountType.MEMBER)
+                .map(v -> v.getCreatedAt().isAfter(LocalDateTime.now().minusMinutes(resendCooldownMinutes)))
+                .orElse(false);
+    }
+
+    private String normalizeEmail(String rawEmail) {
+        return rawEmail.trim().toLowerCase(Locale.ROOT);
     }
 }

@@ -109,6 +109,10 @@ public class Member {
 		deletedAt = LocalDateTime.now();
 	}
 
+	public void restore() {
+		deletedAt = null;
+	}
+
 	@PrePersist
 	protected void onCreate() {
 		createdAt = LocalDateTime.now();
