@@ -1,29 +1,25 @@
 package tw.com.ispan.gym.controller.coach;
 
+import java.util.List;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
+import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
-
-import java.util.List;
-
-import org.springframework.http.HttpStatus;
-
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  * 會員預約教練私教課的對外 API。
@@ -77,5 +73,18 @@ public class CoachBookingController {
         CoachBookingResponse resp = coachBookingService.cancelBooking(memberId, bookingId, acknowledgeConsumption);
 
         return ResponseEntity.status(HttpStatus.OK).body(resp);
+    }
+
+    /**
+     * 查詢自己的所有私教課預約紀錄，成功回 200（純查詢，不是新建立資源）。
+     * 不帶任何路徑參數，身分一律從 {@link CurrentUserProvider#requireCurrentMemberId()} 取得，
+     * 跟 CoachSlotController 的 getMySlots() 是同一套設計原則：不接受前端指定要查誰的資料。
+     */
+    @GetMapping("/bookings")
+    @PreAuthorize("hasRole('MEMBER')")
+    public ResponseEntity<List<CoachBookingHistoryResponse>> getMyBookings() {
+        Integer memberId = currentUserProvider.requireCurrentMemberId();
+        List<CoachBookingHistoryResponse> bookings = coachBookingService.getMyBookings(memberId);
+        return ResponseEntity.status(HttpStatus.OK).body(bookings);
     }
 }
