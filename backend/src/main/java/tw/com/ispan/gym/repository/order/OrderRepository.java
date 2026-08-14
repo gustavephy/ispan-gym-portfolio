@@ -1,7 +1,11 @@
 package tw.com.ispan.gym.repository.order;
 
+import tw.com.ispan.gym.dto.report.OrderPeriodSummary;
+import tw.com.ispan.gym.dto.report.SubscriptionSalesRow;
 import tw.com.ispan.gym.entity.order.Order;
+import tw.com.ispan.gym.enums.order.OrderStatus;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +17,41 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByIdAndMemberId(Long id, Integer userId);
     Optional<Order> findByMerchantTradeNo(String merchantTradeNo);
     Optional<Order> findByTradeNo(String tradeNo);
+
+    /**
+     * 報表區間總計。時間軸用 paidAt（營收歸屬付款日，非下單日）；
+     * 空區間的兩個 SUM 會是 null，由 service 端歸零。
+     */
+    @Query("""
+            SELECT new tw.com.ispan.gym.dto.report.OrderPeriodSummary(
+                COUNT(o), SUM(o.totalAmount), SUM(o.discountAmount))
+            FROM Order o
+            WHERE o.paidAt >= :from AND o.paidAt < :to
+              AND o.status IN :statuses
+            """)
+    OrderPeriodSummary summarizePeriod(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("statuses") Collection<OrderStatus> statuses);
+
+    /**
+     * 訂閱銷售聚合（報表用）：訂閱單刻意不進 order_item（設計定案），
+     * 直接聚合帶 subscription_plan_id 的訂單。金額用 subtotalAmount
+     *（折價前），與明細排行的 priceAtBuy × quantity 口徑一致。
+     */
+    @Query("""
+            SELECT new tw.com.ispan.gym.dto.report.SubscriptionSalesRow(
+                sp.subscriptionPlanId, sp.name, COUNT(o), SUM(o.subtotalAmount))
+            FROM Order o
+            JOIN o.subscriptionPlan sp
+            WHERE o.paidAt >= :from AND o.paidAt < :to
+              AND o.status IN :statuses
+            GROUP BY sp.subscriptionPlanId, sp.name
+            """)
+    List<SubscriptionSalesRow> aggregateSubscriptionSales(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("statuses") Collection<OrderStatus> statuses);
 
     @Query("SELECT o.status, COUNT(o), SUM(o.totalAmount) FROM Order o "
             + "WHERE o.createdAt BETWEEN :from AND :to GROUP BY o.status")

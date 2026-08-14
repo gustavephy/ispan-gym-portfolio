@@ -37,6 +37,9 @@ import tw.com.ispan.gym.repository.member.MemberRepository;
         webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
+        // application.properties 硬寫 spring.profiles.active=dev，會讓 @Profile("!dev") 的
+        // SecurityConfig 不生效、落入 Spring Security 預設鏈，必須覆寫掉（同 JwtSecuritySmokeTest）
+        "spring.profiles.active=test",
         "app.jwt.secret=dGVzdC1zZWNyZXQtdGhhdC1pcy1sb25nLWVub3VnaC1mb3ItaHMyNTYtc2lnbmluZyEh",
         "app.jwt.issuer=ispan-gym",
         "app.jwt.access-token-ttl=PT2H"
@@ -55,6 +58,7 @@ class FilterErrorFormatTest {
         ProbeController.class,
         JwtUtil.class,
         JwtAuthFilter.class,
+        AccountAuthorityResolver.class,
         ApiErrorWriter.class,
         JsonAuthenticationEntryPoint.class,
         JsonAccessDeniedHandler.class,
