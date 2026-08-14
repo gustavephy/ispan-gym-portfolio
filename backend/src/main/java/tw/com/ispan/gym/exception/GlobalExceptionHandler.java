@@ -11,8 +11,10 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -37,6 +39,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<ApiErrorResponse> unreadableRequest(HttpMessageNotReadableException ex) {
         return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "請求主體缺失或格式錯誤，請確認後重試");
+    }
+
+    /** 缺少必要的查詢參數（如報表 /stats 沒帶 from、to）；不列出會被兜底接走誤報 500 */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    ResponseEntity<ApiErrorResponse> missingParameter(MissingServletRequestParameterException ex) {
+        return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
+                "缺少必要參數：" + ex.getParameterName());
+    }
+
+    /** 參數型別轉換失敗：日期格式錯誤、enum 值不存在、路徑 id 非數字等 */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ApiErrorResponse> typeMismatch(MethodArgumentTypeMismatchException ex) {
+        return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
+                "參數格式不正確：" + ex.getName());
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
