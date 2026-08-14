@@ -1,7 +1,5 @@
 package tw.com.ispan.gym.dto.member;
 
-import tw.com.ispan.gym.entity.member.Member;
-
 import java.time.LocalDate;
 
 import jakarta.validation.constraints.Email;
