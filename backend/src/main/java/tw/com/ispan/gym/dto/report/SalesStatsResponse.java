@@ -5,7 +5,7 @@ import java.time.LocalDate;
 import java.util.List;
 import tw.com.ispan.gym.enums.report.ReportItemType;
 
-/** ?單?蝯梯?嚗??賢翰?改?嚗???+ 憿?蝭拚?????? */
+/** 即時統計（不落快照）：總計 + 品項型別篩選後的排行 */
 public record SalesStatsResponse(
         LocalDate periodStart,
         LocalDate periodEnd,
@@ -14,4 +14,3 @@ public record SalesStatsResponse(
         BigDecimal grossAmount,
         List<ReportSalesItemResponse> ranking) {
 }
-

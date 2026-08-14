@@ -3,7 +3,7 @@ package tw.com.ispan.gym.dto.report;
 import java.math.BigDecimal;
 import tw.com.ispan.gym.enums.report.ReportItemType;
 
-/** ?瑕???桀?嚗翰?扳?蝝啗??單????梁嚗?*/
+/** 排行明細列（快照與即時統計共用格式） */
 public record ReportSalesItemResponse(
         Integer rankNo,
         Integer productId,
@@ -12,4 +12,3 @@ public record ReportSalesItemResponse(
         Long quantitySold,
         BigDecimal grossAmount) {
 }
-

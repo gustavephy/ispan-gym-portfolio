@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
@@ -26,6 +27,7 @@ import tw.com.ispan.gym.entity.report.ReportSalesItem;
 import tw.com.ispan.gym.entity.report.ReportSnapshot;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.enums.report.ReportItemType;
+import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
@@ -74,12 +76,23 @@ public class OperationReportService {
         this.employees = employees;
     }
 
+    /**
+     * 退款完成 → 標記涵蓋原付款日的快照為過時。
+     * 同步 listener：事件在退款交易內發布，這裡的 UPDATE 加入同一交易，
+     * 退款與標記原子成敗。方法級 @Transactional 覆寫類別級的 readOnly。
+     */
+    @EventListener
+    @Transactional
+    public void onRefundCompleted(RefundCompletedEvent event) {
+        snapshots.markStaleCovering(event.paidDate(), LocalDateTime.now());
+    }
+
     /** 歷史報表列表，新的在前 */
     public List<ReportSummaryResponse> listReports() {
         return snapshots.findAllByOrderByGeneratedAtDesc().stream()
                 .map(s -> new ReportSummaryResponse(s.getId(), s.getReportType(),
                         s.getPeriodStart(), s.getPeriodEnd(), s.getOrderCount(),
-                        s.getTotalAmount(), s.getDiscountAmount(), s.getGeneratedAt()))
+                        s.getTotalAmount(), s.getDiscountAmount(), s.getGeneratedAt(), s.getStaleAt()))
                 .toList();
     }
 
@@ -228,7 +241,7 @@ public class OperationReportService {
                 .toList();
         return new ReportDetailResponse(s.getId(), s.getReportType(), s.getPeriodStart(),
                 s.getPeriodEnd(), s.getOrderCount(), s.getTotalAmount(), s.getDiscountAmount(),
-                s.getGeneratedAt(), items);
+                s.getGeneratedAt(), s.getStaleAt(), items);
     }
 
     private ReportSalesItemResponse toItemResponse(int rank, SalesEntry e) {

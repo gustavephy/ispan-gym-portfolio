@@ -66,8 +66,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 
 /**
  * 購物車結帳（{@link #createOrderFromCart}）用於一般商品；課程與會員訂閱則分別透過
@@ -99,13 +102,15 @@ public class OrderService {
     private final MemberCourseQuotaRepository courseQuotas;
     private final PaymentTransactionRepository paymentTransactions;
     private final PaymentRefundRepository paymentRefunds;
+    private final ApplicationEventPublisher events;
 
     public OrderService(CartItemRepository cartItems, ProductRepository products, PrivateCourseRepository courses,
             MemberRepository users, CouponRepository coupons, MemberCouponRepository memberCoupons,
             OrderRepository orders, OrderItemRepository orderItems,
             OrderStatusHistoryRepository orderStatusHistories, SubscriptionPlanRepository subscriptionPlans,
             MemberSubscriptionRepository subscriptions, MemberCourseQuotaRepository courseQuotas,
-            PaymentTransactionRepository paymentTransactions, PaymentRefundRepository paymentRefunds) {
+            PaymentTransactionRepository paymentTransactions, PaymentRefundRepository paymentRefunds,
+            ApplicationEventPublisher events) {
         this.cartItems = cartItems;
         this.products = products;
         this.courses = courses;
@@ -120,6 +125,7 @@ public class OrderService {
         this.courseQuotas = courseQuotas;
         this.paymentTransactions = paymentTransactions;
         this.paymentRefunds = paymentRefunds;
+        this.events = events;
     }
 
     @Transactional
@@ -335,6 +341,11 @@ public class OrderService {
 
         orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(), order.getMember(),
                 "ADMIN", "REFUND_COMPLETE"));
+
+        // 同步事件、同一交易：下游（如報表標記快照過時）與退款原子成敗
+        if (order.getPaidAt() != null) {
+            events.publishEvent(new RefundCompletedEvent(order.getId(), order.getPaidAt().toLocalDate()));
+        }
     }
 
     /** 後台待處理退款清單，供人工執行退款前查看 */

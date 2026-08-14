@@ -84,6 +84,14 @@ public class ReportSnapshot {
     @Column(name = "generated_at", nullable = false, updatable = false, columnDefinition = "datetime2")
     private LocalDateTime generatedAt;
 
+    /**
+     * 生成後、涵蓋區間內發生退款的時點；null＝數字仍與訂單一致。
+     * 由 RefundCompletedEvent 的 listener 標記，提示管理者重新生成；
+     * 重算是刪舊插新，新快照自然回到 null，不需清除邏輯。
+     */
+    @Column(name = "stale_at", columnDefinition = "datetime2")
+    private LocalDateTime staleAt;
+
     @OneToMany(mappedBy = "snapshot", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("rankNo ASC")
     private List<ReportSalesItem> items = new ArrayList<>();
