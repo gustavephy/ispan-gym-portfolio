@@ -2,15 +2,17 @@ package tw.com.ispan.gym.service.coach;
 
 import java.security.SecureRandom;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
 import tw.com.ispan.gym.entity.coach.CoachBooking;
@@ -358,4 +360,53 @@ public class CoachBookingService {
                 return slotResponse;
         }
 
+        /**
+         * 查詢會員自己的所有私教課預約紀錄，依建立時間新到舊排序。
+         *
+         * <p>
+         * remainingCourseSnapshot 的來源是 SessionDeductionLog.afterRemaining，取「這筆預約
+         * 最新一筆事件」的快照，不是即時查詢 quota 目前的值：還是 PENDING 就是 BOOK 事件當下
+         * 的餘額，已 COMPLETED/CANCELLED 就是那個終結事件當下的餘額。同一包額度底下的多筆
+         * 預約，這個數字可能各自不同，跟 {@link CoachBookingResponse}（即時餘額）語意不同。
+         *
+         * <p>
+         * 稽核寫入功能上線前建立的舊預約沒有對應的 log，這種情況快照給 null，
+         * 前端請處理成「無歷史資料」，不要當成 0 堂看待。
+         *
+         * <p>
+         * 這裡用批次查詢（一次撈出這批 booking 全部的 log，再用 Map 分組）取代
+         * 「每筆 booking 各查一次」，避免 N 筆預約打 N 次資料庫的 N+1 問題。
+         */
+        @Transactional(readOnly = true)
+        public List<CoachBookingHistoryResponse> getMyBookings(Integer memberId) {
+                List<CoachBooking> myBooking = coachBookingRepository.findByMemberIdOrderByCreatedAtDesc(memberId);
+
+                List<Integer> bookingIds = myBooking.stream().map(booking -> booking.getId()).toList();
+                List<SessionDeductionLog> logs = sessionDeductionLogRepository
+                                .findByCoachBookingIdInOrderByIdDesc(bookingIds);
+
+                // key = coachBookingId，value = 該預約最新一筆 log。
+                // logs 已經照 id 新到舊排序，同一個 key 重複出現時，合併函式選 first（先遇到的、較新的那筆）。
+                Map<Integer, SessionDeductionLog> logMap = logs.stream()
+                                .collect(Collectors.toMap(
+                                                log -> log.getCoachBooking().getId(),
+                                                log -> log,
+                                                (first, second) -> first));
+
+                List<CoachBookingHistoryResponse> response = myBooking.stream()
+                                .map(booking -> {
+                                        SessionDeductionLog log = logMap.getOrDefault(booking.getId(), null);
+                                        Integer snapshot = (log == null) ? null : log.getAfterRemaining();
+                                        return new CoachBookingHistoryResponse(
+                                                        booking.getId(),
+                                                        booking.getCoachSlot().getId(),
+                                                        booking.getCoachSlot().getTrainer().getTrainerId(),
+                                                        booking.getCoachSlot().getStartAt(),
+                                                        booking.getCoachSlot().getEndAt(),
+                                                        booking.getStatus(), booking.getCheckInKey(),
+                                                        snapshot);
+                                })
+                                .toList();
+                return response;
+        }
 }
