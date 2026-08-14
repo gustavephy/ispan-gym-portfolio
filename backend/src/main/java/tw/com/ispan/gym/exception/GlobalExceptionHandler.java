@@ -60,6 +60,12 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "不支援的請求方法: " + ex.getMethod());
     }
 
+    /** async 端點（如 AI 課表生成）超過 spring.mvc.async.request-timeout；不列出會被兜底誤報 500 */
+    @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestTimeoutException.class)
+    ResponseEntity<ApiErrorResponse> asyncTimeout(org.springframework.web.context.request.async.AsyncRequestTimeoutException ex) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "SERVICE_TIMEOUT", "處理逾時，請稍後再試");
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     ResponseEntity<ApiErrorResponse> unauthenticated(AuthenticationException ex) {
         return response(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", ex.getMessage());
