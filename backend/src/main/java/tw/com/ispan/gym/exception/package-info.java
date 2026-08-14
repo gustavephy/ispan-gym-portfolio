@@ -68,7 +68,7 @@
  *   <li>{@code MethodArgumentNotValidException} — {@code @Valid} 驗證失敗，400</li>
  *   <li>{@code AuthenticationException} — service 層丟出的未認證，401</li>
  *   <li>{@code AccessDeniedException} — {@code @PreAuthorize} 擋下，403</li>
- *   <li>{@code Exception} — 兜底，500，細節只寫 log 不外洩</li>
+ *   <li>{@code Exception} — 最後防線，500，細節只寫 log 不外洩</li>
  * </ol>
  *
  * <h2>注意事項</h2>
@@ -76,10 +76,10 @@
  * <ul>
  *   <li><strong>不要在 entity 的 {@code @PrePersist} / {@code @PreUpdate} 做驗證。</strong>
  *       那裡丟出的例外會被 Hibernate 包成 {@code PersistenceException}，
- *       型別已非原始例外，一定會落到兜底變成 500。驗證請放在 DTO
+ *       型別已非原始例外，一定會落入通用例外處理變成 500。驗證請放在 DTO
  *       （{@code @NotNull} 等）或 service 層。
  *       {@code ChatMessage}、{@code InbodyRecord} 目前仍有這種寫法，待接上 controller 時處理。</li>
- *   <li><strong>引入新的框架例外時要想一下。</strong>兜底會接住所有未列舉的例外，
+ *   <li><strong>引入新的框架例外時要想一下。</strong>通用例外處理會接住所有未列舉的例外，
  *       包括那些本身就有正確狀態碼的框架例外（如 {@code AccessDeniedException} 本該是 403）。
  *       若發現某種錯誤莫名變成 500，多半是少了對應的 {@code @ExceptionHandler}。</li>
  *   <li>檔案一律以 UTF-8 存檔，否則中文訊息會變成無效位元組

@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "請求主體缺失或格式錯誤，請確認後重試");
     }
 
-    /** 缺少必要的查詢參數（如報表 /stats 沒帶 from、to）；不列出會被兜底接走誤報 500 */
+    /** 缺少必要的查詢參數（如報表 /stats 沒帶 from、to）；不列出會落入通用例外處理而誤報 500 */
     @ExceptionHandler(MissingServletRequestParameterException.class)
     ResponseEntity<ApiErrorResponse> missingParameter(MissingServletRequestParameterException ex) {
         return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
@@ -60,7 +60,7 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "不支援的請求方法: " + ex.getMethod());
     }
 
-    /** async 端點（如 AI 課表生成）超過 spring.mvc.async.request-timeout；不列出會被兜底誤報 500 */
+    /** async 端點（如 AI 課表生成）超過 spring.mvc.async.request-timeout；不列出會落入通用例外處理而誤報 500 */
     @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestTimeoutException.class)
     ResponseEntity<ApiErrorResponse> asyncTimeout(org.springframework.web.context.request.async.AsyncRequestTimeoutException ex) {
         return response(HttpStatus.SERVICE_UNAVAILABLE, "SERVICE_TIMEOUT", "處理逾時，請稍後再試");
@@ -72,7 +72,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 方法層級授權失敗（@PreAuthorize 等）。若不單獨列出會被下方的兜底接走，
+     * 方法層級授權失敗（@PreAuthorize 等）。若不單獨列出會落入下方的通用例外處理，
      * 導致本該是 403 的回應變成 500。
      * 注意：filter 層的授權失敗（如 SecurityConfig 的 /api/admin/**）不會經過這裡，
      * 需另外設定 AccessDeniedHandler 才能統一格式。
@@ -84,7 +84,7 @@ public class GlobalExceptionHandler {
 
     /**
      * 路徑打錯字、對應不到任何 API 時 Spring 會當成找不到的靜態資源丟出這個例外。
-     * 若不單獨列出會被下方的兜底接走，導致本該是 404 的回應變成 500。
+     * 若不單獨列出會落入下方的通用例外處理，導致本該是 404 的回應變成 500。
      */
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiErrorResponse> noResourceFound(NoResourceFoundException ex) {
@@ -98,7 +98,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 兜底：上面沒列舉到的例外都會走這裡，確保前端永遠收到相同的錯誤格式。
+     * 最後防線：上面沒列舉到的例外都會走這裡，確保前端永遠收到相同的錯誤格式。
      * 例外細節只寫進 log，回應固定訊息以免洩漏系統內部資訊。
      */
     @ExceptionHandler(Exception.class)

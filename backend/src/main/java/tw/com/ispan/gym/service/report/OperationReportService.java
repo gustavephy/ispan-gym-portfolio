@@ -114,7 +114,7 @@ public class OperationReportService {
     /**
      * 以真實訂單結算並寫入快照。
      * 同型別同區間重新生成＝同一交易內刪舊插新，對外永遠只看得到一份完整的；
-     * 併發觸發由 UX_report_type_period 唯一約束兜底。
+     * 併發觸發由 UX_report_type_period 唯一約束作最後防線。
      *
      * @param operatorAccountId 手動觸發的操作者帳號 id（JWT subject）；排程觸發傳 null。
      *                          身分域拆分後操作者記 Employee，以 account_id 反查。

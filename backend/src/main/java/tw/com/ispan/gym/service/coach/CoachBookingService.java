@@ -281,7 +281,7 @@ public class CoachBookingService {
 
                 // 【合併時的修改說明】原本只有一行 !coachBooking.getCheckInKey().equals(checkInKey)：
                 // 核銷功能上線「之前」建立的舊預約，checkInKey 欄位是 null，
-                // 原寫法走到這裡會 NPE、被兜底 handler 轉成 500，教練端只會看到「伺服器發生錯誤」。
+                // 原寫法走到這裡會 NPE、落入通用例外處理轉成 500，教練端只會看到「伺服器發生錯誤」。
                 // 補上 null 先擋，讓舊預約回 409 與明確訊息；新預約的行為完全不變。
                 if (coachBooking.getCheckInKey() == null) {
                         throw new BusinessRuleException("此預約建立於核銷功能上線前，沒有核銷碼，請洽管理人員手動處理");
