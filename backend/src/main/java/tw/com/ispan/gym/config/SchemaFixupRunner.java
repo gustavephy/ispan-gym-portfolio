@@ -51,6 +51,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         createFilteredUniqueIndexes();
         createChatUnreadIndexes();
         addForeignKeys();
+        addEmailVerificationPurposeColumn();
         backfillExistingRows();
         migrateOauthBindingsToAccountTable();
         rebindOauthToAccount();
@@ -686,6 +687,22 @@ public class SchemaFixupRunner implements CommandLineRunner {
                     ADD CONSTRAINT FK_plan_inbody FOREIGN KEY (inbody_record_id)
                         REFERENCES inbody_record(id)
                 """);
+    }
+
+    // === email_verification.purpose 補欄（feat/account-system）================
+    // entity 宣告 nullable=false，但 SQL Server 不允許對非空表直接加 NOT NULL
+    // 欄位——ddl-auto 的 ALTER 會失敗且只默默記 log，欄位根本不存在，
+    // 註冊／重寄在執行期直接 500。這裡以「可空」補上欄位即可：
+    // 新程式寫入時一定帶 purpose；遷移前的舊列維持 NULL，
+    // verifyEmail() 對 null 已有防呆（視為連結失效，引導重寄），不做回填。
+    // 全新資料庫由 ddl-auto 直接建出 NOT NULL 版本，本方法會因欄位已存在而略過。
+
+    private void addEmailVerificationPurposeColumn() {
+        if (!tableExists("email_verification") || columnExists("email_verification", "purpose")) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE email_verification ADD purpose varchar(20) NULL");
+        log.info("已為 email_verification 補上 purpose 欄位（可空；舊列 NULL＝連結失效）");
     }
 
     // === 既有資料回填 =========================================================
