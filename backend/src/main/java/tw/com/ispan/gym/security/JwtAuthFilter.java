@@ -33,7 +33,10 @@ import tw.com.ispan.gym.repository.member.MemberRepository;
  * 一律以 account_id 反查各身分表，不把 account_id 當成 member／employee id 用。
  *
  * <p>權限由 account.roles 展開：具 MEMBER 身分且會員狀態 ACTIVE → ROLE_MEMBER；
- * 具 EMPLOYEE 身分且員工狀態 ACTIVE → ROLE_ADMIN／ROLE_TRAINER（依 employee.role）。
+ * 具 EMPLOYEE 身分且員工狀態 ACTIVE → ROLE_EMPLOYEE（基底：是員工）＋
+ * ROLE_ADMIN／ROLE_TRAINER（職位，依 employee.role）——身分與職位分兩層，
+ * 「員工皆可」的端點寫 hasRole('EMPLOYEE')，收緊到職位才寫 ADMIN/TRAINER，
+ * 新增職位時不必回頭修改任何 hasRole('EMPLOYEE') 端點。
  * 一個帳號可同時持有兩種身分。
  */
 @Component
@@ -113,6 +116,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             Employee employee = employees.findByAccountId(account.getId()).orElse(null);
             if (employee != null && employee.getDeletedAt() == null
                     && employee.getStatus() == EmployeeStatus.ACTIVE) {
+                // 基底角色＋職位角色兩層：見類別 javadoc
+                authorities.add(new SimpleGrantedAuthority("ROLE_EMPLOYEE"));
                 authorities.add(new SimpleGrantedAuthority("ROLE_" + employee.getRole().name()));
             }
         }

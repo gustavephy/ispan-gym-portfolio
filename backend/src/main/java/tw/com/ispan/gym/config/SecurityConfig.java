@@ -65,13 +65,16 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/members/register").permitAll()
                         // Email 驗證連結由信件點入，此時尚未登入（AccountVerificationController）
                         .requestMatchers(HttpMethod.GET, "/api/accounts/verify-email").permitAll()
-                        // 商品瀏覽開放未登入者
+                        // 商品/課程分類瀏覽開放未登入者（前台選單用）
                         .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/course-categories").permitAll()
                         // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）
                         .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // 員工基底角色由 JwtAuthFilter 對所有 ACTIVE 員工加發（職位另有 ROLE_ADMIN/ROLE_TRAINER）
+                        .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")
                         .anyRequest().authenticated())
                 // filter 層的 401／403 不會經過 GlobalExceptionHandler，
                 // 這裡改用自訂處理器輸出相同的 ApiErrorResponse 格式，不導向登入頁
