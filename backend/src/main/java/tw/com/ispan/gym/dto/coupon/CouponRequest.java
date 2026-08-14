@@ -22,7 +22,8 @@ public class CouponRequest {
     @NotBlank(message = "優惠券名稱不得為空")
     private String name;
 
-    @NotBlank(message = "優惠券類型不得為空")
+    // @NotBlank 只適用字串，掛在 enum 上會讓驗證器初始化直接炸 500（HV000030）
+    @NotNull(message = "優惠券類型不得為空")
     private CouponType type;
 
     @NotNull(message = "折抵值不得為空")
