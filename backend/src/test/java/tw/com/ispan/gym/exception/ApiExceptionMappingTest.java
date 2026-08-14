@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
+import tw.com.ispan.gym.exception.product.ProductNotFoundException;
+import tw.com.ispan.gym.exception.product.ProductUnavailableException;
+
 /**
  * 固定各例外對應的狀態碼與錯誤代碼。
  *

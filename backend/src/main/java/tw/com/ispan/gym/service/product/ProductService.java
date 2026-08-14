@@ -14,8 +14,8 @@ import tw.com.ispan.gym.dto.product.ProductResponse;
 import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.entity.product.ProductCategory;
 import tw.com.ispan.gym.enums.product.ProductStatus;
-import tw.com.ispan.gym.exception.ProductNotFoundException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.exception.product.ProductNotFoundException;
 import tw.com.ispan.gym.repository.product.ProductCategoryRepository;
 import tw.com.ispan.gym.repository.product.ProductRepository;
 
