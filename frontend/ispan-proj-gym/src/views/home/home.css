@@ -6,7 +6,9 @@ main { padding-top: 0; }
 
 .hero {
   min-height: calc(100vh - 68px);
-  background: url("@/assets/luxury_gym_hero.png") no-repeat center center;
+  /* 原設計為 url("@/assets/luxury_gym_hero.png")，圖檔尚未進版控（src/assets 不存在），
+     先以同色系漸層墊底，資產補上後再換回背景圖 */
+  background: linear-gradient(135deg, #3c302b 0%, #201a17 100%) no-repeat center center;
   background-size: cover;
   display: flex;
   align-items: center;

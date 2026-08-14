@@ -7,7 +7,7 @@
  *   3. Response 攔截器：統一處理 401（Token 過期）→ 自動跳登入頁
  *
  * 使用方式：
- *   import api from '@/api/index.js'
+ *   import api from '@/api/axios.instance.js'
  *   const products = await api.get('/api/products')
  */
 import axios from 'axios'

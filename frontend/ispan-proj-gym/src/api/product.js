@@ -1,4 +1,4 @@
-import api from './axios-instance.js'
+import api from './axios.instance.js'
 
 export const getProductCategories = ()=>api.get('/api/product-categories')
 export const getCourseCategories = ()=>api.get('/api/course-categories')
