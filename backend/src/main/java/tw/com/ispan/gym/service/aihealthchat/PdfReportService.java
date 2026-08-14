@@ -12,7 +12,6 @@ import org.openpdf.text.Image;
 import org.openpdf.text.PageSize;
 import org.openpdf.text.Paragraph;
 import org.openpdf.text.pdf.BaseFont;
-import org.openpdf.text.pdf.PdfContentByte;
 import org.openpdf.text.pdf.PdfPCell;
 import org.openpdf.text.pdf.PdfPTable;
 import org.openpdf.text.pdf.PdfTemplate;
@@ -32,7 +31,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
 
@@ -45,10 +43,17 @@ import org.springframework.stereotype.Service;
  * 繪製成 PDF，以 byte[] 回傳，不落地存檔（pdf_url 欄位保留給未來如需雲端
  * 儲存時使用，目前一律串流回傳）。
  *
- * ★ 中文顯示：OpenPDF 3.x 套件名稱已改為 org.openpdf.text.*；CJK 對照表
- *   （UniCNS-UCS2-H 等）已內建於 openpdf 核心 jar，使用內建標準字型
- *   "MSung-Light"（繁體宋體）＋ BaseFont.NOT_EMBEDDED 即可正確顯示中文，
- *   不需額外嵌入字型檔，PDF 檢視器會以系統中文字型代換顯示。
+ * ★ 中文顯示：內嵌 resources/fonts/ 下的源樣明體 GenYoMin（思源宋體/Noto Serif
+ *   的 TrueType 衍生版，OFL 授權可自由內嵌散布），OpenPDF 只子集化實際用到的
+ *   字，每份 PDF 約增加數百 KB，換取任何裝置顯示一致。兩個先前的做法都不可行：
+ *   （1）內建標準字型 MSung-Light＋NOT_EMBEDDED——PDF 只帶字型名稱不帶字形，
+ *       瀏覽器內建檢視器等缺少可代換字型的環境中文會整段無法顯示；
+ *   （2）內嵌 Noto Serif TC 官方 OTF——Noto CJK 全系列是 CID-keyed CFF 格式，
+ *       OpenPDF 的 CFF 子集化有已知 bug（LibrePDF/OpenPDF#71），會產生字形
+ *       對應錯亂的 PDF，所以必須用 TrueType（glyf）格式的字型。
+ *   .ttc 路徑後的「,0」是 collection 索引：0=GenYoMinTW（台灣字形）、1=JP。
+ *   字型檔於建構子載入一次（解析 13MB 檔案有成本），BaseFont 本身無狀態，
+ *   跨執行緒共用安全（子集使用字的追蹤在各 PdfWriter 上）。
  */
 @Service
 public class PdfReportService {
@@ -67,20 +72,34 @@ public class PdfReportService {
     private final AiHealthPlanRepository plans;
     private final InbodyRecordRepository inbodyRecords;
     private final ObjectMapper objectMapper;
+    private final BaseFont regularFont;
+    private final BaseFont boldFont;
 
     public PdfReportService(AiHealthPlanRepository plans, InbodyRecordRepository inbodyRecords,
             ObjectMapper objectMapper) {
         this.plans = plans;
         this.inbodyRecords = inbodyRecords;
         this.objectMapper = objectMapper;
+        this.regularFont = loadEmbeddedFont("fonts/GenYoMin-R.ttc,0");
+        this.boldFont = loadEmbeddedFont("fonts/GenYoMin-B.ttc,0");
+    }
+
+    /** 字型檔缺失屬部署錯誤，啟動時直接失敗比第一個會員下載 PDF 才 500 好。 */
+    private static BaseFont loadEmbeddedFont(String classpath) {
+        try {
+            return BaseFont.createFont(classpath, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
+        } catch (Exception ex) {
+            throw new IllegalStateException("載入內嵌中文字型失敗：" + classpath, ex);
+        }
     }
 
     public byte[] generatePlanPdf(Integer memberId, Integer planId) {
         AiHealthPlan plan = ownedPlan(memberId, planId);
         JsonNode content = parsePlanContent(plan.getPlanContent());
 
-        List<InbodyRecord> history = inbodyRecords.findByMemberIdAndDeletedAtIsNullOrderByUpdateDateDesc(memberId);
-        Collections.reverse(history); // repository 回傳新到舊，趨勢圖要照時間先後畫
+        // repository 回傳新到舊，趨勢圖要照時間先後畫；reversed() 回傳視圖不改動原 list
+        List<InbodyRecord> history = inbodyRecords.findByMemberIdAndDeletedAtIsNullOrderByUpdateDateDesc(memberId)
+                .reversed();
 
         try {
             return render(plan, content, history);
@@ -112,12 +131,13 @@ public class PdfReportService {
     }
 
     private byte[] render(AiHealthPlan plan, JsonNode content, List<InbodyRecord> history) throws Exception {
-        BaseFont baseFont = BaseFont.createFont("MSung-Light", "UniCNS-UCS2-H", BaseFont.NOT_EMBEDDED);
-        Font titleFont = new Font(baseFont, 18, Font.BOLD);
-        Font headerFont = new Font(baseFont, 13, Font.BOLD);
-        Font bodyFont = new Font(baseFont, 10, Font.NORMAL);
-        Font mutedFont = new Font(baseFont, 9, Font.ITALIC, Color.GRAY);
-        Font tableHeaderFont = new Font(baseFont, 10, Font.BOLD, Color.WHITE);
+        // 粗體處用 Bold weight 的 BaseFont（style 給 NORMAL），不用 Font.BOLD——
+        // 後者對內嵌字型是描邊模擬粗體，筆畫會糊掉
+        Font titleFont = new Font(boldFont, 18, Font.NORMAL);
+        Font headerFont = new Font(boldFont, 13, Font.NORMAL);
+        Font bodyFont = new Font(regularFont, 10, Font.NORMAL);
+        Font mutedFont = new Font(regularFont, 9, Font.ITALIC, Color.GRAY);
+        Font tableHeaderFont = new Font(boldFont, 10, Font.NORMAL, Color.WHITE);
 
         Document document = new Document(PageSize.A4, 40, 40, 50, 50);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -142,12 +162,22 @@ public class PdfReportService {
         addDaysSection(document, content.at("/days"), headerFont, bodyFont, tableHeaderFont);
         addDietTipsSection(document, content.at("/dietTips"), headerFont, bodyFont);
 
+        List<Image> charts = buildTrendCharts(writer, regularFont, history);
+        if (!charts.isEmpty()) {
+            // 剩餘空間放不下「標題＋第一張圖」就先換頁，避免標題孤懸頁尾、
+            // 圖整張被推到下一頁而中間出現一大段空白
+            float needed = 20f + CHART_ROW_HEIGHT + 16f;
+            if (writer.getVerticalPosition(true) - document.bottom() < needed) {
+                document.newPage();
+            }
+        }
         document.add(new Paragraph("InBody 歷史趨勢", headerFont));
-        Image chart = buildTrendChart(writer, baseFont, history);
-        if (chart != null) {
-            document.add(chart);
-        } else {
+        if (charts.isEmpty()) {
             document.add(new Paragraph("量測紀錄不足（至少需 2 筆才能繪製趨勢圖）", mutedFont));
+        } else {
+            for (Image chart : charts) {
+                document.add(chart);
+            }
         }
 
         document.close();
@@ -230,44 +260,35 @@ public class PdfReportService {
     }
 
     // === 趨勢圖 ===============================================================
-    // 三項量測（體重／體脂率／骨骼肌重）各自獨立座標軸畫成一張直向堆疊的折線圖，
-    // 因為單位不同（kg / % / kg）沒辦法共用一個 y 軸；只有至少兩筆非 null 資料
-    // 的量測項目才會畫，避免只有一個點時線段退化成一個點看起來像畫錯。
+    // 三項量測（體重／體脂率／骨骼肌重）各畫成一張獨立的折線圖，因為單位不同
+    // （kg / % / kg）沒辦法共用一個 y 軸；只有至少兩筆非 null 資料的量測項目才會
+    // 畫，避免只有一個點時線段退化成一個點看起來像畫錯。每張圖是獨立的 Image
+    // 各自帶 x 軸日期，頁面剩餘空間放得下幾張就排幾張，放不下的才換頁，
+    // 不會因為合併成一張大圖整塊被推到下一頁而留下大段空白。
 
     private static final float CHART_WIDTH = 480f;
     private static final float CHART_ROW_HEIGHT = 130f;
-    private static final float CHART_ROW_GAP = 24f;
 
-    private Image buildTrendChart(PdfWriter writer, BaseFont baseFont, List<InbodyRecord> history) throws Exception {
-        List<Series> usable = new ArrayList<>();
-        for (Series series : TREND_SERIES) {
-            long count = history.stream().map(series.extractor()).filter(v -> v != null).count();
-            if (count >= 2) {
-                usable.add(series);
-            }
-        }
-        if (usable.isEmpty()) {
-            return null;
-        }
-
-        float totalHeight = usable.size() * CHART_ROW_HEIGHT + (usable.size() - 1) * CHART_ROW_GAP;
-        PdfTemplate template = writer.getDirectContent().createTemplate(CHART_WIDTH, totalHeight);
-
+    private List<Image> buildTrendCharts(PdfWriter writer, BaseFont baseFont, List<InbodyRecord> history)
+            throws Exception {
+        List<Image> charts = new ArrayList<>();
         List<LocalDate> dates = history.stream().map(InbodyRecord::getUpdateDate).toList();
-        for (int i = 0; i < usable.size(); i++) {
-            Series series = usable.get(i);
+        for (Series series : TREND_SERIES) {
             List<BigDecimal> values = history.stream().map(series.extractor()).toList();
-            // template 原點在左下角；由上往下排列，所以第一個系列要畫在最上面那一格
-            float rowY = totalHeight - (i + 1) * CHART_ROW_HEIGHT - i * CHART_ROW_GAP;
-            boolean showXAxis = (i == usable.size() - 1);
-            drawSeriesChart(template, baseFont, 0f, rowY, CHART_WIDTH, CHART_ROW_HEIGHT,
-                    dates, values, series.label(), series.color(), showXAxis);
-        }
+            if (values.stream().filter(v -> v != null).count() < 2) {
+                continue;
+            }
+            PdfTemplate template = writer.getDirectContent().createTemplate(CHART_WIDTH, CHART_ROW_HEIGHT);
+            drawSeriesChart(template, baseFont, 0f, 0f, CHART_WIDTH, CHART_ROW_HEIGHT,
+                    dates, values, series.label(), series.color(), true);
 
-        Image image = Image.getInstance(template);
-        image.setAlignment(Element.ALIGN_CENTER);
-        image.setSpacingBefore(6);
-        return image;
+            Image image = Image.getInstance(template);
+            image.setAlignment(Element.ALIGN_CENTER);
+            image.setSpacingBefore(6);
+            image.setSpacingAfter(12);
+            charts.add(image);
+        }
+        return charts;
     }
 
     private void drawSeriesChart(PdfTemplate cb, BaseFont baseFont, float x, float y, float w, float h,
@@ -403,10 +424,14 @@ public class PdfReportService {
 
     private void drawOneXLabel(PdfTemplate cb, BaseFont baseFont, float plotX, float plotY, float dx,
             List<LocalDate> dates, int i) {
-        float px = plotX + dx * i;
+        String text = dates.get(i).format(DATE_FMT);
+        // 標籤以資料點為中心置中，但頭尾資料點貼著繪圖區邊緣，置中會超出
+        // template 畫布（超出部分直接被裁掉），所以把中心點夾回可完整顯示的範圍
+        float half = baseFont.getWidthPoint(text, 7.5f) / 2;
+        float px = Math.min(Math.max(plotX + dx * i, half), CHART_WIDTH - half);
         cb.beginText();
         cb.setFontAndSize(baseFont, 7.5f);
-        cb.showTextAligned(Element.ALIGN_CENTER, dates.get(i).format(DATE_FMT), px, plotY - 12f, 0);
+        cb.showTextAligned(Element.ALIGN_CENTER, text, px, plotY - 12f, 0);
         cb.endText();
     }
 }
