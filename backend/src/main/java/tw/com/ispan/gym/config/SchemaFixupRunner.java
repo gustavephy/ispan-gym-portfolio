@@ -69,11 +69,33 @@ public class SchemaFixupRunner implements CommandLineRunner {
         // 先加寬欄位，後面才塞得下 PENDING_APPROVAL（16 字元，原欄位僅 varchar(10)）
         widenVarchar("employee", "status", 20);
 
-        // 值域改名的既有資料搬移；必須排在加寬之後，否則 UPDATE 本身就先被截斷擋下
+        // Hibernate 在 ddl-auto=update 建表當時，會依 @Enumerated(STRING) 欄位「當下」的
+        // enum 值域自動產生一個雜湊命名的 CHECK 約束——跟 orders.status 當初遇到的問題
+        // 一樣（見 widenOrderStatusCheck()）。enum 改了新值域，ddl-auto 不會回頭更新這個
+        // 約束，下面的搬移 UPDATE 寫入新值就會直接被舊約束擋下，必須先拆掉。
+        //
+        // 拆舊約束跟建新約束中間、資料還沒搬完的空窗期，故意不讓 status/role 完全沒有
+        // 約束就去新增涵蓋新值域的版本——SQL Server 的 ADD CONSTRAINT CHECK 預設會拿
+        // 新約束驗證資料表裡既有的資料，資料還是舊值時一定會被新約束本身擋下（ALTER TABLE
+        // 那個當下就失敗）。正確順序是：拆舊約束 → 搬資料 → 資料已經是新值域了才建新約束。
+        dropOtherCheckConstraintsOnColumn("employee", "status", "CK_employee_status");
+        dropOtherCheckConstraintsOnColumn("employee", "role", "CK_employee_role");
+
+        // 值域改名的既有資料搬移；必須排在加寬、拆約束之後，否則會被截斷或舊約束擋下
         backfill("employee.status（PENDING 併入 PENDING_APPROVAL）",
                 "UPDATE employee SET status = 'PENDING_APPROVAL' WHERE status = 'PENDING'");
         backfill("employee.role（TRAINER 併入 EMPLOYEE）",
                 "UPDATE employee SET role = 'EMPLOYEE' WHERE role = 'TRAINER'");
+
+        // 資料已經是新值域，這裡才建可以順利通過驗證的新 CHECK 約束
+        createCheckIfAbsent("employee", "CK_employee_status", """
+                ALTER TABLE employee ADD CONSTRAINT CK_employee_status CHECK (
+                    status IN ('PENDING_APPROVAL','ACTIVE','REJECTED','INACTIVE'))
+                """);
+        createCheckIfAbsent("employee", "CK_employee_role", """
+                ALTER TABLE employee ADD CONSTRAINT CK_employee_role CHECK (
+                    role IN ('EMPLOYEE','ADMIN'))
+                """);
 
         // 審核欄位改名：approve 與 reject 共用同一組欄位，不再各自一套
         renameColumnIfExists("employee", "approved_by", "reviewed_by");
