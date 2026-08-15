@@ -68,7 +68,8 @@ public class GeminiClient {
         JsonNode root = parseJson(response.getBody());
         JsonNode textNode = root.at("/candidates/0/content/parts/0/text");
         if (textNode.isMissingNode()) {
-            throw new IllegalStateException("Gemini 回應缺少預期欄位 candidates[0].content.parts[0].text：" + response.getBody());
+            throw new IllegalStateException(
+                    "Gemini 回應缺少預期欄位 candidates[0].content.parts[0].text：" + response.getBody());
         }
         return textNode.asText();
     }

@@ -1,6 +1,7 @@
 package tw.com.ispan.gym.repository.coach;
 
 import java.util.Optional;
+import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -16,4 +17,6 @@ public interface GroupClassBookingRepository extends JpaRepository<GroupClassBoo
      */
     Optional<GroupClassBooking> findBySessionIdAndMemberIdAndStatus(Integer sessionId, Integer memberId,
             GroupClassBookingStatus status);
+
+    List<GroupClassBooking> findBySessionIdAndStatus(Integer sessionId, GroupClassBookingStatus status);
 }
