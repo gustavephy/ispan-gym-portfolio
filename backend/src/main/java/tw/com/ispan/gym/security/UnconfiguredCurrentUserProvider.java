@@ -13,27 +13,32 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Component;
 import tw.com.ispan.gym.enums.account.OAuthProvider;
 import tw.com.ispan.gym.entity.account.Account;
+import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.member.Member;
+import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.repository.account.AccountRepository;
+import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.account.OauthAccountRepository;
 
 /**
  * 登入身分一律先解析到 {@link Account}（email 或 OAuth 綁定皆屬帳號域），
- * 需要會員語意時再以 account_id 反查 member。
+ * 需要會員／員工語意時再以 account_id 反查對應身分表。
  */
 @Component
 @Profile("!dev")
 public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
     private final AccountRepository accounts;
     private final MemberRepository members;
+    private final EmployeeRepository employees;
     private final OauthAccountRepository oauthAccounts;
 
     public UnconfiguredCurrentUserProvider(AccountRepository accounts, MemberRepository members,
-            OauthAccountRepository oauthAccounts) {
+            EmployeeRepository employees, OauthAccountRepository oauthAccounts) {
         this.accounts = accounts;
         this.members = members;
+        this.employees = employees;
         this.oauthAccounts = oauthAccounts;
     }
 
@@ -54,6 +59,18 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
             throw new DisabledException("此會員帳號目前無法使用");
         }
         return member.getId();
+    }
+
+    /** 員工 id：employee_id 與 account_id 已脫鉤，員工域模組一律用這個 */
+    @Override
+    public Integer requireCurrentEmployeeId() {
+        Account account = requireAccount(requireAuthentication());
+        Employee employee = employees.findByAccountId(account.getId())
+                .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("找不到登入資訊對應的員工帳號"));
+        if (employee.getDeletedAt() != null || employee.getStatus() != EmployeeStatus.ACTIVE) {
+            throw new DisabledException("此員工帳號目前無法使用");
+        }
+        return employee.getId();
     }
 
     private Authentication requireAuthentication() {

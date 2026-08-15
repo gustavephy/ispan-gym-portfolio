@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.enums.employee;
 
-/** 員工角色：TRAINER 另有 trainer 明細表存教練專業資料 */
+/** 員工權限層級；是否為教練由 trainer 表是否存在該員工的資料列決定，與此欄位無關 */
 public enum EmployeeRole {
-	ADMIN, TRAINER
+	EMPLOYEE, ADMIN
 }

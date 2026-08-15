@@ -27,8 +27,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.jayway.jsonpath.JsonPath;
 
 import tw.com.ispan.gym.entity.account.Account;
+import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.account.AccountType;
+import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.exception.GlobalExceptionHandler;
 import tw.com.ispan.gym.repository.account.AccountRepository;
@@ -112,6 +114,12 @@ class AuthControllerLoginTest {
         tw.com.ispan.gym.repository.account.OauthAccountRepository oauthAccountRepository() {
             return Mockito.mock(tw.com.ispan.gym.repository.account.OauthAccountRepository.class);
         }
+
+        @Bean
+        @Primary
+        tw.com.ispan.gym.repository.trainer.TrainerRepository trainerRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.trainer.TrainerRepository.class);
+        }
     }
 
     /** 受保護端點探針，驗證登入拿到的 token 真的能用 */
@@ -126,6 +134,7 @@ class AuthControllerLoginTest {
     @Autowired MockMvc mockMvc;
     @Autowired AccountRepository accounts;
     @Autowired MemberRepository members;
+    @Autowired EmployeeRepository employees;
 
     private Account account() {
         Account account = new Account();
@@ -136,14 +145,41 @@ class AuthControllerLoginTest {
         return account;
     }
 
+    private Account employeeAccount() {
+        Account account = new Account();
+        account.setId(9);
+        account.setEmail("employee@example.com");
+        account.setPasswordHash(PASSWORD_HASH);
+        account.getRoles().add(AccountType.EMPLOYEE);
+        return account;
+    }
+
+    private Member activeMember(Account account) {
+        Member member = new Member();
+        member.setAccount(account);
+        member.setId(70);
+        member.setStatus(UserStatus.ACTIVE);
+        return member;
+    }
+
+    private Employee employee(Account account, EmployeeStatus status) {
+        Employee employee = new Employee();
+        employee.setAccount(account);
+        employee.setId(90);
+        employee.setStatus(status);
+        return employee;
+    }
+
     private String loginBody(String email, String password) {
         return "{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}";
     }
 
     @Test
     void 正確帳密登入成功並回傳token與帳號資訊() throws Exception {
+        Account account = account();
         Mockito.when(accounts.findByEmailIgnoreCase("member@example.com"))
-                .thenReturn(Optional.of(account()));
+                .thenReturn(Optional.of(account));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -176,6 +212,63 @@ class AuthControllerLoginTest {
 
         mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void 員工帳號PENDING_APPROVAL時回401且訊息提示尚待審核() throws Exception {
+        Account account = employeeAccount();
+        Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com")).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(9))
+                .thenReturn(Optional.of(employee(account, EmployeeStatus.PENDING_APPROVAL)));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("employee@example.com", RAW_PASSWORD)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("員工帳號尚待審核，請等候通知。"));
+    }
+
+    @Test
+    void 員工帳號REJECTED時回401且訊息提示可重新申請() throws Exception {
+        Account account = employeeAccount();
+        Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com")).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(9))
+                .thenReturn(Optional.of(employee(account, EmployeeStatus.REJECTED)));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("employee@example.com", RAW_PASSWORD)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("員工申請未通過，如需重新申請請使用重新申請功能。"));
+    }
+
+    @Test
+    void ACTIVE員工正常登入() throws Exception {
+        Account account = employeeAccount();
+        Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com")).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(9))
+                .thenReturn(Optional.of(employee(account, EmployeeStatus.ACTIVE)));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("employee@example.com", RAW_PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    @Test
+    void 同帳號會員ACTIVE員工尚待審核時仍可用會員身分登入() throws Exception {
+        Account account = account(); // MEMBER role, id=7
+        Mockito.when(accounts.findByEmailIgnoreCase("member@example.com")).thenReturn(Optional.of(account));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
+        Mockito.when(employees.findByAccountId(7))
+                .thenReturn(Optional.of(employee(account, EmployeeStatus.PENDING_APPROVAL)));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("member@example.com", RAW_PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty());
     }
 
     @Test

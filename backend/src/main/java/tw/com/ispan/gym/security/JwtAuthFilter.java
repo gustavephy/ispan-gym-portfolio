@@ -19,11 +19,13 @@ import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.account.AccountType;
+import tw.com.ispan.gym.enums.employee.EmployeeRole;
 import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * 解析每個請求的 Authorization: Bearer …，驗簽通過就寫入 SecurityContext。
@@ -33,8 +35,10 @@ import tw.com.ispan.gym.repository.member.MemberRepository;
  * 一律以 account_id 反查各身分表，不把 account_id 當成 member／employee id 用。
  *
  * <p>權限由 account.roles 展開：具 MEMBER 身分且會員狀態 ACTIVE → ROLE_MEMBER；
- * 具 EMPLOYEE 身分且員工狀態 ACTIVE → ROLE_ADMIN／ROLE_TRAINER（依 employee.role）。
- * 一個帳號可同時持有兩種身分。
+ * 具 EMPLOYEE 身分且員工狀態 ACTIVE → ROLE_EMPLOYEE，另外 employee.role == ADMIN
+ * 再加 ROLE_ADMIN、有對應且未刪除的 Trainer 資料列再加 ROLE_TRAINER——
+ * 教練身分只看 Trainer.deletedAt，不看 Trainer.status（那只影響能否被預約，
+ * 不影響教練身分本身）。三種權限彼此不互斥，一個帳號可以同時持有全部。
  */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -46,13 +50,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final AccountRepository accounts;
     private final MemberRepository members;
     private final EmployeeRepository employees;
+    private final TrainerRepository trainers;
 
     public JwtAuthFilter(JwtUtil jwtUtil, AccountRepository accounts, MemberRepository members,
-            EmployeeRepository employees) {
+            EmployeeRepository employees, TrainerRepository trainers) {
         this.jwtUtil = jwtUtil;
         this.accounts = accounts;
         this.members = members;
         this.employees = employees;
+        this.trainers = trainers;
     }
 
     @Override
@@ -113,7 +119,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             Employee employee = employees.findByAccountId(account.getId()).orElse(null);
             if (employee != null && employee.getDeletedAt() == null
                     && employee.getStatus() == EmployeeStatus.ACTIVE) {
-                authorities.add(new SimpleGrantedAuthority("ROLE_" + employee.getRole().name()));
+                authorities.add(new SimpleGrantedAuthority("ROLE_EMPLOYEE"));
+                if (employee.getRole() == EmployeeRole.ADMIN) {
+                    authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+                }
+                trainers.findByEmployeeId(employee.getId())
+                        .filter(t -> t.getDeletedAt() == null)
+                        .ifPresent(t -> authorities.add(new SimpleGrantedAuthority("ROLE_TRAINER")));
             }
         }
         return authorities;

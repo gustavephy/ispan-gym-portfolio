@@ -33,8 +33,9 @@ import org.hibernate.annotations.Nationalized;
  *
  * <p>employee_id 是獨立流水號，與 account_id 脫鉤（2026-08 定案，捨棄 @MapsId 共享主鍵）；
  * 以 account_id 唯一 FK 連回 {@link Account}。
- * 教練＝role=TRAINER 的員工，專業資料另存 {@link Trainer}。
- * 新帳號 status=PENDING，由管理者核准（approvedBy／approvedAt）後轉 ACTIVE。
+ * 是否為教練由 {@link Trainer} 是否存在該員工的資料列決定，與 role 無關。
+ * 新帳號 status=PENDING_APPROVAL，由任一 ACTIVE 員工核准／拒絕（reviewedBy／reviewedAt／reviewNote）
+ * 後轉 ACTIVE／REJECTED。
  */
 @Entity
 @Table(name = "employee", uniqueConstraints = @UniqueConstraint(name = "UX_employee_account_id", columnNames = "account_id"))
@@ -67,19 +68,24 @@ public class Employee {
 	private EmployeeRole role;
 
 	@Enumerated(EnumType.STRING)
-	@Column(name = "status", length = 10, nullable = false)
-	private EmployeeStatus status = EmployeeStatus.PENDING;
+	@Column(name = "status", length = 20, nullable = false)
+	private EmployeeStatus status = EmployeeStatus.PENDING_APPROVAL;
 
 	@Column(name = "hire_date", nullable = false)
 	private LocalDate hireDate;
 
-	/** 核准此帳號的管理者；始祖帳號無人核准，維持 NULL */
+	/** 核准或拒絕此申請的員工；始祖帳號無人核准，維持 NULL */
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "approved_by", foreignKey = @ForeignKey(name = "FK_employee_approved_by"))
-	private Employee approvedBy;
+	@JoinColumn(name = "reviewed_by", foreignKey = @ForeignKey(name = "FK_employee_reviewed_by"))
+	private Employee reviewedBy;
 
-	@Column(name = "approved_at")
-	private LocalDateTime approvedAt;
+	@Column(name = "reviewed_at")
+	private LocalDateTime reviewedAt;
+
+	/** 核准／拒絕備註；拒絕時必填，核准時選填 */
+	@Nationalized
+	@Column(name = "review_note", length = 500)
+	private String reviewNote;
 
 	@Column(name = "deleted_at")
 	private LocalDateTime deletedAt;

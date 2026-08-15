@@ -3,6 +3,7 @@ package tw.com.ispan.gym.exception;
 import java.time.LocalDateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -66,6 +67,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiErrorResponse> noResourceFound(NoResourceFoundException ex) {
         return response(HttpStatus.NOT_FOUND, "NOT_FOUND", "找不到此 API 路徑");
+    }
+
+    /**
+     * 資料庫層級的 constraint 違反（例如兩個並發請求用同一個全新 email 註冊，
+     * 一個繞過程式碼的存在性檢查、直接撞上唯一索引）。不單獨列出會被下方的兜底接走，
+     * 導致本該是使用者可理解的 409 變成看起來像系統壞掉的 500。
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<ApiErrorResponse> dataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.warn("資料庫限制衝突", ex);
+        return response(HttpStatus.CONFLICT, "CONFLICT", "此資料已存在或違反資料庫限制，請確認後重試");
     }
 
     /**

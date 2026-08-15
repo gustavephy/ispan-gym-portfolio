@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,13 +24,16 @@ import org.mockito.Mockito;
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.member.Member;
+import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.enums.account.AccountType;
 import tw.com.ispan.gym.enums.employee.EmployeeRole;
 import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
+import tw.com.ispan.gym.enums.trainer.TrainerStatus;
 import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * 驗證 JwtUtil / JwtAuthFilter / SecurityConfig 三者串起來的行為。
@@ -93,6 +97,12 @@ class JwtSecuritySmokeTest {
         tw.com.ispan.gym.repository.account.OauthAccountRepository oauthAccountRepository() {
             return Mockito.mock(tw.com.ispan.gym.repository.account.OauthAccountRepository.class);
         }
+
+        @Bean
+        @Primary
+        TrainerRepository trainerRepository() {
+            return Mockito.mock(TrainerRepository.class);
+        }
     }
 
     @RestController
@@ -111,6 +121,31 @@ class JwtSecuritySmokeTest {
         String verifyEmail() {
             return "ok";
         }
+
+        @PreAuthorize("hasRole('EMPLOYEE')")
+        @GetMapping("/api/probe/employee")
+        String employeeProbe() {
+            return "ok";
+        }
+
+        @PreAuthorize("hasRole('ADMIN')")
+        @GetMapping("/api/probe/admin")
+        String adminProbe() {
+            return "ok";
+        }
+
+        @PreAuthorize("hasRole('TRAINER')")
+        @GetMapping("/api/probe/trainer")
+        String trainerProbe() {
+            return "ok";
+        }
+
+        // 不加方法層級標註——這條要驗證的是 SecurityConfig 自己的 URL matcher
+        // （/api/employees/reviews/** → hasRole(EMPLOYEE)），比照 /api/orders 的寫法
+        @GetMapping("/api/employees/reviews/probe")
+        String employeeReviewProbe() {
+            return "ok";
+        }
     }
 
     @Autowired MockMvc mockMvc;
@@ -118,6 +153,7 @@ class JwtSecuritySmokeTest {
     @Autowired AccountRepository accounts;
     @Autowired MemberRepository members;
     @Autowired EmployeeRepository employees;
+    @Autowired TrainerRepository trainers;
 
     private Account memberAccount() {
         Account account = new Account();
@@ -134,6 +170,34 @@ class JwtSecuritySmokeTest {
         member.setId(70); // member_id 與 account_id 已脫鉤，刻意不同號
         member.setStatus(UserStatus.ACTIVE);
         return member;
+    }
+
+    private Account employeeAccount() {
+        Account account = new Account();
+        account.setId(8);
+        account.setEmail("employee@example.com");
+        account.setPasswordHash("{noop}irrelevant");
+        account.getRoles().add(AccountType.EMPLOYEE);
+        return account;
+    }
+
+    private Employee activeEmployee(Account account, EmployeeRole role) {
+        Employee employee = new Employee();
+        employee.setAccount(account);
+        employee.setId(80); // employee_id 與 account_id 已脫鉤，刻意不同號
+        employee.setRole(role);
+        employee.setStatus(EmployeeStatus.ACTIVE);
+        return employee;
+    }
+
+    private Trainer trainer(TrainerStatus status, boolean deleted) {
+        Trainer trainer = new Trainer();
+        trainer.setTrainerId(800);
+        trainer.setStatus(status);
+        if (deleted) {
+            trainer.setDeletedAt(java.time.LocalDateTime.now());
+        }
+        return trainer;
     }
 
     @Test
@@ -181,6 +245,114 @@ class JwtSecuritySmokeTest {
 
         mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + jwtUtil.generateToken(account)))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void 純EMPLOYEE角色能進employee探測點但進不去admin() throws Exception {
+        Account account = employeeAccount();
+        Employee employee = activeEmployee(account, EmployeeRole.EMPLOYEE);
+        Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.empty());
+
+        String token = jwtUtil.generateToken(account);
+        mockMvc.perform(get("/api/probe/employee").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/probe/admin").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void ADMIN角色兩個探測點都進得去() throws Exception {
+        Account account = employeeAccount();
+        Employee employee = activeEmployee(account, EmployeeRole.ADMIN);
+        Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.empty());
+
+        String token = jwtUtil.generateToken(account);
+        mockMvc.perform(get("/api/probe/employee").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/probe/admin").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void ADMIN且同時有教練資料時三種權限並存() throws Exception {
+        Account account = employeeAccount();
+        Employee employee = activeEmployee(account, EmployeeRole.ADMIN);
+        Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.of(trainer(TrainerStatus.ACTIVE, false)));
+
+        String token = jwtUtil.generateToken(account);
+        mockMvc.perform(get("/api/probe/employee").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/probe/admin").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/probe/trainer").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 沒有教練資料列進不了trainer探測點() throws Exception {
+        Account account = employeeAccount();
+        Employee employee = activeEmployee(account, EmployeeRole.EMPLOYEE);
+        Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.empty());
+
+        String token = jwtUtil.generateToken(account);
+        mockMvc.perform(get("/api/probe/trainer").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 教練狀態UNAVAILABLE仍保留ROLE_TRAINER() throws Exception {
+        // Trainer.status 只影響能否被預約，不影響教練身分本身——deletedAt 才是身分的開關
+        Account account = employeeAccount();
+        Employee employee = activeEmployee(account, EmployeeRole.EMPLOYEE);
+        Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
+        Mockito.when(trainers.findByEmployeeId(80))
+                .thenReturn(Optional.of(trainer(TrainerStatus.UNAVAILABLE, false)));
+
+        String token = jwtUtil.generateToken(account);
+        mockMvc.perform(get("/api/probe/trainer").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 教練資料已軟刪除時進不了trainer探測點() throws Exception {
+        Account account = employeeAccount();
+        Employee employee = activeEmployee(account, EmployeeRole.EMPLOYEE);
+        Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.of(trainer(TrainerStatus.ACTIVE, true)));
+
+        String token = jwtUtil.generateToken(account);
+        mockMvc.perform(get("/api/probe/trainer").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 員工審核路徑與api_admin互不相通() throws Exception {
+        // 純 EMPLOYEE 帳號能進 /api/employees/reviews/**，純 MEMBER 帳號進不去
+        Account employeeAccount = employeeAccount();
+        Employee employee = activeEmployee(employeeAccount, EmployeeRole.EMPLOYEE);
+        Mockito.when(accounts.findById(8)).thenReturn(Optional.of(employeeAccount));
+        Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.empty());
+        String employeeToken = jwtUtil.generateToken(employeeAccount);
+        mockMvc.perform(get("/api/employees/reviews/probe").header("Authorization", "Bearer " + employeeToken))
+                .andExpect(status().isOk());
+
+        Account memberOnlyAccount = memberAccount();
+        Mockito.when(accounts.findById(7)).thenReturn(Optional.of(memberOnlyAccount));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(memberOnlyAccount)));
+        String memberToken = jwtUtil.generateToken(memberOnlyAccount);
+        mockMvc.perform(get("/api/employees/reviews/probe").header("Authorization", "Bearer " + memberToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test

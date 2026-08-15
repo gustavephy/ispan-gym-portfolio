@@ -11,6 +11,8 @@ package tw.com.ispan.gym.security;
  * 或後續自行反查身分表（如 account → employee → trainer）的模組。</li>
  * <li>{@link #requireCurrentMemberId()} — 會員 id（member 表主鍵），給購物車、
  * 訂單、預約等以 member_id 為 FK 的會員域模組。</li>
+ * <li>{@link #requireCurrentEmployeeId()} — 員工 id（employee 表主鍵），給員工
+ * 審核、教練管理等以 employee_id 為 FK 的員工域模組。</li>
  * </ul>
  */
 public interface CurrentUserProvider {
@@ -20,4 +22,7 @@ public interface CurrentUserProvider {
 
     /** 目前登入者的會員 id（member 表主鍵）；帳號沒有會員身分時拋例外 */
     Integer requireCurrentMemberId();
+
+    /** 目前登入者的員工 id（employee 表主鍵）；帳號沒有員工身分或未 ACTIVE 時拋例外 */
+    Integer requireCurrentEmployeeId();
 }

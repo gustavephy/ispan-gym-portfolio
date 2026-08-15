@@ -87,6 +87,12 @@ class FilterErrorFormatTest {
         tw.com.ispan.gym.repository.account.OauthAccountRepository oauthAccountRepository() {
             return Mockito.mock(tw.com.ispan.gym.repository.account.OauthAccountRepository.class);
         }
+
+        @Bean
+        @Primary
+        tw.com.ispan.gym.repository.trainer.TrainerRepository trainerRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.trainer.TrainerRepository.class);
+        }
     }
 
     @RestController
