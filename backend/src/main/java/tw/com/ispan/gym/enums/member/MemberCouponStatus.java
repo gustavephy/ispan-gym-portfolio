@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.enums.coupon;
+package tw.com.ispan.gym.enums.member;
 
 public enum MemberCouponStatus {
     UNUSED,

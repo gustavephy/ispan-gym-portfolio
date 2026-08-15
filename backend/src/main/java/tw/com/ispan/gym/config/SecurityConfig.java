@@ -1,7 +1,5 @@
 package tw.com.ispan.gym.config;
 
-import java.util.List;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -15,9 +13,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tw.com.ispan.gym.security.JsonAccessDeniedHandler;
 import tw.com.ispan.gym.security.JsonAuthenticationEntryPoint;
 import tw.com.ispan.gym.security.JwtAuthFilter;
@@ -38,10 +33,6 @@ public class SecurityConfig {
     private final JsonAuthenticationEntryPoint authenticationEntryPoint;
     private final JsonAccessDeniedHandler accessDeniedHandler;
 
-    /** 允許的前端來源，多個以逗號分隔 */
-    @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:3000}")
-    private List<String> allowedOrigins;
-
     public SecurityConfig(JwtAuthFilter jwtAuthFilter,
             JsonAuthenticationEntryPoint authenticationEntryPoint,
             JsonAccessDeniedHandler accessDeniedHandler) {
@@ -58,6 +49,10 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // @Async controller（如 AiPlanController 回 CompletableFuture）完成後的
+                        // ASYNC dispatch 不會重跑 JwtAuthFilter，SecurityContext 是空的；
+                        // 授權已在原始 REQUEST dispatch 做過，這裡放行以免被二次攔成 401
+                        .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // 登入 / 註冊 / 忘記密碼等免驗證入口
                         .requestMatchers("/api/auth/**").permitAll()
@@ -72,13 +67,18 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/accounts/verify-email").permitAll()
                         // 重寄驗證信，同樣是註冊/重新啟用流程的一部分，尚未登入（AccountVerificationController）
                         .requestMatchers(HttpMethod.POST, "/api/accounts/resend-verification-email").permitAll()
-                        // 商品瀏覽開放未登入者
-                        .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
+                        // 商品/分類瀏覽開放未登入者（前台選單用）。
+                        // 注意路徑要與 controller 實際值一致：商品分類是 /api/product-categories
+                        //（曾寫成 /api/categories/** 放了空砲，匿名瀏覽分類一直是 401）
+                        .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/product-categories").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/course-categories").permitAll()
                         // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）
                         .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // 員工基底角色由 AccountAuthorityResolver 對所有 ACTIVE 員工加發（職位另有 ROLE_ADMIN/ROLE_TRAINER）
+                        .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")
                         // 員工審核：任何在職員工皆可審核，不限管理者，獨立於 /api/admin/** 之外
                         // （/api/admin/** 還掛著訂單、商品等真正的管理員專屬後台，不能共用同一條規則）
                         .requestMatchers("/api/employees/reviews/**").hasRole("EMPLOYEE")
@@ -96,21 +96,7 @@ public class SecurityConfig {
         return http.build();
     }
 
-    @Bean
-    CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(allowedOrigins);
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
-
-    // PasswordEncoder bean 定義於 PasswordEncoderConfig
+    // CORS 設定移至 CorsConfig（dev／非 dev 共用）；PasswordEncoder bean 定義於 PasswordEncoderConfig
 
     @Bean
     AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {

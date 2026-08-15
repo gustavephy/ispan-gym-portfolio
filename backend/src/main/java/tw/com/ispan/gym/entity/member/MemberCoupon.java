@@ -1,7 +1,6 @@
-package tw.com.ispan.gym.entity.coupon;
+package tw.com.ispan.gym.entity.member;
 
-import tw.com.ispan.gym.entity.member.Member;
-
+import tw.com.ispan.gym.entity.coupon.Coupon;
 
 import java.time.LocalDateTime;
 
@@ -22,7 +21,7 @@ import lombok.Setter;
 import lombok.ToString;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
-import tw.com.ispan.gym.enums.coupon.MemberCouponStatus;
+import tw.com.ispan.gym.enums.member.MemberCouponStatus;
 
 @Entity
 @Table(name = "member_coupon")

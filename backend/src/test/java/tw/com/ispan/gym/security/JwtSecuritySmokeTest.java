@@ -65,6 +65,7 @@ class JwtSecuritySmokeTest {
         ProbeController.class,
         JwtUtil.class,
         JwtAuthFilter.class,
+        AccountAuthorityResolver.class,
         ApiErrorWriter.class,
         JsonAuthenticationEntryPoint.class,
         JsonAccessDeniedHandler.class,

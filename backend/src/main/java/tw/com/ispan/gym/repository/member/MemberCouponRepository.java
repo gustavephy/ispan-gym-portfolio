@@ -1,4 +1,4 @@
-package tw.com.ispan.gym.repository.coupon;
+package tw.com.ispan.gym.repository.member;
 
 
 import java.util.List;
@@ -8,8 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import tw.com.ispan.gym.entity.coupon.MemberCoupon;
-import tw.com.ispan.gym.enums.coupon.MemberCouponStatus;
+import tw.com.ispan.gym.entity.member.MemberCoupon;
+import tw.com.ispan.gym.enums.member.MemberCouponStatus;
 
 public interface MemberCouponRepository extends JpaRepository<MemberCoupon, Integer> {
 

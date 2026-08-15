@@ -73,7 +73,7 @@ class ApiExceptionMappingTest {
         assertThat(ex.getMessage()).isEqualTo("此場次已額滿");
     }
 
-    /** 子類必須都繼承 ApiException，否則會被 Exception 兜底接走變成 500 */
+    /** 子類必須都繼承 ApiException，否則會落入 Exception 通用處理變成 500 */
     @Test
     void 所有自訂例外皆為ApiException子類() {
         assertThat(new ProductNotFoundException(1)).isInstanceOf(ApiException.class);

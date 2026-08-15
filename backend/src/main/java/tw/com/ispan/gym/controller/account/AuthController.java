@@ -8,6 +8,7 @@ import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.security.AccountAuthorityResolver;
 import tw.com.ispan.gym.security.JwtUtil;
 
 import jakarta.validation.Valid;
@@ -35,14 +36,16 @@ public class AuthController {
     private final EmployeeRepository employees;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final AccountAuthorityResolver authorityResolver;
 
     public AuthController(AccountRepository accounts, MemberRepository members, EmployeeRepository employees,
-            PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+            PasswordEncoder passwordEncoder, JwtUtil jwtUtil, AccountAuthorityResolver authorityResolver) {
         this.accounts = accounts;
         this.members = members;
         this.employees = employees;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.authorityResolver = authorityResolver;
     }
 
     @PostMapping("/login")
@@ -65,7 +68,9 @@ public class AuthController {
             throw employeeStatusMessage(account);
         }
 
-        return new LoginResponse(jwtUtil.generateToken(account), account.getId(), account.getEmail());
+        // roles＝展開後的有效權限（與 JwtAuthFilter／AccountAuthorityResolver 同一套規則），供前端導流
+        return new LoginResponse(jwtUtil.generateToken(account), account.getId(), account.getEmail(),
+                authorityResolver.resolveRoleNames(account));
     }
 
     private DisabledException employeeStatusMessage(Account account) {

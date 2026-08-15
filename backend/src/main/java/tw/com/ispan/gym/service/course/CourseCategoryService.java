@@ -21,7 +21,10 @@ public class CourseCategoryService {
 	private final CourseCategoryRepository courseCategoryRepository;
 	
 	//查詢所有課程類別
-	private List<CourseCategoryDto> getAllCourseCategories(){
+	// 【合併時的修改說明】原本是 private：當時還沒有 controller 呼叫它，
+	// feat/coupon-controller 補上了 CourseCategoryController（查詢分類的公開端點），
+	// 這個方法從此有了外部呼叫端，改為 public（作者分支上的同名方法本來就是 public）。
+	public List<CourseCategoryDto> getAllCourseCategories(){
 		log.info("Fetching all course categories");
 		return courseCategoryRepository.findAll().stream()
 				.map(entity -> CourseCategoryDto.fromEntity(entity))

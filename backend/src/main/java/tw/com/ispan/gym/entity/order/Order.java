@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.entity.order;
 
-import tw.com.ispan.gym.entity.coupon.MemberCoupon;
+import tw.com.ispan.gym.entity.member.MemberCoupon;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 
