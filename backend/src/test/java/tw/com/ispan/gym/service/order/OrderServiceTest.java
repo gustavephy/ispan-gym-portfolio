@@ -456,10 +456,17 @@ class OrderServiceTest {
 
     // === createDirectOrder()：私教課 ==========================================
 
+    /** 私教課需先持有有效訂閱才能購買（requireActiveSubscription），成功路徑都要先備妥 */
+    private void stubHasActiveSubscription() {
+        when(subscriptions.findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(
+                any(), any(), any())).thenReturn(Optional.of(new MemberSubscription()));
+    }
+
     @Test
     void 私教課直接結帳以單價乘堂數計算且不碰庫存() {
         when(members.findById(MEMBER_ID)).thenReturn(Optional.of(member()));
         when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course("3000", 10)));
+        stubHasActiveSubscription();
         stubOrderSaveAssignsId();
         stubNoOrderItems();
 
