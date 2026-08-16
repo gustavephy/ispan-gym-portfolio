@@ -26,7 +26,8 @@ import tw.com.ispan.gym.repository.trainer.TrainerRepository;
  * 教練排班（私教課時段）的商業邏輯，涵蓋建立／查詢／修改／取消四個功能，
  * 對應規格書「教練排班」模組，必須避免時段重疊、非本人修改。
  *
- * <p>身分鏈：Controller 從 {@code CurrentUserProvider} 取得的是登入者的帳號 id；
+ * <p>
+ * 身分鏈：Controller 從 {@code CurrentUserProvider} 取得的是登入者的帳號 id；
  * account／employee／trainer 各有獨立流水號，本類別依序以
  * {@code EmployeeRepository#findByAccountId} 與
  * {@link TrainerRepository#findByEmployeeId} 兩段解析出對應的 {@link Trainer}；
@@ -41,7 +42,12 @@ public class CoachSlotService {
         private final TrainerRepository trainerRepository;
         private final EmployeeRepository employeeRepository;
 
-        /** 由登入者的帳號 id 解析出教練資料（account → employee → trainer 兩段查詢） */
+        /**
+         * 由登入者的帳號 id 解析出教練資料（account → employee → trainer 兩段查詢）。
+         *
+         * 行為：先用 accountId 找 Employee，再用 employee.id 找 Trainer。
+         * 若任一段查詢失敗，代表目前帳號沒有教練身分，會拋出 ForbiddenAccessException。
+         */
         // 【合併時的修改說明】分支版本是 trainerRepository.findByEmployeeId(accountId) 一段查詢，
         // 前提是「Account／Employee 以 @MapsId 共享主鍵」——這個前提在 dev 上已經不成立：
         // account／employee／trainer 現在各有獨立流水號，帳號 id 不能直接當 employee id 用，

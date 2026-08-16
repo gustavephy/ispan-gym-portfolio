@@ -34,6 +34,15 @@ import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
 import tw.com.ispan.gym.repository.coach.SessionDeductionLogRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 
+/**
+ * 私教預約（CoachBooking）商業邏輯：包含建立預約、取消、教練核銷與相關稽核紀錄。
+ *
+ * 重要規則／保證：
+ * - 多數方法使用單一 {@code @Transactional}，以確保對 quota、slot、booking 的變更一致性；
+ * - 在變更 quota 前會先拍攝 before 值、執行 quota.book()/consume()/refund()、儲存 quota，
+ * 再寫入 SessionDeductionLog，確保稽核紀錄的 before/after 是正確對應的；
+ * - 建議維持目前的「先存 booking 取得 id 再寫稽核」順序，以便 log 有可關聯的 booking id。
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
