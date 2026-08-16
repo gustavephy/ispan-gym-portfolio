@@ -41,12 +41,17 @@ public class DevSecurityConfig {
                 *  - 所有端點皆可匿名存取，@PreAuthorize 一律不生效            *
                 *  - 登入身分固定為 app.dev-current-user-id，非真實登入者      *
                 *                                                             *
-                *  僅供本機開發使用。專案目前只有 dev 這一種設定，尚未備妥     *
-                *  可對外的 profile：改用 dev 以外的 profile 只會啟用 JWT      *
-                *  驗證，其餘設定仍沿用 application.properties 的本機預設值    *
-                *  （JWT 金鑰、種子管理員密碼都已進版控，等同公開）。          *
-                *  對外部署前必須另外提供 JWT_SECRET／DB_PASSWORD／           *
-                *  SEED_ADMIN_* 等環境變數，並關閉 ddl-auto。                  *
+                *  僅供本機開發使用。要改跑正式安全設定，兩種方式擇一：        *
+                *  1. 設環境變數 SPRING_PROFILES_ACTIVE=<非 dev 的名稱>        *
+                *     （優先序高於設定檔，不必改檔案，部署時用這個）           *
+                *  2. 註解掉 application.properties 的 spring.profiles.active *
+                *     （本機臨時想驗權限時最直接，但別提交上去）               *
+                *                                                             *
+                *  注意：專案目前只有這一份 application.properties，沒有       *
+                *  對外用的設定檔。切換 profile 只會啟用 JWT 驗證，其餘仍讀    *
+                *  同一份檔案的本機預設值（JWT 金鑰、種子管理員密碼都已進      *
+                *  版控，等同公開）。對外部署前必須另外提供 JWT_SECRET／       *
+                *  DB_PASSWORD／SEED_ADMIN_* 等環境變數，並關閉 ddl-auto。     *
                 ***************************************************************
                 """);
     }
