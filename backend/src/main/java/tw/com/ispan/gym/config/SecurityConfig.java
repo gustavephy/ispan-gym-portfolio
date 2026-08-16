@@ -79,6 +79,10 @@ public class SecurityConfig {
                         // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）
                         .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+                        // SockJS 交握本身是一般 HTTP 請求（GET /ws-chat/info、POST .../xhr 等），
+                        // 不會帶 JWT bearer header；真正的登入驗證在 STOMP CONNECT frame 階段
+                        // 由 StompAuthChannelInterceptor 處理，這裡放行純粹是為了讓交握能建立
+                        .requestMatchers("/ws-chat/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // 員工基底角色由 JwtAuthFilter 對所有 ACTIVE 員工加發（職位另有 ROLE_ADMIN/ROLE_TRAINER）
