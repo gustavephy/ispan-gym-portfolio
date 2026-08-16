@@ -18,6 +18,12 @@ import org.springframework.security.web.SecurityFilterChain;
  * 未覆寫就啟動＝整個 API 不設防，且 @PreAuthorize 與 SecurityConfig 的所有規則都不會生效。
  * 這種狀態沒有任何外顯徵兆，開發期間也感受不到權限問題（權限相關的 bug 會一路潛伏到正式環境
  * 才爆出來），因此啟動時印一段醒目的警告，讓「現在沒有任何保護」這件事無法被忽略。
+ *
+ * <p>警告中刻意不指名某個現成的正式 profile：專案目前只有這一份 application.properties，
+ * 沒有 application-prod 之類的設定檔。切到 dev 以外的 profile 只會讓
+ * {@code @Profile("!dev")} 的那組 bean 生效（JWT 驗證、真實身分解析），
+ * 其餘設定仍讀同一份檔案的本機預設值——包含已進版控、等同公開的 JWT 金鑰與種子管理員密碼。
+ * 只換 profile 名稱會得到「看似有防護、金鑰卻是公開的」狀態，比 dev 全放行更難察覺。
  */
 @Configuration
 @Profile("dev")
@@ -35,8 +41,12 @@ public class DevSecurityConfig {
                 *  - 所有端點皆可匿名存取，@PreAuthorize 一律不生效            *
                 *  - 登入身分固定為 app.dev-current-user-id，非真實登入者      *
                 *                                                             *
-                *  僅供本機開發使用。部署到任何對外環境前，務必改用其他        *
-                *  profile（例如 SPRING_PROFILES_ACTIVE=prod）啟動。           *
+                *  僅供本機開發使用。專案目前只有 dev 這一種設定，尚未備妥     *
+                *  可對外的 profile：改用 dev 以外的 profile 只會啟用 JWT      *
+                *  驗證，其餘設定仍沿用 application.properties 的本機預設值    *
+                *  （JWT 金鑰、種子管理員密碼都已進版控，等同公開）。          *
+                *  對外部署前必須另外提供 JWT_SECRET／DB_PASSWORD／           *
+                *  SEED_ADMIN_* 等環境變數，並關閉 ddl-auto。                  *
                 ***************************************************************
                 """);
     }
