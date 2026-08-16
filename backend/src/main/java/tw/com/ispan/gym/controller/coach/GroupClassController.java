@@ -30,9 +30,8 @@ public class GroupClassController {
      * 查看即將開始、開放報名的團課場次。刻意不加 @PreAuthorize（不限定要有 MEMBER 角色），
      * 跟 CoachBookingController.searchSlots() 的既有取捨一致：瀏覽課表本身不該要求登入權限，
      * 只有實際「報名」的動作才需要驗證身分。
-     * 註：這跟 searchSlots() 目前留著的同一個 TODO 有一樣的前提——SecurityConfig 尚未補上
-     * 對應的 permitAll() 規則前，這支端點實際上可能還是會被預設的登入檢查擋下來，
-     * 這是既有的專案層級待辦事項，不是這次新產生的問題。
+     * SecurityConfig 已對 {@code GET /api/member/group-classes} 補上 permitAll，
+     * 匿名瀏覽確實可行（見 JwtSecuritySmokeTest）；報名／取消報名仍需 MEMBER 身分。
      */
     @GetMapping
     public ResponseEntity<List<GroupClassSessionResponse>> getUpcomingSessions() {

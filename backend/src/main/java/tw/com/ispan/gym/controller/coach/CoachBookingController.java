@@ -47,9 +47,9 @@ public class CoachBookingController {
 
     /**
      * 瀏覽指定教練目前可預約的時段，設計上不需登入即可查看（僅顯示公開的排班資訊，不涉及個人資料）。
-     * TODO: SecurityConfig 尚未補上對應的 permitAll() 規則，目前實際上仍會被
-     * anyRequest().authenticated()
-     * 擋下、要求登入，暫以 dev 身分繞過測試。真正開放前，需要跟負責 SecurityConfig 的組員一起補上。
+     * SecurityConfig 已對 {@code GET /api/member/trainers/*&#47;schedules} 補上 permitAll，
+     * 匿名瀏覽確實可行（見 JwtSecuritySmokeTest）；同前綴下的 /bookings 等個人資料端點
+     * 不在放行範圍內，仍需登入。
      */
     @GetMapping("/trainers/{trainerId}/schedules")
     public ResponseEntity<List<CoachSlotResponse>> searchSlots(@PathVariable Integer trainerId) {

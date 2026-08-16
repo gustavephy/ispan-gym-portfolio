@@ -147,6 +147,23 @@ class JwtSecuritySmokeTest {
         String employeeReviewProbe() {
             return "ok";
         }
+
+        // 以下三條路徑同屬 /api/member 前綴，但只有前兩條該匿名開放；
+        // /bookings 是會員自己的預約紀錄，必須維持需登入（見「課表可匿名瀏覽」相關測試）
+        @GetMapping("/api/member/trainers/{trainerId}/schedules")
+        String publicTrainerSchedules() {
+            return "ok";
+        }
+
+        @GetMapping("/api/member/group-classes")
+        String publicGroupClasses() {
+            return "ok";
+        }
+
+        @GetMapping("/api/member/bookings")
+        String myBookings() {
+            return "ok";
+        }
     }
 
     @Autowired MockMvc mockMvc;
@@ -212,6 +229,22 @@ class JwtSecuritySmokeTest {
         // 驗證連結則是從信件點進來的。漏開會讓整條註冊流程鎖死。
         mockMvc.perform(post("/api/members/register")).andExpect(status().isOk());
         mockMvc.perform(get("/api/accounts/verify-email")).andExpect(status().isOk());
+    }
+
+    @Test
+    void 課表瀏覽不需登入() throws Exception {
+        // 教練可預約時段與團課場次都只是公開排班資訊，未登入者要看得到才選得了課；
+        // 這兩條路徑一度只有 controller 註解說「應該公開」，SecurityConfig 卻沒補規則，
+        // 實際上被 anyRequest().authenticated() 擋成 401。
+        mockMvc.perform(get("/api/member/trainers/5/schedules")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/member/group-classes")).andExpect(status().isOk());
+    }
+
+    @Test
+    void 開放課表瀏覽不會連帶把個人預約紀錄也曝光() throws Exception {
+        // /api/member/bookings 與上面兩條同前綴，若當初圖方便寫成 /api/member/**
+        // 就會把會員自己的預約紀錄一起放行成匿名可讀
+        mockMvc.perform(get("/api/member/bookings")).andExpect(status().isUnauthorized());
     }
 
     @Test
