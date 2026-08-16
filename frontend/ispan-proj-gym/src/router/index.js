@@ -8,7 +8,12 @@ const router = createRouter({
       path:'/',
       component:()=>import("@/layouts/DefaultLayout.vue"),
       children:[
-        {path:'',component:()=>import('@/views/home/HomeView.vue')}
+        {path:'',component:()=>import('@/views/home/HomeView.vue')},
+        {path:'courses',component:()=>import('@/views/course/CourseView.vue')},
+        {path:'reservation',component:()=>import('@/views/reservation/ReservationView.vue')},
+        {path:'products',component:()=>import('@/views/product/ProductView.vue')},
+        {path:'products/:id',component:()=>import('@/views/product/ProductDetail.vue')},
+        {path:'subscription',component:()=>import('@/views/subscription/SubscriptionView.vue')}
       ]
     }
   ],
