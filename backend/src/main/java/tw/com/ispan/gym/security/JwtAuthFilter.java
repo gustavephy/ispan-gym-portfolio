@@ -24,8 +24,11 @@ import tw.com.ispan.gym.repository.account.AccountRepository;
  * <p>JWT 的 subject 是 account_id。member 與 employee 各有獨立流水號主鍵，
  * 一律以 account_id 反查各身分表，不把 account_id 當成 member／employee id 用。
  *
- * <p>權限展開規則見 {@link AccountAuthorityResolver}（與登入回應的 roles 欄位共用）。
- * 一個帳號可同時持有會員與員工身分。
+ * <p>權限展開規則見 {@link AccountAuthorityResolver}（與登入回應的 roles 欄位共用）：
+ * 具 EMPLOYEE 身分且員工狀態 ACTIVE → ROLE_EMPLOYEE，另外 employee.role == ADMIN
+ * 再加 ROLE_ADMIN、有對應且未刪除的 Trainer 資料列再加 ROLE_TRAINER——教練身分只看
+ * Trainer.deletedAt，不看 Trainer.status（那只影響能否被預約，不影響教練身分本身）。
+ * 一個帳號可同時持有會員與員工身分，三種員工權限彼此也不互斥。
  */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {

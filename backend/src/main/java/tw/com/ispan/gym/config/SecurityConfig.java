@@ -58,6 +58,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         // 會員註冊（MemberRegisterController）
                         .requestMatchers(HttpMethod.POST, "/api/members/register").permitAll()
+                        // 員工註冊，PENDING_APPROVAL 後改走員工審核，不是這裡驗證（EmployeeRegisterController）
+                        .requestMatchers(HttpMethod.POST, "/api/employees/register").permitAll()
+                        // REJECTED 重新申請：申請者沒有 JWT，密碼驗證由端點自己做，不靠登入態
+                        // （EmployeeRegisterController）
+                        .requestMatchers(HttpMethod.POST, "/api/employees/reapply").permitAll()
                         // Email 驗證連結由信件點入，此時尚未登入（AccountVerificationController）
                         .requestMatchers(HttpMethod.GET, "/api/accounts/verify-email").permitAll()
                         // 重寄驗證信，同樣是註冊/重新啟用流程的一部分，尚未登入（AccountVerificationController）
@@ -72,8 +77,11 @@ public class SecurityConfig {
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        // 員工基底角色由 JwtAuthFilter 對所有 ACTIVE 員工加發（職位另有 ROLE_ADMIN/ROLE_TRAINER）
+                        // 員工基底角色由 AccountAuthorityResolver 對所有 ACTIVE 員工加發（職位另有 ROLE_ADMIN/ROLE_TRAINER）
                         .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")
+                        // 員工審核：任何在職員工皆可審核，不限管理者，獨立於 /api/admin/** 之外
+                        // （/api/admin/** 還掛著訂單、商品等真正的管理員專屬後台，不能共用同一條規則）
+                        .requestMatchers("/api/employees/reviews/**").hasRole("EMPLOYEE")
                         .anyRequest().authenticated())
                 // filter 層的 401／403 不會經過 GlobalExceptionHandler，
                 // 這裡改用自訂處理器輸出相同的 ApiErrorResponse 格式，不導向登入頁

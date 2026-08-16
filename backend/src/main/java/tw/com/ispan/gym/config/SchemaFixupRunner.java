@@ -58,6 +58,72 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropObsoleteColumns();
         widenOrderStatusCheck();
         dropDuplicateUniqueIndexes();
+        migrateEmployeeReviewModel();
+    }
+
+    // === 員工審核模型修正（2026-08-14 定案：EmployeeRole/EmployeeStatus 改版）========
+    // role 的 TRAINER 併入 EMPLOYEE（是否為教練改由 trainer 表判斷，與 role 無關）；
+    // status 的 PENDING 併入 PENDING_APPROVAL（新增 REJECTED，走獨立的重新申請流程）；
+    // approved_by／approved_at 改名 reviewed_by／reviewed_at（核准／拒絕共用同一組欄位）。
+
+    private void migrateEmployeeReviewModel() {
+        // 先加寬欄位，後面才塞得下 PENDING_APPROVAL（16 字元，原欄位僅 varchar(10)）
+        widenVarchar("employee", "status", 20);
+
+        // Hibernate 在 ddl-auto=update 建表當時，會依 @Enumerated(STRING) 欄位「當下」的
+        // enum 值域自動產生一個雜湊命名的 CHECK 約束——跟 orders.status 當初遇到的問題
+        // 一樣（見 widenOrderStatusCheck()）。enum 改了新值域，ddl-auto 不會回頭更新這個
+        // 約束，下面的搬移 UPDATE 寫入新值就會直接被舊約束擋下，必須先拆掉。
+        //
+        // 拆舊約束跟建新約束中間、資料還沒搬完的空窗期，故意不讓 status/role 完全沒有
+        // 約束就去新增涵蓋新值域的版本——SQL Server 的 ADD CONSTRAINT CHECK 預設會拿
+        // 新約束驗證資料表裡既有的資料，資料還是舊值時一定會被新約束本身擋下（ALTER TABLE
+        // 那個當下就失敗）。正確順序是：拆舊約束 → 搬資料 → 資料已經是新值域了才建新約束。
+        dropOtherCheckConstraintsOnColumn("employee", "status", "CK_employee_status");
+        dropOtherCheckConstraintsOnColumn("employee", "role", "CK_employee_role");
+
+        // 值域改名的既有資料搬移；必須排在加寬、拆約束之後，否則會被截斷或舊約束擋下
+        backfill("employee.status（PENDING 併入 PENDING_APPROVAL）",
+                "UPDATE employee SET status = 'PENDING_APPROVAL' WHERE status = 'PENDING'");
+        backfill("employee.role（TRAINER 併入 EMPLOYEE）",
+                "UPDATE employee SET role = 'EMPLOYEE' WHERE role = 'TRAINER'");
+
+        // 資料已經是新值域，這裡才建可以順利通過驗證的新 CHECK 約束
+        createCheckIfAbsent("employee", "CK_employee_status", """
+                ALTER TABLE employee ADD CONSTRAINT CK_employee_status CHECK (
+                    status IN ('PENDING_APPROVAL','ACTIVE','REJECTED','INACTIVE'))
+                """);
+        createCheckIfAbsent("employee", "CK_employee_role", """
+                ALTER TABLE employee ADD CONSTRAINT CK_employee_role CHECK (
+                    role IN ('EMPLOYEE','ADMIN'))
+                """);
+
+        // 審核欄位改名：approve 與 reject 共用同一組欄位，不再各自一套
+        renameColumnIfExists("employee", "approved_by", "reviewed_by");
+        renameColumnIfExists("employee", "approved_at", "reviewed_at");
+        renameConstraint("FK_employee_approved_by", "FK_employee_reviewed_by");
+    }
+
+    /** 加寬 varchar 欄位（僅在現寬不足時動作；對稱於 narrowVarchar／widenNvarchar） */
+    private void widenVarchar(String table, String column, int length) {
+        if (!tableExists(table) || !columnExists(table, column)) {
+            return;
+        }
+        Integer maxLen = jdbc.queryForObject("""
+                SELECT c.max_length FROM sys.columns c
+                    JOIN sys.types t ON t.user_type_id = c.user_type_id
+                    WHERE c.object_id = OBJECT_ID(?) AND c.name = ? AND t.name = 'varchar'
+                """, Integer.class, table, column);
+        if (maxLen == null || maxLen == -1 || maxLen >= length) {
+            return;
+        }
+        Boolean nullable = jdbc.queryForObject("""
+                SELECT is_nullable FROM sys.columns
+                    WHERE object_id = OBJECT_ID(?) AND name = ?
+                """, Boolean.class, table, column);
+        jdbc.execute("ALTER TABLE " + table + " ALTER COLUMN " + column
+                + " varchar(" + length + ") " + (Boolean.TRUE.equals(nullable) ? "NULL" : "NOT NULL"));
+        log.info("已將 {}.{} 加寬為 varchar({})", table, column, length);
     }
 
     // === 舊表改名 =============================================================

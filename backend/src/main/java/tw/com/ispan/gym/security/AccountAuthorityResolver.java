@@ -10,10 +10,12 @@ import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.enums.account.AccountType;
+import tw.com.ispan.gym.enums.employee.EmployeeRole;
 import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * 把帳號展開成當下有效的權限清單——JwtAuthFilter（每請求授權）與
@@ -21,8 +23,10 @@ import tw.com.ispan.gym.repository.member.MemberRepository;
  * 避免兩處各自實作而漂移。
  *
  * <p>展開規則：具 MEMBER 身分且會員 ACTIVE → ROLE_MEMBER；具 EMPLOYEE 身分且
- * 員工 ACTIVE → ROLE_EMPLOYEE（基底：是員工）＋ ROLE_ADMIN／ROLE_TRAINER
- * （職位，依 employee.role）。未啟用的身分不授予任何權限。
+ * 員工 ACTIVE → ROLE_EMPLOYEE（基底：是員工），另外 employee.role == ADMIN
+ * 再加 ROLE_ADMIN、有對應且未刪除的 Trainer 資料列再加 ROLE_TRAINER——教練身分
+ * 只看 Trainer.deletedAt，不看 Trainer.status（那只影響能否被預約，不影響教練
+ * 身分本身）。未啟用的身分不授予任何權限，三種員工權限彼此也不互斥。
  */
 @Component
 public class AccountAuthorityResolver {
@@ -31,10 +35,13 @@ public class AccountAuthorityResolver {
 
     private final MemberRepository members;
     private final EmployeeRepository employees;
+    private final TrainerRepository trainers;
 
-    public AccountAuthorityResolver(MemberRepository members, EmployeeRepository employees) {
+    public AccountAuthorityResolver(MemberRepository members, EmployeeRepository employees,
+            TrainerRepository trainers) {
         this.members = members;
         this.employees = employees;
+        this.trainers = trainers;
     }
 
     public List<SimpleGrantedAuthority> resolve(Account account) {
@@ -51,9 +58,13 @@ public class AccountAuthorityResolver {
             Employee employee = employees.findByAccountId(account.getId()).orElse(null);
             if (employee != null && employee.getDeletedAt() == null
                     && employee.getStatus() == EmployeeStatus.ACTIVE) {
-                // 基底角色＋職位角色兩層：見類別 javadoc
                 authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + "EMPLOYEE"));
-                authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + employee.getRole().name()));
+                if (employee.getRole() == EmployeeRole.ADMIN) {
+                    authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + "ADMIN"));
+                }
+                trainers.findByEmployeeId(employee.getId())
+                        .filter(t -> t.getDeletedAt() == null)
+                        .ifPresent(t -> authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + "TRAINER")));
             }
         }
         return authorities;
