@@ -6,7 +6,9 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
- * dev 用的假登入身分。TODO: replace with authenticated user from Spring Security/JWT.
+ * dev 用的假登入身分，讓本機不必先登入拿 token 就能打 API。
+ * 正式環境走 {@link UnconfiguredCurrentUserProvider}（{@code @Profile("!dev")}），
+ * 由它從 SecurityContext 解析真正的登入者，兩者以 profile 互斥。
  *
  * <p>注意：member_id／employee_id 與 account_id 已是各自獨立的流水號，這裡三個方法
  * 預設都回傳同一個設定值（app.dev-current-user-id）純屬 dev 便宜行事——本機測試時請確保
