@@ -67,6 +67,8 @@ public class SecurityConfig {
                         //（曾寫成 /api/categories/** 放了空砲，匿名瀏覽分類一直是 401）
                         .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/product-categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/course-categories").permitAll()
+                        // 訂閱方案瀏覽開放未登入者（前台展示用），查自己的訂閱狀態仍需登入（見 anyRequest().authenticated()）
+                        .requestMatchers(HttpMethod.GET, "/api/subscription-plans").permitAll()
                         // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）
                         .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()

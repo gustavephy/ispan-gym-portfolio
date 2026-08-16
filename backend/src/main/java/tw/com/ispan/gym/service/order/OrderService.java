@@ -42,6 +42,7 @@ import tw.com.ispan.gym.exception.InvalidQuantityException;
 import tw.com.ispan.gym.exception.ProductNotFoundException;
 import tw.com.ispan.gym.exception.ProductUnavailableException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.exception.SubscriptionRequiredException;
 import tw.com.ispan.gym.repository.cart.CartItemRepository;
 import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
 import tw.com.ispan.gym.repository.coupon.CouponRepository;
@@ -79,7 +80,8 @@ import tw.com.ispan.gym.event.order.RefundCompletedEvent;
  * 待處理退款（{@link PaymentRefund}），實際退款與訂單狀態轉移由後台呼叫
  * {@link #completeRefund} 完成。課程/訂閱的履約（發放堂數額度、啟用訂閱）
  * 由 {@link #fulfillPaidOrder} 在金流付款成功後觸發，見 EcpayService。訂閱不允許提前續約，
- * 名下有未到期的有效訂閱時 {@link #createSubscriptionOrder} 會直接擋下結帳請求。
+ * 名下有未到期的有效訂閱時 {@link #createSubscriptionOrder} 會直接擋下結帳請求；反過來，
+ * 名下沒有有效訂閱時 {@link #createDirectOrder} 也會擋下私教課購買，見 {@link #requireActiveSubscription}。
  */
 @Service
 @Transactional(readOnly = true)
@@ -153,6 +155,7 @@ public class OrderService {
     /**
      * 私教課略過購物車，直接以 privateCourseId + quantity 結帳（團課憑訂閱參加，不走購買）。
      * 會員訂閱請改用 {@link #createSubscriptionOrder}。
+     * 需先持有未到期的有效訂閱才能購買，見 {@link #requireActiveSubscription}。
      */
     @Transactional
     public OrderDetailResponse createDirectOrder(Integer userId, DirectCheckoutRequest request) {
@@ -165,9 +168,21 @@ public class OrderService {
         if (!CourseStatus.ACTIVE.equals(course.getStatus())) {
             throw new DirectCheckoutNotAllowedException(course.getId());
         }
+        requireActiveSubscription(userId);
 
         Order order = createCourseOrder(user, course, request.quantity(), request.couponCode());
         return toDetailResponse(order);
+    }
+
+    /**
+     * 私教課解鎖條件：會員名下需有一筆未到期的 ACTIVE 訂閱，複用防重複訂閱同一支查詢，
+     * 語意對稱——「有 → 不能再訂閱」「沒有 → 不能買私教課」。只卡購買當下，
+     * 訂閱到期後先前已購買的堂數仍可正常預約使用。
+     */
+    private void requireActiveSubscription(Integer userId) {
+        subscriptions.findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(
+                userId, LocalDateTime.now(TAIPEI), SubscriptionStatus.ACTIVE)
+                .orElseThrow(SubscriptionRequiredException::new);
     }
 
     /**
@@ -337,6 +352,7 @@ public class OrderService {
 
         restoreStock(order);
         restoreCoupon(order);
+        cancelSubscriptionIfAny(order);
         order.markRefunded();
 
         orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(), order.getMember(),
@@ -375,6 +391,20 @@ public class OrderService {
             memberCoupon.setStatus(MemberCouponStatus.UNUSED);
             memberCoupon.setUsedAt(null);
         }
+    }
+
+    /**
+     * 訂閱訂單退款時，該筆退款所啟用的那期訂閱要一併轉 CANCELLED，
+     * 否則會員拿回退款後仍保有訂閱權限（含私教課購買資格）直到原訂到期日，形同漏洞。
+     * 只有已付款成功才會有對應的 MemberSubscription（見 activateSubscription），
+     * 查無資料代表退款的是一筆從未真正履約過的訂單，略過即可。
+     */
+    private void cancelSubscriptionIfAny(Order order) {
+        if (order.getSubscriptionPlan() == null) {
+            return;
+        }
+        subscriptions.findByOrderId(order.getId())
+                .ifPresent(subscription -> subscription.setStatus(SubscriptionStatus.CANCELLED));
     }
 
     private Order createOrder(Member user, List<ProductQuantity> productLines, String couponCode,

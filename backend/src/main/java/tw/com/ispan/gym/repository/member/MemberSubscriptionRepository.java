@@ -24,4 +24,7 @@ public interface MemberSubscriptionRepository extends JpaRepository<MemberSubscr
 
 	Optional<MemberSubscription> findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(Integer memberId,
 			LocalDateTime now, SubscriptionStatus status);
+
+	/** 退款時反查該筆訂閱訂單建立的那期訂閱，見 OrderService#completeRefund */
+	Optional<MemberSubscription> findByOrderId(Long orderId);
 }
