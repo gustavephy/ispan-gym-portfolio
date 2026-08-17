@@ -68,7 +68,7 @@ class TrainerServiceTest {
 
     private Trainer trainerOf(Employee employee, TrainerStatus status) {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(TRAINER_ID);
+        trainer.setId(TRAINER_ID);
         trainer.setEmployee(employee);
         trainer.setSpecialty("重量訓練");
         trainer.setExperience("五年健身房授課經驗");
@@ -81,7 +81,7 @@ class TrainerServiceTest {
     private void stubSaveAssigningId() {
         when(trainers.save(any(Trainer.class))).thenAnswer(invocation -> {
             Trainer saved = invocation.getArgument(0);
-            saved.setTrainerId(TRAINER_ID);
+            saved.setId(TRAINER_ID);
             return saved;
         });
     }
@@ -228,7 +228,7 @@ class TrainerServiceTest {
 
         Trainer activeTrainer = trainerOf(active, TrainerStatus.ACTIVE);
         Trainer unavailableTrainer = trainerOf(unavailable, TrainerStatus.UNAVAILABLE);
-        unavailableTrainer.setTrainerId(8);
+        unavailableTrainer.setId(8);
         when(trainers.findByDeletedAtIsNull()).thenReturn(List.of(activeTrainer, unavailableTrainer));
 
         List<TrainerResponse> result = service.listPublic();

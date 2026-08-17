@@ -80,7 +80,7 @@ class TrainerControllerTest {
 
     private static TrainerResponse projected(Integer trainerId, TrainerStatus status) {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(trainerId);
+        trainer.setId(trainerId);
         trainer.setEmployee(employeeWithPrivateData());
         trainer.setSpecialty("重量訓練");
         trainer.setExperience("五年健身房授課經驗");

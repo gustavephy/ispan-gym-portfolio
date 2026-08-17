@@ -76,7 +76,7 @@ class CoachBookingServiceTest {
 
     private CoachSlot slot(LocalDateTime startAt) {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(TRAINER_ID);
+        trainer.setId(TRAINER_ID);
         CoachSlot slot = new CoachSlot();
         slot.setId(SLOT_ID);
         slot.setTrainer(trainer);

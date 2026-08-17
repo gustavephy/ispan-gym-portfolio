@@ -36,9 +36,7 @@ public class GroupCourseService {
     // 取得目前教練名下的團體課程清單
     public List<GroupCourseResponse> getMyCourse(Trainer trainer) {
         log.info("request to get my courses");
-        // 方法名的疊字是必要的：Trainer 主鍵欄位叫 trainerId，衍生查詢路徑須寫全名
-        // trainer.trainerId；改成 findByTrainerId 會在啟動時解析失敗
-        List<GroupCourse> courses = groupCourseRepository.findByTrainerTrainerId(trainer.getTrainerId());
+        List<GroupCourse> courses = groupCourseRepository.findByTrainerId(trainer.getId());
         return courses.stream().map(GroupCourseResponse::from).collect(Collectors.toList());
     }
 
@@ -60,7 +58,7 @@ public class GroupCourseService {
         log.info("request to update group course: {}", groupCourseId);
         GroupCourse groupCourse = groupCourseRepository.findById(groupCourseId)
                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
-        if (!groupCourse.getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
+        if (!groupCourse.getTrainer().getId().equals(trainer.getId())) {
             throw new ForbiddenAccessException("您無權修改此課程");
         }
         applyRequest(groupCourse, request);
@@ -74,7 +72,7 @@ public class GroupCourseService {
         log.info("request to delete group course: {}", groupCourseId);
         GroupCourse groupCourse = groupCourseRepository.findById(groupCourseId)
                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
-        if (!groupCourse.getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
+        if (!groupCourse.getTrainer().getId().equals(trainer.getId())) {
             throw new ForbiddenAccessException("您無權下架此課程");
         }
         groupCourse.setStatus(CourseStatus.INACTIVE);

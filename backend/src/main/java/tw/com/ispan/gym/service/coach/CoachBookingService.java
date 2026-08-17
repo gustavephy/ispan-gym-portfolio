@@ -138,7 +138,7 @@ public class CoachBookingService {
         public CoachBookingResponse createBooking(Integer memberId, Integer slotId) {
                 CoachSlot coachSlot = coachSlotRepository.findById(slotId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此時段"));
-                Integer trainerId = coachSlot.getTrainer().getTrainerId();
+                Integer trainerId = coachSlot.getTrainer().getId();
                 List<MemberCourseQuota> eligibleQuota = memberCourseQuotaRepository.findEligibleQuota(memberId,
                                 trainerId);
                 if (eligibleQuota.isEmpty()) {
@@ -258,7 +258,7 @@ public class CoachBookingService {
 
                 CoachBookingResponse response = new CoachBookingResponse(bookingId,
                                 saveBooking.getCoachSlot().getId(),
-                                saveBooking.getCoachSlot().getTrainer().getTrainerId(),
+                                saveBooking.getCoachSlot().getTrainer().getId(),
                                 saveBooking.getCoachSlot().getStartAt(), saveBooking.getCoachSlot().getEndAt(),
                                 saveBooking.getStatus(), saveBooking.getCheckInKey(),
                                 quota.getRemainingCourse());
@@ -282,7 +282,7 @@ public class CoachBookingService {
                 CoachBooking coachBooking = coachBookingRepository.findById(bookingId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此預約"));
 
-                if (!coachBooking.getCoachSlot().getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
+                if (!coachBooking.getCoachSlot().getTrainer().getId().equals(trainer.getId())) {
                         throw new ForbiddenAccessException("無權核銷此預約：" + bookingId);
                 }
 
@@ -322,11 +322,11 @@ public class CoachBookingService {
                                 "教練核銷到場上課", trainer);
 
                 log.info("教練{}核銷預約, bookingId={}, memberId={}, quotaId={}",
-                                trainer.getTrainerId(), bookingId, coachBooking.getMember().getId(), quota.getId());
+                                trainer.getId(), bookingId, coachBooking.getMember().getId(), quota.getId());
 
                 CoachBookingResponse response = new CoachBookingResponse(saveBooking.getId(),
                                 saveBooking.getCoachSlot().getId(),
-                                trainer.getTrainerId(),
+                                trainer.getId(),
                                 saveBooking.getCoachSlot().getStartAt(), saveBooking.getCoachSlot().getEndAt(),
                                 saveBooking.getStatus(), saveBooking.getCheckInKey(),
                                 quota.getRemainingCourse());
@@ -409,7 +409,7 @@ public class CoachBookingService {
                                         return new CoachBookingHistoryResponse(
                                                         booking.getId(),
                                                         booking.getCoachSlot().getId(),
-                                                        booking.getCoachSlot().getTrainer().getTrainerId(),
+                                                        booking.getCoachSlot().getTrainer().getId(),
                                                         booking.getCoachSlot().getStartAt(),
                                                         booking.getCoachSlot().getEndAt(),
                                                         booking.getStatus(), booking.getCheckInKey(),

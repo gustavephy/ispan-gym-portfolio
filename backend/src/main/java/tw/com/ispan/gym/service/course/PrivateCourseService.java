@@ -33,9 +33,7 @@ public class PrivateCourseService {
 
         // 取得教練名下的課程
         public List<PrivateCourseResponse> getMyCourses(Trainer trainer) {
-                // 方法名的疊字是必要的：Trainer 主鍵欄位叫 trainerId，衍生查詢路徑須寫全名
-                // trainer.trainerId；改成 findByTrainerId 會在啟動時解析失敗
-                List<PrivateCourse> courses = privateCourseRepository.findByTrainerTrainerId(trainer.getTrainerId());
+                List<PrivateCourse> courses = privateCourseRepository.findByTrainerId(trainer.getId());
                 return courses.stream().map(PrivateCourseResponse::from).collect(Collectors.toList());
         }
 
@@ -47,7 +45,7 @@ public class PrivateCourseService {
                 applyRequest(course, request);
                 PrivateCourse saved = privateCourseRepository.save(course);
                 log.info("Trainer (ID: {}) successfully created private course (ID: {}, name: {})",
-                                trainer.getTrainerId(),
+                                trainer.getId(),
                                 saved.getId(), saved.getName());
                 return PrivateCourseResponse.from(saved);
         }
@@ -58,14 +56,14 @@ public class PrivateCourseService {
                         Trainer trainer) {
                 PrivateCourse privateCourse = privateCourseRepository.findById(privateCourseId)
                                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
-                if (!privateCourse.getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
+                if (!privateCourse.getTrainer().getId().equals(trainer.getId())) {
                         log.warn("Trainer (ID: {}) attempted to update unauthorized private course (ID: {})",
-                                        trainer.getTrainerId(), privateCourse.getId());
+                                        trainer.getId(), privateCourse.getId());
                         throw new ForbiddenAccessException("您無權修改此課程");
                 }
                 applyRequest(privateCourse, request);
                 PrivateCourse saved = privateCourseRepository.save(privateCourse);
-                log.info("Trainer (ID: {}) successfully updated private course (ID: {})", trainer.getTrainerId(),
+                log.info("Trainer (ID: {}) successfully updated private course (ID: {})", trainer.getId(),
                                 saved.getId());
                 return PrivateCourseResponse.from(saved);
         }
@@ -75,14 +73,14 @@ public class PrivateCourseService {
         public void deletePrivateCourse(Integer privateCourseId, Trainer trainer) {
                 PrivateCourse privateCourse = privateCourseRepository.findById(privateCourseId)
                                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
-                if (!privateCourse.getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
+                if (!privateCourse.getTrainer().getId().equals(trainer.getId())) {
                         log.warn("Trainer (ID: {}) attempted to delete unauthorized private course (ID: {})",
-                                        trainer.getTrainerId(), privateCourse.getId());
+                                        trainer.getId(), privateCourse.getId());
                         throw new ForbiddenAccessException("您無權刪除此課程");
                 }
                 privateCourse.setStatus(CourseStatus.INACTIVE);
                 privateCourseRepository.save(privateCourse);
-                log.info("Trainer (ID: {}) successfully deleted private course (ID: {})", trainer.getTrainerId(),
+                log.info("Trainer (ID: {}) successfully deleted private course (ID: {})", trainer.getId(),
                                 privateCourse.getId());
         }
 

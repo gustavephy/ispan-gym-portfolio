@@ -58,7 +58,7 @@ class CoachSlotServiceTest {
 
     private Trainer trainer(Integer trainerId) {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(trainerId);
+        trainer.setId(trainerId);
         return trainer;
     }
 

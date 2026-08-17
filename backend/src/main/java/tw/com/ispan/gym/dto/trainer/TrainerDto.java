@@ -25,7 +25,7 @@ public record TrainerDto(
         }
         Employee employee = trainer.getEmployee();
         return new TrainerDto(
-                trainer.getTrainerId(),
+                trainer.getId(),
                 employee.getLastName() + employee.getFirstName(),
                 employee.getAccount().getEmail(),
                 trainer.getSpecialty(),

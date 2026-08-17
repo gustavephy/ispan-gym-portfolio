@@ -16,7 +16,7 @@ public interface MemberCourseQuotaRepository extends JpaRepository<MemberCourseQ
      * 呼叫端若拿多筆結果，應取第一筆（最早到期，優先用掉）。
      */
 
-    @Query("SELECT q FROM MemberCourseQuota q WHERE q.member.id = :memberId AND q.trainer.trainerId = :trainerId "
+    @Query("SELECT q FROM MemberCourseQuota q WHERE q.member.id = :memberId AND q.trainer.id = :trainerId "
             + "AND q.remainingCourse > 0 AND (q.expiryDate IS NULL OR q.expiryDate > CURRENT_TIMESTAMP) "
             + "ORDER BY q.expiryDate ASC")
     List<MemberCourseQuota> findEligibleQuota(@Param("memberId") Integer memberId, @Param("trainerId") Integer trainerId);

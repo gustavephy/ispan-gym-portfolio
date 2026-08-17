@@ -210,7 +210,7 @@ class JwtSecuritySmokeTest {
 
     private Trainer trainer(TrainerStatus status, boolean deleted) {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(800);
+        trainer.setId(800);
         trainer.setStatus(status);
         if (deleted) {
             trainer.setDeletedAt(java.time.LocalDateTime.now());
