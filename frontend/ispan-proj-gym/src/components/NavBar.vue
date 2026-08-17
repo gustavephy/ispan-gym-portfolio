@@ -1,5 +1,7 @@
 <script setup>
-  import { RouterLink } from 'vue-router'
+  import { computed } from 'vue'
+  import { RouterLink, useRoute, useRouter } from 'vue-router'
+  import { useAuthStore } from '@/stores/auth.js'
 
   const navLinks = [
     { to: '/', label: '首頁' },
@@ -8,6 +10,36 @@
     { to: '/products', label: '補給商城' },
     { to: '/subscription', label: '會籍方案' },
   ]
+
+  const auth = useAuthStore()
+  const route = useRoute()
+  const router = useRouter()
+
+  // roles 是疊加式清單（如 ["MEMBER","EMPLOYEE","ADMIN"]），全列出來很吵——
+  // 徽章只顯示化簡後的「對外身分」：ADMIN/TRAINER 蘊含 EMPLOYEE（基底角色）故不重複列；
+  // 有員工側身分時不再列「會員」。完整清單保留在 title 提示，授權判斷不受影響（store 未動）。
+  const ROLE_LABELS = { MEMBER: '會員', EMPLOYEE: '員工', ADMIN: '管理員', TRAINER: '教練' }
+  const KNOWN_ROLES = Object.keys(ROLE_LABELS)
+  const roleLabels = computed(() => {
+    const roles = new Set(auth.roles)
+    const labels = []
+    if (roles.has('ADMIN')) labels.push('管理員')
+    if (roles.has('TRAINER')) labels.push('教練')
+    if (labels.length === 0 && roles.has('EMPLOYEE')) labels.push('員工')
+    if (labels.length === 0 && roles.has('MEMBER')) labels.push('會員')
+    // 未知角色照樣顯示，之後後端新增角色不會無聲消失
+    for (const role of roles) {
+      if (!KNOWN_ROLES.includes(role)) labels.push(role)
+    }
+    return labels
+  })
+  const fullRoleList = computed(() => auth.roles.map((role) => ROLE_LABELS[role] ?? role).join('、'))
+
+  function onLogout() {
+    auth.logout()
+    // 目前所有頁面皆可匿名瀏覽，登出後留在原頁即可；回首頁讓狀態變化更明顯
+    router.push('/')
+  }
 </script>
 
 <template>
@@ -27,6 +59,23 @@
         {{ link.label }}
       </RouterLink>
     </nav>
+
+    <div class="nav-auth">
+      <template v-if="auth.isLoggedIn">
+        <span class="nav-auth__email" :title="auth.email">{{ auth.email }}</span>
+        <ul class="nav-auth__roles" aria-label="目前身分" :title="`完整身分：${fullRoleList}`">
+          <li v-for="label in roleLabels" :key="label" class="nav-auth__role">{{ label }}</li>
+        </ul>
+        <button type="button" class="nav-auth__button" @click="onLogout">登出</button>
+      </template>
+      <RouterLink
+        v-else
+        class="nav-auth__button nav-auth__button--primary"
+        :to="{ name: 'login', query: route.fullPath !== '/' ? { redirect: route.fullPath } : {} }"
+      >
+        登入
+      </RouterLink>
+    </div>
 
     <div class="nav-footer">© 2026 威力健身房</div>
   </aside>
@@ -91,6 +140,64 @@
     font-weight: 700;
   }
 
+  .nav-auth {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .nav-auth__email {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .nav-auth__roles {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.3rem;
+  }
+  .nav-auth__role {
+    padding: 0.1rem 0.55rem;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .nav-auth__button {
+    padding: 0.5rem 0.9rem;
+    border: 1px solid #d5c2ab;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .nav-auth__button:hover {
+    background: #e6d8c6;
+    color: var(--primary-dark);
+  }
+  .nav-auth__button--primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .nav-auth__button--primary:hover {
+    background: var(--primary-dark);
+    border-color: var(--primary-dark);
+    color: #fff;
+  }
+
   .nav-footer {
     font-size: 0.72rem;
     color: var(--text-muted);
@@ -128,6 +235,22 @@
       white-space: nowrap;
       padding: 0.4rem 0.7rem;
       font-size: 0.88rem;
+    }
+    .nav-auth {
+      flex-direction: row;
+      align-items: center;
+      margin-bottom: 0;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    /* 頂欄寬度有限：隱藏 email，保留較有資訊量的角色徽章與登出鈕 */
+    .nav-auth__email { display: none; }
+    .nav-auth__roles { flex-wrap: nowrap; }
+    .nav-auth__role { white-space: nowrap; }
+    .nav-auth__button {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.82rem;
+      white-space: nowrap;
     }
     .nav-footer { display: none; }
   }

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.js'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -15,6 +16,21 @@ const router = createRouter({
         {path:'products/:id',component:()=>import('@/views/product/ProductDetail.vue')},
         {path:'subscription',component:()=>import('@/views/subscription/SubscriptionView.vue')}
       ]
+    },
+    // 具名路由：401 攔截器會導向這裡，並以 query.redirect 記住原本要去的頁面
+    {
+      path:'/login',
+      name:'login',
+      component:()=>import('@/views/account/LoginView.vue'),
+      // 已登入者不需要看到登入頁：導向原目標（redirect query）或首頁。
+      // token 過期的情況不在這裡驗證——之後任何 API 回 401 時，
+      // 攔截器會清除登入狀態並導回登入頁，屆時本守衛自然放行。
+      beforeEnter: (to) => {
+        const auth = useAuthStore()
+        if (auth.isLoggedIn) {
+          return typeof to.query.redirect === 'string' ? to.query.redirect : '/'
+        }
+      }
     }
   ],
 })
