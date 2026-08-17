@@ -42,6 +42,7 @@ import tw.com.ispan.gym.service.coach.GroupClassService;
 import tw.com.ispan.gym.service.coupon.EmployeeCouponService;
 import tw.com.ispan.gym.service.employee.EmployeeReviewService;
 import tw.com.ispan.gym.service.product.ProductService;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 /**
  * 用「真實的 controller」驗證方法層級的 @PreAuthorize 是否確實生效。
@@ -85,6 +86,7 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.employee.EmployeeReviewController.class,
         tw.com.ispan.gym.controller.coupon.EmployeeCouponController.class,
         tw.com.ispan.gym.controller.product.ProductController.class,
+        tw.com.ispan.gym.controller.trainer.TrainerController.class,
         // 安全基礎設施
         JwtUtil.class,
         JwtAuthFilter.class,
@@ -132,6 +134,9 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary ProductService productService() {
             return Mockito.mock(ProductService.class);
+        }
+        @Bean @Primary TrainerService trainerService() {
+            return Mockito.mock(TrainerService.class);
         }
     }
 
@@ -233,7 +238,10 @@ class EndpointAuthorizationTest {
               "checkInKey": "KEY123",
               "reviewNote": "OK",
               "reason": "不符資格",
-              "memberIds": [1]
+              "memberIds": [1],
+              "specialty": "重量訓練",
+              "experience": "五年授課經驗",
+              "bio": "自我介紹"
             }
             """;
 
@@ -367,5 +375,28 @@ class EndpointAuthorizationTest {
     void 團課場次瀏覽不需登入() throws Exception {
         // 同一支 controller 內，只有報名相關的方法掛 @PreAuthorize，列表刻意不掛
         mockMvc.perform(get("/api/member/group-classes")).andExpect(status().isOk());
+    }
+
+    // === ADMIN：員工升級為教練 ===================================================
+
+    @Test
+    void 建立教練僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/employees/22/trainer"));
+        expectForbidden(post("/api/employees/22/trainer"), memberToken());
+        // 關鍵：一般在職員工可以「審核」同事，但不能把人升級成教練
+        expectForbidden(post("/api/employees/22/trainer"), employeeToken());
+        // 教練身分本身也不夠——升級教練是管理者的權責
+        expectForbidden(post("/api/employees/22/trainer"), trainerToken());
+        expectAuthorized(post("/api/employees/22/trainer"), adminToken());
+    }
+
+    @Test
+    void 公開教練列表與單筆查詢不需登入() throws Exception {
+        mockMvc.perform(get("/api/trainers")).andExpect(status().isOk());
+        // 單筆走 service（已 mock，回 null）不影響授權判斷，重點是沒有被擋成 401
+        int status = mockMvc.perform(get("/api/trainers/7")).andReturn().getResponse().getStatus();
+        org.assertj.core.api.Assertions.assertThat(status)
+                .as("公開單筆查詢不該被安全層擋下（實際 %d）", status)
+                .isNotIn(401, 403);
     }
 }
