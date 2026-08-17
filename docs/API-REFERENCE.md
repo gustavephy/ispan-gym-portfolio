@@ -830,15 +830,25 @@ Response `TrainerResponse`：
 ## 12. 營運報表
 
 前綴 `/api/admin/reports`，全部 🛡️ **ADMIN**（僅靠 URL 前綴把關，類別上沒有 `@PreAuthorize`）。
-**全部回 JSON，沒有 Excel／PDF 匯出端點。**
 
 | 方法 | 路徑 | 成功狀態 | 說明 |
 |---|---|---|---|
 | GET | `/api/admin/reports` | 200 | 報表快照列表（`generatedAt DESC`） |
 | GET | `/api/admin/reports/stats` | 200 | 即時銷售統計（不落地） |
 | GET | `/api/admin/reports/{reportId}` | 200 | 報表明細 |
+| GET | `/api/admin/reports/{reportId}/pdf` | 200 | **報表匯出 PDF** |
 | POST | `/api/admin/reports` | **201** | 產生報表快照 |
 | DELETE | `/api/admin/reports/{reportId}` | **204** | 刪除快照（連同明細） |
+
+`GET /{reportId}/pdf` 回應：
+- `Content-Type: application/pdf`
+- `Content-Disposition: attachment; filename="operation-report-{id}.pdf"`
+- 內容：報表類型與期間、生成時間與產生者、總覽（訂單數／營收／折扣）、銷售排行表；
+  內嵌中文字型，任何裝置顯示一致
+- **只能匯出已生成的快照** —— 即時統計（`/stats`）要匯出前先 `POST` 生成快照，
+  確保 PDF 上的數字永遠有資料庫紀錄可回查
+- 快照已過時（`staleAt` 非 null）時，PDF 開頭會帶紅字警示，紙本流通後讀者仍知數據可能過時
+- 錯誤：`404` 找不到報表資料；`500 PDF_GENERATION_FAILED` 報表 PDF 產生失敗，請稍後再試
 
 `GET /stats` 參數：
 
