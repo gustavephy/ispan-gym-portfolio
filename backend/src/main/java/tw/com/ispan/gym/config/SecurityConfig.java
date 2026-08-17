@@ -72,6 +72,9 @@ public class SecurityConfig {
                         //（曾寫成 /api/categories/** 放了空砲，匿名瀏覽分類一直是 401）
                         .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/product-categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/course-categories").permitAll()
+                        // 公開教練介紹頁／列表（TrainerController）；未軟刪除者皆可匿名瀏覽，
+                        // UNAVAILABLE 教練同樣公開，由回應的 status 讓前端自行停用預約入口
+                        .requestMatchers(HttpMethod.GET, "/api/trainers", "/api/trainers/*").permitAll()
                         // 課表瀏覽開放未登入者：教練可預約時段（CoachBookingController#searchSlots）與
                         // 團課場次列表（GroupClassController#getUpcomingSessions）都只是公開排班資訊，
                         // 實際「預約／報名」的動作才需要登入。
@@ -96,6 +99,8 @@ public class SecurityConfig {
                         // 員工審核：任何在職員工皆可審核，不限管理者，獨立於 /api/admin/** 之外
                         // （/api/admin/** 還掛著訂單、商品等真正的管理員專屬後台，不能共用同一條規則）
                         .requestMatchers("/api/employees/reviews/**").hasRole("EMPLOYEE")
+                        // 員工升級為教練：限管理者，與上面的員工審核（任何在職員工皆可）是不同動作的不同權限
+                        .requestMatchers(HttpMethod.POST, "/api/employees/*/trainer").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 // filter 層的 401／403 不會經過 GlobalExceptionHandler，
                 // 這裡改用自訂處理器輸出相同的 ApiErrorResponse 格式，不導向登入頁

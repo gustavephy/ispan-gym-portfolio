@@ -26,7 +26,8 @@ import org.hibernate.annotations.Nationalized;
 import tw.com.ispan.gym.enums.trainer.TrainerStatus;
 
 /**
- * 教練明細：role=TRAINER 的員工一人一筆，存專業資料。
+ * 教練明細：ACTIVE 員工經 ADMIN 建立後一人一筆，存專業資料。
+ * 是否為教練純看本表資料列是否存在，與 {@link Employee#getRole()} 無關。
  * 供給鏈（課程、時段、核銷）FK 皆指本表，由 DB 保證開課者必為教練。
  * deleted_at 獨立於 employee 軟刪除——代表「不再是教練」，
  * 員工帳號本身可能仍在職（轉任行政等）。
