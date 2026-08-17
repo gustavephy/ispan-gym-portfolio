@@ -186,6 +186,10 @@ public class TestDataSeedRunner implements CommandLineRunner {
         if (trainer == null) {
             trainer = new Trainer();
             trainer.setEmployee(employee);
+            // populate required personal info from employee/account to satisfy non-null DB constraints
+            trainer.setFirstName(employee.getFirstName());
+            trainer.setLastName(employee.getLastName());
+            trainer.setEmail(employee.getAccount().getEmail());
             trainer.setSpecialty("重量訓練、體態雕塑");
             trainer.setExperience("五年一對一私人教練經驗");
             trainer.setBio("測試用教練帳號，供本機開發與功能展示。");
