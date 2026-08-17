@@ -30,7 +30,7 @@ import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
 @Table(name = "member_subscription")
 @Getter
 @Setter
-@ToString(exclude = {"member","order","subscriptionPlan"})
+@ToString(exclude = { "member", "order", "subscriptionPlan" })
 @EntityListeners(AuditingEntityListener.class)
 public class MemberSubscription {
 
@@ -43,17 +43,17 @@ public class MemberSubscription {
 	@JoinColumn(name = "member_id", nullable = false)
 	private Member member;
 
-	@ManyToOne(fetch=FetchType.LAZY)
-	@JoinColumn(name = "order_id", nullable = false)
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "order_id")
 	private Order order;
-	
-	@Column(nullable=false, columnDefinition="NVARCHAR(100)")
+
+	@Column(nullable = false, columnDefinition = "NVARCHAR(100)")
 	private String planName;
-	
-	@ManyToOne(optional=false, fetch=FetchType.LAZY)
-	@JoinColumn(name="subscription_plan_id",nullable=false)
+
+	@ManyToOne(optional = false, fetch = FetchType.LAZY)
+	@JoinColumn(name = "subscription_plan_id", nullable = false)
 	private SubscriptionPlan subscriptionPlan;
-	
+
 	@Column(nullable = false)
 	private LocalDateTime startDate;
 

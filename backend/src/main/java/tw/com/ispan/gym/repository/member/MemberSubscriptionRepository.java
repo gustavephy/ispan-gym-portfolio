@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
@@ -18,10 +19,12 @@ import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
  */
 public interface MemberSubscriptionRepository extends JpaRepository<MemberSubscription, Integer> {
 
-	List<MemberSubscription> findByMemberId(Integer memberId);
-
+	// 查詢特定會員的所有訂閱紀錄（依結束日期降序），因為一個會員擁有多筆訂閱歷史，故不能用單一紀錄的 findById
+	@Query("SELECT s FROM MemberSubscription s WHERE s.member.memberId = :memberId ORDER BY s.endDate DESC")
 	List<MemberSubscription> findByMemberIdOrderByEndDateDesc(Integer memberId);
 
+	// 查詢特定會員目前最新且有效的訂閱紀錄
+	@Query("SELECT s FROM MemberSubscription s WHERE s.member.memberId = :memberId AND s.endDate > :now AND s.status = :status ORDER BY s.endDate DESC")
 	Optional<MemberSubscription> findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(Integer memberId,
 			LocalDateTime now, SubscriptionStatus status);
 }

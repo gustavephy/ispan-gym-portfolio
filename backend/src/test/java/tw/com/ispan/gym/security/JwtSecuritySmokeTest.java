@@ -35,9 +35,7 @@ import tw.com.ispan.gym.repository.member.MemberRepository;
  * 驗證 JwtUtil / JwtAuthFilter / SecurityConfig 三者串起來的行為。
  * 不連資料庫，repository 一律以 mock 取代。
  */
-@SpringBootTest(
-        classes = {JwtSecuritySmokeTest.TestApp.class},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(classes = { JwtSecuritySmokeTest.TestApp.class }, webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
         // application.properties 硬寫 spring.profiles.active=dev，會讓 @Profile("!dev") 的
@@ -49,24 +47,24 @@ import tw.com.ispan.gym.repository.member.MemberRepository;
 })
 class JwtSecuritySmokeTest {
 
-    @org.springframework.boot.autoconfigure.EnableAutoConfiguration(
-            exclude = {
-                org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
-                org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration.class,
-                org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration.class
-            })
+    @org.springframework.boot.autoconfigure.EnableAutoConfiguration(exclude = {
+            org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class,
+            org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration.class,
+            org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration.class
+    })
     @org.springframework.context.annotation.Configuration
     @Import({
-        TestBeans.class,
-        ProbeController.class,
-        JwtUtil.class,
-        JwtAuthFilter.class,
-        ApiErrorWriter.class,
-        JsonAuthenticationEntryPoint.class,
-        JsonAccessDeniedHandler.class,
-        tw.com.ispan.gym.config.SecurityConfig.class
+            TestBeans.class,
+            ProbeController.class,
+            JwtUtil.class,
+            JwtAuthFilter.class,
+            ApiErrorWriter.class,
+            JsonAuthenticationEntryPoint.class,
+            JsonAccessDeniedHandler.class,
+            tw.com.ispan.gym.config.SecurityConfig.class
     })
-    static class TestApp {}
+    static class TestApp {
+    }
 
     @TestConfiguration
     static class TestBeans {
@@ -113,11 +111,16 @@ class JwtSecuritySmokeTest {
         }
     }
 
-    @Autowired MockMvc mockMvc;
-    @Autowired JwtUtil jwtUtil;
-    @Autowired AccountRepository accounts;
-    @Autowired MemberRepository members;
-    @Autowired EmployeeRepository employees;
+    @Autowired
+    MockMvc mockMvc;
+    @Autowired
+    JwtUtil jwtUtil;
+    @Autowired
+    AccountRepository accounts;
+    @Autowired
+    MemberRepository members;
+    @Autowired
+    EmployeeRepository employees;
 
     private Account memberAccount() {
         Account account = new Account();
@@ -172,7 +175,7 @@ class JwtSecuritySmokeTest {
         Employee employee = new Employee();
         employee.setAccount(account);
         employee.setId(71); // employee_id 與 account_id 已脫鉤，刻意不同號
-        employee.setRole(EmployeeRole.ADMIN);
+        employee.setRole(EmployeeRole.EMPLOYEE);
         employee.setStatus(EmployeeStatus.ACTIVE);
 
         Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));

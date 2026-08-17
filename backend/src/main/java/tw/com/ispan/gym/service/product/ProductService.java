@@ -14,7 +14,7 @@ import tw.com.ispan.gym.dto.product.ProductResponse;
 import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.entity.product.ProductCategory;
 import tw.com.ispan.gym.enums.product.ProductStatus;
-import tw.com.ispan.gym.exception.ProductNotFoundException;
+import tw.com.ispan.gym.exception.product.ProductNotFoundException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.product.ProductCategoryRepository;
 import tw.com.ispan.gym.repository.product.ProductRepository;
@@ -31,21 +31,23 @@ public class ProductService {
         this.productCategories = productCategories;
     }
 
-    /** 前台商品列表：只回上架中的商品，可依分類／關鍵字／品牌／口味／尺寸／價格區間篩選 */
+    // 前台商品列表：只回上架中的商品，可依分類／關鍵字／品牌／口味／尺寸／價格區間篩選
     public Page<ProductResponse> getProducts(Integer productCategoryId, String keyword, String brand,
             String flavor, String size, BigDecimal minPrice, BigDecimal maxPrice, int page, int pageSize) {
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
         String kw = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
         return products.findProductsWithFilters(ProductStatus.ACTIVE, productCategoryId, kw,
-                        brand, flavor, size, minPrice, maxPrice, pageable)
+                brand, flavor, size, minPrice, maxPrice, pageable)
                 .map(ProductResponse::from);
     }
 
+    // 查詢單一商品
     public ProductResponse getProductById(Integer productId) {
         return ProductResponse.from(products.findById(productId)
                 .orElseThrow(() -> new ProductNotFoundException(productId)));
     }
 
+    // 新增商品
     @Transactional
     public ProductResponse createProduct(ProductRequest request) {
         Product product = new Product();
@@ -53,6 +55,7 @@ public class ProductService {
         return ProductResponse.from(products.save(product));
     }
 
+    // 更新商品
     @Transactional
     public ProductResponse updateProduct(Integer productId, ProductRequest request) {
         Product product = products.findById(productId)
@@ -61,7 +64,7 @@ public class ProductService {
         return ProductResponse.from(product);
     }
 
-    /** 下架＝status 改 INACTIVE，不實體刪除（訂單明細仍引用商品列） */
+    // 下架商品
     @Transactional
     public void deleteProduct(Integer productId) {
         Product product = products.findById(productId)
@@ -69,22 +72,23 @@ public class ProductService {
         product.setStatus(ProductStatus.INACTIVE);
     }
 
+    // 內部使用方法，提供給createProduct和updateProduct使用，不對外開放
     private void applyRequest(Product product, ProductRequest request) {
-        product.setName(request.getName());
-        product.setDescription(request.getDescription());
-        product.setPrice(request.getPrice());
-        product.setStock(request.getStock());
-        product.setImageUrl(request.getImageUrl());
-        product.setBrand(request.getBrand());
-        product.setFlavor(request.getFlavor());
-        product.setSize(request.getSize());
-        product.setWeight(request.getWeight());
-        product.setMaterial(request.getMaterial());
-        product.setOrigin(request.getOrigin());
-        product.setColor(request.getColor());
-        if (request.getProductCategoryId() != null) {
-            ProductCategory category = productCategories.findById(request.getProductCategoryId())
-                    .orElseThrow(() -> new ResourceNotFoundException("找不到商品分類：" + request.getProductCategoryId()));
+        product.setName(request.name());
+        product.setDescription(request.description());
+        product.setPrice(request.price());
+        product.setStock(request.stock());
+        product.setImageUrl(request.imageUrl());
+        product.setBrand(request.brand());
+        product.setFlavor(request.flavor());
+        product.setSize(request.size());
+        product.setWeight(request.weight());
+        product.setMaterial(request.material());
+        product.setOrigin(request.origin());
+        product.setColor(request.color());
+        if (request.productCategoryId() != null) {
+            ProductCategory category = productCategories.findById(request.productCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("找不到商品分類：" + request.productCategoryId()));
             product.setProductCategory(category);
         } else {
             product.setProductCategory(null);

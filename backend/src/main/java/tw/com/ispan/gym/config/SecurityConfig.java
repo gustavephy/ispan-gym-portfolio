@@ -71,7 +71,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers("/error").permitAll()
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")
                         .anyRequest().authenticated())
                 // filter 層的 401／403 不會經過 GlobalExceptionHandler，
                 // 這裡改用自訂處理器輸出相同的 ApiErrorResponse 格式，不導向登入頁

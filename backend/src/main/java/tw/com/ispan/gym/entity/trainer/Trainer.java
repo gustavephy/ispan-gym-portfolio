@@ -47,6 +47,22 @@ public class Trainer {
 	private Employee employee;
 
 	@Nationalized
+	@Column(name = "first_name", length = 255, nullable = false)
+	private String firstName;
+
+	@Nationalized
+	@Column(name = "last_name", length = 255, nullable = false)
+	private String lastName;
+
+	@Nationalized
+	@Column(name = "email", length = 255, nullable = false)
+	private String email;
+
+	@Nationalized
+	@Column(name = "avatar_url", length = 255, nullable = true)
+	private String avatarUrl;
+
+	@Nationalized
 	@Column(name = "specialty", length = 255, nullable = false)
 	private String specialty;
 

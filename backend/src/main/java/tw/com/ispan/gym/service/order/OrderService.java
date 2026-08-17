@@ -39,8 +39,8 @@ import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.DirectCheckoutNotAllowedException;
 import tw.com.ispan.gym.exception.InsufficientStockException;
 import tw.com.ispan.gym.exception.InvalidQuantityException;
-import tw.com.ispan.gym.exception.ProductNotFoundException;
-import tw.com.ispan.gym.exception.ProductUnavailableException;
+import tw.com.ispan.gym.exception.product.ProductNotFoundException;
+import tw.com.ispan.gym.exception.product.ProductUnavailableException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.cart.CartItemRepository;
 import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
@@ -157,7 +157,7 @@ public class OrderService {
         PrivateCourse course = courses.findById(request.privateCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到私教課：" + request.privateCourseId()));
         if (!CourseStatus.ACTIVE.equals(course.getStatus())) {
-            throw new DirectCheckoutNotAllowedException(course.getId());
+            throw new DirectCheckoutNotAllowedException(course.getPrivateCourseId());
         }
 
         Order order = createCourseOrder(user, course, request.quantity(), request.couponCode());
@@ -478,7 +478,7 @@ public class OrderService {
                 .sorted(Comparator.comparing(OrderItem::getId))
                 .map(item -> new OrderItemResponse(item.getId(),
                         item.isCourseItem() ? null : item.getProduct().getProductId(),
-                        item.isCourseItem() ? item.getCourse().getId() : null,
+                        item.isCourseItem() ? item.getCourse().getPrivateCourseId() : null,
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
                         item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
                 .toList();

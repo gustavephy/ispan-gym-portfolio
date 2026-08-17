@@ -30,7 +30,8 @@ import org.hibernate.annotations.Nationalized;
 /**
  * 會員個人資料；登入用的 email／密碼存於 {@link Account}。
  *
- * <p>member_id 是獨立流水號，與 account_id 脫鉤（2026-08 定案，捨棄 @MapsId 共享主鍵）；
+ * <p>
+ * member_id 是獨立流水號，與 account_id 脫鉤（2026-08 定案，捨棄 @MapsId 共享主鍵）；
  * 以 account_id 唯一 FK 連回 {@link Account}，同一個 account 仍可同時具備會員與員工身分。
  */
 @Entity
@@ -42,7 +43,7 @@ public class Member {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "member_id")
-	private Integer id;
+	private Integer memberId;
 
 	@OneToOne(fetch = FetchType.LAZY, optional = false)
 	@JoinColumn(name = "account_id", nullable = false, foreignKey = @ForeignKey(name = "FK_member_account_id"))

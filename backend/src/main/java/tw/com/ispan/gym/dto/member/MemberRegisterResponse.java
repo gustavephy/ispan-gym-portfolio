@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 import tw.com.ispan.gym.entity.member.Member;
 
 public record MemberRegisterResponse(
-        Integer id,
+        Integer memberId,
         String firstName,
         String lastName,
         String email,
@@ -15,7 +15,7 @@ public record MemberRegisterResponse(
 
     public static MemberRegisterResponse from(Member member) {
         return new MemberRegisterResponse(
-                member.getId(),
+                member.getMemberId(),
                 member.getFirstName(),
                 member.getLastName(),
                 member.getAccount().getEmail(),

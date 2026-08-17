@@ -10,7 +10,7 @@ import tw.com.ispan.gym.enums.course.CourseStatus;
 public interface PrivateCourseRepository extends JpaRepository<PrivateCourse, Integer> {
 
 	/** Trainer 的主鍵欄位叫 trainerId，衍生查詢路徑須寫全名 trainer.trainerId */
-	List<PrivateCourse> findByTrainerTrainerId(Integer trainerId);
+	List<PrivateCourse> findByTrainerId(Integer trainerId);
 
 	List<PrivateCourse> findByStatus(CourseStatus status);
 }

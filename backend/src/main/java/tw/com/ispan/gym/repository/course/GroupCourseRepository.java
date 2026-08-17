@@ -3,14 +3,15 @@ package tw.com.ispan.gym.repository.course;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import tw.com.ispan.gym.entity.course.GroupCourse;
 import tw.com.ispan.gym.enums.course.CourseStatus;
 
 public interface GroupCourseRepository extends JpaRepository<GroupCourse, Integer> {
 
-	/** 某教練授課的團課；Trainer 主鍵欄位叫 trainerId，路徑須寫全名 */
-	List<GroupCourse> findByTrainerTrainerId(Integer trainerId);
+	@Query("SELECT g FROM GroupCourse g WHERE g.trainer.trainerId = :trainerId")
+	List<GroupCourse> findByTrainerId(Integer trainerId);
 
 	List<GroupCourse> findByStatus(CourseStatus status);
 }
