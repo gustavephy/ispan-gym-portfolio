@@ -16,4 +16,9 @@ public interface MemberRepository extends JpaRepository<Member, Integer> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from Member u where u.id = :id")
     Optional<Member> findByIdForUpdate(@Param("id") Integer id);
+
+    /** 期間新註冊會員數（報表用）；半開區間 [from, to) */
+    @Query("SELECT COUNT(m) FROM Member m WHERE m.createdAt >= :from AND m.createdAt < :to")
+    long countCreatedBetween(@Param("from") java.time.LocalDateTime from,
+                             @Param("to") java.time.LocalDateTime to);
 }

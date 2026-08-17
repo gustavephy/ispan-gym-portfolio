@@ -843,8 +843,9 @@ Response `TrainerResponse`：
 `GET /{reportId}/pdf` 回應：
 - `Content-Type: application/pdf`
 - `Content-Disposition: attachment; filename="operation-report-{id}.pdf"`
-- 內容：報表類型與期間、生成時間與產生者、總覽（訂單數／營收／折扣）、銷售排行表；
-  內嵌中文字型，任何裝置顯示一致
+- 內容依序為：報表類型與期間、生成時間與產生者、總覽（訂單數／營收／折扣／平均客單價）、
+  品類小計與占比、每日營收趨勢折線圖、訂單狀態與付款方式分佈、銷售排行（含占比）、
+  退款與會員動態；內嵌中文字型，任何裝置顯示一致
 - **只能匯出已生成的快照** —— 即時統計（`/stats`）要匯出前先 `POST` 生成快照，
   確保 PDF 上的數字永遠有資料庫紀錄可回查
 - 快照已過時（`staleAt` 非 null）時，PDF 開頭會帶紅字警示，紙本流通後讀者仍知數據可能過時
@@ -863,7 +864,14 @@ Response `TrainerResponse`：
 
 回應 DTO：
 - `ReportSummaryResponse`：`id`、`reportType`、`periodStart`、`periodEnd`、`orderCount` Long、`totalAmount`、`discountAmount`、`generatedAt`、`staleAt`
-- `ReportDetailResponse`：上述 + `items` `List<ReportSalesItemResponse>`
+- `ReportDetailResponse`：上述 + `items` `List<ReportSalesItemResponse>`，以及延伸統計：
+  `statusBreakdown`／`paymentBreakdown` `List<ReportBreakdownResponse>`（`itemKey`、`orderCount`、`amount`；
+  付款方式的 `amount` 為 null）、`dailyTotals` `List<ReportDailyTotalResponse>`（`statDate`、`orderCount`、`revenue`）、
+  `refundCount`、`refundAmount`、`newMemberCount`、`newSubscriptionCount`
+
+> 延伸統計於 2026-08-17 加入，與總覽同一份快照凍結（趨勢資料不於讀取時重算，
+> 避免退款後趨勢與總覽變成兩個口徑）。此前生成的舊快照這些欄位為 null、清單為空，前端需容忍。
+> 分佈的時間軸為**下單日**（看訂單量），與營收的付款日口徑不同。
 - `SalesStatsResponse`：`periodStart`、`periodEnd`、`productType`、`totalQuantity` Long、`grossAmount`、`ranking`
 - `ReportSalesItemResponse`：`rankNo`、`productId`、`productType`、`productName`、`quantitySold` Long、`grossAmount`
 

@@ -113,4 +113,46 @@ public class ReportSnapshot {
     public void addItem(ReportSalesItem item) {
         items.add(item);
     }
+
+    // === 延伸統計（2026-08-17 擴充；舊快照這些欄位為 null／空集合，呈現端須容忍）====
+
+    /** 期間內完成退款筆數（completed_at 落在區間、status=COMPLETED） */
+    @Column(name = "refund_count")
+    private Long refundCount;
+
+    @Column(name = "refund_amount", precision = 12, scale = 2)
+    private BigDecimal refundAmount;
+
+    /** 期間內新註冊會員數（member.created_at） */
+    @Column(name = "new_member_count")
+    private Long newMemberCount;
+
+    /** 期間內新生效訂閱數（member_subscription.created_at） */
+    @Column(name = "new_subscription_count")
+    private Long newSubscriptionCount;
+
+    @OneToMany(mappedBy = "snapshot", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("statDate ASC")
+    private List<ReportDailyTotal> dailyTotals = new ArrayList<>();
+
+    @OneToMany(mappedBy = "snapshot", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
+    private List<ReportBreakdown> breakdowns = new ArrayList<>();
+
+    public void addDailyTotal(ReportDailyTotal dailyTotal) {
+        dailyTotals.add(dailyTotal);
+    }
+
+    public void addBreakdown(ReportBreakdown breakdown) {
+        breakdowns.add(breakdown);
+    }
+
+    /** 生成時一次附掛延伸統計的純量值；不提供個別 setter，快照寫入後即凍結 */
+    public void attachExtendedStats(Long refundCount, BigDecimal refundAmount,
+                                    Long newMemberCount, Long newSubscriptionCount) {
+        this.refundCount = refundCount;
+        this.refundAmount = refundAmount;
+        this.newMemberCount = newMemberCount;
+        this.newSubscriptionCount = newSubscriptionCount;
+    }
 }
