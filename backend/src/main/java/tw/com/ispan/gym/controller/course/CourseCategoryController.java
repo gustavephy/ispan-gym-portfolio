@@ -37,7 +37,7 @@ public class CourseCategoryController {
 	@PostMapping("/api/employee/course-categories")
 	@PreAuthorize("hasRole('EMPLOYEE')")
 	public ResponseEntity<CourseCategoryDto> createCourseCategory(@RequestBody CourseCategoryDto dto){
-		log.info("Request to create course category: name={}", dto.getName());
+		log.info("Request to create course category: name={}", dto.name());
 		return ResponseEntity.ok(courseCategoryService.createCourseCategory(dto));
 	}
 
@@ -54,7 +54,7 @@ public class CourseCategoryController {
 	@PostMapping("/api/employee/course-categories/{id}")
 	@PreAuthorize("hasRole('EMPLOYEE')")
 	public ResponseEntity<CourseCategoryDto> updateCourseCategory(@PathVariable Integer id,@RequestBody CourseCategoryDto dto){
-		log.info("Request to update course category with id={}, name={}", id, dto.getName());
+		log.info("Request to update course category with id={}, name={}", id, dto.name());
 		return ResponseEntity.ok(courseCategoryService.updateCourseCategory(id, dto));
 	}
 	

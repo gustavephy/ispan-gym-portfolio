@@ -58,7 +58,7 @@ public class ProductController {
 	@PostMapping("/api/admin/products/upload")
 	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<ProductResponse> createProduct (@Valid @RequestBody ProductRequest request){
-		log.info("Request to create product:{}",request.getName());
+		log.info("Request to create product:{}",request.name());
 		return ResponseEntity.ok(productService.createProduct(request));
 	}
 	
@@ -67,7 +67,7 @@ public class ProductController {
 	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<ProductResponse> updateProduct(
 			@PathVariable Integer productId,@Valid @RequestBody ProductRequest request){
-		log.info("Request to update product: productId={}, name={}", productId, request.getName());
+		log.info("Request to update product: productId={}, name={}", productId, request.name());
 		return ResponseEntity.ok(productService.updateProduct(productId,request));
 	}
 	

@@ -35,7 +35,7 @@ public class ProductCategoryController {
 	@PostMapping("/api/admin/product-categories")
 	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<ProductCategoryDto> createProductCategory(@RequestBody ProductCategoryDto category) {
-		log.info("Request to create product category: name={}", category.getName());
+		log.info("Request to create product category: name={}", category.name());
 		return ResponseEntity.ok(productCategoryService.createProductCategory(category));
 	}
 

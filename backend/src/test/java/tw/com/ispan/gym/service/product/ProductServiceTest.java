@@ -58,15 +58,25 @@ class ProductServiceTest {
     }
 
     private ProductRequest request() {
-        ProductRequest request = new ProductRequest();
-        request.setName("高蛋白餅乾");
-        request.setDescription("低糖高蛋白");
-        request.setPrice(new BigDecimal("80"));
-        request.setStock(50);
-        request.setBrand("MyBrand");
-        request.setFlavor("巧克力");
-        request.setSize("M");
-        return request;
+        return request(null);
+    }
+
+    /** record 無 setter，需要分類的測試改用這個多載直接帶 productCategoryId */
+    private ProductRequest request(Integer productCategoryId) {
+        return new ProductRequest(
+                "高蛋白餅乾",          // name
+                "低糖高蛋白",          // description
+                new BigDecimal("80"), // price
+                50,                   // stock
+                null,                 // imageUrl
+                productCategoryId,
+                "MyBrand",            // brand
+                null,                 // weight
+                "巧克力",              // flavor
+                "M",                  // size
+                null,                 // color
+                null,                 // material
+                null);                // origin
     }
 
     private ProductCategory category() {
@@ -133,8 +143,8 @@ class ProductServiceTest {
 
         ProductResponse response = service.getProductById(PRODUCT_ID);
 
-        assertThat(response.getProductId()).isEqualTo(PRODUCT_ID);
-        assertThat(response.getName()).isEqualTo("乳清蛋白");
+        assertThat(response.productId()).isEqualTo(PRODUCT_ID);
+        assertThat(response.name()).isEqualTo("乳清蛋白");
     }
 
     @Test
@@ -153,9 +163,9 @@ class ProductServiceTest {
 
         ProductResponse response = service.createProduct(request());
 
-        assertThat(response.getName()).isEqualTo("高蛋白餅乾");
-        assertThat(response.getPrice()).isEqualByComparingTo("80");
-        assertThat(response.getStock()).isEqualTo(50);
+        assertThat(response.name()).isEqualTo("高蛋白餅乾");
+        assertThat(response.price()).isEqualByComparingTo("80");
+        assertThat(response.stock()).isEqualTo(50);
         // 新商品預設為上架
         verify(products).save(org.mockito.ArgumentMatchers.argThat(
                 (Product p) -> p.getStatus() == ProductStatus.ACTIVE));
@@ -163,8 +173,7 @@ class ProductServiceTest {
 
     @Test
     void 建立商品時帶分類會連結該分類() {
-        ProductRequest request = request();
-        request.setProductCategoryId(CATEGORY_ID);
+        ProductRequest request = request(CATEGORY_ID);
         when(categories.findById(CATEGORY_ID)).thenReturn(Optional.of(category()));
         when(products.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -177,8 +186,7 @@ class ProductServiceTest {
 
     @Test
     void 建立商品時分類不存在回404且不寫入() {
-        ProductRequest request = request();
-        request.setProductCategoryId(CATEGORY_ID);
+        ProductRequest request = request(CATEGORY_ID);
         when(categories.findById(CATEGORY_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createProduct(request))
@@ -196,7 +204,7 @@ class ProductServiceTest {
 
         ProductResponse response = service.updateProduct(PRODUCT_ID, request());
 
-        assertThat(response.getName()).isEqualTo("高蛋白餅乾");
+        assertThat(response.name()).isEqualTo("高蛋白餅乾");
         assertThat(existing.getStock()).isEqualTo(50);
         // 交給 JPA dirty checking，不需要顯式 save
         assertThat(existing.getPrice()).isEqualByComparingTo("80");

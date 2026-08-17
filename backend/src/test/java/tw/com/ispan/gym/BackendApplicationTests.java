@@ -32,7 +32,7 @@ class BackendApplicationTests {
 			System.out.println("2. 測試 Entity 轉換為 ProductResponse DTO");
 			Product firstProduct = products.get(0);
 			ProductResponse dto = ProductResponse.from(firstProduct);
-			System.out.println("DTO 轉換成功！商品名稱為：" + dto.getName() + "，狀態為：" + dto.getStatus());
+			System.out.println("DTO 轉換成功！商品名稱為：" + dto.name() + "，狀態為：" + dto.status());
 		} else {
 			System.out.println("警告：目前資料庫中沒有商品資料，請確認資料庫中是否有 seeds 資料。");
 		}
