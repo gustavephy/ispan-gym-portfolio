@@ -1,10 +1,10 @@
 # API Reference
 
-> 對應 commit `122394a`（2026-08-17）。以原始碼為準逐一核對 controller、DTO、SecurityConfig 與 GlobalExceptionHandler。
+> 對應 commit `9b2ab38`（2026-08-17）。以原始碼為準逐一核對 controller、DTO、SecurityConfig 與 GlobalExceptionHandler。
 >
 > 標記說明：🔓 免登入｜🔒 需登入｜👤 MEMBER｜🧑‍💼 EMPLOYEE｜🛡️ ADMIN｜🏋️ TRAINER
 >
-> 全文共 25 支 controller、約 100 個端點，另有 2 條 WebSocket 訊息目的地。
+> 全文共 26 支 controller、約 100 個端點，另有 2 條 WebSocket 訊息目的地。
 
 ---
 
@@ -22,6 +22,7 @@
 | 金流 | `/api/payments` | [6](#6-金流ecpay) |
 | 訂閱 | `/api/subscription-plans`、`/api/me/subscription` | [7](#7-訂閱) |
 | 教練時段／預約 | `/api/trainer`、`/api/member` | [8](#8-私教教練時段與預約) |
+| 教練檔案 | `/api/trainers`、`/api/employees/{id}/trainer` | [8.7](#87-教練檔案trainercontroller) |
 | 團課 | `/api/member/group-classes`、`/api/admin/group-classes` | [9](#9-團課) |
 | 課程分類 | `/api/course-categories`、`/api/employee/course-categories` | [10](#10-課程分類) |
 | 優惠券 | `/api/coupons`、`/api/employee/coupons` | [11](#11-優惠券) |
@@ -118,6 +119,7 @@ GET     /api/product-categories          （精確路徑，無 /**）
 GET     /api/course-categories           （精確路徑，無 /**）
 GET     /api/member/trainers/*/schedules
 GET     /api/member/group-classes        （精確路徑，無 /**）
+GET     /api/trainers、/api/trainers/*   （公開教練介紹）
 GET     /api/subscription-plans
 POST    /api/payments/ecpay/notify
 /oauth2/**、/login/oauth2/**、/ws-chat/**、/error
@@ -130,6 +132,7 @@ POST    /api/payments/ecpay/notify
 | `/api/admin/**` | `hasRole("ADMIN")` |
 | `/api/employee/**` | `hasRole("EMPLOYEE")` |
 | `/api/employees/reviews/**` | `hasRole("EMPLOYEE")`（任何在職員工皆可審核，刻意獨立於 `/api/admin/**` 之外） |
+| `POST /api/employees/*/trainer` | `hasRole("ADMIN")`（員工升級教練限管理者，與員工審核是不同動作的不同權限） |
 
 > `/api/member/**` 刻意沒有整段放行 —— 同前綴下還有 `GET /api/member/bookings` 等個人資料端點，
 > 一併放行會使其變成匿名可讀。放行的是逐條精確列出的公開排班資訊。
@@ -640,6 +643,56 @@ Response `200` `Map<String,String>`：
 | `acknowledgeConsumption` | 會員 | 72 小時內取消會扣掉堂數 |
 
 兩者都以 `409 CONFIRMATION_REQUIRED` 觸發。前端應以 `code` 判斷「跳確認框後重送」還是「單純錯誤」：`CONFIRMATION_REQUIRED` 屬前者，`BUSINESS_RULE_VIOLATION` 屬後者。
+
+### 8.7 教練檔案（TrainerController）
+
+| 方法 | 路徑 | 權限 | 成功狀態 |
+|---|---|---|---|
+| POST | `/api/employees/{employeeId}/trainer` | 🛡️ ADMIN（filter + `@PreAuthorize` 雙重把關） | **201** |
+| GET | `/api/trainers` | 🔓 | 200 |
+| GET | `/api/trainers/{trainerId}` | 🔓 | 200 |
+
+#### 🛡️ `POST /api/employees/{employeeId}/trainer` —— 員工升級為教練
+
+Request `TrainerCreateRequest`：
+
+| 欄位 | 型別 | 驗證 |
+|---|---|---|
+| `specialty` | String | `@NotBlank` `@Size(max=255)` |
+| `experience` | String | `@NotBlank` `@Size(max=1000)` |
+| `bio` | String | `@NotBlank` |
+
+> **不接受 `status`** —— 建立時一律由後端固定為 `ACTIVE`，避免呼叫端任意指定狀態。
+
+行為：建立前以 `findByIdForUpdate` 鎖住 Employee 列，同一員工的並發升級請求會序列化，
+確保回報精準的「已經是教練」而非資料庫 constraint 的通用錯誤。
+一位員工一生只會有一筆 Trainer（revive-not-recreate）。
+
+錯誤：
+
+| 情況 | 回應 |
+|---|---|
+| 員工不存在 | `404` 找不到此員工 |
+| 員工非在職（非 ACTIVE 或已軟刪除） | `409` 此員工目前不是在職狀態，無法建立教練身分 |
+| 已是教練 | `409` 此員工已經是教練 |
+| 曾是教練（已軟刪除） | `409` 此員工先前曾是教練，需走恢復流程，MVP 階段尚未支援 |
+
+#### 🔓 `GET /api/trainers`／`GET /api/trainers/{trainerId}` —— 公開教練介紹
+
+Response `TrainerResponse`：
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| `trainerId` | Integer | |
+| `displayName` | String | 姓＋名組合 |
+| `specialty` | String | 專長 |
+| `experience` | String | 經歷 |
+| `bio` | String | 自我介紹 |
+| `status` | TrainerStatus | `ACTIVE`｜`UNAVAILABLE` |
+
+- 列表**不篩 status** —— `UNAVAILABLE`（如休假中）教練同樣回傳，由前端依 `status` 自行停用預約入口；只排除軟刪除者
+- **刻意不帶 Employee 內部資料**（email／電話／地址／生日／審核資訊），公開端點不外洩個資
+- 單筆查詢：不存在或已軟刪除 → `404` 找不到此教練
 
 ---
 
