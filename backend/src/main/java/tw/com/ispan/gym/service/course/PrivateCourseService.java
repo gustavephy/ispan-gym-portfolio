@@ -33,6 +33,8 @@ public class PrivateCourseService {
 
         // 取得教練名下的課程
         public List<PrivateCourseResponse> getMyCourses(Trainer trainer) {
+                // 方法名的疊字是必要的：Trainer 主鍵欄位叫 trainerId，衍生查詢路徑須寫全名
+                // trainer.trainerId；改成 findByTrainerId 會在啟動時解析失敗
                 List<PrivateCourse> courses = privateCourseRepository.findByTrainerTrainerId(trainer.getTrainerId());
                 return courses.stream().map(PrivateCourseResponse::from).collect(Collectors.toList());
         }

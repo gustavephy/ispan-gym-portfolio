@@ -36,6 +36,8 @@ public class GroupCourseService {
     // 取得目前教練名下的團體課程清單
     public List<GroupCourseResponse> getMyCourse(Trainer trainer) {
         log.info("request to get my courses");
+        // 方法名的疊字是必要的：Trainer 主鍵欄位叫 trainerId，衍生查詢路徑須寫全名
+        // trainer.trainerId；改成 findByTrainerId 會在啟動時解析失敗
         List<GroupCourse> courses = groupCourseRepository.findByTrainerTrainerId(trainer.getTrainerId());
         return courses.stream().map(GroupCourseResponse::from).collect(Collectors.toList());
     }
