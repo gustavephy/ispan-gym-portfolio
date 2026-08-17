@@ -16,6 +16,8 @@ const auth = useAuthStore()
 const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
+// 連續輸錯時訊息文字相同，key 遞增才能重新觸發搖晃動畫
+const errorKey = ref(0)
 const submitting = ref(false)
 
 /**
@@ -49,6 +51,7 @@ async function onSubmit() {
   } catch (e) {
     // 攔截器已正規化，直接取 message（後端會回「帳號或密碼錯誤」「員工帳號尚待審核」等具體說明）
     errorMessage.value = e.message
+    errorKey.value++
   } finally {
     submitting.value = false
   }
@@ -70,7 +73,11 @@ async function onSubmit() {
         <input v-model="password" type="password" required autocomplete="current-password" />
       </label>
 
-      <p v-if="errorMessage" class="login__error" role="alert">{{ errorMessage }}</p>
+      <Transition name="login-error">
+        <p v-if="errorMessage" :key="errorKey" class="login__error" role="alert">
+          {{ errorMessage }}
+        </p>
+      </Transition>
 
       <button class="login__submit" type="submit" :disabled="submitting">
         {{ submitting ? '登入中…' : '登入' }}
@@ -130,6 +137,34 @@ async function onSubmit() {
   margin: 0;
   color: #c0392b;
   font-size: 0.875rem;
+}
+
+/* 錯誤出現：淡入＋左右搖晃（幅度遞減）；再次失敗由 key 重掛重新觸發 */
+.login-error-enter-active {
+  animation: login-error-shake 0.4s ease-out;
+}
+
+.login-error-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.login-error-leave-to {
+  opacity: 0;
+}
+
+@keyframes login-error-shake {
+  0% { opacity: 0; transform: translateX(0); }
+  20% { opacity: 1; transform: translateX(-0.4rem); }
+  40% { transform: translateX(0.35rem); }
+  60% { transform: translateX(-0.25rem); }
+  80% { transform: translateX(0.15rem); }
+  100% { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-error-enter-active {
+    animation: none;
+  }
 }
 
 .login__submit {
