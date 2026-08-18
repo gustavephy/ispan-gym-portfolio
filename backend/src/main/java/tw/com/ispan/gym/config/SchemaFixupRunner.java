@@ -44,6 +44,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
         renameLegacyColumns();
         clearLegacyOperatorIds();
         dropLegacyIdentityArtifacts();
+        migrateCartItemIdToInt();
+        renameOrderForeignKeys();
         migrateLoginColumnsToAccount();
         migrateCourseDomainSplit();
         splitCourseEntity();
@@ -361,6 +363,38 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 log.info("已移除空的過渡表 staff（由 employee 取代）");
             }
         }
+    }
+
+    // === 購物車主鍵改型別（2026-08-17 定案：cart_item.id 由 bigint 改 int，
+    // 欄名補實體前綴改為 cart_item_id，跟其他表的主鍵命名一致）===================
+    // SQL Server 不允許直接 ALTER 一個 IDENTITY 欄位的型別，只能整張表重建；
+    // 購物車是暫存資料（結帳後即清空、從未跨會員保留），直接砍表讓 ddl-auto
+    // 用新型別／新欄名重建即可，不需要遷移舊資料。
+
+    private void migrateCartItemIdToInt() {
+        if (tableExists("cart_item") && columnIsBigint("cart_item", "id")) {
+            dropForeignKeysReferencing("cart_item");
+            jdbc.execute("DROP TABLE cart_item");
+            log.info("已移除舊 bigint id 的 cart_item 表，int cart_item_id 新表由 ddl-auto 重建（購物車為暫存資料，不遷移）");
+        }
+    }
+
+    private boolean columnIsBigint(String table, String column) {
+        Integer found = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM sys.columns c
+                    JOIN sys.types t ON t.user_type_id = c.user_type_id
+                    WHERE c.object_id = OBJECT_ID(?) AND c.name = ? AND t.name = 'bigint'
+                """, Integer.class, table, column);
+        return found != null && found > 0;
+    }
+
+    // === orders 外鍵改名（2026-08-17：FK_orders_user(_coupon) 補齊 member 命名）========
+    // 底層欄位（member_id／member_coupon_id）早就改名完成，只有這兩個約束名稱的
+    // 字面字串一直沒跟上，這裡補上，不涉及型別變更，直接沿用既有的 renameConstraint。
+
+    private void renameOrderForeignKeys() {
+        renameConstraint("FK_orders_user", "FK_orders_member");
+        renameConstraint("FK_orders_user_coupon", "FK_orders_member_coupon");
     }
 
     // === 欄位長度收斂 =========================================================

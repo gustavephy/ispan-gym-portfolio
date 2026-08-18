@@ -30,14 +30,14 @@ public class CartController {
     }
 
     @PutMapping("/items/{cartItemId}")
-    public CartItemResponse updateItem(@PathVariable Long cartItemId,
+    public CartItemResponse updateItem(@PathVariable Integer cartItemId,
                                        @Valid @RequestBody UpdateCartItemRequest request) {
         return cartService.updateQuantity(currentUser.requireCurrentMemberId(), cartItemId, request);
     }
 
     @DeleteMapping("/items/{cartItemId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void removeItem(@PathVariable Long cartItemId) {
+    public void removeItem(@PathVariable Integer cartItemId) {
         cartService.removeItem(currentUser.requireCurrentMemberId(), cartItemId);
     }
 

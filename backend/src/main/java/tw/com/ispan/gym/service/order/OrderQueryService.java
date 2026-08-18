@@ -23,12 +23,12 @@ public class OrderQueryService {
         this.orderItems = orderItems;
     }
 
-    public List<OrderSummaryResponse> findMine(Integer userId) {
-        return orders.findAllByMemberIdOrderByCreatedAtDesc(userId).stream().map(this::summary).toList();
+    public List<OrderSummaryResponse> findMine(Integer memberId) {
+        return orders.findAllByMemberIdOrderByCreatedAtDesc(memberId).stream().map(this::summary).toList();
     }
 
-    public OrderDetailResponse findMineById(Integer userId, Long orderId) {
-        Order order = orders.findByIdAndMemberId(orderId, userId)
+    public OrderDetailResponse findMineById(Integer memberId, Long orderId) {
+        Order order = orders.findByIdAndMemberId(orderId, memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
                 .map(item -> new OrderItemResponse(item.getId(),

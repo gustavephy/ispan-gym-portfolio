@@ -19,6 +19,8 @@ export const useProductsStore = defineStore('products', () => {
   const categories = ref([])
   const courseCategories = ref([])
   const products = ref([])
+  const totalElements = ref(0)
+  const totalPages = ref(0)
   const currentProduct = ref(null)
   const comments = ref([])
   const trainerCourses = ref([])
@@ -37,11 +39,14 @@ export const useProductsStore = defineStore('products', () => {
   }
 
   //載入商品列表，params 直接透傳給後端（分類、關鍵字、分頁等）
+  //後端回傳 Spring Data Page（{ content, totalElements, totalPages, ... }），這裡拆開存
   async function loadProducts(params) {
     loading.value = true
     try {
       const res = await getProducts(params)
-      products.value = res.data
+      products.value = res.data.content
+      totalElements.value = res.data.totalElements
+      totalPages.value = res.data.totalPages
     } finally {
       loading.value = false
     }
@@ -54,13 +59,18 @@ export const useProductsStore = defineStore('products', () => {
   }
 
   //載入單一商品明細與留言
+  //留言 API 後端尚未實作，失敗時不影響商品明細顯示
   async function loadProductDetail(id) {
     loading.value = true
     try {
       const res = await getProductById(id)
       currentProduct.value = res.data
-      const commentRes = await getProductComments(id)
-      comments.value = commentRes.data
+      try {
+        const commentRes = await getProductComments(id)
+        comments.value = commentRes.data
+      } catch {
+        comments.value = []
+      }
     } finally {
       loading.value = false
     }
@@ -79,6 +89,8 @@ export const useProductsStore = defineStore('products', () => {
     categories,
     courseCategories,
     products,
+    totalElements,
+    totalPages,
     currentProduct,
     comments,
     trainerCourses,

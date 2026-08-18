@@ -13,7 +13,10 @@ const router = createRouter({
         {path:'reservation',component:()=>import('@/views/reservation/ReservationView.vue')},
         {path:'products',component:()=>import('@/views/product/ProductView.vue')},
         {path:'products/:id',component:()=>import('@/views/product/ProductDetail.vue')},
-        {path:'subscription',component:()=>import('@/views/subscription/SubscriptionView.vue')}
+        {path:'subscription',component:()=>import('@/views/subscription/SubscriptionView.vue')},
+        {path:'cart',component:()=>import('@/views/cart/CartView.vue')},
+        {path:'checkout',component:()=>import('@/views/cart/CheckoutView.vue')},
+        {path:'orders',component:()=>import('@/views/member/OrderListView.vue')}
       ]
     }
   ],

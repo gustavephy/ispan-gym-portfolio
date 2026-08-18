@@ -13,7 +13,7 @@ import tw.com.ispan.gym.enums.member.MemberCouponStatus;
 
 public interface MemberCouponRepository extends JpaRepository<MemberCoupon, Integer> {
 
-	Optional<MemberCoupon> findByMemberIdAndCouponCouponIdAndStatus(Integer userId, Integer couponId, MemberCouponStatus status);
+	Optional<MemberCoupon> findByMemberIdAndCouponCouponIdAndStatus(Integer memberId, Integer couponId, MemberCouponStatus status);
 
 	@Query("select mc from MemberCoupon mc where mc.member.id = :memberId")
 	List<MemberCoupon> findByMemberId(@Param("memberId") Integer memberId);

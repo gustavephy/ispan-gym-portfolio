@@ -26,7 +26,7 @@ public class Order extends TaipeiTimestampEntity {
     @Column(name = "id", nullable = false)
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "FK_orders_user"))
+    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "FK_orders_member"))
     private Member member;
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
@@ -51,7 +51,7 @@ public class Order extends TaipeiTimestampEntity {
     private String receiverAddress;
     /** 本筆訂單消耗掉的那一張已領取優惠券（券種可由 memberCoupon.coupon 取得） */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_coupon_id", foreignKey = @ForeignKey(name = "FK_orders_user_coupon"))
+    @JoinColumn(name = "member_coupon_id", foreignKey = @ForeignKey(name = "FK_orders_member_coupon"))
     private MemberCoupon memberCoupon;
     /**
      * 有值代表這是一筆訂閱方案購買。訂閱不像商品/課程走 order_items 多型

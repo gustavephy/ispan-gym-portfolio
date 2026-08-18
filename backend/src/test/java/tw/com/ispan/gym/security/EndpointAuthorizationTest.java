@@ -35,13 +35,19 @@ import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.account.OauthAccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.order.OrderRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
+import tw.com.ispan.gym.service.cart.CartService;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
 import tw.com.ispan.gym.service.coach.GroupClassService;
 import tw.com.ispan.gym.service.coupon.EmployeeCouponService;
 import tw.com.ispan.gym.service.employee.EmployeeReviewService;
+import tw.com.ispan.gym.service.order.OrderQueryService;
+import tw.com.ispan.gym.service.order.OrderService;
+import tw.com.ispan.gym.service.payment.EcpayService;
 import tw.com.ispan.gym.service.product.ProductService;
+import tw.com.ispan.gym.service.report.OperationReportService;
 
 /**
  * 用「真實的 controller」驗證方法層級的 @PreAuthorize 是否確實生效。
@@ -85,6 +91,11 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.employee.EmployeeReviewController.class,
         tw.com.ispan.gym.controller.coupon.EmployeeCouponController.class,
         tw.com.ispan.gym.controller.product.ProductController.class,
+        tw.com.ispan.gym.controller.cart.CartController.class,
+        tw.com.ispan.gym.controller.order.OrderController.class,
+        tw.com.ispan.gym.controller.order.AdminOrderController.class,
+        tw.com.ispan.gym.controller.payment.PaymentController.class,
+        tw.com.ispan.gym.controller.report.OperationReportController.class,
         // 安全基礎設施
         JwtUtil.class,
         JwtAuthFilter.class,
@@ -132,6 +143,24 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary ProductService productService() {
             return Mockito.mock(ProductService.class);
+        }
+        @Bean @Primary CartService cartService() {
+            return Mockito.mock(CartService.class);
+        }
+        @Bean @Primary OrderService orderService() {
+            return Mockito.mock(OrderService.class);
+        }
+        @Bean @Primary OrderQueryService orderQueryService() {
+            return Mockito.mock(OrderQueryService.class);
+        }
+        @Bean @Primary EcpayService ecpayService() {
+            return Mockito.mock(EcpayService.class);
+        }
+        @Bean @Primary OperationReportService operationReportService() {
+            return Mockito.mock(OperationReportService.class);
+        }
+        @Bean @Primary OrderRepository orderRepository() {
+            return Mockito.mock(OrderRepository.class);
         }
     }
 
@@ -367,5 +396,52 @@ class EndpointAuthorizationTest {
     void 團課場次瀏覽不需登入() throws Exception {
         // 同一支 controller 內，只有報名相關的方法掛 @PreAuthorize，列表刻意不掛
         mockMvc.perform(get("/api/member/group-classes")).andExpect(status().isOk());
+    }
+
+    // === MEMBER：購物車、訂單、綠界結帳 =========================================
+    // 這三支 controller 沒有掛 @PreAuthorize，權限完全靠 SecurityConfig 的
+    // anyRequest().authenticated() 兜底；JwtSecuritySmokeTest 已用假的 ProbeController
+    // 驗過同一條 URL 規則本身，這裡改用真牌 controller，確認規則真的套用到它們身上。
+
+    @Test
+    void 購物車需要登入() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/cart"));
+        expectAuthorized(get("/api/cart"), memberToken());
+    }
+
+    @Test
+    void 訂單查詢與建立需要登入() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/orders"));
+        expectAuthorized(get("/api/orders"), memberToken());
+        expectAuthorized(post("/api/orders"), memberToken());
+    }
+
+    @Test
+    void 綠界結帳查詢需要登入但付款通知不需要() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/payments/ecpay/checkout/1"));
+        expectAuthorized(post("/api/payments/ecpay/checkout/1"), memberToken());
+
+        // server-to-server 通知不帶登入態（PaymentController#notify），匿名必須放行；
+        // 端點對任何輸入一律回 200 的「1|OK」，這裡只確認沒有被安全層擋成 401
+        mockMvc.perform(post("/api/payments/ecpay/notify"))
+                .andExpect(status().isOk());
+    }
+
+    // === ADMIN：後台訂單管理與營運報表 ===========================================
+
+    @Test
+    void 後台訂單與退款管理僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/orders/refunds/pending"));
+        expectForbidden(get("/api/admin/orders/refunds/pending"), memberToken());
+        expectForbidden(get("/api/admin/orders/refunds/pending"), employeeToken());
+        expectAuthorized(get("/api/admin/orders/refunds/pending"), adminToken());
+    }
+
+    @Test
+    void 營運報表僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/reports"));
+        expectForbidden(get("/api/admin/reports"), memberToken());
+        expectForbidden(get("/api/admin/reports"), employeeToken());
+        expectAuthorized(get("/api/admin/reports"), adminToken());
     }
 }

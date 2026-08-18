@@ -217,7 +217,7 @@ public class EmployeeCouponService {
 
 	/** 管理員：批量發放給指定 memberId 清單 */
 	@Transactional
-	public int distributeToUsers(Integer couponId, List<Integer> memberIds) {
+	public int distributeToMembers(Integer couponId, List<Integer> memberIds) {
 		Coupon coupon = couponRepository.findById(couponId)
 				.orElseThrow(() -> new ResourceNotFoundException("優惠券不存在"));
 

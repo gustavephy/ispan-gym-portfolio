@@ -327,7 +327,7 @@ class EmployeeCouponServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // === distributeToUsers() ==================================================
+    // === distributeToMembers() ==================================================
 
     @Test
     void 指定發放跳過不存在的會員與已持有者() {
@@ -338,7 +338,7 @@ class EmployeeCouponServiceTest {
         when(members.findById(3)).thenReturn(Optional.of(member(3, UserStatus.ACTIVE)));
         when(memberCoupons.existsByMemberIdAndCouponId(3, COUPON_ID)).thenReturn(true); // 已持有
 
-        int count = service.distributeToUsers(COUPON_ID, List.of(1, 2, 3));
+        int count = service.distributeToMembers(COUPON_ID, List.of(1, 2, 3));
 
         assertThat(count).isEqualTo(1);
         assertThat(coupon.getClaimedQuantity()).isEqualTo(1);
@@ -348,7 +348,7 @@ class EmployeeCouponServiceTest {
     void 指定發放時已停用的優惠券擋下() {
         when(coupons.findById(COUPON_ID)).thenReturn(Optional.of(coupon(COUPON_ID, "GIFT", CouponStatus.INACTIVE)));
 
-        assertThatThrownBy(() -> service.distributeToUsers(COUPON_ID, List.of(1)))
+        assertThatThrownBy(() -> service.distributeToMembers(COUPON_ID, List.of(1)))
                 .isInstanceOf(BusinessRuleException.class);
 
         verify(memberCoupons, never()).save(any());
@@ -359,7 +359,7 @@ class EmployeeCouponServiceTest {
         Coupon coupon = coupon(COUPON_ID, "GIFT", CouponStatus.ACTIVE);
         when(coupons.findById(COUPON_ID)).thenReturn(Optional.of(coupon));
 
-        assertThat(service.distributeToUsers(COUPON_ID, List.of())).isZero();
+        assertThat(service.distributeToMembers(COUPON_ID, List.of())).isZero();
         assertThat(coupon.getClaimedQuantity()).isZero();
     }
 }

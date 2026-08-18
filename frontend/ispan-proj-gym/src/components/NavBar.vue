@@ -1,5 +1,15 @@
 <script setup>
+  import { onMounted } from 'vue'
   import { RouterLink } from 'vue-router'
+  import { storeToRefs } from 'pinia'
+  import { useCartStore } from '@/stores/cart.js'
+
+  const cart = useCartStore()
+  const { itemCount } = storeToRefs(cart)
+
+  onMounted(() => {
+    cart.loadCart()
+  })
 
   const navLinks = [
     { to: '/', label: '首頁' },
@@ -26,6 +36,11 @@
       >
         {{ link.label }}
       </RouterLink>
+      <RouterLink to="/cart" class="nav-link cart-link">
+        購物車
+        <span v-if="itemCount > 0" class="cart-badge">{{ itemCount }}</span>
+      </RouterLink>
+      <RouterLink to="/orders" class="nav-link">我的訂單</RouterLink>
     </nav>
 
     <div class="nav-footer">© 2026 威力健身房</div>
@@ -84,6 +99,24 @@
   .nav-link:hover {
     background: #e6d8c6;
     color: var(--primary-dark);
+  }
+  .cart-link {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .cart-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #e03131;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
   }
   .nav-link.router-link-exact-active {
     background: var(--accent);
