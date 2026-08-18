@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { getUpcomingSessions, bookSession, getMyBookings, cancelBooking } from '@/api/groupClass.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
@@ -246,9 +247,16 @@ async function handleCancelBooking(booking) {
   }
 }
 
+const auth = useAuthStore()
+
 onMounted(() => {
   fetchSessions()
-  fetchMyBookings()
+  // 「我的團課報名」需要 MEMBER 身分；未登入時不呼叫——
+  // 否則會拿到 401，被 axios 攔截器當成登入過期而導向登入頁，
+  // 使得這個本該公開的課表頁未登入者根本進不來。
+  if (auth.isMember) {
+    fetchMyBookings()
+  }
   window.addEventListener('keydown', handleKeydown)
 })
 
@@ -297,7 +305,8 @@ onUnmounted(() => {
       </template>
     </template>
 
-    <div class="my-bookings-section">
+    <!-- 未登入時整塊隱藏：沒有資料來源，顯示空區塊反而困惑 -->
+    <div v-if="auth.isMember" class="my-bookings-section">
       <h3 class="schedule-title">我的團課報名</h3>
 
       <div class="search-field">
