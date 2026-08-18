@@ -1,16 +1,20 @@
 package tw.com.ispan.gym.repository.coach;
 
-import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import tw.com.ispan.gym.entity.coach.CoachBooking;
 import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 
 public interface CoachBookingRepository extends JpaRepository<CoachBooking, Integer> {
-    /** 查詢某會員的所有預約紀錄，依建立時間新到舊排序，供會員查看自己的預約歷史。 */
-    List<CoachBooking> findByMemberIdOrderByCreatedAtDesc(Integer memberId);
+    /**
+     * 分頁查詢某會員的所有預約紀錄，供會員查看自己的預約歷史。排序交給呼叫端組出的
+     * Pageable 決定（依 coachSlot.startAt 新到舊），不需要搜尋參數，衍生查詢方法名稱就能處理。
+     */
+    Page<CoachBooking> findByMemberId(Integer memberId, Pageable pageable);
 
     /**
      * 查詢某時段目前是否有指定狀態的預約。

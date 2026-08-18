@@ -19,8 +19,12 @@ export const getTrainerSchedules = (trainerId) => api.get(`/api/member/trainers/
  */
 export const createBooking = (slotId) => api.post(`/api/member/schedules/${slotId}/booking`)
 
-/** 查詢自己的所有預約紀錄，需登入 */
-export const getMyBookings = () => api.get('/api/member/bookings')
+/**
+ * 分頁查詢自己的所有預約紀錄，需登入
+ * @param {{page?: number, size?: number}} params page 從 0 開始
+ */
+export const getMyBookings = ({ page = 0, size = 10 } = {}) =>
+  api.get('/api/member/bookings', { params: { page, size } })
 
 /**
  * 取消指定的預約，需登入

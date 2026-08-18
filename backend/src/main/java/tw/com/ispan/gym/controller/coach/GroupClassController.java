@@ -13,8 +13,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import tw.com.ispan.gym.dto.coach.GroupClassBookingResponse;
 import tw.com.ispan.gym.dto.coach.GroupClassSessionResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.coach.GroupClassService;
 
@@ -60,6 +62,23 @@ public class GroupClassController {
         Integer memberId = currentUserProvider.requireCurrentMemberId();
         GroupClassBookingResponse resp = groupClassService.cancelBooking(memberId, bookingId);
         return ResponseEntity.status(HttpStatus.OK).body(resp);
+    }
+
+    /**
+     * 查詢自己的所有團課報名紀錄，成功回 200（純查詢，不是新建立資源）。
+     * 身分一律從 {@link CurrentUserProvider#requireCurrentMemberId()} 取得，
+     * 跟 CoachBookingController.getMyBookings() 是同一套設計原則。
+     */
+    @GetMapping("/bookings")
+    @PreAuthorize("hasRole('MEMBER')")
+    public ResponseEntity<PageResponse<GroupClassBookingResponse>> getMyBookings(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search) {
+        Integer memberId = currentUserProvider.requireCurrentMemberId();
+        PageResponse<GroupClassBookingResponse> bookings = groupClassService.getMyBookings(memberId, page, size,
+                search);
+        return ResponseEntity.status(HttpStatus.OK).body(bookings);
     }
 
 }

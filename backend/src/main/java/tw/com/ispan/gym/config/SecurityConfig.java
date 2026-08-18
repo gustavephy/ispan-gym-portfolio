@@ -72,6 +72,7 @@ public class SecurityConfig {
                         //（曾寫成 /api/categories/** 放了空砲，匿名瀏覽分類一直是 401）
                         .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/product-categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/course-categories").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/group-courses").permitAll()
                         // 公開教練介紹頁／列表（TrainerController）；未軟刪除者皆可匿名瀏覽，
                         // UNAVAILABLE 教練同樣公開，由回應的 status 讓前端自行停用預約入口
                         .requestMatchers(HttpMethod.GET, "/api/trainers", "/api/trainers/*").permitAll()

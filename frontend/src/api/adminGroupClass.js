@@ -6,10 +6,27 @@ import api from './axios.instance.js'
 // 那邊管課程本身（教練、名稱、預設容量……），這裡管特定日期/教室的場次。
 
 /**
+ * 分頁查詢團課場次列表，可依課程名稱、教練姓名或教室搜尋，需登入且為 ADMIN。
+ * 後台專用端點，跟會員瀏覽用的 GroupClassController#getUpcomingSessions（行事曆用，
+ * 一次回傳全部資料）分開，不要混用。
+ * @param {{page?: number, size?: number, search?: string}} params page 從 0 開始
+ */
+export const getSessions = ({ page = 0, size = 10, search = '' } = {}) =>
+  api.get('/api/admin/group-classes', { params: { page, size, search } })
+
+/**
  * 建立團課場次，需登入且為 ADMIN
  * @param {{groupCourseId: number, roomName: string, startAt: string, endAt: string, capacity?: number}} payload
  */
 export const createSession = (payload) => api.post('/api/admin/group-classes', payload)
+
+/**
+ * 修改團課場次，需登入且為 ADMIN。version 為樂觀鎖版本，必須帶目前列表拿到的值，
+ * 版本不符會回 409（見 GroupClassService.updateSession）。capacity 留空維持原本容量
+ * @param {number} id 要修改的場次 id
+ * @param {{roomName: string, startAt: string, endAt: string, capacity?: number, version: number}} payload
+ */
+export const updateSession = (id, payload) => api.put(`/api/admin/group-classes/${id}`, payload)
 
 /**
  * 取消團課場次，需登入且為 ADMIN

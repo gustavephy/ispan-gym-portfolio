@@ -13,10 +13,15 @@ import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
 import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
 import tw.com.ispan.gym.dto.coach.UpdateCoachSlotRequest;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.coach.CoachSlot;
 import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.trainer.Trainer;
@@ -357,12 +362,13 @@ class CoachSlotServiceTest {
     void getMySlots_回傳自己的所有時段含CANCELLED() {
         Trainer trainer = loginAsTrainer();
         CoachSlot cancelled = slot(trainer, SlotStatus.CANCELLED);
-        when(slots.findByTrainerIdOrderByStartAtAsc(TRAINER_ID)).thenReturn(List.of(cancelled));
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
+        when(slots.findByTrainerId(TRAINER_ID, pageable)).thenReturn(new PageImpl<>(List.of(cancelled), pageable, 1));
 
-        List<CoachSlotResponse> response = service.getMySlots(ACCOUNT_ID);
+        PageResponse<CoachSlotResponse> response = service.getMySlots(ACCOUNT_ID, 0, 10);
 
-        assertThat(response).hasSize(1);
-        assertThat(response.get(0).getStatus()).isEqualTo(SlotStatus.CANCELLED);
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).getStatus()).isEqualTo(SlotStatus.CANCELLED);
     }
 
     @Test

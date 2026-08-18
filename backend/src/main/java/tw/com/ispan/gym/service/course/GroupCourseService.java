@@ -2,12 +2,18 @@ package tw.com.ispan.gym.service.course;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.course.GroupCourseRequest;
 import tw.com.ispan.gym.dto.course.GroupCourseResponse;
+import tw.com.ispan.gym.dto.course.UpdateGroupCourseRequest;
 import tw.com.ispan.gym.entity.course.CourseCategory;
 import tw.com.ispan.gym.entity.course.GroupCourse;
 import tw.com.ispan.gym.entity.trainer.Trainer;
@@ -63,12 +69,27 @@ public class GroupCourseService {
         return toResponse(saved);
     }
 
-    /** 查詢所有團課主檔，不分狀態，方便管理員也看得到已下架（非 ACTIVE）的課程。 */
+    /**
+     * 後台團課主檔列表，分頁＋依課程名稱或授課教練姓名搜尋，不分狀態，方便管理員
+     * 也看得到已下架（非 ACTIVE）的課程。
+     *
+     * size 做安全上限（1~100）避免有人傳誇張的值一次撈爆資料庫；page 不可小於 0。
+     * 排序固定依 createdAt 新到舊，寫在這裡組出的 Pageable 裡，不寫在 JPQL
+     * （理由見 {@link tw.com.ispan.gym.repository.course.GroupCourseRepository#searchCourses}）。
+     */
     @Transactional(readOnly = true)
-    public List<GroupCourseResponse> getAllCourses() {
-        return groupCourseRepository.findAll().stream()
+    public PageResponse<GroupCourseResponse> getAllCourses(int page, int size, String search) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+
+        Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<GroupCourse> result = groupCourseRepository.searchCourses(search, pageable);
+
+        List<GroupCourseResponse> items = result.getContent().stream()
                 .map(this::toResponse)
                 .toList();
+
+        return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
     }
 
     /**
@@ -90,6 +111,59 @@ public class GroupCourseService {
         }
 
         return toResponse(groupCourse);
+    }
+
+    /**
+     * 修改團課主檔。name、maxCapacity 為必填，全量覆蓋；description、imageUrl、isTrial、
+     * courseCategoryId 允許不填，request 對應欄位為 null 時維持 Entity 現有值，不會被清空。
+     * 不接受變更 trainerId／status：授課教練換人需另開課程，狀態只走既有的下架端點。
+     */
+    @Transactional
+    public GroupCourseResponse updateCourse(Integer id, UpdateGroupCourseRequest request) {
+        GroupCourse groupCourse = groupCourseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("查無此課程主檔"));
+
+        groupCourse.setName(request.getName());
+        groupCourse.setMaxCapacity(request.getMaxCapacity());
+
+        if (request.getDescription() != null) {
+            groupCourse.setDescription(request.getDescription());
+        }
+        if (request.getImageUrl() != null) {
+            groupCourse.setImageUrl(request.getImageUrl());
+        }
+        if (request.getIsTrial() != null) {
+            groupCourse.setIsTrial(request.getIsTrial());
+        }
+        if (request.getCourseCategoryId() != null) {
+            CourseCategory category = courseCategoryRepository.findById(request.getCourseCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("查無此課程分類"));
+            groupCourse.setCategory(category);
+        }
+
+        GroupCourse saved = groupCourseRepository.save(groupCourse);
+        return toResponse(saved);
+    }
+
+    /**
+     * 公開瀏覽上架中（status=ACTIVE）團課主檔的分頁＋搜尋版本，供團課介紹頁使用，不需登入即可查詢。
+     * 用 {@link GroupCourseRepository#searchActiveCourses} 而非後台列表用的 {@code searchCourses}，
+     * 避免後台不分狀態的主檔列表被意外套用了 status 篩選。
+     * size/page 安全防呆與排序邏輯同 {@link #getAllCourses}。
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<GroupCourseResponse> getActiveCoursesPaged(int page, int size, String search) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+
+        Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<GroupCourse> result = groupCourseRepository.searchActiveCourses(CourseStatus.ACTIVE, search, pageable);
+
+        List<GroupCourseResponse> items = result.getContent().stream()
+                .map(this::toResponse)
+                .toList();
+
+        return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
     }
 
     private GroupCourseResponse toResponse(GroupCourse groupCourse) {

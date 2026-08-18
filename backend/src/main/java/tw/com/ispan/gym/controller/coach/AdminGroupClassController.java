@@ -3,6 +3,7 @@ package tw.com.ispan.gym.controller.coach;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import tw.com.ispan.gym.dto.coach.CreateGroupClassSessionRequest;
 import tw.com.ispan.gym.dto.coach.UpdateGroupClassSessionRequest;
 import tw.com.ispan.gym.dto.coach.GroupClassSessionResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.service.coach.GroupClassService;
 
 /**
@@ -29,6 +31,22 @@ import tw.com.ispan.gym.service.coach.GroupClassService;
 public class AdminGroupClassController {
 
     private final GroupClassService groupClassService;
+
+    /**
+     * 分頁查詢即將開始、開放報名的團課場次，可依課程名稱／教練姓名／教室搜尋，成功回 200。
+     * 全新端點，跟 {@code GroupClassController#getUpcomingSessions()}（會員瀏覽團課行事曆的
+     * 資料來源，前端依賴它一次回傳全部資料）完全分開，不影響那支既有端點的行為。
+     */
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PageResponse<GroupClassSessionResponse>> getUpcomingSessions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search) {
+        PageResponse<GroupClassSessionResponse> resp = groupClassService.getUpcomingSessionsForAdmin(page, size,
+                search);
+        return ResponseEntity.status(HttpStatus.OK).body(resp);
+    }
 
     /** 建立團課場次，成功回 201。 */
     @PostMapping

@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 import tw.com.ispan.gym.exception.GlobalExceptionHandler;
 import tw.com.ispan.gym.security.CurrentUserProvider;
@@ -45,44 +46,46 @@ class CoachBookingControllerHistoryTest {
     @Test
     void 查詢成功回200與預約歷史() throws Exception {
         when(currentUser.requireCurrentMemberId()).thenReturn(MEMBER_ID);
-        when(coachBookingService.getMyBookings(MEMBER_ID)).thenReturn(List.of(
+        when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10)).thenReturn(new PageResponse<>(List.of(
                 new CoachBookingHistoryResponse(10, 3, 2,
                         LocalDateTime.of(2030, 1, 1, 10, 0),
                         LocalDateTime.of(2030, 1, 1, 11, 0),
-                        CoachBookingStatus.PENDING, "ABC123", 7)));
+                        CoachBookingStatus.PENDING, "ABC123", 7)), 0, 10, 1, 1));
 
         mockMvc.perform(get("/api/member/bookings"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(10))
-                .andExpect(jsonPath("$[0].trainerId").value(2))
-                .andExpect(jsonPath("$[0].status").value("PENDING"))
-                .andExpect(jsonPath("$[0].checkInKey").value("ABC123"))
-                .andExpect(jsonPath("$[0].remainingCourseSnapshot").value(7));
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(10))
+                .andExpect(jsonPath("$.items[0].trainerId").value(2))
+                .andExpect(jsonPath("$.items[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.items[0].checkInKey").value("ABC123"))
+                .andExpect(jsonPath("$.items[0].remainingCourseSnapshot").value(7))
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
     }
 
     @Test
     void 無稽核紀錄的舊預約快照為null() throws Exception {
         when(currentUser.requireCurrentMemberId()).thenReturn(MEMBER_ID);
-        when(coachBookingService.getMyBookings(MEMBER_ID)).thenReturn(List.of(
+        when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10)).thenReturn(new PageResponse<>(List.of(
                 new CoachBookingHistoryResponse(11, 4, 2,
                         LocalDateTime.of(2029, 1, 1, 10, 0),
                         LocalDateTime.of(2029, 1, 1, 11, 0),
-                        CoachBookingStatus.COMPLETED, "OLD999", null)));
+                        CoachBookingStatus.COMPLETED, "OLD999", null)), 0, 10, 1, 1));
 
         mockMvc.perform(get("/api/member/bookings"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].status").value("COMPLETED"))
-                .andExpect(jsonPath("$[0].remainingCourseSnapshot", nullValue()));
+                .andExpect(jsonPath("$.items[0].status").value("COMPLETED"))
+                .andExpect(jsonPath("$.items[0].remainingCourseSnapshot", nullValue()));
     }
 
     @Test
     void 無任何預約回200空陣列() throws Exception {
         when(currentUser.requireCurrentMemberId()).thenReturn(MEMBER_ID);
-        when(coachBookingService.getMyBookings(MEMBER_ID)).thenReturn(List.of());
+        when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10)).thenReturn(new PageResponse<>(List.of(), 0, 10, 0, 0));
 
         mockMvc.perform(get("/api/member/bookings"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.items.length()").value(0));
     }
 }

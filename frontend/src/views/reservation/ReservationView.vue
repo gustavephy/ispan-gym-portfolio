@@ -7,6 +7,10 @@ import {
   getMyBookings,
   cancelBooking,
 } from '@/api/coachBooking.js'
+import { isInlineError } from '@/api/api-error.js'
+import { notifyApiError } from '@/api/error-bus.js'
+import OperationMessage from '@/components/OperationMessage.vue'
+import Pagination from '@/components/Pagination.vue'
 
 // 預約狀態對照表：後端回傳 PENDING/COMPLETED/CANCELLED，畫面顯示中文與顏色
 const BOOKING_STATUS_MAP = {
@@ -28,6 +32,15 @@ const bookingSlotId = ref(null)
 // 我的預約列表，跟教練清單、時段列表的 loading 各自獨立、互不影響
 const myBookings = ref([])
 const myBookingsLoading = ref(true)
+
+// 預約／取消預約的就地錯誤訊息，顯示在「我的預約」區塊上方
+const bookingActionMessage = ref('')
+
+// 「我的預約」的分頁狀態；這個區塊沒有搜尋需求
+const page = ref(0)
+const size = ref(10)
+const totalItems = ref(0)
+const totalPages = ref(0)
 
 // 依開始時間排序，未來時段在前（跟 TrainerScheduleView 的 sortedSlots 同樣的排序邏輯）
 const sortedSlots = computed(() =>
@@ -97,11 +110,24 @@ async function fetchTrainerSchedules(trainerId) {
 async function fetchMyBookings() {
   myBookingsLoading.value = true
   try {
-    const res = await getMyBookings()
-    myBookings.value = res.data
+    const res = await getMyBookings({ page: page.value, size: size.value })
+    myBookings.value = res.data.items
+    totalItems.value = res.data.totalItems
+    totalPages.value = res.data.totalPages
   } finally {
     myBookingsLoading.value = false
   }
+}
+
+function handlePageChange(newPage) {
+  page.value = newPage
+  fetchMyBookings()
+}
+
+function handleSizeChange(newSize) {
+  size.value = newSize
+  page.value = 0
+  fetchMyBookings()
 }
 
 // 呼叫取消預約 API；若後端回 CONFIRMATION_REQUIRED（距上課不到 72 小時，取消視同消耗額度），
@@ -123,6 +149,7 @@ async function submitCancelBooking(bookingId, acknowledgeConsumption = false) {
 // 點擊「取消」：取消成功後刷新我的預約列表；若被取消的預約剛好是目前選中教練的，
 // 該時段有機會變回可預約狀態，一併刷新時段列表
 async function handleCancelBooking(booking) {
+  bookingActionMessage.value = ''
   try {
     await submitCancelBooking(booking.id)
     await fetchMyBookings()
@@ -130,7 +157,12 @@ async function handleCancelBooking(booking) {
       await fetchTrainerSchedules(selectedTrainerId.value)
     }
   } catch (err) {
-    alert(err.response?.data?.message || '取消預約失敗，請稍後再試')
+    const apiError = err
+    if (isInlineError(apiError)) {
+      bookingActionMessage.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
   }
 }
 
@@ -151,13 +183,19 @@ async function handleBook(slot) {
   )
   if (!confirmed) return
 
+  bookingActionMessage.value = ''
   bookingSlotId.value = slot.id
   try {
     const res = await createBooking(slot.id)
     alert(`預約成功！核銷碼：${res.data.checkInKey}，上課時請出示給教練核銷`)
     await fetchTrainerSchedules(selectedTrainerId.value)
   } catch (err) {
-    alert(err.response?.data?.message || '預約失敗，請稍後再試')
+    const apiError = err
+    if (isInlineError(apiError)) {
+      bookingActionMessage.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
   } finally {
     bookingSlotId.value = null
   }
@@ -235,6 +273,8 @@ onMounted(() => {
     <div class="my-bookings-section">
       <h3 class="schedule-title">我的預約</h3>
 
+      <OperationMessage :message="bookingActionMessage" />
+
       <div v-if="myBookingsLoading" class="spinner"></div>
 
       <template v-else>
@@ -273,6 +313,14 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
+
+        <Pagination
+          :page="page"
+          :total-pages="totalPages"
+          :size="size"
+          @update:page="handlePageChange"
+          @update:size="handleSizeChange"
+        />
       </template>
     </div>
   </div>

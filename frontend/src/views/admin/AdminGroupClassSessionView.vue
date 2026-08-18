@@ -1,8 +1,11 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { getAllCourses } from '@/api/adminGroupCourse.js'
-import { getUpcomingSessions } from '@/api/groupClass.js'
-import { createSession, cancelSession } from '@/api/adminGroupClass.js'
+import { getSessions, createSession, updateSession, cancelSession } from '@/api/adminGroupClass.js'
+import { isInlineError } from '@/api/api-error.js'
+import { notifyApiError } from '@/api/error-bus.js'
+import OperationMessage from '@/components/OperationMessage.vue'
+import Pagination from '@/components/Pagination.vue'
 
 // 場次狀態對照表：後端回傳 SCHEDULED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
@@ -28,6 +31,17 @@ const form = ref({
 const formError = ref('')
 const submitting = ref(false)
 
+// 取消場次操作的就地錯誤訊息，顯示在場次列表上方
+const sessionListMessage = ref('')
+
+// 場次列表的分頁與搜尋狀態
+const page = ref(0)
+const size = ref(10)
+const search = ref('')
+const totalItems = ref(0)
+const totalPages = ref(0)
+let searchDebounceTimer = null
+
 // 開始日期改到比目前結束日期更晚時，原本選的結束日期就不合法了，清空讓使用者重選
 // （寫法比照 TrainerScheduleView.vue 的同名 watch）
 watch(
@@ -35,6 +49,24 @@ watch(
   (newStartDate) => {
     if (newStartDate && form.value.endDate && form.value.endDate < newStartDate) {
       form.value.endDate = ''
+    }
+  },
+)
+
+// 編輯場次用的 modal 狀態，跟最上面的建立表單完全分開，互不影響
+const isEditModalOpen = ref(false)
+const editingSessionId = ref(null)
+// 樂觀鎖版本，不顯示在畫面上，內部保留用於送出時一併帶回
+const editingSessionVersion = ref(null)
+const editForm = ref({ roomName: '', startDate: '', startTime: '', endDate: '', endTime: '', capacity: '' })
+const editFormError = ref('')
+const editSubmitting = ref(false)
+
+watch(
+  () => editForm.value.startDate,
+  (newStartDate) => {
+    if (newStartDate && editForm.value.endDate && editForm.value.endDate < newStartDate) {
+      editForm.value.endDate = ''
     }
   },
 )
@@ -84,6 +116,14 @@ function todayDateString() {
   return `${yyyy}-${mm}-${dd}`
 }
 
+// 把 ISO 格式的 LocalDateTime 字串（如 "2026-08-20T10:00:00"）拆回表單用的日期＋時間下拉選單格式
+// 用字串切割而非 new Date().toLocaleXxx()，避免經過 Date 物件轉換時受瀏覽器時區影響
+// （寫法比照 TrainerScheduleView.vue 的同名函式）
+function splitIsoDateTime(iso) {
+  const [datePart, timePart] = iso.split('T')
+  return { date: datePart, time: (timePart || '').slice(0, 5) }
+}
+
 async function fetchCourses() {
   coursesLoading.value = true
   try {
@@ -97,11 +137,34 @@ async function fetchCourses() {
 async function fetchSessions() {
   sessionsLoading.value = true
   try {
-    const res = await getUpcomingSessions()
-    sessions.value = res.data
+    const res = await getSessions({ page: page.value, size: size.value, search: search.value })
+    sessions.value = res.data.items
+    totalItems.value = res.data.totalItems
+    totalPages.value = res.data.totalPages
   } finally {
     sessionsLoading.value = false
   }
+}
+
+// 搜尋字串變動時 debounce 400ms 才觸發查詢；換了搜尋條件代表結果集變了，
+// page 一律重設為 0，避免卡在一個搜尋後根本不存在的頁碼（寫法比照 AdminGroupCourseView.vue）
+watch(search, () => {
+  clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    page.value = 0
+    fetchSessions()
+  }, 400)
+})
+
+function handlePageChange(newPage) {
+  page.value = newPage
+  fetchSessions()
+}
+
+function handleSizeChange(newSize) {
+  size.value = newSize
+  page.value = 0
+  fetchSessions()
 }
 
 async function handleCreate() {
@@ -142,7 +205,12 @@ async function handleCreate() {
     }
     await fetchSessions()
   } catch (err) {
-    alert(err.response?.data?.message || '建立場次失敗，請稍後再試')
+    const apiError = err
+    if (isInlineError(apiError)) {
+      formError.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
   } finally {
     submitting.value = false
   }
@@ -165,17 +233,101 @@ async function submitCancelSession(sessionId, acknowledgeExistingBooking = false
 }
 
 async function handleCancelSession(session) {
+  sessionListMessage.value = ''
   try {
     await submitCancelSession(session.id)
     await fetchSessions()
   } catch (err) {
-    alert(err.response?.data?.message || '取消場次失敗，請稍後再試')
+    const apiError = err
+    if (isInlineError(apiError)) {
+      sessionListMessage.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
+  }
+}
+
+// 點擊「編輯」：開啟 modal，並把這筆場次既有的教室/時間/容量帶入編輯表單；
+// version 一併記住（不顯示在畫面上），送出時要帶回給後端做樂觀鎖檢查
+function openEditModal(session) {
+  editFormError.value = ''
+  const start = splitIsoDateTime(session.startAt)
+  const end = splitIsoDateTime(session.endAt)
+  editForm.value = {
+    roomName: session.roomName,
+    startDate: start.date,
+    startTime: start.time,
+    endDate: end.date,
+    endTime: end.time,
+    capacity: session.capacity,
+  }
+  editingSessionId.value = session.id
+  editingSessionVersion.value = session.version
+  isEditModalOpen.value = true
+}
+
+// 取消／點遮罩都走這裡：關閉 modal，不送出任何請求
+function closeEditModal() {
+  isEditModalOpen.value = false
+  editingSessionId.value = null
+  editingSessionVersion.value = null
+  editForm.value = { roomName: '', startDate: '', startTime: '', endDate: '', endTime: '', capacity: '' }
+  editFormError.value = ''
+}
+
+async function handleEditSubmit() {
+  editFormError.value = ''
+
+  const { roomName, startDate, startTime, endDate, endTime, capacity } = editForm.value
+  if (!roomName || !startDate || !startTime || !endDate || !endTime) {
+    editFormError.value = '請填寫教室與開始/結束時間'
+    return
+  }
+
+  // 日期跟時間兩個欄位分開收，這裡再組回後端要的 LocalDateTime 格式
+  const startAt = `${startDate}T${startTime}:00`
+  const endAt = `${endDate}T${endTime}:00`
+
+  if (new Date(endAt) <= new Date(startAt)) {
+    editFormError.value = '結束時間必須晚於開始時間'
+    return
+  }
+
+  editSubmitting.value = true
+  try {
+    await updateSession(editingSessionId.value, {
+      roomName,
+      startAt,
+      endAt,
+      capacity: capacity || null,
+      version: editingSessionVersion.value,
+    })
+    closeEditModal()
+    await fetchSessions()
+  } catch (err) {
+    const apiError = err
+    if (isInlineError(apiError)) {
+      // 版本衝突（樂觀鎖）是預期中會發生的競態情況，不能自動重試（不知道使用者這次改的
+      // 內容是否還適用於別人剛改過的新版本），只能請使用者自己重新整理列表、看清楚最新狀態再改一次
+      editFormError.value =
+        apiError.status === 409 && apiError.message.includes('已被修改')
+          ? `${apiError.message}，請關閉後重新整理列表再試`
+          : apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
+  } finally {
+    editSubmitting.value = false
   }
 }
 
 onMounted(() => {
   fetchCourses()
   fetchSessions()
+})
+
+onUnmounted(() => {
+  clearTimeout(searchDebounceTimer)
 })
 </script>
 
@@ -237,6 +389,12 @@ onMounted(() => {
     </form>
     <p v-if="formError" class="form-error">{{ formError }}</p>
 
+    <div class="search-field">
+      <input id="sessionSearch" v-model="search" type="text" placeholder="搜尋課程名稱、教練或教室" />
+    </div>
+
+    <OperationMessage :message="sessionListMessage" />
+
     <div v-if="sessionsLoading" class="spinner"></div>
 
     <template v-else>
@@ -269,19 +427,88 @@ onMounted(() => {
               </span>
             </td>
             <td>
-              <button
-                v-if="session.status !== 'CANCELLED'"
-                class="btn btn-outline"
-                type="button"
-                @click="handleCancelSession(session)"
-              >
-                取消
-              </button>
+              <div v-if="session.status !== 'CANCELLED'" class="row-actions">
+                <button class="btn btn-outline" type="button" @click="openEditModal(session)">編輯</button>
+                <button class="btn btn-outline" type="button" @click="handleCancelSession(session)">取消</button>
+              </div>
             </td>
           </tr>
         </tbody>
       </table>
+
+      <Pagination
+        :page="page"
+        :total-pages="totalPages"
+        :size="size"
+        @update:page="handlePageChange"
+        @update:size="handleSizeChange"
+      />
     </template>
+
+    <div v-if="isEditModalOpen" class="modal-overlay" @click.self="closeEditModal">
+      <div class="modal-content">
+        <h3 class="modal-title">編輯場次</h3>
+        <form @submit.prevent="handleEditSubmit">
+          <div class="modal-fields">
+            <div class="field field-wide">
+              <label for="editSessionRoom">教室</label>
+              <input id="editSessionRoom" v-model="editForm.roomName" type="text" required />
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="editSessionStartDate">開始日期</label>
+                <input
+                  id="editSessionStartDate"
+                  v-model="editForm.startDate"
+                  type="date"
+                  :min="todayDateString()"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label for="editSessionStartTime">開始時間</label>
+                <select id="editSessionStartTime" v-model="editForm.startTime" required>
+                  <option value="" disabled>請選擇</option>
+                  <option v-for="t in TIME_OPTIONS" :key="t" :value="t">{{ t }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="editSessionEndDate">結束日期</label>
+                <input
+                  id="editSessionEndDate"
+                  v-model="editForm.endDate"
+                  type="date"
+                  :min="editForm.startDate"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label for="editSessionEndTime">結束時間</label>
+                <select id="editSessionEndTime" v-model="editForm.endTime" required>
+                  <option value="" disabled>請選擇</option>
+                  <option v-for="t in TIME_OPTIONS" :key="t" :value="t">{{ t }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="editSessionCapacity">容納人數</label>
+              <input id="editSessionCapacity" v-model.number="editForm.capacity" type="number" min="1" />
+            </div>
+          </div>
+          <p v-if="editFormError" class="form-error">{{ editFormError }}</p>
+          <div class="modal-actions">
+            <button class="btn btn-accent" type="submit" :disabled="editSubmitting">
+              {{ editSubmitting ? '儲存中…' : '儲存修改' }}
+            </button>
+            <button class="btn btn-outline" type="button" :disabled="editSubmitting" @click="closeEditModal">
+              取消
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -322,6 +549,20 @@ onMounted(() => {
   color: #b3452f;
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
+}
+
+.search-field {
+  margin-bottom: 1rem;
+}
+
+.search-field input {
+  width: 100%;
+  max-width: 320px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: var(--text-primary);
 }
 
 .empty-state {
@@ -372,5 +613,61 @@ onMounted(() => {
 .status-cancelled {
   background: #f1ecea;
   color: var(--text-muted);
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 100;
+}
+
+.modal-content {
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hover);
+  padding: 1.75rem;
+}
+
+.modal-title {
+  margin: 0 0 1.25rem;
+  font-size: 1.15rem;
+  color: var(--text-primary);
+}
+
+.modal-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+/* 開始/結束各自成一排，日期與時間並排：用明確的 row 容器取代單純 flex-wrap，
+   避免欄位寬度不一時被排版擠到不相關的欄位同一排（如開始時間跟結束日期擠在一起） */
+.field-row {
+  display: flex;
+  gap: 1rem;
+  flex: 1 1 100%;
+}
+
+.field-row .field {
+  flex: 1;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
 </style>
