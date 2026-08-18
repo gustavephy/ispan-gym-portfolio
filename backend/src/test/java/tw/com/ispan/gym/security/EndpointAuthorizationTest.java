@@ -86,7 +86,6 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.employee.EmployeeReviewController.class,
         tw.com.ispan.gym.controller.coupon.EmployeeCouponController.class,
         tw.com.ispan.gym.controller.product.ProductController.class,
-        tw.com.ispan.gym.controller.trainer.TrainerController.class,
         // 安全基礎設施
         JwtUtil.class,
         JwtAuthFilter.class,

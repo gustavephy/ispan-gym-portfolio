@@ -1,11 +1,16 @@
 package tw.com.ispan.gym.service.course;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.course.PrivateCourseRequest;
@@ -13,17 +18,18 @@ import tw.com.ispan.gym.dto.course.PrivateCourseResponse;
 import tw.com.ispan.gym.entity.course.PrivateCourse;
 import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.enums.course.CourseStatus;
-import tw.com.ispan.gym.repository.course.PrivateCourseRepository;
-
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.repository.course.PrivateCourseRepository;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@Transactional
 public class PrivateCourseService {
         private final PrivateCourseRepository privateCourseRepository;
 
+        // 取得公開(已購買)的私教課
         public List<PrivateCourseResponse> getPublicCourses() {
                 List<PrivateCourse> courses = privateCourseRepository.findByStatus(CourseStatus.ACTIVE);
                 return courses.stream()
@@ -32,9 +38,35 @@ public class PrivateCourseService {
         }
 
         // 取得教練名下的課程
-        public List<PrivateCourseResponse> getMyCourses(Trainer trainer) {
-                List<PrivateCourse> courses = privateCourseRepository.findByTrainerId(trainer.getId());
-                return courses.stream().map(PrivateCourseResponse::from).collect(Collectors.toList());
+        @Transactional
+        public Page<PrivateCourseResponse> getAllCourses(
+                        String keyword,
+                        Integer trainerId,
+                        CourseStatus status,
+                        LocalDate startDate,
+                        LocalDate endDate,
+                        int page,
+                        int pageSize) {
+                PageRequest pageRequest = PageRequest.of(page, pageSize, Sort.by("privateCourseId").descending());
+
+                LocalDateTime startLdt = null;
+                if (startDate != null) {
+                        startLdt = startDate.atStartOfDay();
+                }
+
+                LocalDateTime endLdt = null;
+                if (endDate != null) {
+                        endLdt = endDate.atTime(23, 59, 59, 999999);
+                }
+
+                Page<PrivateCourse> courses = privateCourseRepository.findCoursesWithFilters(
+                                status,
+                                trainerId,
+                                (keyword != null && !keyword.isBlank()) ? keyword.trim() : null,
+                                startLdt,
+                                endLdt,
+                                pageRequest);
+                return courses.map(PrivateCourseResponse::from);
         }
 
         // 新增私教課

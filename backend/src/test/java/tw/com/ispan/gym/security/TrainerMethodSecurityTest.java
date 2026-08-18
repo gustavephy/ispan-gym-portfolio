@@ -76,8 +76,6 @@ class TrainerMethodSecurityTest {
     @Import({
         MockedBeans.class,
         RelaxedUrlSecurityConfig.class,
-        // 受測的正牌 controller，未做任何調整
-        tw.com.ispan.gym.controller.trainer.TrainerController.class,
         JwtUtil.class,
         JwtAuthFilter.class,
         AccountAuthorityResolver.class,

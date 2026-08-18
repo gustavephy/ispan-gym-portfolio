@@ -100,4 +100,9 @@ public class Trainer {
 	protected void onUpdate() {
 		updatedAt = LocalDateTime.now();
 	}
+
+	public Object trainerId() {
+		// TODO Auto-generated method stub
+		throw new UnsupportedOperationException("Unimplemented method 'trainerId'");
+	}
 }
