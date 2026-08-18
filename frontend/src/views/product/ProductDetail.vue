@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useProductsStore } from '@/stores/products.js'
@@ -56,9 +56,16 @@ async function addToCart() {
   showFeedback(res.success ? '已加入購物車' : res.message, res.success ? 'success' : 'error')
 }
 
-onMounted(() => {
-  productsStore.loadProductDetail(route.params.id)
-})
+// 用 watch(immediate) 而不是 onMounted：同一條路由只換 params（例如日後加「相關商品」
+// 互連）時 Vue Router 會重用元件、onMounted 不會再觸發，畫面會停在舊商品。
+watch(
+  () => route.params.id,
+  (id) => {
+    if (id) productsStore.loadProductDetail(id)
+    qty.value = 1
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

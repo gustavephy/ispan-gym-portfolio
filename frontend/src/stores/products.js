@@ -61,6 +61,10 @@ export const useProductsStore = defineStore('products', () => {
   //載入單一商品明細與留言
   //留言 API 後端尚未實作，失敗時不影響商品明細顯示
   async function loadProductDetail(id) {
+    // 先清空舊資料：不清的話，從 A 商品切到 B 商品時模板的 v-if="product"
+    // 仍成立（留著 A 的資料），畫面會先閃一下 A 才換成 B，spinner 也永遠不會出現
+    currentProduct.value = null
+    comments.value = []
     loading.value = true
     try {
       const res = await getProductById(id)
