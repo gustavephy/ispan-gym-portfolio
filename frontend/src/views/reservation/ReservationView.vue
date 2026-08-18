@@ -190,7 +190,9 @@ async function handleBook(slot) {
   try {
     const res = await createBooking(slot.id)
     alert(`預約成功！核銷碼：${res.data.checkInKey}，上課時請出示給教練核銷`)
-    await fetchTrainerSchedules(selectedTrainerId.value)
+    // 時段列表要讓已被約走的時段消失，「我的預約」要出現這筆新紀錄——兩邊都得重抓。
+    // 只抓其中一邊會讓使用者以為預約沒成功（同 handleCancelBooking 的處理）
+    await Promise.all([fetchTrainerSchedules(selectedTrainerId.value), fetchMyBookings()])
   } catch (err) {
     const apiError = err
     if (isInlineError(apiError)) {
