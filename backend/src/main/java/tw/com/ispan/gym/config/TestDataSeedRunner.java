@@ -23,6 +23,22 @@ import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
+import tw.com.ispan.gym.repository.product.ProductCategoryRepository;
+import tw.com.ispan.gym.repository.product.ProductRepository;
+import tw.com.ispan.gym.repository.subscription.SubscriptionPlanRepository;
+import tw.com.ispan.gym.repository.course.CourseCategoryRepository;
+import tw.com.ispan.gym.repository.course.GroupCourseRepository;
+import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
+import tw.com.ispan.gym.entity.product.ProductCategory;
+import tw.com.ispan.gym.entity.product.Product;
+import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
+import tw.com.ispan.gym.entity.course.CourseCategory;
+import tw.com.ispan.gym.entity.course.GroupCourse;
+import tw.com.ispan.gym.entity.coach.GroupClassSession;
+import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
+import java.math.BigDecimal;
+import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * 開發用測試帳號播種：讓每位組員的本機資料庫收斂到同一組已知帳號，
@@ -58,6 +74,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final MemberRepository members;
     private final EmployeeRepository employees;
     private final TrainerRepository trainers;
+    private final ProductCategoryRepository productCategories;
+    private final ProductRepository products;
+    private final SubscriptionPlanRepository subscriptionPlans;
+    private final CourseCategoryRepository courseCategories;
+    private final GroupCourseRepository groupCourses;
+    private final GroupClassSessionRepository groupClassSessions;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
 
@@ -66,12 +88,24 @@ public class TestDataSeedRunner implements CommandLineRunner {
             MemberRepository members,
             EmployeeRepository employees,
             TrainerRepository trainers,
+            ProductCategoryRepository productCategories,
+            ProductRepository products,
+            SubscriptionPlanRepository subscriptionPlans,
+            CourseCategoryRepository courseCategories,
+            GroupCourseRepository groupCourses,
+            GroupClassSessionRepository groupClassSessions,
             PasswordEncoder passwordEncoder,
             @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
         this.accounts = accounts;
         this.members = members;
         this.employees = employees;
         this.trainers = trainers;
+        this.productCategories = productCategories;
+        this.products = products;
+        this.subscriptionPlans = subscriptionPlans;
+        this.courseCategories = courseCategories;
+        this.groupCourses = groupCourses;
+        this.groupClassSessions = groupClassSessions;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
     }
@@ -95,6 +129,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
         ensureMember(coach, "教練", "測試", "0933333333");
         Employee coachEmployee = ensureEmployee(coach, "教練", "測試", "0933333333", EmployeeRole.EMPLOYEE);
         ensureTrainer(coachEmployee);
+
+        ensureCatalogData(coachEmployee);
 
         log.info("測試帳號播種完成（密碼一律 {}；正式環境請以 SEED_TEST_DATA_ENABLED=false 停用）", TEST_PASSWORD);
     }
@@ -202,5 +238,124 @@ public class TestDataSeedRunner implements CommandLineRunner {
             trainers.save(trainer);
             log.info("已將測試教練（employee={}）導正為未刪除", employee.getId());
         }
+    }
+
+
+    // ─────────────── 目錄資料：讓前端頁面有東西可顯示 ───────────────
+
+    /**
+     * 商品／訂閱方案／團課等前台頁面若沒有資料，畫面只會顯示空狀態，
+     * 無從判斷版面與串接是否正確。這裡補上最小一組可展示的資料。
+     *
+     * <p>判斷方式一律是「該表為空才建立」而非逐筆比對——這些是展示用資料，
+     * 組員自己在後台新增的內容不該被本 runner 覆蓋或刪除。
+     */
+    private void ensureCatalogData(Employee coachEmployee) {
+        ProductCategory supplementCategory = ensureProductCategory();
+        ensureProducts(supplementCategory);
+        ensureSubscriptionPlans();
+        CourseCategory groupCategory = ensureCourseCategory();
+        ensureGroupCourseAndSession(coachEmployee, groupCategory);
+    }
+
+    private ProductCategory ensureProductCategory() {
+        return productCategories.findAll().stream().findFirst().orElseGet(() -> {
+            ProductCategory category = new ProductCategory();
+            category.setName("運動補給");
+            ProductCategory saved = productCategories.save(category);
+            log.info("已建立測試商品分類：{}", saved.getName());
+            return saved;
+        });
+    }
+
+    private void ensureProducts(ProductCategory category) {
+        if (!products.findAll().isEmpty()) {
+            return;
+        }
+        record Seed(String name, String price, int stock, String brand, String flavor, String desc) {}
+        List<Seed> seeds = List.of(
+                new Seed("乳清蛋白 1kg", "1280", 50, "MyProtein", "巧克力", "每份 24g 蛋白質，訓練後補給首選。"),
+                new Seed("BCAA 支鏈胺基酸", "890", 30, "Optimum", "莓果", "訓練中補充，延緩疲勞。"),
+                new Seed("搖搖杯 700ml", "250", 100, "Blender", null, "防漏設計，附攪拌球。"),
+                new Seed("健身手套", "450", 20, "Harbinger", null, "止滑耐磨，保護掌心。"),
+                new Seed("能量棒（12入）", "600", 0, "Quest", "花生", "高蛋白低糖，隨身補給。"));
+        for (Seed seed : seeds) {
+            Product product = new Product();
+            product.setName(seed.name());
+            product.setPrice(new BigDecimal(seed.price()));
+            product.setStock(seed.stock());
+            product.setBrand(seed.brand());
+            product.setFlavor(seed.flavor());
+            product.setDescription(seed.desc());
+            product.setProductCategory(category);
+            products.save(product);
+        }
+        // 其中一筆刻意庫存為 0，方便驗證前端的「已售完」呈現
+        log.info("已建立 {} 筆測試商品（含 1 筆零庫存）", seeds.size());
+    }
+
+    private void ensureSubscriptionPlans() {
+        if (!subscriptionPlans.findAll().isEmpty()) {
+            return;
+        }
+        record Seed(String name, String price, int days, String desc) {}
+        List<Seed> seeds = List.of(
+                new Seed("月費方案", "1500", 30, "單月無限次入場，可報名團體課程。"),
+                new Seed("季費方案", "4200", 90, "三個月方案，平均每月 1400 元。"),
+                new Seed("年費方案", "15000", 365, "最超值方案，平均每月 1250 元。"));
+        for (Seed seed : seeds) {
+            SubscriptionPlan plan = new SubscriptionPlan();
+            plan.setName(seed.name());
+            plan.setPrice(new BigDecimal(seed.price()));
+            plan.setDurationDays(seed.days());
+            plan.setDescription(seed.desc());
+            subscriptionPlans.save(plan);
+        }
+        log.info("已建立 {} 筆測試訂閱方案", seeds.size());
+    }
+
+    private CourseCategory ensureCourseCategory() {
+        return courseCategories.findAll().stream().findFirst().orElseGet(() -> {
+            CourseCategory category = new CourseCategory();
+            category.setName("團體有氧");
+            CourseCategory saved = courseCategories.save(category);
+            log.info("已建立測試課程分類：{}", saved.getName());
+            return saved;
+        });
+    }
+
+    /**
+     * 團課主檔與場次一起建立：只有主檔而沒有場次時，前台團課頁仍是空的
+     * （那頁顯示的是「即將開始且開放報名的場次」，不是課程本身）。
+     * 場次時間刻意設在未來，才會出現在前台列表。
+     */
+    private void ensureGroupCourseAndSession(Employee coachEmployee, CourseCategory category) {
+        if (!groupCourses.findAll().isEmpty()) {
+            return;
+        }
+        Trainer trainer = trainers.findByEmployeeId(coachEmployee.getId()).orElse(null);
+        if (trainer == null) {
+            log.warn("找不到測試教練，略過團課播種");
+            return;
+        }
+        GroupCourse course = new GroupCourse();
+        course.setTrainer(trainer);
+        course.setName("燃脂有氧");
+        course.setDescription("高強度間歇訓練，適合想快速燃脂的學員。");
+        course.setCategory(category);
+        course.setMaxCapacity(20);
+        GroupCourse savedCourse = groupCourses.save(course);
+
+        LocalDateTime start = LocalDateTime.now().plusDays(3).withHour(19).withMinute(0)
+                .withSecond(0).withNano(0);
+        GroupClassSession session = new GroupClassSession();
+        session.setCourse(savedCourse);
+        session.setRoomName("A 教室");
+        session.setStartAt(start);
+        session.setEndAt(start.plusHours(1));
+        session.setCapacity(20);
+        session.setStatus(GroupClassSessionStatus.SCHEDULED);
+        groupClassSessions.save(session);
+        log.info("已建立測試團課主檔與 1 筆未來場次（{}）", start);
     }
 }
