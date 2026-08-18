@@ -4,7 +4,12 @@ import { getMySlots, createSlot, updateSlot, cancelSlot, checkInBooking } from '
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import FeedbackToast from '@/components/FeedbackToast.vue'
+import { useFeedback } from '@/composables/useFeedback.js'
 import Pagination from '@/components/Pagination.vue'
+
+// 成功提示用 toast，不用 window.alert（會阻斷畫面且要多按一次確定）
+const { feedback, showFeedback } = useFeedback(2500)
 
 // 狀態對照表：後端回傳 AVAILABLE/BOOKED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
@@ -290,7 +295,7 @@ async function handleCheckIn(slot) {
   slotActionMessage.value = ''
   try {
     await checkInBooking(slot.bookingId, checkInKey)
-    alert('核銷成功')
+    showFeedback('核銷成功')
     await fetchSlots()
   } catch (err) {
     const apiError = err
@@ -441,6 +446,8 @@ onUnmounted(() => {
         </form>
       </div>
     </div>
+
+    <FeedbackToast :feedback="feedback" />
   </div>
 </template>
 

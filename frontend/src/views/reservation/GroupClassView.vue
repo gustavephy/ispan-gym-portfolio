@@ -5,6 +5,8 @@ import { useAuthStore } from '@/stores/auth.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import FeedbackToast from '@/components/FeedbackToast.vue'
+import { useFeedback } from '@/composables/useFeedback.js'
 import Pagination from '@/components/Pagination.vue'
 import FullCalendar from '@fullcalendar/vue3'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -16,6 +18,10 @@ const MY_BOOKING_STATUS_MAP = {
   BOOKED: { label: '已報名', className: 'status-booked' },
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
 }
+
+// 成功提示用 toast 而非 window.alert——alert 會阻斷畫面、還要使用者多按一次確定，
+// 對「操作已完成」這種不需要決策的訊息太重（用法比照 ProductDetail.vue）
+const { feedback, showFeedback } = useFeedback(2500)
 
 const sessions = ref([])
 const loading = ref(true)
@@ -151,7 +157,7 @@ async function handleBookInModal() {
     // 先解除 loading 狀態，closeDetailModal() 才不會被自己的送出中防呆擋住
     bookingSubmitting.value = false
     closeDetailModal()
-    alert('報名成功')
+    showFeedback('報名成功')
     // 行事曆要更新剩餘名額，「我的團課報名」要出現這筆新紀錄——兩邊都得重抓，
     // 只抓其中一邊會讓使用者以為報名沒成功（寫法比照 handleCancelBooking）
     await Promise.all([fetchSessions(), fetchMyBookings()])
@@ -404,6 +410,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    <FeedbackToast :feedback="feedback" />
   </div>
 </template>
 

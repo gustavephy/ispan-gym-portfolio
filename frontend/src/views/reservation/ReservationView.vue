@@ -10,6 +10,8 @@ import {
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import FeedbackToast from '@/components/FeedbackToast.vue'
+import { useFeedback } from '@/composables/useFeedback.js'
 import Pagination from '@/components/Pagination.vue'
 
 // 預約狀態對照表：後端回傳 PENDING/COMPLETED/CANCELLED，畫面顯示中文與顏色
@@ -18,6 +20,10 @@ const BOOKING_STATUS_MAP = {
   COMPLETED: { label: '已完成', className: 'status-completed' },
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
 }
+
+// 成功提示用 toast，不用 window.alert（會阻斷畫面且要多按一次確定）
+// 核銷碼會停留久一點——那是使用者需要記下來或截圖的資訊
+const { feedback, showFeedback } = useFeedback(6000)
 
 const trainers = ref([])
 const trainersLoading = ref(true)
@@ -189,7 +195,7 @@ async function handleBook(slot) {
   bookingSlotId.value = slot.id
   try {
     const res = await createBooking(slot.id)
-    alert(`預約成功！核銷碼：${res.data.checkInKey}，上課時請出示給教練核銷`)
+    showFeedback(`預約成功！核銷碼 ${res.data.checkInKey}，上課時請出示給教練核銷`)
     // 時段列表要讓已被約走的時段消失，「我的預約」要出現這筆新紀錄——兩邊都得重抓。
     // 只抓其中一邊會讓使用者以為預約沒成功（同 handleCancelBooking 的處理）
     await Promise.all([fetchTrainerSchedules(selectedTrainerId.value), fetchMyBookings()])
@@ -327,6 +333,7 @@ onMounted(() => {
         />
       </template>
     </div>
+    <FeedbackToast :feedback="feedback" />
   </div>
 </template>
 
