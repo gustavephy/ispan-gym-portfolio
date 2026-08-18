@@ -44,7 +44,6 @@ public class SchemaFixupRunner implements CommandLineRunner {
         renameLegacyColumns();
         clearLegacyOperatorIds();
         dropLegacyIdentityArtifacts();
-        migrateCartItemIdToInt();
         renameOrderForeignKeys();
         migrateLoginColumnsToAccount();
         migrateCourseDomainSplit();
@@ -365,28 +364,11 @@ public class SchemaFixupRunner implements CommandLineRunner {
         }
     }
 
-    // === 購物車主鍵改型別（2026-08-17 定案：cart_item.id 由 bigint 改 int，
-    // 欄名補實體前綴改為 cart_item_id，跟其他表的主鍵命名一致）===================
-    // SQL Server 不允許直接 ALTER 一個 IDENTITY 欄位的型別，只能整張表重建；
-    // 購物車是暫存資料（結帳後即清空、從未跨會員保留），直接砍表讓 ddl-auto
-    // 用新型別／新欄名重建即可，不需要遷移舊資料。
+    // === 購物車主鍵改型別：已移至 PreSchemaFixupRunner =====================
+    // 那支遷移必須在 Hibernate 建表之前執行（舊表還在的話 ddl-auto 會想
+    // 在同一張表再加一個 identity 欄位而失敗），而本類別是 CommandLineRunner、
+    // 執行時 ddl-auto 早已跑完，放這裡第一次啟動必定報錯、要重啟第二次才正常。
 
-    private void migrateCartItemIdToInt() {
-        if (tableExists("cart_item") && columnIsBigint("cart_item", "id")) {
-            dropForeignKeysReferencing("cart_item");
-            jdbc.execute("DROP TABLE cart_item");
-            log.info("已移除舊 bigint id 的 cart_item 表，int cart_item_id 新表由 ddl-auto 重建（購物車為暫存資料，不遷移）");
-        }
-    }
-
-    private boolean columnIsBigint(String table, String column) {
-        Integer found = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM sys.columns c
-                    JOIN sys.types t ON t.user_type_id = c.user_type_id
-                    WHERE c.object_id = OBJECT_ID(?) AND c.name = ? AND t.name = 'bigint'
-                """, Integer.class, table, column);
-        return found != null && found > 0;
-    }
 
     // === orders 外鍵改名（2026-08-17：FK_orders_user(_coupon) 補齊 member 命名）========
     // 底層欄位（member_id／member_coupon_id）早就改名完成，只有這兩個約束名稱的
