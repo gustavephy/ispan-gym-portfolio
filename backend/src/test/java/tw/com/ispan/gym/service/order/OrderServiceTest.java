@@ -241,7 +241,7 @@ class OrderServiceTest {
     void 購物車結帳加總各項小計並扣除庫存() {
         Product a = product(PRODUCT_ID, 10, "1000");
         Product b = product(OTHER_PRODUCT_ID, 5, "250.50");
-        stubCart(new CartItem(member(), a, 2L), new CartItem(member(), b, 3L));
+        stubCart(new CartItem(member(), a, 2), new CartItem(member(), b, 3));
         stubProductLock(a, b);
         stubOrderSaveAssignsId();
         stubNoOrderItems();
@@ -272,7 +272,7 @@ class OrderServiceTest {
     void 結帳時逐一對商品取鎖以避免死結() {
         Product a = product(PRODUCT_ID, 10, "1000");
         Product b = product(OTHER_PRODUCT_ID, 10, "500");
-        stubCart(new CartItem(member(), a, 1L), new CartItem(member(), b, 1L));
+        stubCart(new CartItem(member(), a, 1), new CartItem(member(), b, 1));
         stubProductLock(a, b);
         stubOrderSaveAssignsId();
         stubNoOrderItems();
@@ -287,7 +287,7 @@ class OrderServiceTest {
     @Test
     void 結帳時庫存不足擋下且不建立訂單() {
         Product a = product(PRODUCT_ID, 1, "1000");
-        stubCart(new CartItem(member(), a, 2L));
+        stubCart(new CartItem(member(), a, 2));
         stubProductLock(a);
 
         assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, null))
@@ -302,7 +302,7 @@ class OrderServiceTest {
     void 結帳時商品已下架擋下() {
         Product a = product(PRODUCT_ID, 99, "1000");
         a.setStatus(ProductStatus.INACTIVE);
-        stubCart(new CartItem(member(), a, 1L));
+        stubCart(new CartItem(member(), a, 1));
         stubProductLock(a);
 
         assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, null))
@@ -314,7 +314,7 @@ class OrderServiceTest {
     @Test
     void 結帳時商品在鎖定查詢時已不存在回404() {
         Product a = product(PRODUCT_ID, 10, "1000");
-        stubCart(new CartItem(member(), a, 1L));
+        stubCart(new CartItem(member(), a, 1));
         when(products.findByIdForUpdate(PRODUCT_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, null))
@@ -326,7 +326,7 @@ class OrderServiceTest {
     @Test
     void 現金券折抵固定金額() {
         Product a = product(PRODUCT_ID, 10, "1000");
-        stubCart(new CartItem(member(), a, 1L));
+        stubCart(new CartItem(member(), a, 1));
         stubProductLock(a);
         stubOrderSaveAssignsId();
         stubNoOrderItems();
@@ -346,7 +346,7 @@ class OrderServiceTest {
     @Test
     void 百分比券以四捨五入計算折抵金額() {
         Product a = product(PRODUCT_ID, 10, "333.33");
-        stubCart(new CartItem(member(), a, 1L));
+        stubCart(new CartItem(member(), a, 1));
         stubProductLock(a);
         stubOrderSaveAssignsId();
         stubNoOrderItems();
@@ -362,7 +362,7 @@ class OrderServiceTest {
     @Test
     void 折抵金額大於小計時總額為零而不是負數() {
         Product a = product(PRODUCT_ID, 10, "80");
-        stubCart(new CartItem(member(), a, 1L));
+        stubCart(new CartItem(member(), a, 1));
         stubProductLock(a);
         stubOrderSaveAssignsId();
         stubNoOrderItems();
@@ -380,7 +380,7 @@ class OrderServiceTest {
     @Test
     void 優惠券代碼不存在回404() {
         Product a = product(PRODUCT_ID, 10, "1000");
-        stubCart(new CartItem(member(), a, 1L));
+        stubCart(new CartItem(member(), a, 1));
         stubProductLock(a);
         when(coupons.findByCode(COUPON_CODE)).thenReturn(Optional.empty());
 
@@ -427,7 +427,7 @@ class OrderServiceTest {
     @Test
     void 未持有或已使用過該券時擋下() {
         Product a = product(PRODUCT_ID, 10, "1000");
-        stubCart(new CartItem(member(), a, 1L));
+        stubCart(new CartItem(member(), a, 1));
         stubProductLock(a);
         Coupon coupon = coupon(CouponType.CASH, "100");
         when(coupons.findByCode(COUPON_CODE)).thenReturn(Optional.of(coupon));
@@ -444,7 +444,7 @@ class OrderServiceTest {
     }
 
     private void assertCouponRejected(Product product, Coupon coupon, String messageFragment) {
-        stubCart(new CartItem(member(), product, 1L));
+        stubCart(new CartItem(member(), product, 1));
         stubProductLock(product);
         stubHoldsCoupon(coupon, heldCoupon(coupon));
 

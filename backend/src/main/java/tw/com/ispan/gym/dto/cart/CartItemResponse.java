@@ -3,11 +3,11 @@ package tw.com.ispan.gym.dto.cart;
 import java.math.BigDecimal;
 
 public record CartItemResponse(
-        Long cartItemId,
+        Integer cartItemId,
         Integer productId,
         String productName,
         String imageUrl,
         BigDecimal unitPrice,
-        Long quantity,
+        Integer quantity,
         BigDecimal subtotal) {}
 

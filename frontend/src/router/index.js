@@ -19,6 +19,9 @@ const router = createRouter({
           path: 'subscription',
           component: () => import('@/views/subscription/SubscriptionView.vue'),
         },
+        { path: 'cart', component: () => import('@/views/cart/CartView.vue') },
+        { path: 'checkout', component: () => import('@/views/cart/CheckoutView.vue') },
+        { path: 'orders', component: () => import('@/views/member/OrderListView.vue') },
         {
           path: 'trainer/schedules',
           component: () => import('@/views/trainer/TrainerScheduleView.vue'),

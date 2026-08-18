@@ -1,9 +1,227 @@
-<script>
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useProductsStore } from '@/stores/products.js'
+import { useCartStore } from '@/stores/cart.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { useFeedback } from '@/composables/useFeedback.js'
+import FeedbackToast from '@/components/FeedbackToast.vue'
 
+const route = useRoute()
+const productsStore = useProductsStore()
+const cart = useCartStore()
+const auth = useAuthStore()
+
+const { currentProduct: product, loading } = storeToRefs(productsStore)
+
+const qty = ref(1)
+const { feedback, showFeedback } = useFeedback(2000)
+
+const specLabels = {
+  brand: '品牌',
+  weight: '重量',
+  flavor: '口味',
+  size: '尺寸',
+  color: '顏色',
+  material: '材質',
+  origin: '產地',
+}
+
+const specifications = computed(() => {
+  if (!product.value) return {}
+  const specs = {}
+  for (const key of Object.keys(specLabels)) {
+    const val = product.value[key]
+    if (val !== null && val !== undefined && val !== '') {
+      specs[key] = key === 'weight' ? `${val} kg` : val
+    }
+  }
+  return specs
+})
+
+function increaseQty() {
+  if (product.value && qty.value < product.value.stock) qty.value++
+}
+function decreaseQty() {
+  if (qty.value > 1) qty.value--
+}
+
+async function addToCart() {
+  if (!auth.isLoggedIn) {
+    showFeedback('請先登入會員後再加入購物車', 'error')
+    return
+  }
+  const res = await cart.addItem(product.value.productId, qty.value)
+  showFeedback(res.success ? '已加入購物車' : res.message, res.success ? 'success' : 'error')
+}
+
+onMounted(() => {
+  productsStore.loadProductDetail(route.params.id)
+})
 </script>
-<template>
 
+<template>
+  <div class="page-container" v-if="product">
+    <div class="breadcrumb">
+      <RouterLink to="/products">商城商品</RouterLink>
+      <span>›</span>
+      <span>{{ product.name }}</span>
+    </div>
+
+    <div class="detail-layout">
+      <div class="product-image">
+        <img v-if="product.imageUrl" :src="product.imageUrl" :alt="product.name" />
+        <span v-else class="product-image-fallback">{{ product.name?.[0] }}</span>
+      </div>
+
+      <div class="product-info">
+        <h1 class="product-name">{{ product.name }}</h1>
+        <p class="product-category" v-if="product.categoryName">分類：{{ product.categoryName }}</p>
+        <p class="product-desc">{{ product.description }}</p>
+
+        <div class="price-row">
+          <span class="product-price">NT$ {{ Number(product.price).toLocaleString() }}</span>
+          <span class="product-stock">庫存：{{ product.stock }}</span>
+        </div>
+
+        <dl v-if="Object.keys(specifications).length" class="spec-list">
+          <template v-for="(value, key) in specifications" :key="key">
+            <dt>{{ specLabels[key] || key }}</dt>
+            <dd>{{ value }}</dd>
+          </template>
+        </dl>
+
+        <div class="add-section">
+          <div class="qty-ctrl">
+            <button class="qty-btn" @click="decreaseQty">−</button>
+            <span class="qty-num">{{ qty }}</span>
+            <button class="qty-btn" @click="increaseQty">＋</button>
+          </div>
+          <button
+            class="btn btn-accent"
+            :disabled="product.stock === 0"
+            @click="addToCart"
+          >{{ product.stock === 0 ? '已售完' : '加入購物車' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <FeedbackToast :feedback="feedback" />
+  </div>
+  <div v-else-if="loading" class="spinner"></div>
 </template>
+
 <style scoped>
-    
+.breadcrumb {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+.detail-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 2rem;
+}
+.product-image {
+  height: 280px;
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.product-image-fallback {
+  font-size: 4rem;
+  color: var(--text-muted);
+}
+.product-name {
+  font-size: 1.6rem;
+  font-weight: 900;
+  margin-bottom: 0.5rem;
+}
+.product-category {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+.product-desc {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+  line-height: 1.7;
+}
+.price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.product-price {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--accent-hover);
+}
+.product-stock {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.spec-list {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: 0.5rem 1rem;
+  font-size: 0.88rem;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 1rem 0;
+  margin-bottom: 1.5rem;
+}
+.spec-list dt {
+  color: var(--text-secondary);
+}
+.spec-list dd {
+  margin: 0;
+  color: var(--text-primary);
+}
+.add-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.qty-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.6rem;
+}
+.qty-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+.qty-btn:hover {
+  background: var(--bg-soft);
+}
+.qty-num {
+  width: 32px;
+  text-align: center;
+  font-weight: 700;
+}
+@media (max-width: 768px) {
+  .detail-layout { grid-template-columns: 1fr; }
+}
 </style>

@@ -14,8 +14,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
-    List<Order> findAllByMemberIdOrderByCreatedAtDesc(Integer userId);
-    Optional<Order> findByIdAndMemberId(Long id, Integer userId);
+    List<Order> findAllByMemberIdOrderByCreatedAtDesc(Integer memberId);
+    Optional<Order> findByIdAndMemberId(Long id, Integer memberId);
     Optional<Order> findByMerchantTradeNo(String merchantTradeNo);
     Optional<Order> findByTradeNo(String tradeNo);
 

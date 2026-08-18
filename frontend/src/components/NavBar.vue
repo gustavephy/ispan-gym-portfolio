@@ -1,7 +1,8 @@
 <script setup>
-  import { computed } from 'vue'
+  import { computed, onMounted } from 'vue'
   import { RouterLink, useRoute, useRouter } from 'vue-router'
   import { useAuthStore } from '@/stores/auth.js'
+  import { useCartStore } from '@/stores/cart.js'
 
   // requires 是「看得到這個連結所需的角色」，未指定＝所有人（含未登入）皆可見。
   // 這裡只管選單的可見性，不是安全機制——真正的把關在後端的 @PreAuthorize，
@@ -20,6 +21,10 @@
   ]
 
   const auth = useAuthStore()
+
+  // 購物車數量徽章：進站就載入一次，之後由 store 自己在加入／移除時更新
+  const cart = useCartStore()
+  onMounted(() => cart.loadCart())
 
   const visibleLinks = computed(() =>
     navLinks.filter((link) => !link.requires || auth.roles.includes(link.requires)),
@@ -70,6 +75,12 @@
       >
         {{ link.label }}
       </RouterLink>
+      <!-- 購物車要掛數量徽章，無法塞進上面的 v-for，單獨渲染 -->
+      <RouterLink to="/cart" class="nav-link cart-link">
+        購物車
+        <span v-if="cart.itemCount > 0" class="cart-badge">{{ cart.itemCount }}</span>
+      </RouterLink>
+      <RouterLink to="/orders" class="nav-link">我的訂單</RouterLink>
     </nav>
 
     <div class="nav-auth">
@@ -145,6 +156,25 @@
     background: #e6d8c6;
     color: var(--primary-dark);
   }
+  .cart-link {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .cart-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #e03131;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
   .nav-link.router-link-exact-active {
     background: var(--accent);
     color: #fff;
