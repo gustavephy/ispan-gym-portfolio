@@ -65,8 +65,14 @@ const roomFilteredSessions = computed(() =>
 )
 
 // 我的團課報名列表依開始時間排序，跟行事曆的排序邏輯一致
+// 後端已依「狀態→開課時間」排好（BOOKED 在前），這裡沿用同一套規則，
+// 避免前端只對「當前這一頁」重排而把後端的順序打亂
 const sortedMyBookings = computed(() =>
-  [...myBookings.value].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)),
+  [...myBookings.value].sort(
+    (a, b) =>
+      Number(a.status === 'CANCELLED') - Number(b.status === 'CANCELLED') ||
+      new Date(a.startAt) - new Date(b.startAt),
+  ),
 )
 
 function myBookingStatusInfo(status) {
@@ -146,7 +152,9 @@ async function handleBookInModal() {
     bookingSubmitting.value = false
     closeDetailModal()
     alert('報名成功')
-    await fetchSessions()
+    // 行事曆要更新剩餘名額，「我的團課報名」要出現這筆新紀錄——兩邊都得重抓，
+    // 只抓其中一邊會讓使用者以為報名沒成功（寫法比照 handleCancelBooking）
+    await Promise.all([fetchSessions(), fetchMyBookings()])
   } catch (err) {
     const apiError = err
     if (isInlineError(apiError)) {

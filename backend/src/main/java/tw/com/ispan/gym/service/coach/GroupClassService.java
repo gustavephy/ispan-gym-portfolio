@@ -363,7 +363,12 @@ public class GroupClassService {
                         String search) {
                 int safePage = Math.max(page, 0);
                 int safeSize = Math.min(Math.max(size, 1), 100);
-                Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "session.startAt"));
+                // 先依狀態再依開課時間：BOOKED 排在 CANCELLED 之前（EnumType.STRING 存的是字面值，
+                // 字母序剛好是 BOOKED < CANCELLED），讓「還有效的報名」永遠在最前面。
+                // 少了狀態這一層，同一場次的已取消紀錄會跟剛報名的混在一起，
+                // 使用者報名完往下看，第一眼看到的可能是舊的「已取消」，會以為報名失敗。
+                Pageable pageable = PageRequest.of(safePage, safeSize,
+                                Sort.by(Sort.Order.asc("status"), Sort.Order.asc("session.startAt")));
 
                 Page<GroupClassBooking> result = groupClassBookingRepository.searchMyBookings(memberId, search,
                                 pageable);
