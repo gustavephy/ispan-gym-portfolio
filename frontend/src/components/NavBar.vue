@@ -84,20 +84,25 @@
     </nav>
 
     <div class="nav-auth">
-      <template v-if="auth.isLoggedIn">
+      <!-- mode="out-in"：登入／登出兩種狀態高度不同，同時存在會互相推擠，
+           改成舊的先退場、新的才進場 -->
+      <Transition name="auth" mode="out-in">
+      <div v-if="auth.isLoggedIn" key="in" class="nav-auth__panel">
         <span class="nav-auth__email" :title="auth.email">{{ auth.email }}</span>
         <ul class="nav-auth__roles" aria-label="目前身分" :title="`完整身分：${fullRoleList}`">
           <li v-for="label in roleLabels" :key="label" class="nav-auth__role">{{ label }}</li>
         </ul>
         <button type="button" class="nav-auth__button" @click="onLogout">登出</button>
-      </template>
+      </div>
       <RouterLink
         v-else
+        key="out"
         class="nav-auth__button nav-auth__button--primary"
         :to="{ name: 'login', query: route.fullPath !== '/' ? { redirect: route.fullPath } : {} }"
       >
         登入
       </RouterLink>
+      </Transition>
     </div>
 
   </aside>
@@ -183,6 +188,27 @@
 
   /* nav-links 佔滿剩餘空間把這塊推到底；原本的 margin-bottom 是為了跟版權字隔開，
      版權字移除後不再需要，留著只會讓登入區浮在離底部一段距離的地方 */
+  /* Transition 內只能有一個根節點，已登入的三個元素包成 panel */
+  .nav-auth__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* 登入／登出切換：淡入淡出＋輕微位移，時間短到不拖慢操作感 */
+  .auth-enter-active,
+  .auth-leave-active {
+    transition: opacity 0.22s ease, transform 0.22s ease;
+  }
+  .auth-enter-from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  .auth-leave-to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
   .nav-auth {
     display: flex;
     flex-direction: column;
