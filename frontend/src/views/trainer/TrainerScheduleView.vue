@@ -211,8 +211,10 @@ async function submitUpdate(slotId, startAt, endAt, acknowledgeExistingBooking =
   try {
     await updateSlot(slotId, { startAt, endAt, acknowledgeExistingBooking })
   } catch (err) {
-    const { code, message } = err.response?.data || {}
-    if (code === 'CONFIRMATION_REQUIRED' && !acknowledgeExistingBooking && window.confirm(message)) {
+    // 攔截器 reject 的是 normalizeApiError() 正規化後的物件（{code, message, needsConfirmation, raw…}），
+    // 不是原始 axios error——讀 err.response.data 永遠是 undefined，確認框就再也不會跳，
+    // 使用者只會看到一行「請確認」卻無從確認
+    if (err.needsConfirmation && !acknowledgeExistingBooking && window.confirm(err.message)) {
       await submitUpdate(slotId, startAt, endAt, true)
       return
     }
@@ -253,8 +255,8 @@ async function submitCancel(slotId, acknowledgeExistingBooking = false) {
   try {
     await cancelSlot(slotId, acknowledgeExistingBooking)
   } catch (err) {
-    const { code, message } = err.response?.data || {}
-    if (code === 'CONFIRMATION_REQUIRED' && !acknowledgeExistingBooking && window.confirm(message)) {
+    // 同上：讀正規化後的 needsConfirmation，不是 err.response.data
+    if (err.needsConfirmation && !acknowledgeExistingBooking && window.confirm(err.message)) {
       await submitCancel(slotId, true)
       return
     }

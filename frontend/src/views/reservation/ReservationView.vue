@@ -137,8 +137,10 @@ async function submitCancelBooking(bookingId, acknowledgeConsumption = false) {
   try {
     await cancelBooking(bookingId, acknowledgeConsumption)
   } catch (err) {
-    const { code, message } = err.response?.data || {}
-    if (code === 'CONFIRMATION_REQUIRED' && !acknowledgeConsumption && window.confirm(message)) {
+    // 攔截器 reject 的是 normalizeApiError() 正規化後的物件（{code, message, needsConfirmation, raw…}），
+    // 不是原始的 axios error——所以這裡不能讀 err.response.data，那永遠是 undefined，
+    // 確認框就再也不會跳出來，使用者只會看到一行「請確認」的錯誤訊息卻無從確認。
+    if (err.needsConfirmation && !acknowledgeConsumption && window.confirm(err.message)) {
       await submitCancelBooking(bookingId, true)
       return
     }
