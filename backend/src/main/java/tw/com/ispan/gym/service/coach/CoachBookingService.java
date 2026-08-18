@@ -7,6 +7,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.coach.CoachBooking;
 import tw.com.ispan.gym.entity.coach.CoachSlot;
 // 【合併時的修改說明】原分支寫的是 tw.com.ispan.gym.entity.Member / entity.Trainer：
@@ -383,7 +388,9 @@ public class CoachBookingService {
         }
 
         /**
-         * 查詢會員自己的所有私教課預約紀錄，依建立時間新到舊排序。
+         * 分頁查詢會員自己的所有私教課預約紀錄，依上課時間（coachSlot.startAt）由近到遠排序
+         * （Pageable 的 Sort，不寫 JPQL，理由同 {@code GroupCourseRepository#searchCourses}）。
+         * size 做安全上限（1~100）、page 不可小於 0，理由同 {@code GroupCourseService#getAllCourses}。
          *
          * <p>
          * remainingCourseSnapshot 的來源是 SessionDeductionLog.afterRemaining，取「這筆預約
@@ -396,12 +403,18 @@ public class CoachBookingService {
          * 前端請處理成「無歷史資料」，不要當成 0 堂看待。
          *
          * <p>
-         * 這裡用批次查詢（一次撈出這批 booking 全部的 log，再用 Map 分組）取代
-         * 「每筆 booking 各查一次」，避免 N 筆預約打 N 次資料庫的 N+1 問題。
+         * 這裡用批次查詢（一次撈出這一頁 booking 全部的 log，再用 Map 分組）取代
+         * 「每筆 booking 各查一次」，避免 N 筆預約打 N 次資料庫的 N+1 問題；
+         * 分頁後批次查詢的範圍縮小到單頁筆數，比原本一次撈全部預約再批次查更省。
          */
         @Transactional(readOnly = true)
-        public List<CoachBookingHistoryResponse> getMyBookings(Integer memberId) {
-                List<CoachBooking> myBooking = coachBookingRepository.findByMemberIdOrderByCreatedAtDesc(memberId);
+        public PageResponse<CoachBookingHistoryResponse> getMyBookings(Integer memberId, int page, int size) {
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+                Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "coachSlot.startAt"));
+
+                Page<CoachBooking> result = coachBookingRepository.findByMemberId(memberId, pageable);
+                List<CoachBooking> myBooking = result.getContent();
 
                 List<Integer> bookingIds = myBooking.stream().map(booking -> booking.getId()).toList();
                 List<SessionDeductionLog> logs = sessionDeductionLogRepository
@@ -415,7 +428,7 @@ public class CoachBookingService {
                                                 log -> log,
                                                 (first, second) -> first));
 
-                List<CoachBookingHistoryResponse> response = myBooking.stream()
+                List<CoachBookingHistoryResponse> items = myBooking.stream()
                                 .map(booking -> {
                                         SessionDeductionLog log = logMap.getOrDefault(booking.getId(), null);
                                         Integer snapshot = (log == null) ? null : log.getAfterRemaining();
@@ -429,6 +442,7 @@ public class CoachBookingService {
                                                         snapshot);
                                 })
                                 .toList();
-                return response;
+
+                return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
         }
 }

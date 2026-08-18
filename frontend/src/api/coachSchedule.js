@@ -3,8 +3,12 @@ import api from './axios.instance.js'
 // 教練排班（私教課時段）對應後端 CoachSlotController 的
 // GET/POST/PUT /api/trainer/schedules。取消時段是下一步再加。
 
-/** 查詢目前登入教練自己的所有時段（含已取消的舊紀錄，由畫面自行決定怎麼呈現） */
-export const getMySlots = () => api.get('/api/trainer/schedules')
+/**
+ * 分頁查詢目前登入教練自己的所有時段（含已取消的舊紀錄，由畫面自行決定怎麼呈現）
+ * @param {{page?: number, size?: number}} params page 從 0 開始
+ */
+export const getMySlots = ({ page = 0, size = 10 } = {}) =>
+  api.get('/api/trainer/schedules', { params: { page, size } })
 
 /**
  * 建立新時段

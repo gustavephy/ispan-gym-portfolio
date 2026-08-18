@@ -3,12 +3,17 @@ package tw.com.ispan.gym.service.coach;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
 import tw.com.ispan.gym.dto.coach.UpdateCoachSlotRequest;
 import tw.com.ispan.gym.entity.coach.CoachBooking;
@@ -164,14 +169,21 @@ public class CoachSlotService {
         }
 
         /**
-         * 查詢自己的所有時段，唯讀交易。
+         * 分頁查詢自己的所有時段，唯讀交易。依開始時間由近到遠排序（Pageable 的 Sort，不寫 JPQL，
+         * 理由同 {@code GroupCourseRepository#searchCourses}）。
          * 回傳內容包含 CANCELLED 的舊紀錄，不在這一層過濾，交由前端決定顯示方式。
+         * size 做安全上限（1~100）、page 不可小於 0，理由同 {@code GroupCourseService#getAllCourses}。
          */
         @Transactional(readOnly = true)
-        public List<CoachSlotResponse> getMySlots(Integer accountId) {
+        public PageResponse<CoachSlotResponse> getMySlots(Integer accountId, int page, int size) {
                 Trainer trainer = requireTrainerByAccount(accountId);
-                List<CoachSlot> mySlot = coachSlotRepository.findByTrainerIdOrderByStartAtAsc(trainer.getId());
-                List<CoachSlotResponse> response = mySlot.stream().map(slot -> {
+
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+                Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "startAt"));
+
+                Page<CoachSlot> result = coachSlotRepository.findByTrainerId(trainer.getId(), pageable);
+                List<CoachSlotResponse> items = result.getContent().stream().map(slot -> {
                         CoachBooking activeBooking = findActiveBooking(slot.getId());
                         return new CoachSlotResponse(slot.getId(),
                                         slot.getTrainer().getId(), slot.getStartAt(), slot.getEndAt(), slot.getStatus(),
@@ -179,7 +191,7 @@ public class CoachSlotService {
                                         activeBooking != null ? activeBooking.getStatus() : null);
                 }).toList();
 
-                return response;
+                return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
         }
 
         /**

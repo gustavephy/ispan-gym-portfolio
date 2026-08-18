@@ -1,6 +1,10 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { getMySlots, createSlot, updateSlot, cancelSlot, checkInBooking } from '@/api/coachSchedule.js'
+import { isInlineError } from '@/api/api-error.js'
+import { notifyApiError } from '@/api/error-bus.js'
+import OperationMessage from '@/components/OperationMessage.vue'
+import Pagination from '@/components/Pagination.vue'
 
 // 狀態對照表：後端回傳 AVAILABLE/BOOKED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
@@ -15,6 +19,15 @@ const submitting = ref(false)
 
 const form = ref({ startDate: '', startTime: '', endDate: '', endTime: '' })
 const formError = ref('')
+
+// 取消／核銷這兩個列表按鈕操作共用同一個就地訊息，顯示在表格上方（這兩個操作本來就沒有 modal）
+const slotActionMessage = ref('')
+
+// 分頁狀態；這頁沒有搜尋需求
+const page = ref(0)
+const size = ref(10)
+const totalItems = ref(0)
+const totalPages = ref(0)
 
 // 開始日期改到比目前結束日期更晚時，原本選的結束日期就不合法了，清空讓使用者重選
 watch(
@@ -51,11 +64,6 @@ const TIME_OPTIONS = Array.from({ length: 24 * 6 }, (_, i) => {
   return `${hh}:${mm}`
 })
 
-// 依開始時間排序，未來時段在前
-const sortedSlots = computed(() =>
-  [...slots.value].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)),
-)
-
 function statusInfo(status) {
   return STATUS_MAP[status] || { label: status, className: '' }
 }
@@ -88,11 +96,25 @@ function formatDateTime(value) {
 async function fetchSlots() {
   loading.value = true
   try {
-    const res = await getMySlots()
-    slots.value = res.data
+    const res = await getMySlots({ page: page.value, size: size.value })
+    // 已信任後端回傳的排序，不再於前端重新 sort 一次
+    slots.value = res.data.items
+    totalItems.value = res.data.totalItems
+    totalPages.value = res.data.totalPages
   } finally {
     loading.value = false
   }
+}
+
+function handlePageChange(newPage) {
+  page.value = newPage
+  fetchSlots()
+}
+
+function handleSizeChange(newSize) {
+  size.value = newSize
+  page.value = 0
+  fetchSlots()
 }
 
 // 今天的日期字串（YYYY-MM-DD），給「開始日期」欄位的 :min 用。
@@ -153,8 +175,12 @@ async function handleCreate() {
     form.value = { startDate: '', startTime: '', endDate: '', endTime: '' }
     await fetchSlots()
   } catch (err) {
-    // 全域錯誤提示還沒有人做（見前面討論），先在這裡自己接住訊息顯示給使用者
-    formError.value = err.response?.data?.message || '建立時段失敗，請稍後再試'
+    const apiError = err
+    if (isInlineError(apiError)) {
+      formError.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
   } finally {
     submitting.value = false
   }
@@ -209,7 +235,12 @@ async function handleEditSubmit() {
     closeEditModal()
     await fetchSlots()
   } catch (err) {
-    editFormError.value = err.response?.data?.message || '修改時段失敗，請稍後再試'
+    const apiError = err
+    if (isInlineError(apiError)) {
+      editFormError.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
   } finally {
     editSubmitting.value = false
   }
@@ -235,11 +266,17 @@ async function submitCancel(slotId, acknowledgeExistingBooking = false) {
 async function handleCancel(slot) {
   if (!window.confirm('確定要取消這個時段嗎？')) return
 
+  slotActionMessage.value = ''
   try {
     await submitCancel(slot.id)
     await fetchSlots()
   } catch (err) {
-    alert(err.response?.data?.message || '取消時段失敗，請稍後再試')
+    const apiError = err
+    if (isInlineError(apiError)) {
+      slotActionMessage.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
   }
 }
 
@@ -248,12 +285,18 @@ async function handleCheckIn(slot) {
   const checkInKey = window.prompt('請輸入會員出示的核銷碼：')
   if (!checkInKey) return
 
+  slotActionMessage.value = ''
   try {
     await checkInBooking(slot.bookingId, checkInKey)
     alert('核銷成功')
     await fetchSlots()
   } catch (err) {
-    alert(err.response?.data?.message || '核銷失敗，請稍後再試')
+    const apiError = err
+    if (isInlineError(apiError)) {
+      slotActionMessage.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
   }
 }
 
@@ -308,10 +351,12 @@ onUnmounted(() => {
     </form>
     <p v-if="formError" class="form-error">{{ formError }}</p>
 
+    <OperationMessage :message="slotActionMessage" />
+
     <div v-if="loading" class="spinner"></div>
 
     <template v-else>
-      <p v-if="sortedSlots.length === 0" class="empty-state">目前還沒有任何時段，先建立第一筆看看。</p>
+      <p v-if="slots.length === 0" class="empty-state">目前還沒有任何時段，先建立第一筆看看。</p>
 
       <table v-else class="slot-table">
         <thead>
@@ -323,7 +368,7 @@ onUnmounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="slot in sortedSlots" :key="slot.id">
+          <tr v-for="slot in slots" :key="slot.id">
             <td>{{ formatDateTime(slot.startAt) }}</td>
             <td>{{ formatDateTime(slot.endAt) }}</td>
             <td>
@@ -344,6 +389,14 @@ onUnmounted(() => {
           </tr>
         </tbody>
       </table>
+
+      <Pagination
+        :page="page"
+        :total-pages="totalPages"
+        :size="size"
+        @update:page="handlePageChange"
+        @update:size="handleSizeChange"
+      />
     </template>
 
     <div v-if="isEditModalOpen" class="modal-overlay" @click.self="closeEditModal">
