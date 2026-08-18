@@ -126,6 +126,11 @@ function buildAndValidate({ startDate, startTime, endDate, endTime }) {
   if (new Date(endAt) <= new Date(startAt)) {
     return { error: '結束時間必須晚於開始時間' }
   }
+  // 後端 DTO 的 @Future 會擋過去時間，但那要送出去才知道；先在這裡擋，
+  // 使用者不必等一次往返才看到錯誤（同一條規則兩邊都有，前端只是提早回饋）
+  if (new Date(startAt) <= new Date()) {
+    return { error: '開始時間必須是未來時間' }
+  }
   const durationMinutes = (new Date(endAt) - new Date(startAt)) / 60000
   if (durationMinutes < 60 || durationMinutes > 90) {
     return { error: '時段長度需介於 60 分鐘至 90 分鐘之間' }
