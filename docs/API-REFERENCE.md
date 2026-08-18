@@ -1144,7 +1144,7 @@ CONNECT 失敗訊息：聊天室連線缺少 Authorization: Bearer \<token\>／�
 | `distribute-all` 回應 | 鍵名誤植為 `messsage`（三個 s）；同檔的 `distribute` 則是正確的 `message` |
 | `POST /api/admin/products/upload` | 命名誤導——實際只收 JSON 建立商品，**不是上傳圖片**（專案目前無檔案上傳能力） |
 | 商品評論 | `GET /api/products/{id}/comments`、`POST /api/comments` 前端已寫但**後端未實作**；前端以 `skipGlobalError` 靜默處理 |
-| 課程方案（私教課） | `PrivateCourseService` 已寫好但**沒有任何 controller 呼叫**，前台 `/courses` 頁面也是空殼 |
+| 私教課（PrivateCourse） | `PrivateCourseService` 已寫好但**仍無任何 controller 呼叫**，無法建立或瀏覽私教課；但購買流程（`POST /api/orders/direct`）已可用，資料只能手動進 DB |
 | 會員管理前端 | [2.6](#26-memberprofilecontrollerapimemberprofile)／[2.7](#27-adminmembercontrollerapiadminmembers-admin) 的 API 已可用，但**尚無對應頁面** |
 
 ### 15.2 已修復（保留紀錄供回溯）
@@ -1156,6 +1156,7 @@ CONNECT 失敗訊息：聊天室連線缺少 Authorization: Bearer \<token\>／�
 | 教練時段與團課列表被擋成 401 | SecurityConfig 已補上對應 permitAll（逐條精確列出，見 [1.5](#15-路徑層級授權 securityconfig)） |
 | 欄位驗證失敗一律回統一字串 | 已改為帶出規則自己的訊息並附 `errors`（見 [1.6](#16-錯誤格式)） |
 | `cart_item` 主鍵遷移需重啟兩次 | 已移至 `PreSchemaFixupRunner`，在 Hibernate 建表前執行，一次啟動完成 |
+| 前台 `/courses` 是空殼 | 已實作為**團課**介紹頁，接團課主檔公開端點 `GET /api/group-courses`（分頁＋搜尋）；私教課仍未接（見 15.1） |
 
 ---
 
