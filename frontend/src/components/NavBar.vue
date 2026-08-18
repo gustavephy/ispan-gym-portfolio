@@ -3,6 +3,10 @@
   import { RouterLink, useRoute, useRouter } from 'vue-router'
   import { useAuthStore } from '@/stores/auth.js'
 
+  // requires 是「看得到這個連結所需的角色」，未指定＝所有人（含未登入）皆可見。
+  // 這裡只管選單的可見性，不是安全機制——真正的把關在後端的 @PreAuthorize，
+  // 直接輸入網址仍會被擋（見 EndpointAuthorizationTest）；隱藏連結是為了不讓
+  // 使用者點進註定 403 的頁面。
   const navLinks = [
     { to: '/', label: '首頁' },
     { to: '/courses', label: '課程方案' },
@@ -10,14 +14,16 @@
     { to: '/group-classes', label: '團體課程' },
     { to: '/products', label: '補給商城' },
     { to: '/subscription', label: '會籍方案' },
-    { to: '/trainer/schedules', label: '教練排班' },
-    // 目前任何人都看得到這個連結；之後角色守衛做好要記得補上僅 ADMIN 可見的限制
-    { to: '/admin/group-courses', label: '後台：團課主檔' },
-    // 同上，之後角色守衛做好要記得補上僅 ADMIN 可見的限制
-    { to: '/admin/group-classes', label: '後台：團課場次' },
+    { to: '/trainer/schedules', label: '教練排班', requires: 'TRAINER' },
+    { to: '/admin/group-courses', label: '後台：團課主檔', requires: 'ADMIN' },
+    { to: '/admin/group-classes', label: '後台：團課場次', requires: 'ADMIN' },
   ]
 
   const auth = useAuthStore()
+
+  const visibleLinks = computed(() =>
+    navLinks.filter((link) => !link.requires || auth.roles.includes(link.requires)),
+  )
   const route = useRoute()
   const router = useRouter()
 
@@ -57,7 +63,7 @@
 
     <nav class="nav-links">
       <RouterLink
-        v-for="link in navLinks"
+        v-for="link in visibleLinks"
         :key="link.to"
         :to="link.to"
         class="nav-link"
@@ -83,7 +89,6 @@
       </RouterLink>
     </div>
 
-    <div class="nav-footer">© 2026 威力健身房</div>
   </aside>
 </template>
 
@@ -146,11 +151,12 @@
     font-weight: 700;
   }
 
+  /* nav-links 佔滿剩餘空間把這塊推到底；原本的 margin-bottom 是為了跟版權字隔開，
+     版權字移除後不再需要，留著只會讓登入區浮在離底部一段距離的地方 */
   .nav-auth {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    margin-bottom: 1rem;
   }
   .nav-auth__email {
     font-size: 0.78rem;
@@ -204,11 +210,6 @@
     color: #fff;
   }
 
-  .nav-footer {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    text-align: center;
-  }
 
   @media (max-width: 900px) {
     .navbar {
@@ -258,6 +259,5 @@
       font-size: 0.82rem;
       white-space: nowrap;
     }
-    .nav-footer { display: none; }
   }
 </style>
