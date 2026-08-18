@@ -272,38 +272,40 @@ onUnmounted(() => {
     <h2 class="section-title">團體課程</h2>
     <p class="section-desc">依教室篩選，以週曆檢視瀏覽即將開課的團體課程場次。</p>
 
-    <div v-if="loading" class="spinner"></div>
+    <!--
+      行事曆必須「永遠掛載」，不能用 v-if/v-else 換掉：
+      場次資料是由 FullCalendar 的 datesSet 事件觸發載入的，一旦它被移除，
+      事件就不會再發生——載入中會卡在轉圈圈、切到沒課的那週則再也切不回來。
+      因此 loading 與「本週沒課」都只作為疊加提示，不影響行事曆本身的存在。
+    -->
+    <div class="room-tabs">
+      <button
+        type="button"
+        class="room-tab"
+        :class="{ 'room-tab-active': selectedRoom === 'all' }"
+        @click="selectedRoom = 'all'"
+      >
+        所有教室
+      </button>
+      <button
+        v-for="room in rooms"
+        :key="room"
+        type="button"
+        class="room-tab"
+        :class="{ 'room-tab-active': selectedRoom === room }"
+        @click="selectedRoom = room"
+      >
+        {{ room }}
+      </button>
+    </div>
 
-    <template v-else>
-      <p v-if="visibleSessions.length === 0" class="empty-state">目前沒有開放報名的團課場次。</p>
-
-      <template v-else>
-        <div class="room-tabs">
-          <button
-            type="button"
-            class="room-tab"
-            :class="{ 'room-tab-active': selectedRoom === 'all' }"
-            @click="selectedRoom = 'all'"
-          >
-            所有教室
-          </button>
-          <button
-            v-for="room in rooms"
-            :key="room"
-            type="button"
-            class="room-tab"
-            :class="{ 'room-tab-active': selectedRoom === room }"
-            @click="selectedRoom = room"
-          >
-            {{ room }}
-          </button>
-        </div>
-
-        <div class="calendar-wrap">
-          <FullCalendar :options="calendarOptions" />
-        </div>
-      </template>
-    </template>
+    <div class="calendar-wrap">
+      <div v-if="loading" class="calendar-notice"><div class="spinner"></div></div>
+      <p v-else-if="visibleSessions.length === 0" class="empty-state calendar-notice">
+        這一週沒有開放報名的團課場次，可切換到其他週次查看。
+      </p>
+      <FullCalendar :options="calendarOptions" />
+    </div>
 
     <!-- 未登入時整塊隱藏：沒有資料來源，顯示空區塊反而困惑 -->
     <div v-if="auth.isMember" class="my-bookings-section">
@@ -426,6 +428,12 @@ onUnmounted(() => {
   border-color: var(--accent);
   color: #fff;
   font-weight: 700;
+}
+
+.calendar-notice {
+  /* 提示疊在行事曆上方，行事曆本身保持掛載——datesSet 是資料載入的觸發點，不能讓它被移除 */
+  margin-bottom: 0.75rem;
+  text-align: center;
 }
 
 .calendar-wrap {
