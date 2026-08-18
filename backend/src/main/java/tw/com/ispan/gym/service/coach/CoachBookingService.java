@@ -333,6 +333,19 @@ public class CoachBookingService {
                 return response;
         }
 
+        /**
+         * 教練取消時段，並連鎖處理該時段底下尚未核銷的預約。
+         *
+         * <p>
+         * 實際取消時段的邏輯委派給 {@link CoachSlotService#cancelSlot}（含既有預約的
+         * acknowledge 檢查）；這裡接著找出該時段狀態為 PENDING 的預約（若有），
+         * 一併退還額度（quota.refund()）、把預約標記為 CANCELLED，並寫入
+         * SessionDeductionLog 稽核紀錄。
+         *
+         * <p>
+         * operatorTrainer 直接從 booking 的 CoachSlot 關聯取得，因為觸發者是教練本人，
+         * 不需要另外查證身分。
+         */
         @Transactional
         public CoachSlotResponse cancelSlotWithCascade(Integer accountId, Integer slotId,
                         boolean acknowledgeExistingBooking) {

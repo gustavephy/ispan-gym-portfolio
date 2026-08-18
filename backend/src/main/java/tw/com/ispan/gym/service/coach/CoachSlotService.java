@@ -11,13 +11,16 @@ import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
 import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
 import tw.com.ispan.gym.dto.coach.UpdateCoachSlotRequest;
+import tw.com.ispan.gym.entity.coach.CoachBooking;
 import tw.com.ispan.gym.entity.coach.CoachSlot;
 import tw.com.ispan.gym.entity.trainer.Trainer;
+import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 import tw.com.ispan.gym.enums.coach.SlotStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ConfirmationRequiredException;
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.repository.coach.CoachBookingRepository;
 import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
@@ -41,6 +44,7 @@ public class CoachSlotService {
         private final CoachSlotRepository coachSlotRepository;
         private final TrainerRepository trainerRepository;
         private final EmployeeRepository employeeRepository;
+        private final CoachBookingRepository coachBookingRepository;
 
         /**
          * 由登入者的帳號 id 解析出教練資料（account → employee → trainer 兩段查詢）。
@@ -73,6 +77,18 @@ public class CoachSlotService {
         }
 
         /**
+         * 查詢這個時段目前那筆非取消狀態的預約（PENDING 或 COMPLETED），供教練自己查看時段時
+         * 知道要核銷哪一筆 bookingId。查不到就回傳 null，呼叫端直接塞進 CoachSlotResponse
+         * 的 bookingId／bookingStatus 即可，不用另外判斷。
+         * 只給教練本人視角的方法（createSlot／cancelSlot／getMySlots／updateSlot）呼叫，
+         * searchSlots（公開瀏覽、不需登入）刻意不呼叫這個方法，避免外洩預約內部 id 給陌生人。
+         */
+        private CoachBooking findActiveBooking(Integer slotId) {
+                return coachBookingRepository.findByCoachSlotIdAndStatusNot(slotId, CoachBookingStatus.CANCELLED)
+                                .orElse(null);
+        }
+
+        /**
          * 建立新的可預約時段。
          * 順序：先解析教練身分，再查重疊（避免建立後才發現衝突、白白產生一筆要清的髒資料），
          * 通過才真的建立、存檔。
@@ -99,11 +115,14 @@ public class CoachSlotService {
                 log.info("教練{}，新增時段, slotId={},{}~{}", trainer.getTrainerId(), saveSlot.getId(),
                                 request.getStartAt(), request.getEndAt());
 
+                CoachBooking activeBooking = findActiveBooking(saveSlot.getId());
                 CoachSlotResponse response = new CoachSlotResponse(saveSlot.getId(),
                                 trainer.getTrainerId(),
                                 saveSlot.getStartAt(),
                                 saveSlot.getEndAt(),
-                                saveSlot.getStatus());
+                                saveSlot.getStatus(),
+                                activeBooking != null ? activeBooking.getId() : null,
+                                activeBooking != null ? activeBooking.getStatus() : null);
 
                 return response;
         }
@@ -132,11 +151,14 @@ public class CoachSlotService {
                 log.info("教練{}，取消時段, slotId={},{}~{}", trainer.getTrainerId(), saveSlot.getId(),
                                 coachSlot.getStartAt(), coachSlot.getEndAt());
 
+                CoachBooking activeBooking = findActiveBooking(saveSlot.getId());
                 CoachSlotResponse response = new CoachSlotResponse(saveSlot.getId(),
                                 trainer.getTrainerId(),
                                 saveSlot.getStartAt(),
                                 saveSlot.getEndAt(),
-                                saveSlot.getStatus());
+                                saveSlot.getStatus(),
+                                activeBooking != null ? activeBooking.getId() : null,
+                                activeBooking != null ? activeBooking.getStatus() : null);
 
                 return response;
         }
@@ -149,9 +171,13 @@ public class CoachSlotService {
         public List<CoachSlotResponse> getMySlots(Integer accountId) {
                 Trainer trainer = requireTrainerByAccount(accountId);
                 List<CoachSlot> mySlot = coachSlotRepository.findByTrainerIdOrderByStartAtAsc(trainer.getTrainerId());
-                List<CoachSlotResponse> response = mySlot.stream().map(slot -> new CoachSlotResponse(slot.getId(),
-                                slot.getTrainer().getTrainerId(), slot.getStartAt(), slot.getEndAt(), slot.getStatus()))
-                                .toList();
+                List<CoachSlotResponse> response = mySlot.stream().map(slot -> {
+                        CoachBooking activeBooking = findActiveBooking(slot.getId());
+                        return new CoachSlotResponse(slot.getId(),
+                                        slot.getTrainer().getTrainerId(), slot.getStartAt(), slot.getEndAt(), slot.getStatus(),
+                                        activeBooking != null ? activeBooking.getId() : null,
+                                        activeBooking != null ? activeBooking.getStatus() : null);
+                }).toList();
 
                 return response;
         }
@@ -191,11 +217,14 @@ public class CoachSlotService {
                 log.info("教練{}，修改時段, slotId={}, {}~{} 改為 {}~{}",
                                 trainer.getTrainerId(), saveSlot.getId(), oldStartAt, oldEndAt,
                                 saveSlot.getStartAt(), saveSlot.getEndAt());
+                CoachBooking activeBooking = findActiveBooking(saveSlot.getId());
                 CoachSlotResponse response = new CoachSlotResponse(saveSlot.getId(),
                                 trainer.getTrainerId(),
                                 saveSlot.getStartAt(),
                                 saveSlot.getEndAt(),
-                                saveSlot.getStatus());
+                                saveSlot.getStatus(),
+                                activeBooking != null ? activeBooking.getId() : null,
+                                activeBooking != null ? activeBooking.getStatus() : null);
 
                 return response;
         }
@@ -270,10 +299,12 @@ public class CoachSlotService {
         public List<CoachSlotResponse> searchSlots(Integer trainerId) {
                 List<CoachSlot> availableSlots = coachSlotRepository
                                 .findByTrainerIdAndStatusOrderByStartAtAsc(trainerId, SlotStatus.AVAILABLE);
+                // 公開瀏覽端點、不需登入即可打，bookingId／bookingStatus 固定給 null，
+                // 不查詢 CoachBookingRepository，避免把別人的預約內部 id 曝光給陌生人
                 List<CoachSlotResponse> response = availableSlots.stream()
                                 .map(slot -> new CoachSlotResponse(slot.getId(),
                                                 slot.getTrainer().getTrainerId(), slot.getStartAt(), slot.getEndAt(),
-                                                slot.getStatus()))
+                                                slot.getStatus(), null, null))
                                 .toList();
 
                 return response;

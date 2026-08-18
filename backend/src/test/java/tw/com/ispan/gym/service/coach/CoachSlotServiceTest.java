@@ -25,6 +25,7 @@ import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ConfirmationRequiredException;
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.repository.coach.CoachBookingRepository;
 import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
@@ -52,7 +53,8 @@ class CoachSlotServiceTest {
     private final CoachSlotRepository slots = mock(CoachSlotRepository.class);
     private final TrainerRepository trainers = mock(TrainerRepository.class);
     private final EmployeeRepository employees = mock(EmployeeRepository.class);
-    private final CoachSlotService service = new CoachSlotService(slots, trainers, employees);
+    private final CoachBookingRepository bookings = mock(CoachBookingRepository.class);
+    private final CoachSlotService service = new CoachSlotService(slots, trainers, employees, bookings);
 
     // === 共用測試資料 ========================================================
 
