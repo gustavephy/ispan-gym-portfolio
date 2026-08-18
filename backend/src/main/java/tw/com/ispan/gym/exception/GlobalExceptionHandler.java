@@ -11,6 +11,9 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -31,9 +34,26 @@ public class GlobalExceptionHandler {
         return response(ex.getStatus(), ex.getCode(), ex.getMessage());
     }
 
+    /**
+     * 欄位驗證失敗：帶出 DTO 上各條規則自己寫的訊息，不再統一蓋成一句籠統的話。
+     * DTO 每條 @NotNull／@Future／@AssertTrue 都已附精確訊息（例如「開始時間必須是未來時間」），
+     * 全部壓成「請確認輸入資料是否正確」等於把這些資訊丟掉，使用者無從得知該改哪裡。
+     *
+     * <p>message 取第一則訊息讓前端可直接顯示；errors 附完整的欄位對應，供表單逐欄標紅。
+     * 跨欄位規則（@AssertTrue）的 field 會是那個判斷方法的屬性名（如 endAfterStart），
+     * 對不上實際輸入欄位，所以 message 一律以「訊息本身」為主，不要求前端解讀 field。
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiErrorResponse> invalidRequest(MethodArgumentNotValidException ex) {
-        return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "請確認輸入資料是否正確");
+        Map<String, String> errors = new LinkedHashMap<>();
+        for (FieldError error : ex.getBindingResult().getFieldErrors()) {
+            // 同一欄位可能有多條規則同時失敗，保留第一則即可，避免訊息洗版
+            errors.putIfAbsent(error.getField(), error.getDefaultMessage());
+        }
+        String message = errors.isEmpty() ? "請確認輸入資料是否正確" : errors.values().iterator().next();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiErrorResponse("INVALID_REQUEST", message, LocalDateTime.now(),
+                        errors.isEmpty() ? null : errors));
     }
 
     /** request body 缺失或 JSON 格式錯誤，Jackson 反序列化失敗時丟出。 */
