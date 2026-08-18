@@ -93,7 +93,7 @@ public class CoachSlotController {
     @PutMapping("/schedules/{bookingId}/checkin")
     @PreAuthorize("hasRole('TRAINER')")
     public ResponseEntity<CoachBookingResponse> checkIn(@PathVariable("bookingId") Integer bookingId,
-            @RequestBody CheckInRequest request) {
+            @Valid @RequestBody CheckInRequest request) {
         Integer accountId = currentUserProvider.requireCurrentUserId();
         CoachBookingResponse resp = coachBookingService.checkIn(accountId, bookingId, request.getCheckInKey());
         return ResponseEntity.status(HttpStatus.OK).body(resp);

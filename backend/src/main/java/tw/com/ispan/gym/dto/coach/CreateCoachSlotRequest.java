@@ -1,6 +1,6 @@
 package tw.com.ispan.gym.dto.coach;
 
-
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 import jakarta.validation.constraints.AssertTrue;
@@ -34,5 +34,20 @@ public class CreateCoachSlotRequest {
     @AssertTrue(message = "結束時間必須晚於開始時間")
     private boolean isEndAfterStart() {
         return startAt == null || endAt == null || endAt.isAfter(startAt);
+    }
+
+    /**
+     * 時段長度限制：預設一堂課 60 分鐘，最長不超過 90 分鐘。
+     * （避免建出像 1 分鐘、或跨好幾天這種不合理的時段）。
+     * 跟 isEndAfterStart() 一樣，startAt/endAt 是 null 時直接放行，
+     * 交給各自的 @NotNull 去擋，這裡不重複報錯。
+     */
+    @AssertTrue(message = "時段長度需介於 60 分鐘至 90 分鐘之間")
+    private boolean isDurationValid() {
+        if (startAt == null || endAt == null) {
+            return true;
+        }
+        long minutes = Duration.between(startAt, endAt).toMinutes();
+        return minutes >= 60 && minutes <= 90;
     }
 }

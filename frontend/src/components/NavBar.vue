@@ -7,8 +7,14 @@
     { to: '/', label: '首頁' },
     { to: '/courses', label: '課程方案' },
     { to: '/reservation', label: '預約課程' },
+    { to: '/group-classes', label: '團體課程' },
     { to: '/products', label: '補給商城' },
     { to: '/subscription', label: '會籍方案' },
+    { to: '/trainer/schedules', label: '教練排班' },
+    // 目前任何人都看得到這個連結；之後角色守衛做好要記得補上僅 ADMIN 可見的限制
+    { to: '/admin/group-courses', label: '後台：團課主檔' },
+    // 同上，之後角色守衛做好要記得補上僅 ADMIN 可見的限制
+    { to: '/admin/group-classes', label: '後台：團課場次' },
   ]
 
   const auth = useAuthStore()
