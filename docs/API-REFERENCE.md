@@ -16,6 +16,8 @@
 | 帳號驗證 | `/api/accounts` | [2.2](#22-accountverificationcontroller) |
 | 會員註冊 | `/api/members/register` | [2.3](#23-memberregistercontroller) |
 | 員工註冊／審核 | `/api/employees` | [2.4](#24-employeeregistercontroller)、[2.5](#25-employeereviewcontroller) |
+| 會員資料（自助） | `/api/member/profile` | [2.6](#26-memberprofilecontrollerapimemberprofile) |
+| 會員管理（後台） | `/api/admin/members` | [2.7](#27-adminmembercontrollerapiadminmembers-admin) |
 | 商品／分類 | `/api/products`、`/api/product-categories` | [3](#3-商品) |
 | 購物車 | `/api/cart` | [4](#4-購物車) |
 | 訂單 | `/api/orders`、`/api/admin/orders` | [5](#5-訂單) |
@@ -24,7 +26,7 @@
 | 教練時段／預約 | `/api/trainer`、`/api/member` | [8](#8-私教教練時段與預約) |
 | 教練檔案 | `/api/trainers`、`/api/employees/{id}/trainer` | [8.7](#87-教練檔案trainercontroller) |
 | 團課 | `/api/member/group-classes`、`/api/admin/group-classes` | [9](#9-團課) |
-| 課程分類 | `/api/course-categories`、`/api/employee/course-categories` | [10](#10-課程分類) |
+| 課程分類／團課主檔 | `/api/course-categories`、`/api/admin/group-courses` | [10](#10-課程分類)、[10.1](#101-團課主檔apiadmingroup-courses-admin) |
 | 優惠券 | `/api/coupons`、`/api/employee/coupons` | [11](#11-優惠券) |
 | 營運報表 | `/api/admin/reports` | [12](#12-營運報表) |
 | AI 健康（InBody／課表／聊天） | `/api/inbody`、`/api/ai-plans`、`/api/chat` | [13](#13-ai-健康) |
@@ -117,6 +119,7 @@ POST    /api/accounts/resend-verification-email
 GET     /api/products/**
 GET     /api/product-categories          （精確路徑，無 /**）
 GET     /api/course-categories           （精確路徑，無 /**）
+GET     /api/member/trainers            （在職教練清單，精確路徑）
 GET     /api/member/trainers/*/schedules
 GET     /api/member/group-classes        （精確路徑，無 /**）
 GET     /api/trainers、/api/trainers/*   （公開教練介紹）
@@ -147,6 +150,25 @@ POST    /api/payments/ecpay/notify
   "timestamp": "2026-08-17T09:30:00"
 }
 ```
+
+欄位驗證失敗（`INVALID_REQUEST`）另帶選填的 `errors`，且 `message` 是**該條規則自己的訊息**而非統一字串：
+
+```json
+{
+  "code": "INVALID_REQUEST",
+  "message": "開始時間必須是未來時間",
+  "timestamp": "2026-08-18T09:30:00",
+  "errors": {
+    "startAt": "開始時間必須是未來時間",
+    "endAt": "結束時間必須是未來時間"
+  }
+}
+```
+
+- `message` 取第一則，前端可直接顯示；`errors` 供表單逐欄標紅
+- 同一欄位多條規則同時失敗只保留第一則，避免訊息洗版
+- 跨欄位規則（`@AssertTrue`）的 key 是**判斷方法的屬性名**（如 `durationValid`），對不上實際輸入欄位，因此以 `message` 為主
+- 無欄位錯誤時不帶 `errors`，`message` 退回「請確認輸入資料是否正確」
 
 **通用錯誤碼**
 
@@ -328,6 +350,63 @@ Email 或密碼錯誤／此帳號沒有可重新申請的員工紀錄／此員�
 > 審核者身分取自登入 token（`CurrentUserProvider`），不由前端傳入。
 
 錯誤：`404` 找不到此員工申請／找不到審核者的員工資料；`409` 此員工申請已被刪除／此員工帳號目前不是待審核狀態
+
+---
+
+### 2.6 MemberProfileController（`/api/member/profile`）
+
+| 方法 | 路徑 | 權限 | 成功狀態 | 說明 |
+|---|---|---|---|---|
+| GET | `/api/member/profile` | 🔒 需登入 | 200 | 查自己的會員資料 |
+| PUT | `/api/member/profile` | 👤 MEMBER | 200 | 修改自己的會員資料 |
+
+> GET 沒有方法層級 `@PreAuthorize`，只要求已登入；能不能取到 Member 交由 Service 判斷
+> （帳號可能只有員工身分而無會員資料 → `403`）。PUT 另加 `hasRole('MEMBER')`。
+
+`MemberProfileUpdateRequest`：
+`firstName`／`lastName`（`@NotBlank`，≤50）、`phone`（`@NotBlank`，≤10，`^09\d{8}$`）、
+`dob`、`gender`、`emergencyContact`（≤50）、`emergencyPhone`、`zipCode`、`city`、`district`、`address`
+
+`MemberProfileResponse`：上述欄位 ＋ `memberId`、`email`（來自 account）、`status`
+
+主要錯誤：`403 FORBIDDEN_ACCESS` 此帳號沒有可用的會員資料（無 Member、已軟刪除，或 PUT 時非 `ACTIVE`）
+
+> **實作重點**：Service 只接受 `accountId`，不接受 `memberId`。
+> 修改走 `findByAccountIdForUpdate()` 悲觀鎖，且刻意是該 transaction 內**第一次**載入 Member——
+> 若先經 `requireCurrentMemberId()`（內部會未鎖定載入一次），Persistence Context 會快取該實體，
+> 之後即使鎖定查詢命中同一列，Hibernate 仍回傳先前那個舊物件，鎖形同白鎖。
+
+---
+
+### 2.7 AdminMemberController（`/api/admin/members`，🛡️ ADMIN）
+
+| 方法 | 路徑 | 成功狀態 | 說明 |
+|---|---|---|---|
+| GET | `/api/admin/members` | 200 | 會員列表（分頁） |
+| GET | `/api/admin/members/{memberId}` | 200 | 單筆詳細 |
+| PUT | `/api/admin/members/{memberId}` | 200 | 修改會員資料 |
+| POST | `/api/admin/members/{memberId}/suspend` | 200 | 停權 |
+| POST | `/api/admin/members/{memberId}/activate` | 200 | 復權 |
+
+**列表查詢參數**：`keyword`（不分大小寫比對姓名／手機／登入 email）、`status`（不傳＝全部）、
+`page`（預設 0）、`size`（預設 20，**上限 100**）
+
+> 列表以 `JOIN FETCH` 帶出 account，避免映射時逐筆 lazy load 造成 N+1；一律排除軟刪除的會員。
+
+**狀態轉換規則**：
+
+| 動作 | 目前狀態 | 結果 |
+|---|---|---|
+| suspend | `ACTIVE` | → `SUSPENDED` |
+| suspend | `SUSPENDED` | `409` 此會員已是停權狀態 |
+| suspend | `PENDING` | `409` 此會員尚未完成驗證，無法停用 |
+| activate | `SUSPENDED` | → `ACTIVE` |
+| activate | `ACTIVE` | `409` 此會員已是啟用狀態 |
+| activate | `PENDING` | `409` 尚未完成驗證，請由會員完成 Email 驗證 |
+
+> `PENDING` 兩個方向都擋：該狀態要靠會員自己點驗證信轉為 `ACTIVE`，管理者不代為跳過。
+
+主要錯誤：`400 INVALID_REQUEST` 頁碼不可小於 0／每頁筆數必須介於 1 到 100；`404` 查無此會員
 
 ---
 
@@ -599,11 +678,14 @@ Response `200` `Map<String,String>`：
 
 | 方法 | 路徑 | 權限 | 成功狀態 |
 |---|---|---|---|
+| GET | `/trainers` | 🔓 | 200 |
 | GET | `/trainers/{trainerId}/schedules` | 🔓 | 200 |
 | POST | `/schedules/{slotId}/booking` | 👤 | **201** |
 | DELETE | `/schedules/{bookingId}/cancel` | 👤 | 200 |
 | GET | `/bookings` | 👤 | 200 |
 
+- `GET /trainers`：在職教練清單（公開），供會員瀏覽後決定要約哪位——是下一行時段查詢的前一步
+  （`TrainerSummaryResponse`：`trainerId`、`name`、`specialty`、`status`）
 - 查詢時段為公開（只回 `AVAILABLE`，依 `startAt` 遞增；未知 trainerId 回空陣列而非 404）
 - 預約：自動選用**最早到期**的可用堂數包，客戶端無法指定
 - `GET /bookings` 回 `CoachBookingHistoryResponse`：欄位同 `CoachBookingResponse`，但最後一欄是 `remainingCourseSnapshot`
@@ -758,8 +840,30 @@ Response `TrainerResponse`：
 > 會落到兜底處理回 **500 `INTERNAL_ERROR`**，而非預期的 404。
 > 刪除則因使用 `deleteById`，不存在的 id **不會回 404**（靜默成功）。
 
-### 10.1 GroupCourseController（未實作）
-`controller/course/GroupCourseController.java` 是空類別，沒有 `@RestController`、沒有任何方法，**不註冊任何端點**。團課功能實際由 [9](#9-團課) 的 `GroupClassController`／`AdminGroupClassController` 承擔，此檔為殘留樣板，建議刪除。
+### 10.1 團課主檔（`/api/admin/group-courses`，🛡️ ADMIN）
+
+| 方法 | 路徑 | 成功狀態 | 說明 |
+|---|---|---|---|
+| POST | `/api/admin/group-courses` | **201** | 建立團課主檔 |
+| GET | `/api/admin/group-courses` | 200 | 全部主檔（**含已下架**，供管理者檢視） |
+| DELETE | `/api/admin/group-courses/{id}` | 200 | 下架（`status` → `INACTIVE`，回傳更新後資料） |
+
+`GroupCourseRequest`：`trainerId`（必填）、`name`、`description`、`imageUrl`、`courseCategoryId`（選填）、
+`maxCapacity`、`isTrial`、`status`
+
+> `isTrial`／`status` 未填時由 **Service** 補預設（`false`／`ACTIVE`），刻意不放在 DTO 欄位 initializer——
+> Jackson 目前是先建空物件再逐一 setter 灌值，改用建構子反序列化時 initializer 不保證生效。
+
+`GroupCourseResponse`：`id`、`name`、`trainerId`、`trainerName`、`description`、`imageUrl`、`maxCapacity`、
+`isTrial`、`status`、`courseCategoryId`、`courseCategoryName`、`createdAt`、`updatedAt`
+
+**下架語意**：冪等（已是 `INACTIVE` 再呼叫不報錯，直接回現況）；**不影響已排定的場次**，
+只影響「之後能不能被選來建立新場次」。設計比照教練時段取消的軟刪除。
+
+主要錯誤：`404` 查無此教練／查無此課程分類／查無此課程主檔
+
+> 主檔（本節）與場次（[9](#9-團課)）職責分離：這裡只管「課程長怎樣」（教練、名稱、容量上限），
+> 不涉及任何特定場次的時間、教室與報名狀態。
 
 ---
 
