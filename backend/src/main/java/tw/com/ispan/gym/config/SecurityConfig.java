@@ -76,14 +76,12 @@ public class SecurityConfig {
                         // 公開教練介紹頁／列表（TrainerController）；未軟刪除者皆可匿名瀏覽，
                         // UNAVAILABLE 教練同樣公開，由回應的 status 讓前端自行停用預約入口
                         .requestMatchers(HttpMethod.GET, "/api/trainers", "/api/trainers/*").permitAll()
-                        // 課表瀏覽開放未登入者：在職教練清單（CoachBookingController#getActiveTrainers）、
-                        // 教練可預約時段（CoachBookingController#searchSlots）與
+                        // 課表瀏覽開放未登入者：教練可預約時段（CoachBookingController#searchSlots）與
                         // 團課場次列表（GroupClassController#getUpcomingSessions）都只是公開排班資訊，
                         // 實際「預約／報名」的動作才需要登入。
                         // 路徑必須逐條精確列出、不能寫成 /api/member/**——同一前綴下還掛著
                         // GET /api/member/bookings（會員自己的預約紀錄）等個人資料端點，
                         // 一併放行會把它們也曝光成匿名可讀。
-                        .requestMatchers(HttpMethod.GET, "/api/member/trainers").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/member/trainers/*/schedules").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/member/group-classes").permitAll()
                         // 訂閱方案瀏覽開放未登入者（前台展示用），查自己的訂閱狀態仍需登入（見 anyRequest().authenticated()）

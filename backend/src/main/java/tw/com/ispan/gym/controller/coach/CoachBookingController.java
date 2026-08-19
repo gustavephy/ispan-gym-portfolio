@@ -17,12 +17,10 @@ import lombok.RequiredArgsConstructor;
 import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
-import tw.com.ispan.gym.dto.coach.TrainerSummaryResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
-import tw.com.ispan.gym.service.coach.TrainerDirectoryService;
 
 /**
  * 會員預約教練私教課的對外 API。
@@ -37,7 +35,6 @@ public class CoachBookingController {
     private final CurrentUserProvider currentUserProvider;
     private final CoachBookingService coachBookingService;
     private final CoachSlotService coachSlotService;
-    private final TrainerDirectoryService trainerDirectoryService;
 
     /** 預約指定時段，成功回 201（新建立一筆預約紀錄）。 */
     @PostMapping("/schedules/{slotId}/booking")
@@ -47,17 +44,6 @@ public class CoachBookingController {
         CoachBookingResponse resp = coachBookingService.createBooking(memberId, slotId);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(resp);
-    }
-
-    /**
-     * 查詢在職教練清單，設計上不需登入即可查看（僅顯示公開的教練資訊，供會員瀏覽、決定要約哪位教練，
-     * 是 {@link #searchSlots} 前一步的瀏覽流程）。
-     * SecurityConfig 已對 {@code GET /api/member/trainers} 補上 permitAll。
-     */
-    @GetMapping("/trainers")
-    public ResponseEntity<List<TrainerSummaryResponse>> getActiveTrainers() {
-        List<TrainerSummaryResponse> trainers = trainerDirectoryService.getActiveTrainers();
-        return ResponseEntity.status(HttpStatus.OK).body(trainers);
     }
 
     /**

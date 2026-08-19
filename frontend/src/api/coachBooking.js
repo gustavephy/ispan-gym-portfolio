@@ -4,8 +4,12 @@ import api from './axios.instance.js'
 // GET /api/member/trainers、GET /api/member/trainers/{trainerId}/schedules。
 // 跟 coachSchedule.js 職責分開：那是教練管理自己的時段，這裡是會員瀏覽別人開的時段。
 
-/** 查詢在職教練清單，不需登入即可呼叫 */
-export const getTrainers = () => api.get('/api/member/trainers')
+/**
+ * 查詢在職教練清單，不需登入即可呼叫。
+ * 改接新版 TrainerController 的公開端點，不再依賴 CoachBookingController 的
+ * /api/member/trainers（該端點即將淘汰）
+ */
+export const getTrainers = () => api.get('/api/trainers')
 
 /**
  * 查詢指定教練目前的所有時段（含非 AVAILABLE 的，由畫面自行篩選），不需登入即可呼叫
