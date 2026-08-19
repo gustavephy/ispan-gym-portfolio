@@ -20,10 +20,16 @@ export const useCartStore = defineStore('cart', () => {
     items.value.reduce((sum, item) => sum + Number(item.quantity), 0)
   )
 
-  // 從後端載入購物車；未登入時直接清空本地狀態，不打 API
+  // 從後端載入購物車；未登入、或登入者沒有會員身分時直接清空本地狀態，不打 API。
+  //
+  // 購物車是會員域的功能，後端以 requireCurrentMemberId() 反查 member 列，帳號沒有
+  // 對應會員資料時會回 401「找不到登入資訊對應的會員帳號」。純員工／純管理員帳號
+  // （roles 只有 EMPLOYEE／ADMIN）正是這種情況，而 axios 攔截器看到 401 會直接登出
+  // 並跳「登入已過期」——使用者剛登入成功就被踢出去，看起來像是登入失敗。
+  // 因此這裡先檢查 isMember，沒有會員身分就不發這個請求。
   async function loadCart() {
     const auth = useAuthStore()
-    if (!auth.isLoggedIn) {
+    if (!auth.isLoggedIn || !auth.isMember) {
       items.value = []
       totalAmount.value = 0
       return
