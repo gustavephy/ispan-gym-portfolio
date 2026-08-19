@@ -9,6 +9,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import tw.com.ispan.gym.entity.account.Account;
@@ -29,6 +30,10 @@ import tw.com.ispan.gym.repository.subscription.SubscriptionPlanRepository;
 import tw.com.ispan.gym.repository.course.CourseCategoryRepository;
 import tw.com.ispan.gym.repository.course.GroupCourseRepository;
 import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
+import tw.com.ispan.gym.repository.order.OrderRepository;
+import tw.com.ispan.gym.repository.order.OrderItemRepository;
+import tw.com.ispan.gym.entity.order.OrderItem;
+import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.entity.product.ProductCategory;
 import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
@@ -71,6 +76,10 @@ public class TestDataSeedRunner implements CommandLineRunner {
     /** 與 LoginView.vue 測試帳號面板一致；改這裡要同步改前端 */
     private static final String TEST_PASSWORD = "Admin@12345";
 
+    /** 樣本訂單的 order_no 前綴，用來辨識哪些是播種產生的，不會誤動真實下單流程的訂單 */
+    private static final String SAMPLE_ORDER_PREFIX = "SEED-ORD-";
+    private static final int SAMPLE_ORDER_COUNT = 10;
+
     private final AccountRepository accounts;
     private final MemberRepository members;
     private final EmployeeRepository employees;
@@ -81,6 +90,9 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final CourseCategoryRepository courseCategories;
     private final GroupCourseRepository groupCourses;
     private final GroupClassSessionRepository groupClassSessions;
+    private final OrderRepository orders;
+    private final OrderItemRepository orderItems;
+    private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
 
@@ -95,6 +107,9 @@ public class TestDataSeedRunner implements CommandLineRunner {
             CourseCategoryRepository courseCategories,
             GroupCourseRepository groupCourses,
             GroupClassSessionRepository groupClassSessions,
+            OrderRepository orders,
+            OrderItemRepository orderItems,
+            JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
             @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
         this.accounts = accounts;
@@ -107,6 +122,9 @@ public class TestDataSeedRunner implements CommandLineRunner {
         this.courseCategories = courseCategories;
         this.groupCourses = groupCourses;
         this.groupClassSessions = groupClassSessions;
+        this.orders = orders;
+        this.orderItems = orderItems;
+        this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
     }
@@ -263,6 +281,93 @@ public class TestDataSeedRunner implements CommandLineRunner {
         ensureSubscriptionPlans();
         CourseCategory groupCategory = ensureCourseCategory();
         ensureGroupCourseAndSession(coachEmployee, groupCategory);
+        ensureSampleOrders();
+    }
+
+    /**
+     * 商品訂單樣本：讓營運統計頁的排行、每日營收趨勢與狀態分佈有足夠資料可看，
+     * 只有三兩筆時圖表幾乎沒有意義。
+     *
+     * <p>以 order_no 前綴 {@value #SAMPLE_ORDER_PREFIX} 辨識是否已播種，補齊到固定筆數即停手，
+     * 不碰任何真實下單流程產生的訂單。日期刻意散佈在最近三十天內、狀態涵蓋
+     * PAID／UNPAID／REFUNDED／CANCELLED，讓分佈圖表不會只有單一色塊。
+     */
+    private void ensureSampleOrders() {
+        Member buyer = members.findAll().stream().findFirst().orElse(null);
+        if (buyer == null) {
+            return;
+        }
+        long existing = orders.findAll().stream()
+                .filter(o -> o.getOrderNo() != null && o.getOrderNo().startsWith(SAMPLE_ORDER_PREFIX))
+                .count();
+        if (existing >= SAMPLE_ORDER_COUNT) {
+            return;
+        }
+
+        List<Product> sellable = products.findAll().stream()
+                .filter(p -> p.getPrice() != null)
+                .toList();
+        if (sellable.isEmpty()) {
+            return;
+        }
+
+        // 狀態與「幾天前」的組合寫死，播種結果才可重現，不同機器看到的圖表一致
+        record Seed(int daysAgo, OrderStatus status, int productIndex, int quantity) {}
+        List<Seed> seeds = List.of(
+                new Seed(27, OrderStatus.PAID, 0, 2),
+                new Seed(24, OrderStatus.PAID, 1, 1),
+                new Seed(21, OrderStatus.REFUNDED, 2, 3),
+                new Seed(18, OrderStatus.PAID, 3, 1),
+                new Seed(15, OrderStatus.CANCELLED, 4, 2),
+                new Seed(12, OrderStatus.PAID, 5, 1),
+                new Seed(9, OrderStatus.PAID, 6, 4),
+                new Seed(6, OrderStatus.UNPAID, 7, 1),
+                new Seed(4, OrderStatus.PAID, 8, 2),
+                new Seed(1, OrderStatus.PAID, 9, 1));
+
+        int created = 0;
+        for (int i = (int) existing; i < seeds.size() && i < SAMPLE_ORDER_COUNT; i++) {
+            Seed seed = seeds.get(i);
+            Product product = sellable.get(seed.productIndex() % sellable.size());
+            BigDecimal unit = product.getPrice();
+            BigDecimal amount = unit.multiply(BigDecimal.valueOf(seed.quantity()));
+            LocalDateTime placedAt = LocalDateTime.now().minusDays(seed.daysAgo());
+
+            String no = SAMPLE_ORDER_PREFIX + String.format("%03d", i + 1);
+            // 走正式建構子＋狀態轉移方法，不硬塞欄位：Order 刻意只開放 cancel()／markPaid()
+            // 等方法來改狀態（會檢查前置狀態並同步 paidAt／cancelledAt），繞過去等於自己
+            // 造出一個業務規則不允許的狀態組合
+            tw.com.ispan.gym.entity.order.Order order = new tw.com.ispan.gym.entity.order.Order(
+                    buyer, no, no, amount, BigDecimal.ZERO, amount, amount, null,
+                    buyer.getLastName() + buyer.getFirstName(), buyer.getPhone(), null, null);
+            switch (seed.status()) {
+                case PAID -> order.markPaid("Credit_CreditCard", no);
+                case REFUNDED -> {
+                    order.markPaid("Credit_CreditCard", no);
+                    order.markRefunded();
+                }
+                case CANCELLED -> order.cancel("測試資料：模擬取消訂單");
+                default -> { /* UNPAID 是建構子的預設狀態，不必轉移 */ }
+            }
+            tw.com.ispan.gym.entity.order.Order savedOrder = orders.save(order);
+            orderItems.save(new OrderItem(savedOrder, product, product.getName(), unit,
+                    seed.quantity()));
+
+            // created_at 由 TaipeiTimestampEntity 的 @PrePersist 強制設成「現在」，
+            // 不改的話十筆訂單全部落在同一天，趨勢圖只會有一個點。這裡直接下 SQL 回填
+            // 分散的日期——是刻意繞過 JPA 的稽核欄位，僅限測試資料播種使用。
+            jdbc.update("UPDATE orders SET created_at = ?, updated_at = ? WHERE id = ?",
+                    placedAt, placedAt, savedOrder.getId());
+            jdbc.update("UPDATE order_item SET created_at = ? WHERE order_id = ?",
+                    placedAt, savedOrder.getId());
+            if (savedOrder.getPaidAt() != null) {
+                jdbc.update("UPDATE orders SET paid_at = ? WHERE id = ?", placedAt, savedOrder.getId());
+            }
+            created++;
+        }
+        if (created > 0) {
+            log.info("已建立 {} 筆測試訂單（狀態涵蓋 PAID／UNPAID／REFUNDED／CANCELLED）", created);
+        }
     }
 
     private ProductCategory ensureProductCategory() {
@@ -275,18 +380,29 @@ public class TestDataSeedRunner implements CommandLineRunner {
         });
     }
 
+    /**
+     * 逐筆以名稱比對補建，不是「整張表空的才播種」——早期資料庫已經有一兩筆手動建立的
+     * 商品，用整表判斷會讓這批種子永遠不會進去，商城與報表都只有零星資料可看。
+     */
     private void ensureProducts(ProductCategory category) {
-        if (!products.findAll().isEmpty()) {
-            return;
-        }
         record Seed(String name, String price, int stock, String brand, String flavor, String desc) {}
         List<Seed> seeds = List.of(
                 new Seed("乳清蛋白 1kg", "1280", 50, "MyProtein", "巧克力", "每份 24g 蛋白質，訓練後補給首選。"),
                 new Seed("BCAA 支鏈胺基酸", "890", 30, "Optimum", "莓果", "訓練中補充，延緩疲勞。"),
                 new Seed("搖搖杯 700ml", "250", 100, "Blender", null, "防漏設計，附攪拌球。"),
                 new Seed("健身手套", "450", 20, "Harbinger", null, "止滑耐磨，保護掌心。"),
-                new Seed("能量棒（12入）", "600", 0, "Quest", "花生", "高蛋白低糖，隨身補給。"));
+                new Seed("能量棒（12入）", "600", 0, "Quest", "花生", "高蛋白低糖，隨身補給。"),
+                new Seed("肌酸 300g", "780", 40, "Optimum", null, "提升爆發力與訓練表現。"),
+                new Seed("彈力帶組（5條）", "520", 60, "TheraBand", null, "五種阻力，適合暖身與居家訓練。"),
+                new Seed("運動毛巾", "180", 120, "Willy", null, "吸汗快乾，健身房必備。"),
+                new Seed("瑜珈墊 6mm", "990", 25, "Manduka", null, "止滑防潑水，附收納背帶。"),
+                new Seed("護腕（一對）", "320", 45, "Harbinger", null, "大重量訓練穩定腕關節。"));
+
+        int created = 0;
         for (Seed seed : seeds) {
+            if (products.findAll().stream().anyMatch(p -> seed.name().equals(p.getName()))) {
+                continue;
+            }
             Product product = new Product();
             product.setName(seed.name());
             product.setPrice(new BigDecimal(seed.price()));
@@ -296,9 +412,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
             product.setDescription(seed.desc());
             product.setProductCategory(category);
             products.save(product);
+            created++;
         }
-        // 其中一筆刻意庫存為 0，方便驗證前端的「已售完」呈現
-        log.info("已建立 {} 筆測試商品（含 1 筆零庫存）", seeds.size());
+        if (created > 0) {
+            // 其中一筆刻意庫存為 0，方便驗證前端的「已售完」呈現
+            log.info("已建立 {} 筆測試商品（含 1 筆零庫存）", created);
+        }
     }
 
     private void ensureSubscriptionPlans() {

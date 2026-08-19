@@ -8,9 +8,10 @@ import org.springframework.data.repository.query.Param;
 import tw.com.ispan.gym.dto.report.ReportRefundSummary;
 import tw.com.ispan.gym.entity.payment.PaymentRefund;
 
-public interface PaymentRefundRepository extends JpaRepository<PaymentRefund, Long> {
-    List<PaymentRefund> findByPaymentId(Long paymentId);
+public interface PaymentRefundRepository extends JpaRepository<PaymentRefund, Integer> {
+    List<PaymentRefund> findByPaymentId(Integer paymentId);
     List<PaymentRefund> findByStatusOrderByRequestedAtAsc(String status);
+    boolean existsByPaymentIdAndStatus(Integer paymentId, String status);
 
     /** 期間完成退款彙總（報表用）；時間軸為 completedAt（退款生效日） */
     @Query("""

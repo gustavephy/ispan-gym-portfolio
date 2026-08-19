@@ -20,7 +20,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 @Getter
 @Setter
 public class PaymentTransaction {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Integer id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "order_id") private Order order;
     @Column(nullable = false, length = 20) private String provider;
     @Column(name = "merchant_trade_no", nullable = false, length = 20) private String merchantTradeNo;

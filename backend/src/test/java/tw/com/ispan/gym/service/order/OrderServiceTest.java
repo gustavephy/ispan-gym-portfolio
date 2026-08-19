@@ -89,7 +89,7 @@ class OrderServiceTest {
     private static final Integer COURSE_ID = 200;
     private static final Integer PLAN_ID = 300;
     private static final Integer COUPON_ID = 50;
-    private static final Long ORDER_ID = 900L;
+    private static final Integer ORDER_ID = 900;
     private static final String COUPON_CODE = "SAVE100";
 
     private final CartItemRepository cartItems = mock(CartItemRepository.class);
@@ -186,13 +186,13 @@ class OrderServiceTest {
                 MEMBER_ID, COUPON_ID, MemberCouponStatus.UNUSED)).thenReturn(Optional.of(held));
     }
 
-    private OrderItem productItem(Order order, Product product, long quantity, Long id) {
+    private OrderItem productItem(Order order, Product product, int quantity, Integer id) {
         OrderItem item = new OrderItem(order, product, product.getName(), product.getPrice(), quantity);
         ReflectionTestUtils.setField(item, "id", id);
         return item;
     }
 
-    private OrderItem courseItem(Order order, PrivateCourse course, long quantity, Long id) {
+    private OrderItem courseItem(Order order, PrivateCourse course, int quantity, Integer id) {
         OrderItem item = new OrderItem(order, course, course.getName(), course.getPrice(), quantity);
         ReflectionTestUtils.setField(item, "id", id);
         return item;
@@ -471,7 +471,7 @@ class OrderServiceTest {
         stubNoOrderItems();
 
         OrderDetailResponse response = service.createDirectOrder(MEMBER_ID,
-                new DirectCheckoutRequest(COURSE_ID, 2L, null));
+                new DirectCheckoutRequest(COURSE_ID, 2, null));
 
         assertThat(response.totalAmount()).isEqualByComparingTo("6000");
         verify(products, never()).findByIdForUpdate(any());
@@ -480,7 +480,7 @@ class OrderServiceTest {
     @Test
     void 私教課數量為零或null擋下() {
         assertThatThrownBy(() -> service.createDirectOrder(MEMBER_ID,
-                new DirectCheckoutRequest(COURSE_ID, 0L, null)))
+                new DirectCheckoutRequest(COURSE_ID, 0, null)))
                 .isInstanceOf(InvalidQuantityException.class);
         assertThatThrownBy(() -> service.createDirectOrder(MEMBER_ID,
                 new DirectCheckoutRequest(COURSE_ID, null, null)))
@@ -495,7 +495,7 @@ class OrderServiceTest {
         when(courses.findById(COURSE_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createDirectOrder(MEMBER_ID,
-                new DirectCheckoutRequest(COURSE_ID, 1L, null)))
+                new DirectCheckoutRequest(COURSE_ID, 1, null)))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -507,7 +507,7 @@ class OrderServiceTest {
         when(courses.findById(COURSE_ID)).thenReturn(Optional.of(inactive));
 
         assertThatThrownBy(() -> service.createDirectOrder(MEMBER_ID,
-                new DirectCheckoutRequest(COURSE_ID, 1L, null)))
+                new DirectCheckoutRequest(COURSE_ID, 1, null)))
                 .isInstanceOf(DirectCheckoutNotAllowedException.class);
 
         verify(orders, never()).save(any());
@@ -575,7 +575,7 @@ class OrderServiceTest {
         Product product = product(PRODUCT_ID, 5, "1000");
         when(orders.findByIdAndMemberId(ORDER_ID, MEMBER_ID)).thenReturn(Optional.of(order));
         when(orderItems.findAllByOrderIdOrderByIdAsc(ORDER_ID))
-                .thenReturn(List.of(productItem(order, product, 3L, 1L)));
+                .thenReturn(List.of(productItem(order, product, 3, 1)));
         stubProductLock(product);
 
         OrderDetailResponse response = service.cancelOrder(MEMBER_ID, ORDER_ID, new CancelOrderRequest("不想要了"));
@@ -592,7 +592,7 @@ class OrderServiceTest {
         Order order = savedOrder();
         when(orders.findByIdAndMemberId(ORDER_ID, MEMBER_ID)).thenReturn(Optional.of(order));
         when(orderItems.findAllByOrderIdOrderByIdAsc(ORDER_ID))
-                .thenReturn(List.of(courseItem(order, course("3000", 10), 1L, 1L)));
+                .thenReturn(List.of(courseItem(order, course("3000", 10), 1, 1)));
 
         service.cancelOrder(MEMBER_ID, ORDER_ID, null);
 
@@ -664,15 +664,15 @@ class OrderServiceTest {
         PaymentTransaction payment = payment(order);
         PaymentRefund refund = new PaymentRefund(payment, "RF1", new BigDecimal("1000"), "退款");
         refund.setStatus("PENDING");
-        ReflectionTestUtils.setField(refund, "id", 7L);
+        ReflectionTestUtils.setField(refund, "id", 7);
 
         Product product = product(PRODUCT_ID, 2, "1000");
-        when(paymentRefunds.findById(7L)).thenReturn(Optional.of(refund));
+        when(paymentRefunds.findById(7)).thenReturn(Optional.of(refund));
         when(orderItems.findAllByOrderIdOrderByIdAsc(ORDER_ID))
-                .thenReturn(List.of(productItem(order, product, 3L, 1L)));
+                .thenReturn(List.of(productItem(order, product, 3, 1)));
         stubProductLock(product);
 
-        service.completeRefund(7L);
+        service.completeRefund(7);
 
         assertThat(refund.getStatus()).isEqualTo("COMPLETED");
         assertThat(refund.getCompletedAt()).isNotNull();
@@ -687,18 +687,18 @@ class OrderServiceTest {
         PaymentTransaction payment = payment(savedOrder());
         PaymentRefund refund = new PaymentRefund(payment, "RF1", new BigDecimal("1000"), "退款");
         refund.setStatus("COMPLETED"); // 已經處理過
-        when(paymentRefunds.findById(7L)).thenReturn(Optional.of(refund));
+        when(paymentRefunds.findById(7)).thenReturn(Optional.of(refund));
 
-        assertThatThrownBy(() -> service.completeRefund(7L))
+        assertThatThrownBy(() -> service.completeRefund(7))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("已處理過");
     }
 
     @Test
     void 退款紀錄不存在回404() {
-        when(paymentRefunds.findById(7L)).thenReturn(Optional.empty());
+        when(paymentRefunds.findById(7)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.completeRefund(7L))
+        assertThatThrownBy(() -> service.completeRefund(7))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -709,7 +709,7 @@ class OrderServiceTest {
         Order order = savedOrder();
         PrivateCourse course = course("3000", 10); // 每單位 10 堂
         when(orderItems.findAllByOrderIdOrderByIdAsc(ORDER_ID))
-                .thenReturn(List.of(courseItem(order, course, 2L, 1L))); // 買 2 單位
+                .thenReturn(List.of(courseItem(order, course, 2, 1))); // 買 2 單位
 
         service.fulfillPaidOrder(order);
 
@@ -722,7 +722,7 @@ class OrderServiceTest {
     void 付款後商品明細不發放課程額度() {
         Order order = savedOrder();
         when(orderItems.findAllByOrderIdOrderByIdAsc(ORDER_ID))
-                .thenReturn(List.of(productItem(order, product(PRODUCT_ID, 5, "1000"), 1L, 1L)));
+                .thenReturn(List.of(productItem(order, product(PRODUCT_ID, 5, "1000"), 1, 1)));
 
         service.fulfillPaidOrder(order);
 

@@ -155,7 +155,7 @@ class OrderServiceSubscriptionTest {
         when(subscriptions.findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(
                 eq(MEMBER_ID), any(), eq(SubscriptionStatus.ACTIVE))).thenReturn(Optional.empty());
 
-        DirectCheckoutRequest request = new DirectCheckoutRequest(COURSE_ID, 1L, null);
+        DirectCheckoutRequest request = new DirectCheckoutRequest(COURSE_ID, 1, null);
 
         assertThatThrownBy(() -> service.createDirectOrder(MEMBER_ID, request))
                 .isInstanceOf(SubscriptionRequiredException.class);
@@ -171,7 +171,7 @@ class OrderServiceSubscriptionTest {
         stubOrderPersistence();
 
         OrderDetailResponse response = service.createDirectOrder(MEMBER_ID,
-                new DirectCheckoutRequest(COURSE_ID, 1L, null));
+                new DirectCheckoutRequest(COURSE_ID, 1, null));
 
         assertThat(response).isNotNull();
         verify(orders).save(any(Order.class));
@@ -216,11 +216,11 @@ class OrderServiceSubscriptionTest {
         Order order = paidOrder(true);
         PaymentRefund refund = pendingRefund(order);
         MemberSubscription subscription = activeSubscription();
-        when(paymentRefunds.findById(1L)).thenReturn(Optional.of(refund));
+        when(paymentRefunds.findById(1)).thenReturn(Optional.of(refund));
         when(orderItems.findAllByOrderIdOrderByIdAsc(any())).thenReturn(List.of());
         when(subscriptions.findByOrderId(any())).thenReturn(Optional.of(subscription));
 
-        service.completeRefund(1L);
+        service.completeRefund(1);
 
         assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.CANCELLED);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.REFUNDED);
@@ -231,10 +231,10 @@ class OrderServiceSubscriptionTest {
     void 退款_一般商品訂單完成退款時不觸碰訂閱查詢() {
         Order order = paidOrder(false);
         PaymentRefund refund = pendingRefund(order);
-        when(paymentRefunds.findById(2L)).thenReturn(Optional.of(refund));
+        when(paymentRefunds.findById(2)).thenReturn(Optional.of(refund));
         when(orderItems.findAllByOrderIdOrderByIdAsc(any())).thenReturn(List.of());
 
-        service.completeRefund(2L);
+        service.completeRefund(2);
 
         verify(subscriptions, never()).findByOrderId(any());
         assertThat(order.getStatus()).isEqualTo(OrderStatus.REFUNDED);

@@ -189,7 +189,7 @@ public class OrderService {
      * 私教課訂單：不涉庫存，明細以 private_course_id 記錄。
      * 履約（發放堂數額度）待付款成功後由 {@link #fulfillPaidOrder} 執行。
      */
-    private Order createCourseOrder(Member member, PrivateCourse course, long quantity, String couponCode) {
+    private Order createCourseOrder(Member member, PrivateCourse course, int quantity, String couponCode) {
         BigDecimal subtotal = course.getPrice().multiply(BigDecimal.valueOf(quantity));
 
         MemberCoupon memberCoupon = null;
@@ -307,7 +307,7 @@ public class OrderService {
      * 提前釋放庫存/優惠券會造成「退款還沒真的處理、商品已經被別人買走」的競態。
      */
     @Transactional
-    public OrderDetailResponse cancelOrder(Integer memberId, Long orderId, CancelOrderRequest request) {
+    public OrderDetailResponse cancelOrder(Integer memberId, Integer orderId, CancelOrderRequest request) {
         Order order = orders.findByIdAndMemberId(orderId, memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         String fromStatus = order.getStatus().name();
@@ -333,18 +333,37 @@ public class OrderService {
         order.assertRefundable();
         PaymentTransaction payment = paymentTransactions.findByOrderId(order.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到這筆訂單的付款紀錄"));
+        // assertRefundable 只看訂單狀態（PAID），沒擋「同一筆訂單已經有退款申請在跑」——
+        // 使用者重複按申請退款會疊出好幾筆 PENDING PaymentRefund，這裡補上防呆
+        if (paymentRefunds.existsByPaymentIdAndStatus(payment.getId(), "PENDING")) {
+            throw new BusinessRuleException("這筆訂單已經有退款申請正在處理中，請等候客服審核");
+        }
         paymentRefunds.save(new PaymentRefund(payment, generateRefundNo(), order.getTotalAmount(), reason));
     }
 
-    /** 後台人工執行退款完成：退款狀態轉 COMPLETED、還原庫存/優惠券、訂單轉 REFUNDED */
+    /**
+     * 後台人工執行退款完成：退款狀態轉 COMPLETED、還原庫存/優惠券、訂單轉 REFUNDED。
+     * 若訂單已經不是 PAID（同一訂單的重複退款申請，另一筆已經處理過），改標記這筆為 CANCELLED，不重複履約。
+     */
     @Transactional
-    public void completeRefund(Long refundId) {
+    public void completeRefund(Integer refundId) {
         PaymentRefund refund = paymentRefunds.findById(refundId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到退款紀錄：" + refundId));
         if (!"PENDING".equals(refund.getStatus())) {
             throw new BusinessRuleException("此退款已處理過");
         }
         Order order = refund.getPayment().getOrder();
+
+        // 同一張訂單的重複退款申請（requestRefund 補防呆之前留下的舊資料才會出現）：
+        // 訂單已經因為另一筆退款完成轉為 REFUNDED，這筆是多出來的重複申請，不能再走一次
+        // 還原庫存/優惠券／訂閱，否則會錯誤地把庫存/優惠券還原兩次；直接標記為多餘即可，
+        // 不計入 ReportRefundSummary（只統計 COMPLETED）
+        if (order.getStatus() != OrderStatus.PAID) {
+            refund.setStatus("CANCELLED");
+            refund.setCompletedAt(LocalDateTime.now(TAIPEI));
+            return;
+        }
+
         String fromStatus = order.getStatus().name();
 
         refund.setStatus("COMPLETED");
@@ -456,7 +475,7 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("找不到商品：" + product.getProductId()));
     }
 
-    private void validateAvailableAndInStock(Product product, long quantity) {
+    private void validateAvailableAndInStock(Product product, int quantity) {
         if (!ProductStatus.ACTIVE.equals(product.getStatus())) {
             throw new ProductUnavailableException(product.getProductId());
         }
@@ -527,7 +546,7 @@ public class OrderService {
                 order.getStatus(), order.getCreatedAt(), items);
     }
 
-    private record OrderLine(Product product, long quantity) {}
+    private record OrderLine(Product product, int quantity) {}
 
-    private record ProductQuantity(Product product, long quantity) {}
+    private record ProductQuantity(Product product, int quantity) {}
 }

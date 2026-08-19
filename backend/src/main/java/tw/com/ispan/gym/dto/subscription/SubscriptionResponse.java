@@ -9,7 +9,7 @@ public record SubscriptionResponse(
         Integer subscriptionId,
         String planName,
         Integer subscriptionPlanId,
-        Long orderId,
+        Integer orderId,
         LocalDateTime startDate,
         LocalDateTime endDate,
         SubscriptionStatus status,
@@ -21,7 +21,7 @@ public record SubscriptionResponse(
             return null;
         }
         Integer subscriptionPlanId = sub.getSubscriptionPlan() != null ? sub.getSubscriptionPlan().getSubscriptionPlanId() : null;
-        Long orderId = sub.getOrder() != null ? sub.getOrder().getId() : null;
+        Integer orderId = sub.getOrder() != null ? sub.getOrder().getId() : null;
         boolean isActive = sub.getStatus() == SubscriptionStatus.ACTIVE
                 && sub.getEndDate() != null
                 && sub.getEndDate().isAfter(LocalDateTime.now());

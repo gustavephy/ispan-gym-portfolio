@@ -71,7 +71,7 @@ class EcpayServiceTest {
         Order order = new Order(member, TRADE_NO, "ORD20260816120000001", new BigDecimal(total),
                 BigDecimal.ZERO, new BigDecimal(total), new BigDecimal(total), null, "王小明",
                 "0912345678", null, "buyer@example.com");
-        ReflectionTestUtils.setField(order, "id", 900L);
+        ReflectionTestUtils.setField(order, "id", 900);
         return order;
     }
 
@@ -80,8 +80,8 @@ class EcpayServiceTest {
         product.setProductId(100);
         product.setName(name);
         product.setPrice(new BigDecimal(price));
-        OrderItem item = new OrderItem(order, product, name, new BigDecimal(price), 1L);
-        ReflectionTestUtils.setField(item, "id", 1L);
+        OrderItem item = new OrderItem(order, product, name, new BigDecimal(price), 1);
+        ReflectionTestUtils.setField(item, "id", 1);
         return item;
     }
 
@@ -117,7 +117,7 @@ class EcpayServiceTest {
     @Test
     void 結帳表單帶齊綠界必要欄位() {
         Order order = order("1000");
-        when(orderItems.findAllByOrderIdOrderByIdAsc(900L)).thenReturn(List.of(item(order, "乳清蛋白", "1000")));
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of(item(order, "乳清蛋白", "1000")));
 
         Map<String, String> form = service.buildCheckoutForm(order);
 
@@ -130,7 +130,7 @@ class EcpayServiceTest {
     @Test
     void 金額四捨五入為整數字串綠界不收小數() {
         Order order = order("1000.60");
-        when(orderItems.findAllByOrderIdOrderByIdAsc(900L)).thenReturn(List.of());
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
 
         Map<String, String> form = service.buildCheckoutForm(order);
 
@@ -140,7 +140,7 @@ class EcpayServiceTest {
     @Test
     void 多筆明細的商品名以井字號串接() {
         Order order = order("1500");
-        when(orderItems.findAllByOrderIdOrderByIdAsc(900L)).thenReturn(List.of(
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of(
                 item(order, "乳清蛋白", "1000"), item(order, "搖搖杯", "500")));
 
         Map<String, String> form = service.buildCheckoutForm(order);
@@ -151,7 +151,7 @@ class EcpayServiceTest {
     @Test
     void 沒有明細時商品名退回訂單編號() {
         Order order = order("1500");
-        when(orderItems.findAllByOrderIdOrderByIdAsc(900L)).thenReturn(List.of());
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
 
         Map<String, String> form = service.buildCheckoutForm(order);
 
@@ -161,7 +161,7 @@ class EcpayServiceTest {
     @Test
     void 表單簽章排除ActionUrl因為那是算完才附加的目的地資訊() {
         Order order = order("1000");
-        when(orderItems.findAllByOrderIdOrderByIdAsc(900L)).thenReturn(List.of());
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
 
         Map<String, String> form = service.buildCheckoutForm(order);
 

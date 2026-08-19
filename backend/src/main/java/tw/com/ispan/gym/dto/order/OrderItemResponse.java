@@ -6,11 +6,11 @@ import java.math.BigDecimal;
 
 /** productId 與 privateCourseId 恰好一個非空，對應 order_item 的雙 FK */
 public record OrderItemResponse(
-        Long orderItemId,
+        Integer orderItemId,
         Integer productId,
         Integer privateCourseId,
         String productNameAtBuy,
         BigDecimal priceAtBuy,
-        Long quantity,
+        Integer quantity,
         BigDecimal lineAmount) {}
 

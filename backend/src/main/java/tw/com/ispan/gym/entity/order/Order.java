@@ -24,7 +24,7 @@ public class Order extends TaipeiTimestampEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
-    private Long id;
+    private Integer id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "FK_orders_member"))
     private Member member;
@@ -156,7 +156,7 @@ public class Order extends TaipeiTimestampEntity {
         this.status = OrderStatus.REFUNDED;
     }
 
-    public Long getId() {
+    public Integer getId() {
         return id;
     }
 

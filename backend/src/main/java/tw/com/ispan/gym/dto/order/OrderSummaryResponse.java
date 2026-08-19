@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record OrderSummaryResponse(
-        Long orderId,
+        Integer orderId,
         String merchantTradeNo,
         BigDecimal totalAmount,
         OrderStatus status,

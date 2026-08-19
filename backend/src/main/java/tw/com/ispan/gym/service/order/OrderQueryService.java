@@ -27,7 +27,7 @@ public class OrderQueryService {
         return orders.findAllByMemberIdOrderByCreatedAtDesc(memberId).stream().map(this::summary).toList();
     }
 
-    public OrderDetailResponse findMineById(Integer memberId, Long orderId) {
+    public OrderDetailResponse findMineById(Integer memberId, Integer orderId) {
         Order order = orders.findByIdAndMemberId(orderId, memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
