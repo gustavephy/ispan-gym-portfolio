@@ -7,7 +7,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -52,7 +54,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String token = resolveToken(request);
-        if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+        if (token != null && !alreadyAuthenticated()) {
             authenticate(request, token);
         }
         filterChain.doFilter(request, response);
@@ -87,6 +89,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
+    }
+
+    /**
+     * 是否已經有「真正的」登入者。不能只判斷 {@code getAuthentication() == null}——
+     * dev profile 的 filter chain 全放行，Spring Security 的 AnonymousAuthenticationFilter
+     * 會先塞一個 anonymousUser 進來，此時 authentication 不是 null，token 就永遠不會被解析，
+     * DevCurrentUserProvider 也就永遠拿不到真實身分（見其類別註解）。
+     * 匿名身分視同未驗證，讓帶了 token 的請求可以覆寫掉它。
+     */
+    private boolean alreadyAuthenticated() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && !(authentication instanceof AnonymousAuthenticationToken);
     }
 
     /** 取出 Authorization: Bearer … 的 token，格式不符回 null */
