@@ -53,6 +53,8 @@ class CoachBookingServiceTest {
     private static final Integer TRAINER_ID = 5;
     private static final Integer SLOT_ID = 10;
     private static final Integer BOOKING_ID = 99;
+    private static final Integer ACCOUNT_ID = 20;
+    private static final String CHECK_IN_KEY = "ABC123";
 
     private final CoachSlotRepository slots = mock(CoachSlotRepository.class);
     private final MemberCourseQuotaRepository quotas = mock(MemberCourseQuotaRepository.class);
@@ -102,6 +104,19 @@ class CoachBookingServiceTest {
         booking.setCoachSlot(slot);
         booking.setQuota(quota);
         booking.setStatus(status);
+        return booking;
+    }
+
+    private Trainer trainer(Integer id) {
+        Trainer trainer = new Trainer();
+        trainer.setId(id);
+        return trainer;
+    }
+
+    private CoachBooking bookingWithCheckInKey(CoachSlot slot, MemberCourseQuota quota,
+            CoachBookingStatus status, String checkInKey) {
+        CoachBooking booking = booking(member(MEMBER_ID), slot, quota, status);
+        booking.setCheckInKey(checkInKey);
         return booking;
     }
 
@@ -307,5 +322,125 @@ class CoachBookingServiceTest {
         assertThatThrownBy(() -> service.cancelBooking(MEMBER_ID, BOOKING_ID, false))
                 .isInstanceOf(BusinessRuleException.class);
         verify(bookings, never()).save(any());
+    }
+
+    // === checkIn（核銷）======================================================
+
+    @Test
+    void 核銷成功_扣額度並寫入核銷時間與稽核紀錄() {
+        Trainer trainer = trainer(TRAINER_ID);
+        CoachSlot slot = slot(LocalDateTime.now().plusDays(1));
+        MemberCourseQuota quota = quota(7, 4, 1);
+        CoachBooking booking = bookingWithCheckInKey(slot, quota, CoachBookingStatus.PENDING, CHECK_IN_KEY);
+        when(slotService.requireTrainerByAccount(ACCOUNT_ID)).thenReturn(trainer);
+        when(bookings.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+        stubBookingSaveReturnsArgument();
+
+        CoachBookingResponse response = service.checkIn(ACCOUNT_ID, BOOKING_ID, CHECK_IN_KEY);
+
+        // consume：reserved-1, used+1（不退還）
+        assertThat(quota.getRemainingCourse()).isEqualTo(4);
+        assertThat(quota.getReservedCourse()).isZero();
+        assertThat(quota.getUsedCourse()).isEqualTo(1);
+        assertThat(booking.getStatus()).isEqualTo(CoachBookingStatus.COMPLETED);
+        assertThat(booking.getCheckInTime()).isNotNull();
+        assertThat(booking.getCheckInApprover()).isEqualTo(trainer);
+        verify(quotas).save(quota);
+        verify(deductionLogs).save(any());
+        assertThat(response.getStatus()).isEqualTo(CoachBookingStatus.COMPLETED);
+    }
+
+    @Test
+    void 核銷_查無此預約回404且不動額度() {
+        when(slotService.requireTrainerByAccount(ACCOUNT_ID)).thenReturn(trainer(TRAINER_ID));
+        when(bookings.findById(BOOKING_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.checkIn(ACCOUNT_ID, BOOKING_ID, CHECK_IN_KEY))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(quotas, never()).save(any());
+        verify(deductionLogs, never()).save(any());
+    }
+
+    @Test
+    void 核銷_非本人時段教練回403且不動額度() {
+        CoachSlot slot = slot(LocalDateTime.now().plusDays(1));
+        MemberCourseQuota quota = quota(7, 4, 1);
+        CoachBooking booking = bookingWithCheckInKey(slot, quota, CoachBookingStatus.PENDING, CHECK_IN_KEY);
+        Integer otherTrainerId = TRAINER_ID + 1;
+        when(slotService.requireTrainerByAccount(ACCOUNT_ID)).thenReturn(trainer(otherTrainerId));
+        when(bookings.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> service.checkIn(ACCOUNT_ID, BOOKING_ID, CHECK_IN_KEY))
+                .isInstanceOf(ForbiddenAccessException.class);
+        assertThat(quota.getReservedCourse()).isEqualTo(1);
+        assertThat(quota.getUsedCourse()).isZero();
+        verify(quotas, never()).save(any());
+        verify(deductionLogs, never()).save(any());
+    }
+
+    @Test
+    void 核銷_重複核銷已完成的預約回409且不再次扣額度() {
+        Trainer trainer = trainer(TRAINER_ID);
+        CoachSlot slot = slot(LocalDateTime.now().plusDays(1));
+        MemberCourseQuota quota = quota(7, 5, 0);
+        quota.setUsedCourse(1); // 模擬這包額度先前已經核銷消耗過一堂
+        CoachBooking booking = bookingWithCheckInKey(slot, quota, CoachBookingStatus.COMPLETED, CHECK_IN_KEY);
+        when(slotService.requireTrainerByAccount(ACCOUNT_ID)).thenReturn(trainer);
+        when(bookings.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> service.checkIn(ACCOUNT_ID, BOOKING_ID, CHECK_IN_KEY))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("已核銷或已取消");
+        // 重點斷言：被擋下來後 usedCourse 停在 1，沒有再被消耗第二次
+        assertThat(quota.getUsedCourse()).isEqualTo(1);
+        verify(quotas, never()).save(any());
+        verify(deductionLogs, never()).save(any());
+    }
+
+    @Test
+    void 核銷_已取消的預約回409且不動額度() {
+        Trainer trainer = trainer(TRAINER_ID);
+        CoachSlot slot = slot(LocalDateTime.now().plusDays(1));
+        MemberCourseQuota quota = quota(7, 5, 0);
+        CoachBooking booking = bookingWithCheckInKey(slot, quota, CoachBookingStatus.CANCELLED, CHECK_IN_KEY);
+        when(slotService.requireTrainerByAccount(ACCOUNT_ID)).thenReturn(trainer);
+        when(bookings.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> service.checkIn(ACCOUNT_ID, BOOKING_ID, CHECK_IN_KEY))
+                .isInstanceOf(BusinessRuleException.class);
+        verify(quotas, never()).save(any());
+        verify(deductionLogs, never()).save(any());
+    }
+
+    @Test
+    void 核銷_舊資料無核銷碼回409且不動額度() {
+        Trainer trainer = trainer(TRAINER_ID);
+        CoachSlot slot = slot(LocalDateTime.now().plusDays(1));
+        MemberCourseQuota quota = quota(7, 4, 1);
+        CoachBooking booking = bookingWithCheckInKey(slot, quota, CoachBookingStatus.PENDING, null);
+        when(slotService.requireTrainerByAccount(ACCOUNT_ID)).thenReturn(trainer);
+        when(bookings.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> service.checkIn(ACCOUNT_ID, BOOKING_ID, CHECK_IN_KEY))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("核銷功能上線前");
+        verify(quotas, never()).save(any());
+        verify(deductionLogs, never()).save(any());
+    }
+
+    @Test
+    void 核銷_核銷碼錯誤回409且不動額度() {
+        Trainer trainer = trainer(TRAINER_ID);
+        CoachSlot slot = slot(LocalDateTime.now().plusDays(1));
+        MemberCourseQuota quota = quota(7, 4, 1);
+        CoachBooking booking = bookingWithCheckInKey(slot, quota, CoachBookingStatus.PENDING, CHECK_IN_KEY);
+        when(slotService.requireTrainerByAccount(ACCOUNT_ID)).thenReturn(trainer);
+        when(bookings.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> service.checkIn(ACCOUNT_ID, BOOKING_ID, "WRONG_KEY"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("核銷碼錯誤");
+        verify(quotas, never()).save(any());
+        verify(deductionLogs, never()).save(any());
     }
 }
