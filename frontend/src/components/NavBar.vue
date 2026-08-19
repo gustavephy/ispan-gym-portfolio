@@ -11,6 +11,11 @@
    *
    * requires 為進入該工作區所需的角色；null 代表任何人（含未登入）皆可。
    * 這只是選單的可見性，不是安全機制——把關在後端 @PreAuthorize 與路由守衛。
+   *
+   * AI健康管理（InBody／AI課表／聊天室，皆以 member_id 為主體）歸在會員工作區，
+   * 跟「我的訂單」一樣額外標記 requires: 'MEMBER'；學員訊息（教練回覆聊天室訊息）
+   * 歸在教練工作區——兩者訪客或不具對應角色都看不到，直接輸入網址仍會被
+   * router 的 requiresAuth／requiresRole 守衛擋下（見 router/index.js）。
    */
   const WORKSPACES = [
     {
@@ -25,13 +30,17 @@
         { to: '/products', label: '補給商城' },
         { to: '/subscription', label: '會籍方案' },
         { to: '/orders', label: '我的訂單', requires: 'MEMBER' },
+        { to: '/health', label: 'AI健康管理', requires: 'MEMBER' },
       ],
     },
     {
       key: 'trainer',
       label: '教練',
       requires: 'TRAINER',
-      links: [{ to: '/trainer/schedules', label: '教練排班' }],
+      links: [
+        { to: '/trainer/schedules', label: '教練排班' },
+        { to: '/employee/chat', label: '學員訊息' },
+      ],
     },
     {
       key: 'admin',
