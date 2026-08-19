@@ -154,8 +154,13 @@ onMounted(async () => {
   }
 
   refreshUnread()
-  // 目前只會即時訂閱正在開啟的那個對話；其他學員的新訊息靠定期刷新列表讓未讀數與預覽保持更新
-  pollTimer = setInterval(refreshConversations, 15000)
+  // 目前只會即時訂閱正在開啟的那個對話；其他學員的新訊息靠定期輪詢更新。
+  // 總未讀（標題徽章）與列表各筆未讀是兩支 API，兩個都要刷新，
+  // 否則會出現列表已更新、標題徽章卻還是舊值的不一致。
+  pollTimer = setInterval(() => {
+    refreshConversations()
+    refreshUnread()
+  }, 15000)
 })
 
 onBeforeUnmount(() => {

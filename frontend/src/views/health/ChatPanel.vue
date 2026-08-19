@@ -26,6 +26,7 @@ const sending = ref(false)
 const messageListEl = ref(null)
 
 let currentSub = null
+let pollTimer = null
 
 const currentCounterpartType = computed(() => (activeTab.value === 'ai' ? 'AI' : 'EMPLOYEE'))
 const currentEmployeeId = computed(() => (activeTab.value === 'employee' ? selectedEmployeeId.value : null))
@@ -167,9 +168,15 @@ onMounted(async () => {
   } catch (e) {
     initError.value = e.message
   }
+
+  refreshUnread()
+  // 只會即時訂閱正在開著的那個房間，另一個分頁（AI／教練）來訊時收不到事件，
+  // 未讀數得靠定期輪詢才會更新，否則要重新整理才看得到。
+  pollTimer = setInterval(refreshUnread, 15000)
 })
 
 onBeforeUnmount(() => {
+  clearInterval(pollTimer)
   currentSub?.unsubscribe()
   socket.disconnect()
 })
