@@ -22,25 +22,19 @@ import tw.com.ispan.gym.dto.course.UpdateGroupCourseRequest;
 import tw.com.ispan.gym.service.course.GroupCourseService;
 
 /**
- * 後台團課主檔管理。受 SecurityConfig 既有的 /api/employee/** → hasRole("EMPLOYEE")
- * 規則保護，這裡額外疊上 @PreAuthorize，跟 EmployeeGroupClassController（場次管理）的
- * 慣例一致（雙層防護）。
- *
- * <p>權限訂在 EMPLOYEE 而非 ADMIN：團課主檔屬於日常課務維護，一般員工就該能處理。
- * 注意角色是疊加的（見 AccountAuthorityResolver），教練同時持有 ROLE_EMPLOYEE，
- * 因此教練也能管理團課主檔——課務本來就在教練的工作範圍內，這是預期行為。
- * 商品、訂單那類真正的管理員專屬後台仍留在 /api/admin/**，不隨之放寬。
+ * 後台團課主檔管理。受 SecurityConfig 既有的 /api/admin/** → hasRole("ADMIN") 規則保護，
+ * 這裡額外疊上 @PreAuthorize，跟 AdminGroupClassController（場次管理）的慣例一致（雙層防護）。
  */
 @RestController
-@RequestMapping("/api/employee/group-courses")
+@RequestMapping("/api/admin/group-courses")
 @RequiredArgsConstructor
-public class EmployeeGroupCourseController {
+public class AdminGroupCourseController {
 
     private final GroupCourseService groupCourseService;
 
     /** 建立團課主檔，成功回 201。 */
     @PostMapping
-    @PreAuthorize("hasRole('EMPLOYEE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupCourseResponse> createCourse(@Valid @RequestBody GroupCourseRequest request) {
         GroupCourseResponse resp = groupCourseService.createCourse(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(resp);
@@ -48,7 +42,7 @@ public class EmployeeGroupCourseController {
 
     /** 分頁查詢所有團課主檔，不分狀態，可依課程名稱或授課教練姓名搜尋，成功回 200。 */
     @GetMapping
-    @PreAuthorize("hasRole('EMPLOYEE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PageResponse<GroupCourseResponse>> getAllCourses(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -59,7 +53,7 @@ public class EmployeeGroupCourseController {
 
     /** 修改團課主檔，成功回 200。授課教練與狀態不可經此端點變更。 */
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('EMPLOYEE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupCourseResponse> updateCourse(@PathVariable Integer id,
             @Valid @RequestBody UpdateGroupCourseRequest request) {
         GroupCourseResponse resp = groupCourseService.updateCourse(id, request);
@@ -68,7 +62,7 @@ public class EmployeeGroupCourseController {
 
     /** 下架團課主檔，成功回 200（更新既有資源的狀態，不是新建立）。 */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('EMPLOYEE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupCourseResponse> deactivateCourse(@PathVariable Integer id) {
         GroupCourseResponse resp = groupCourseService.deactivateCourse(id);
         return ResponseEntity.status(HttpStatus.OK).body(resp);

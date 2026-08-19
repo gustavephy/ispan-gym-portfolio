@@ -43,11 +43,9 @@
       ],
     },
     {
-      // 團課主檔與場次都屬日常課務，一般員工即可維護（後端同為 /api/employee/**）。
-      // 之後若加入商品、訂單等管理員專屬功能，該連結各自標 requires: 'ADMIN' 即可。
       key: 'admin',
       label: '管理',
-      requires: 'EMPLOYEE',
+      requires: 'ADMIN',
       links: [
         { to: '/admin/group-courses', label: '團課主檔' },
         { to: '/admin/group-classes', label: '團課場次' },

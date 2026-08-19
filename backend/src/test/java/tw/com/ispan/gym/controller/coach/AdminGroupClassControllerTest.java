@@ -22,16 +22,16 @@ import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.service.coach.GroupClassService;
 
 /**
- * POST /api/employee/group-classes 的 controller 層測試：standalone MockMvc，
+ * POST /api/admin/group-classes 的 controller 層測試：standalone MockMvc，
  * service 全 mock，只驗證路由、@Valid 檢核與 ApiException → JSON 錯誤格式的對應；
  * 教室重疊等商業規則的正確性由 service 層負責，ADMIN 角色保護由 JwtSecuritySmokeTest 統一驗證。
  */
-class EmployeeGroupClassControllerTest {
+class AdminGroupClassControllerTest {
 
     private final GroupClassService groupClassService = mock(GroupClassService.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new EmployeeGroupClassController(groupClassService))
+            .standaloneSetup(new AdminGroupClassController(groupClassService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
@@ -53,7 +53,7 @@ class EmployeeGroupClassControllerTest {
                 20, 0, 20, false, GroupClassSessionStatus.SCHEDULED, 0,
                 LocalDateTime.of(2029, 12, 1, 9, 0), LocalDateTime.of(2029, 12, 1, 9, 0)));
 
-        mockMvc.perform(post("/api/employee/group-classes")
+        mockMvc.perform(post("/api/admin/group-classes")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(VALID_BODY))
                 .andExpect(status().isCreated())
@@ -64,7 +64,7 @@ class EmployeeGroupClassControllerTest {
 
     @Test
     void 缺少必填欄位回400() throws Exception {
-        mockMvc.perform(post("/api/employee/group-classes")
+        mockMvc.perform(post("/api/admin/group-classes")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {
@@ -79,7 +79,7 @@ class EmployeeGroupClassControllerTest {
 
     @Test
     void 結束時間早於開始時間回400() throws Exception {
-        mockMvc.perform(post("/api/employee/group-classes")
+        mockMvc.perform(post("/api/admin/group-classes")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {
@@ -98,7 +98,7 @@ class EmployeeGroupClassControllerTest {
         when(groupClassService.createSession(any()))
                 .thenThrow(new ResourceNotFoundException("查無此課程"));
 
-        mockMvc.perform(post("/api/employee/group-classes")
+        mockMvc.perform(post("/api/admin/group-classes")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(VALID_BODY))
                 .andExpect(status().isNotFound())
@@ -110,7 +110,7 @@ class EmployeeGroupClassControllerTest {
         when(groupClassService.createSession(any()))
                 .thenThrow(new BusinessRuleException("此教室已有重疊時段"));
 
-        mockMvc.perform(post("/api/employee/group-classes")
+        mockMvc.perform(post("/api/admin/group-classes")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(VALID_BODY))
                 .andExpect(status().isConflict())

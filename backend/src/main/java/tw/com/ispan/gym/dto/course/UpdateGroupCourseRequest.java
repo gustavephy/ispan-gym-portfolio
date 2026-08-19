@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
- * 編輯團課主檔時可更新的欄位。此 DTO 用於後台管理介面的 PUT /api/employee/group-courses/{id}，
+ * 編輯團課主檔時可更新的欄位。此 DTO 用於後台管理介面的 PUT /api/admin/group-courses/{id}，
  * 跟建立用的 {@link GroupCourseRequest} 分開：不含 trainerId（授課教練不可透過修改變更，
  * 換教練需另開課程）、不含 status（狀態只能透過既有的下架端點改變，避免兩條路徑都能改狀態）。
  *

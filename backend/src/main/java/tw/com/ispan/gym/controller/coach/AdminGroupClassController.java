@@ -22,19 +22,13 @@ import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.service.coach.GroupClassService;
 
 /**
- * 後台團課場次管理。受 SecurityConfig 既有的 /api/employee/** → hasRole("EMPLOYEE")
- * 規則保護，這裡額外疊上 @PreAuthorize，跟 /api/trainer、/api/member 兩支的慣例一致
- *（雙層防護）。
- *
- * <p>權限訂在 EMPLOYEE 而非 ADMIN：排課屬日常課務，一般員工就該能處理——實務上排場次
- * 比定義課程更頻繁，不宜比團課主檔（同為 EMPLOYEE）更嚴格。注意角色是疊加的
- *（見 AccountAuthorityResolver），教練同時持有 ROLE_EMPLOYEE，因此教練也能排課，
- * 這在課務範圍內屬預期行為。商品、訂單那類管理員專屬後台仍留在 /api/admin/**。
+ * 後台團課場次管理。受 SecurityConfig 既有的 /api/admin/** → hasRole("ADMIN") 規則保護，
+ * 這裡額外疊上 @PreAuthorize，跟 /api/trainer、/api/member 兩支的慣例一致（雙層防護）。
  */
 @RestController
-@RequestMapping("/api/employee/group-classes")
+@RequestMapping("/api/admin/group-classes")
 @RequiredArgsConstructor
-public class EmployeeGroupClassController {
+public class AdminGroupClassController {
 
     private final GroupClassService groupClassService;
 
@@ -44,7 +38,7 @@ public class EmployeeGroupClassController {
      * 資料來源，前端依賴它一次回傳全部資料）完全分開，不影響那支既有端點的行為。
      */
     @GetMapping
-    @PreAuthorize("hasRole('EMPLOYEE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PageResponse<GroupClassSessionResponse>> getUpcomingSessions(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -56,16 +50,16 @@ public class EmployeeGroupClassController {
 
     /** 建立團課場次，成功回 201。 */
     @PostMapping
-    @PreAuthorize("hasRole('EMPLOYEE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupClassSessionResponse> createSession(
             @Valid @RequestBody CreateGroupClassSessionRequest request) {
         GroupClassSessionResponse groupClass = groupClassService.createSession(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(groupClass);
     }
 
-    /** 更新團課場次，管理後台專用 */
+    /** 更新團課場次，管理後台專用，需 ADMIN 權限 */
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('EMPLOYEE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupClassSessionResponse> updateSession(@PathVariable Integer id,
             @Valid @RequestBody UpdateGroupClassSessionRequest request) {
         /**
@@ -83,7 +77,7 @@ public class EmployeeGroupClassController {
 
     /** 管理者取消整個場次。若場次已有會員報名，預設會拒絕並要求再次確認（query param）。 */
     @DeleteMapping("/{sessionId}")
-    @PreAuthorize("hasRole('EMPLOYEE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<GroupClassSessionResponse> cancelSession(@PathVariable Integer sessionId,
             @RequestParam(defaultValue = "false") boolean acknowledgeExistingBooking) {
         GroupClassSessionResponse resp = groupClassService.cancelSession(sessionId, acknowledgeExistingBooking);

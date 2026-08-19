@@ -11,7 +11,7 @@ import lombok.Data;
 @Data
 public class UpdateGroupClassSessionRequest {
     /**
-     * 編輯場次時可更新的欄位。此 DTO 用於後台管理介面的 PUT /api/employee/group-classes/{id}。
+     * 編輯場次時可更新的欄位。此 DTO 用於後台管理介面的 PUT /api/admin/group-classes/{id}。
      */
     @NotBlank(message = "教室不可為空")
     private String roomName;

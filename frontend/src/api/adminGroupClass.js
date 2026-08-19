@@ -1,7 +1,7 @@
 import api from './axios.instance.js'
 
 // 管理員排定團課場次，對應後端 AdminGroupClassController 的
-// POST /api/employee/group-classes、DELETE /api/employee/group-classes/{sessionId}。
+// POST /api/admin/group-classes、DELETE /api/admin/group-classes/{sessionId}。
 // 跟團課主檔管理（adminGroupCourse.js）分開檔案，職責不同：
 // 那邊管課程本身（教練、名稱、預設容量……），這裡管特定日期/教室的場次。
 
@@ -12,13 +12,13 @@ import api from './axios.instance.js'
  * @param {{page?: number, size?: number, search?: string}} params page 從 0 開始
  */
 export const getSessions = ({ page = 0, size = 10, search = '' } = {}) =>
-  api.get('/api/employee/group-classes', { params: { page, size, search } })
+  api.get('/api/admin/group-classes', { params: { page, size, search } })
 
 /**
  * 建立團課場次，需登入且為 ADMIN
  * @param {{groupCourseId: number, roomName: string, startAt: string, endAt: string, capacity?: number}} payload
  */
-export const createSession = (payload) => api.post('/api/employee/group-classes', payload)
+export const createSession = (payload) => api.post('/api/admin/group-classes', payload)
 
 /**
  * 修改團課場次，需登入且為 ADMIN。version 為樂觀鎖版本，必須帶目前列表拿到的值，
@@ -26,7 +26,7 @@ export const createSession = (payload) => api.post('/api/employee/group-classes'
  * @param {number} id 要修改的場次 id
  * @param {{roomName: string, startAt: string, endAt: string, capacity?: number, version: number}} payload
  */
-export const updateSession = (id, payload) => api.put(`/api/employee/group-classes/${id}`, payload)
+export const updateSession = (id, payload) => api.put(`/api/admin/group-classes/${id}`, payload)
 
 /**
  * 取消團課場次，需登入且為 ADMIN
@@ -35,4 +35,4 @@ export const updateSession = (id, payload) => api.put(`/api/employee/group-class
  * @param {boolean} acknowledgeExistingBooking 該場次已有會員報名時，是否二次確認要一併取消
  */
 export const cancelSession = (sessionId, acknowledgeExistingBooking) =>
-  api.delete(`/api/employee/group-classes/${sessionId}`, { params: { acknowledgeExistingBooking } })
+  api.delete(`/api/admin/group-classes/${sessionId}`, { params: { acknowledgeExistingBooking } })

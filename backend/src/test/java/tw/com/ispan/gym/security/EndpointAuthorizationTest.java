@@ -89,7 +89,7 @@ class EndpointAuthorizationTest {
     @Import({
         MockedBeans.class,
         // 受測的正牌 controller
-        tw.com.ispan.gym.controller.coach.EmployeeGroupClassController.class,
+        tw.com.ispan.gym.controller.coach.AdminGroupClassController.class,
         tw.com.ispan.gym.controller.coach.CoachSlotController.class,
         tw.com.ispan.gym.controller.coach.GroupClassController.class,
         tw.com.ispan.gym.controller.employee.EmployeeReviewController.class,
@@ -359,25 +359,22 @@ class EndpointAuthorizationTest {
                 .isNotIn(401, 403);
     }
 
-    // === EMPLOYEE：團課場次管理 ================================================
-    // 排課屬日常課務，開放給一般員工（不再是管理者專屬）；管理者本身也持有
-    // ROLE_EMPLOYEE，因此同樣通過。純會員與未登入仍被擋下。
+    // === ADMIN：團課場次管理 ===================================================
 
     @Test
-    void 建立團課場次開放員工但擋下會員() throws Exception {
-        expectUnauthorizedWhenAnonymous(post("/api/employee/group-classes"));
-        expectForbidden(post("/api/employee/group-classes"), memberToken());
-        expectAuthorized(post("/api/employee/group-classes"), employeeToken());
-        // 管理者是員工的疊加身分，一併確認沒被更嚴格的規則誤擋
-        expectAuthorized(post("/api/employee/group-classes"), adminToken());
+    void 建立團課場次僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/admin/group-classes"));
+        expectForbidden(post("/api/admin/group-classes"), memberToken());
+        // 一般員工也不行——/api/admin/** 是管理者專屬
+        expectForbidden(post("/api/admin/group-classes"), employeeToken());
+        expectAuthorized(post("/api/admin/group-classes"), adminToken());
     }
 
     @Test
-    void 更新與取消團課場次開放員工() throws Exception {
-        expectForbidden(put("/api/employee/group-classes/1"), memberToken());
-        expectAuthorized(put("/api/employee/group-classes/1"), employeeToken());
-        expectAuthorized(delete("/api/employee/group-classes/1"), employeeToken());
-        expectAuthorized(delete("/api/employee/group-classes/1"), adminToken());
+    void 更新與取消團課場次僅限管理者() throws Exception {
+        expectForbidden(put("/api/admin/group-classes/1"), employeeToken());
+        expectForbidden(delete("/api/admin/group-classes/1"), employeeToken());
+        expectAuthorized(delete("/api/admin/group-classes/1"), adminToken());
     }
 
     // === ADMIN：商品維護 =======================================================
