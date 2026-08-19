@@ -1,5 +1,7 @@
 package tw.com.ispan.gym.controller.aihealthchat;
 
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import tw.com.ispan.gym.dto.aihealthchat.ChatConversationSummary;
 import tw.com.ispan.gym.dto.aihealthchat.ChatMessageDTO;
 import tw.com.ispan.gym.dto.aihealthchat.ChatUnreadCountResponse;
 import tw.com.ispan.gym.entity.aihealthchat.ChatMessage.ChatCounterpartType;
@@ -91,5 +94,12 @@ public class ChatController {
     @PreAuthorize("hasRole('EMPLOYEE')")
     public ChatUnreadCountResponse getUnreadCountForEmployee() {
         return new ChatUnreadCountResponse(chatService.unreadCountForEmployeeAccount(currentUser.requireCurrentUserId()));
+    }
+
+    /** 「學員訊息」列表：曾與我對話過的學員，依最後訊息時間排序，附預覽與未讀數 */
+    @GetMapping("/api/employee/chat/conversations")
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    public List<ChatConversationSummary> getConversationsForEmployee() {
+        return chatService.listConversationsForEmployeeAccount(currentUser.requireCurrentUserId());
     }
 }

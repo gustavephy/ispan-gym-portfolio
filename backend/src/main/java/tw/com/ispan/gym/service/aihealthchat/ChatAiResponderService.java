@@ -82,8 +82,11 @@ public class ChatAiResponderService {
     /** 學員主動按「推薦課程」時觸發，僅從真實、目前開放報名的課程中挑選（不是每次聊天都查） */
     @Async("aiTaskExecutor")
     public void generateCourseRecommendationAsync(Integer memberId, String roomId) {
-        List<GroupCourse> activeGroupCourses = groupCourses.findByStatus(CourseStatus.ACTIVE);
-        List<PrivateCourse> activePrivateCourses = privateCourses.findByStatus(CourseStatus.ACTIVE);
+        // 用 *WithCategory 版本一次帶出 LAZY 的 category，因為下面組 prompt 時要讀
+        // category 名稱，而這支方法離開後（Gemini 呼叫前後）session 就關閉了，見兩份
+        // repository 對應方法的註解。
+        List<GroupCourse> activeGroupCourses = groupCourses.findByStatusWithCategory(CourseStatus.ACTIVE);
+        List<PrivateCourse> activePrivateCourses = privateCourses.findByStatusWithCategory(CourseStatus.ACTIVE);
 
         Set<String> allowedNames = new HashSet<>();
         activeGroupCourses.forEach(c -> allowedNames.add(c.getName()));

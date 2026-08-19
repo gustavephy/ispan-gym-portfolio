@@ -209,21 +209,23 @@ class TrainerControllerTest {
     // === 公開 DTO 防洩漏 ==========================================================
 
     @Test
-    void 公開JSON只有六個欄位不含員工內部資料() throws Exception {
+    void 公開JSON只有七個欄位不含員工內部資料() throws Exception {
         when(trainerService.getById(7)).thenReturn(projected(7, TrainerStatus.ACTIVE));
 
         mockMvc.perform(get("/api/trainers/7"))
                 .andExpect(status().isOk())
-                // 白名單：多一個欄位就會失敗，之後有人往 DTO 加東西會被這條擋下
-                .andExpect(jsonPath("$.length()").value(6))
+                // 白名單：多一個欄位就會失敗，之後有人往 DTO 加東西會被這條擋下。
+                // employeeId 是聊天室（§14）用來定址教練對話對象所需的內部數字 FK，
+                // 不是 email/電話/生日等個資，故加入白名單而非視為外洩（見 TrainerResponse 註解）。
+                .andExpect(jsonPath("$.length()").value(7))
                 .andExpect(jsonPath("$.trainerId").exists())
+                .andExpect(jsonPath("$.employeeId").exists())
                 .andExpect(jsonPath("$.displayName").exists())
                 .andExpect(jsonPath("$.specialty").exists())
                 .andExpect(jsonPath("$.experience").exists())
                 .andExpect(jsonPath("$.bio").exists())
                 .andExpect(jsonPath("$.status").exists())
                 // 黑名單：逐一點名確認個資、角色與審核欄位都沒混進來
-                .andExpect(jsonPath("$.employeeId").doesNotExist())
                 .andExpect(jsonPath("$.employee").doesNotExist())
                 .andExpect(jsonPath("$.account").doesNotExist())
                 .andExpect(jsonPath("$.email").doesNotExist())

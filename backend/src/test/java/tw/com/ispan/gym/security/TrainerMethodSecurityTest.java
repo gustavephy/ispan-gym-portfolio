@@ -201,7 +201,7 @@ class TrainerMethodSecurityTest {
     void 管理者通過方法層級授權且Service確實被呼叫() throws Exception {
         String token = tokenFor(3, 33, "admin@example.com", EmployeeRole.ADMIN);
         Mockito.when(trainerService.create(eq(22), any(TrainerCreateRequest.class)))
-                .thenReturn(new TrainerResponse(7, "陳小華", "重量訓練", "五年授課經驗",
+                .thenReturn(new TrainerResponse(7, 22, "陳小華", "重量訓練", "五年授課經驗",
                         "自我介紹", TrainerStatus.ACTIVE));
 
         mockMvc.perform(post("/api/employees/22/trainer")

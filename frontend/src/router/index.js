@@ -53,6 +53,22 @@ const router = createRouter({
           component: () => import('@/views/admin/AdminGroupClassSessionView.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
+        {
+          path: 'health',
+          component: () => import('@/views/health/HealthHubView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
+          children: [
+            { path: '', redirect: '/health/inbody' },
+            { path: 'inbody', component: () => import('@/views/health/InbodyPanel.vue') },
+            { path: 'ai-plan', component: () => import('@/views/health/AiPlanPanel.vue') },
+            { path: 'chat', component: () => import('@/views/health/ChatPanel.vue') },
+          ],
+        },
+        {
+          path: 'employee/chat',
+          component: () => import('@/views/employee/EmployeeChatView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'EMPLOYEE' },
+        },
       ],
     },
     // 具名路由：401 攔截器會導向這裡，並以 query.redirect 記住原本要去的頁面

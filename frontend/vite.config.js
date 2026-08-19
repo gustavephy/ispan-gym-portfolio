@@ -22,6 +22,12 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      // 聊天室 SockJS 交握＋WebSocket 升級都走這個前綴，ws:true 讓 proxy 也處理升級請求
+      '/ws-chat': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })
