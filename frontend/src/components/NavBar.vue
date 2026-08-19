@@ -47,6 +47,7 @@
       label: '管理',
       requires: 'ADMIN',
       links: [
+        { to: '/admin/reports', label: '營運統計' },
         { to: '/admin/members', label: '會員管理' },
         { to: '/admin/group-courses', label: '團課主檔' },
         { to: '/admin/group-classes', label: '團課場次' },
