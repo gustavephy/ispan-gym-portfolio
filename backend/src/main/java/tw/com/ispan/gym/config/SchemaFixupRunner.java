@@ -41,6 +41,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
     @Override
     public void run(String... args) {
         renameLegacyTables();
+        dropEmptyLegacyTables();
         renameLegacyColumns();
         clearLegacyOperatorIds();
         dropLegacyIdentityArtifacts();
@@ -159,6 +160,37 @@ public class SchemaFixupRunner implements CommandLineRunner {
             renameUniqueIndex("account_role", "UX_account_roles_account_id_role", "UX_account_role_account_id_role");
             renameConstraint("FK_account_roles_account_id", "FK_account_role_account_id");
         }
+    }
+
+    // === 命名統一單數後沒人接著清的空舊表 ======================================
+    // 同樣是 2026-08-13 附屬表改單數定案的一部分，但這幾個當初沒有補
+    // renameLegacyTable，導致 entity 已經指向單數新表名、Hibernate 也照新名建了
+    // 表，複數的舊表名就一直留在資料庫裡沒人管。
+    //
+    // 跟 renameLegacyTable 不同：這裡沒有資料要搬（新表才是 entity 實際在用的），
+    // 單純確認舊表本身是空的才砍；只要還有資料一律不動，留給人工判斷是不是有隊友
+    // 本機還沒遷移過的歷史資料。
+    private void dropEmptyLegacyTables() {
+        for (String table : new String[] {
+                "chat_messages", "coach_bookings", "coach_slots",
+                "group_class_bookings", "group_class_sessions", "idempotency_requests",
+                "inbody_records", "session_deduction_logs", "ai_health_plans" }) {
+            dropEmptyLegacyTable(table);
+        }
+    }
+
+    private void dropEmptyLegacyTable(String table) {
+        if (!tableExists(table)) {
+            return;
+        }
+        Integer rows = jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class);
+        if (rows == null || rows > 0) {
+            log.warn("{} 還有資料，不自動砍，請人工確認是否為改名前的舊資料", table);
+            return;
+        }
+        dropForeignKeysReferencing(table);
+        jdbc.execute("DROP TABLE " + table);
+        log.info("已移除命名統一單數後沒人清的空舊表 {}", table);
     }
 
     /** 以 sp_rename OBJECT 改名 FK 等具名約束；來源不存在就跳過 */

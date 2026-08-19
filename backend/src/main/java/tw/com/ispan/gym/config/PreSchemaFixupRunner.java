@@ -53,6 +53,17 @@ public class PreSchemaFixupRunner {
         };
     }
 
+    @Bean
+    InitializingBean orderPaymentIdSchemaFixup(DataSource dataSource) {
+        return () -> migrateOrderPaymentIdsToInt(new JdbcTemplate(dataSource));
+    }
+
+    @Bean
+    static EntityManagerFactoryDependsOnPostProcessor orderPaymentIdSchemaFixupDependsOn() {
+        return new EntityManagerFactoryDependsOnPostProcessor("orderPaymentIdSchemaFixup") {
+        };
+    }
+
     // === 購物車主鍵改型別（2026-08-17 定案：cart_item.id 由 bigint 改 int，
     // 欄名補實體前綴改為 cart_item_id，跟其他表的主鍵命名一致）===================
     // SQL Server 不允許直接 ALTER 一個 IDENTITY 欄位的型別，只能整張表重建；
@@ -68,6 +79,47 @@ public class PreSchemaFixupRunner {
         dropForeignKeysReferencing(jdbc, "cart_item");
         jdbc.execute("DROP TABLE cart_item");
         log.info("已移除舊 bigint id 的 cart_item 表，int cart_item_id 新表由 ddl-auto 重建（購物車為暫存資料，不遷移）");
+    }
+
+    // === 訂單／付款／報表子表主鍵改型別（2026-08-19 定案：orders、order_item、
+    // order_status_history、payment_transaction、payment_refund、payment_webhook，
+    // 以及 report_snapshot 的三張 cascade 子表 report_daily_total／report_breakdown／
+    // report_sales_item，id 由 bigint 改 int，跟其餘模組 member/employee/trainer/
+    // cart_item/report_snapshot 的慣例一致）=========================================
+    // 跟 cart_item 同樣的限制：SQL Server 不允許直接 ALTER 一個 IDENTITY 欄位的型別，
+    // 只能整張表重建。這批表不是暫存資料，但目前僅本機測試資料，直接砍表重建、
+    // 不遷移舊資料（已與使用者確認接受清空）。
+    //
+    // 這個叢集外面有 3 個表帶外鍵指進來，這些表本身不砍，只清掉會變孤兒的那幾列：
+    //   - member_subscription.order_id 是 NOT NULL，訂單沒了那幾筆本來就不可能存在，整列刪除
+    //   - member_course_quota.order_item_id 可為 NULL，只清空這個欄位
+    //   - inventory_log.ref_order_id 可為 NULL，同樣只清空欄位（目前沒有資料，防禦性處理）
+    private void migrateOrderPaymentIdsToInt(JdbcTemplate jdbc) {
+        if (!tableExists(jdbc, "orders") || !columnIsBigint(jdbc, "orders", "id")) {
+            return;
+        }
+        jdbc.execute("DELETE FROM member_subscription WHERE order_id IS NOT NULL");
+        jdbc.execute("UPDATE member_course_quota SET order_item_id = NULL WHERE order_item_id IS NOT NULL");
+        jdbc.execute("UPDATE inventory_log SET ref_order_id = NULL WHERE ref_order_id IS NOT NULL");
+
+        // 光清空孤兒資料不會改變欄位型別，這三個欄位本身也要從 bigint 改 int，
+        // 不然 Hibernate 等一下想在新表上補外鍵時會因為型別對不上而失敗（orders.id 已經是 int）。
+        // 不是 IDENTITY 欄位，可以直接 ALTER COLUMN，不用整欄重建。
+        jdbc.execute("ALTER TABLE member_subscription ALTER COLUMN order_id int NOT NULL");
+        jdbc.execute("ALTER TABLE member_course_quota ALTER COLUMN order_item_id int NULL");
+        jdbc.execute("ALTER TABLE inventory_log ALTER COLUMN ref_order_id int NULL");
+
+        for (String table : new String[] {
+                "order_status_history", "payment_refund", "payment_transaction",
+                "order_item", "orders", "payment_webhook",
+                "report_daily_total", "report_breakdown", "report_sales_item" }) {
+            if (!tableExists(jdbc, table)) {
+                continue;
+            }
+            dropForeignKeysReferencing(jdbc, table);
+            jdbc.execute("DROP TABLE " + table);
+        }
+        log.info("已移除訂單／付款／報表子表的舊 bigint id 表，int 新表由 ddl-auto 重建（本機測試資料，不遷移）");
     }
 
     private boolean tableExists(JdbcTemplate jdbc, String table) {

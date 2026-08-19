@@ -42,7 +42,7 @@ export const useCartStore = defineStore('cart', () => {
       await loadCart()
       return { success: true }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || '加入購物車失敗' }
+      return { success: false, message: err.message || '加入購物車失敗' }
     }
   }
 
@@ -52,7 +52,7 @@ export const useCartStore = defineStore('cart', () => {
       await loadCart()
       return { success: true }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || '修改數量失敗' }
+      return { success: false, message: err.message || '修改數量失敗' }
     }
   }
 
@@ -62,7 +62,7 @@ export const useCartStore = defineStore('cart', () => {
       await loadCart()
       return { success: true }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || '刪除品項失敗' }
+      return { success: false, message: err.message || '刪除品項失敗' }
     }
   }
 
@@ -73,7 +73,7 @@ export const useCartStore = defineStore('cart', () => {
       totalAmount.value = 0
       return { success: true }
     } catch (err) {
-      return { success: false, message: err.response?.data?.message || '清空購物車失敗' }
+      return { success: false, message: err.message || '清空購物車失敗' }
     }
   }
 

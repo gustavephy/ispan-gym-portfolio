@@ -53,6 +53,11 @@ const router = createRouter({
           component: () => import('@/views/admin/AdminGroupClassSessionView.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
+        {
+          path: 'admin/refunds',
+          component: () => import('@/views/admin/AdminRefundView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
       ],
     },
     // 具名路由：401 攔截器會導向這裡，並以 query.redirect 記住原本要去的頁面

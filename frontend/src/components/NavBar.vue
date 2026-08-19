@@ -40,6 +40,7 @@
       links: [
         { to: '/admin/group-courses', label: '團課主檔' },
         { to: '/admin/group-classes', label: '團課場次' },
+        { to: '/admin/refunds', label: '退款處理' },
       ],
     },
   ]
