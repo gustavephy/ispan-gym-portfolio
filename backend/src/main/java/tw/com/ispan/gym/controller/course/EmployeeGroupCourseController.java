@@ -23,7 +23,7 @@ import tw.com.ispan.gym.service.course.GroupCourseService;
 
 /**
  * 後台團課主檔管理。受 SecurityConfig 既有的 /api/employee/** → hasRole("EMPLOYEE")
- * 規則保護，這裡額外疊上 @PreAuthorize，跟 AdminGroupClassController（場次管理）的
+ * 規則保護，這裡額外疊上 @PreAuthorize，跟 EmployeeGroupClassController（場次管理）的
  * 慣例一致（雙層防護）。
  *
  * <p>權限訂在 EMPLOYEE 而非 ADMIN：團課主檔屬於日常課務維護，一般員工就該能處理。

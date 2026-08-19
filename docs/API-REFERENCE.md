@@ -25,7 +25,7 @@
 | 訂閱 | `/api/subscription-plans`、`/api/me/subscription` | [7](#7-訂閱) |
 | 教練時段／預約 | `/api/trainer`、`/api/member` | [8](#8-私教教練時段與預約) |
 | 教練檔案 | `/api/trainers`、`/api/employees/{id}/trainer` | [8.7](#87-教練檔案trainercontroller) |
-| 團課 | `/api/member/group-classes`、`/api/admin/group-classes` | [9](#9-團課) |
+| 團課 | `/api/member/group-classes`、`/api/employee/group-classes` | [9](#9-團課) |
 | 課程分類／團課主檔 | `/api/course-categories`、`/api/employee/group-courses` | [10](#10-課程分類)、[10.1](#101-團課主檔apiemployeegroup-courses-employee) |
 | 優惠券 | `/api/coupons`、`/api/employee/coupons` | [11](#11-優惠券) |
 | 營運報表 | `/api/admin/reports` | [12](#12-營運報表) |
@@ -801,13 +801,19 @@ Response `TrainerResponse`：
 
 > 取消團課報名**沒有 72 小時規則、也不需二次確認**。
 
-### 9.2 管理端（`/api/admin/group-classes`，🛡️ ADMIN）
+### 9.2 管理端（`/api/employee/group-classes`，🛡️ EMPLOYEE）
 
 | 方法 | 路徑 | 成功狀態 |
 |---|---|---|
-| POST | `/api/admin/group-classes` | **201** |
-| PUT | `/api/admin/group-classes/{id}` | 200 |
-| DELETE | `/api/admin/group-classes/{sessionId}` | 200 |
+| GET | `/api/employee/group-classes` | 200 |
+| POST | `/api/employee/group-classes` | **201** |
+| PUT | `/api/employee/group-classes/{id}` | 200 |
+| DELETE | `/api/employee/group-classes/{sessionId}` | 200 |
+
+> **權限為何是 EMPLOYEE 而非 ADMIN**：排課屬日常課務，一般員工即可處理，不宜比
+> 團課主檔（[§10.1](#101-團課主檔apiemployeegroup-courses-employee)，同為 EMPLOYEE）更嚴格。
+> 角色是疊加的（見 [§3](#3-角色與權限)），教練同時持有 `ROLE_EMPLOYEE`，因此教練也能排課。
+> 商品、訂單那類管理員專屬後台仍留在 `/api/admin/**`。
 
 - `CreateGroupClassSessionRequest`：`groupCourseId` `@NotNull`、`roomName` `@NotBlank`、`startAt`／`endAt`（`@NotNull` `@Future`）、`capacity`（選填，null 時取課程的 `maxCapacity`）
 - `UpdateGroupClassSessionRequest`：`roomName`、`startAt`、`endAt`、`capacity`（選填）、**`version` `@NotNull`**（樂觀鎖，須帶回讀取時拿到的值）；不含 `groupCourseId`，無法改綁課程
@@ -851,7 +857,7 @@ Response `TrainerResponse`：
 > **權限為何是 EMPLOYEE 而非 ADMIN**：團課主檔屬日常課務維護，一般員工即可處理。
 > 角色是疊加的（見 [§3](#3-角色與權限)），教練同時持有 `ROLE_EMPLOYEE`，因此教練也能管理團課主檔——
 > 課務本就在教練的工作範圍內。商品、訂單那類管理員專屬後台仍留在 `/api/admin/**`，不隨之放寬。
-> 團課**場次**（`/api/admin/group-classes`）也維持 ADMIN。
+> 團課**場次**（[§9.2](#92-管理端apiemployeegroup-classes-employee)）同樣是 EMPLOYEE。
 
 `GroupCourseRequest`：`trainerId`（必填）、`name`、`description`、`imageUrl`、`courseCategoryId`（選填）、
 `maxCapacity`、`isTrial`、`status`

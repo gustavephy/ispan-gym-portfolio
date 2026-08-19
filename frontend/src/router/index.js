@@ -52,7 +52,8 @@ const router = createRouter({
         {
           path: 'admin/group-classes',
           component: () => import('@/views/admin/AdminGroupClassSessionView.vue'),
-          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+          // 排課同屬日常課務（後端 /api/employee/group-classes 同此權限）
+          meta: { requiresAuth: true, requiresRole: 'EMPLOYEE' },
         },
         {
           path: 'health',
