@@ -114,6 +114,28 @@ public class GroupCourseService {
     }
 
     /**
+     * 重新上架已下架的團課主檔：把 status 改回 ACTIVE。與 deactivateCourse() 對稱，
+     * 已經是 ACTIVE 的課程可以重複呼叫（冪等，不會報錯），直接回傳現有資料即可。
+     *
+     * 刻意不檢查底下授課教練目前的狀態（是否離職／暫停接案）：createCourse() 本身
+     * 也沒有這層檢查，維持一致，避免同一個 Service 對「教練狀態」出現不同標準。
+     * 若之後要補這類防護，應該加在 GroupClassService#createSession()（建立場次時
+     * 檢查教練可用性），那才是真正會影響會員報名的風險點，不屬於這個方法的職責。
+     */
+    @Transactional
+    public GroupCourseResponse activateCourse(Integer id) {
+        GroupCourse groupCourse = groupCourseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("查無此課程主檔"));
+
+        if (groupCourse.getStatus() != CourseStatus.ACTIVE) {
+            groupCourse.setStatus(CourseStatus.ACTIVE);
+            groupCourse = groupCourseRepository.save(groupCourse);
+        }
+
+        return toResponse(groupCourse);
+    }
+
+    /**
      * 修改團課主檔。name、maxCapacity 為必填，全量覆蓋；description、imageUrl、isTrial、
      * courseCategoryId 允許不填，request 對應欄位為 null 時維持 Entity 現有值，不會被清空。
      * 不接受變更 trainerId／status：授課教練換人需另開課程，狀態只走既有的下架端點。

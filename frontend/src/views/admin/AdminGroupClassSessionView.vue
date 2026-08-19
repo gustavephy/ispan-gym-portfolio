@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { getAllCourses } from '@/api/adminGroupCourse.js'
+import { getActiveCourses } from '@/api/groupClass.js'
 import { getSessions, createSession, updateSession, cancelSession } from '@/api/adminGroupClass.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
@@ -12,6 +12,12 @@ const STATUS_MAP = {
   SCHEDULED: { label: '已排定', className: 'status-available' },
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
 }
+
+// 團課教室清單：目前只有這 4 間，對應現有 3 種團課類型（瑜珈/拳擊/重量訓練）
+// 加一間測試用教室。之後要新增教室，只需要在這個陣列加一筆，不用動後端或資料庫
+// ——roomName 在後端只是純字串欄位，沒有教室主檔表（見專案技術債討論，暫不建 Room
+// entity，避免期末專題過度設計）。
+const ROOM_OPTIONS = ['瑜珈教室', '拳擊教室', '團體重訓室', '測試用教室A']
 
 const courses = ref([])
 const coursesLoading = ref(true)
@@ -72,8 +78,10 @@ watch(
 )
 
 // 24 小時、每 10 分鐘一個選項，寫法比照 TrainerScheduleView.vue
-const TIME_OPTIONS = Array.from({ length: 24 * 6 }, (_, i) => {
-  const totalMinutes = i * 10
+// 只開放 10:00~22:00、每 10 分鐘一個選項（含 22:00 這個端點），對應健身房營業時間。
+// length 73 = 從 10:00 到 22:00 共 72 個 10 分鐘間隔 + 1（含頭尾兩端點）
+const TIME_OPTIONS = Array.from({ length: 73 }, (_, i) => {
+  const totalMinutes = 10 * 60 + i * 10
   const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0')
   const mm = String(totalMinutes % 60).padStart(2, '0')
   return `${hh}:${mm}`
@@ -127,8 +135,11 @@ function splitIsoDateTime(iso) {
 async function fetchCourses() {
   coursesLoading.value = true
   try {
-    const res = await getAllCourses()
-    courses.value = res.data
+    // size 給大一點：這是下拉選單用途，不是分頁列表，一次抓齊所有上架中課程即可。
+    // 目前後端這支查詢單頁上限是 100（GroupCourseService 的 safeSize 防呆），
+    // 正常情況下健身房的上架課程數不會超過這個量級；真的超過再考慮做成可搜尋的下拉選單。
+    const res = await getActiveCourses({ size: 100 })
+    courses.value = res.data.items
   } finally {
     coursesLoading.value = false
   }
@@ -185,6 +196,12 @@ async function handleCreate() {
     return
   }
 
+  const durationMinutes = (new Date(endAt) - new Date(startAt)) / 60000
+  if (durationMinutes < 60 || durationMinutes > 90) {
+    formError.value = '場次長度需介於 60 分鐘至 90 分鐘之間'
+    return
+  }
+
   submitting.value = true
   try {
     await createSession({
@@ -223,8 +240,8 @@ async function submitCancelSession(sessionId, acknowledgeExistingBooking = false
   try {
     await cancelSession(sessionId, acknowledgeExistingBooking)
   } catch (err) {
-    const { code, message } = err.response?.data || {}
-    if (code === 'CONFIRMATION_REQUIRED' && !acknowledgeExistingBooking && window.confirm(message)) {
+    const apiError = err
+    if (apiError.needsConfirmation && !acknowledgeExistingBooking && window.confirm(apiError.message)) {
       await submitCancelSession(sessionId, true)
       return
     }
@@ -293,6 +310,12 @@ async function handleEditSubmit() {
     return
   }
 
+  const durationMinutes = (new Date(endAt) - new Date(startAt)) / 60000
+  if (durationMinutes < 60 || durationMinutes > 90) {
+    editFormError.value = '場次長度需介於 60 分鐘至 90 分鐘之間'
+    return
+  }
+
   editSubmitting.value = true
   try {
     await updateSession(editingSessionId.value, {
@@ -349,7 +372,10 @@ onUnmounted(() => {
       </div>
       <div class="field">
         <label for="sessionRoom">教室</label>
-        <input id="sessionRoom" v-model="form.roomName" type="text" required />
+        <select id="sessionRoom" v-model="form.roomName" required>
+          <option value="" disabled>請選擇</option>
+          <option v-for="room in ROOM_OPTIONS" :key="room" :value="room">{{ room }}</option>
+        </select>
       </div>
       <div class="field">
         <label for="sessionStartDate">開始日期</label>
@@ -452,7 +478,10 @@ onUnmounted(() => {
           <div class="modal-fields">
             <div class="field field-wide">
               <label for="editSessionRoom">教室</label>
-              <input id="editSessionRoom" v-model="editForm.roomName" type="text" required />
+              <select id="editSessionRoom" v-model="editForm.roomName" required>
+                <option value="" disabled>請選擇</option>
+                <option v-for="room in ROOM_OPTIONS" :key="room" :value="room">{{ room }}</option>
+              </select>
             </div>
             <div class="field-row">
               <div class="field">
