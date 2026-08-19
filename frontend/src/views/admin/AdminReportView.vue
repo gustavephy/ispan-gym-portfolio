@@ -6,7 +6,12 @@ import * as echarts from 'echarts/core'
 import { LineChart, BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import { getLiveStats, getReports, getReportDetail } from '@/api/adminReport.js'
+import {
+  getLiveStats,
+  getReports,
+  getReportDetail,
+  downloadReportPdf,
+} from '@/api/adminReport.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 
@@ -256,6 +261,31 @@ async function fetchDetail(reportId) {
 
 watch(selectedReportId, (id) => fetchDetail(id))
 
+// PDF 由後端 ReportPdfService 產生（內嵌中文字型），這裡只負責把回傳的 blob
+// 轉成下載連結；寫法比照 AiPlanPanel.vue 的 onDownloadPdf
+const downloadingPdf = ref(false)
+
+async function onDownloadPdf() {
+  const report = detail.value
+  if (!report) return
+  downloadingPdf.value = true
+  try {
+    const { data } = await downloadReportPdf(report.id)
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `operation-report-${report.id}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    notifyApiError(e)
+  } finally {
+    downloadingPdf.value = false
+  }
+}
+
 function applyFilter() {
   fetchStats()
 }
@@ -334,15 +364,26 @@ onBeforeUnmount(() => {
     <section class="card chart-card">
       <header class="chart-card__header">
         <h2 class="chart-card__title">每日營收趨勢</h2>
-        <label class="report-picker">
-          <span class="filter__label">報表快照</span>
-          <select v-model="selectedReportId" class="filter__input">
-            <option v-for="r in reports" :key="r.id" :value="r.id">
-              {{ REPORT_TYPE_LABELS[r.reportType] ?? r.reportType }}｜{{ formatDate(r.periodStart) }} –
-              {{ formatDate(r.periodEnd) }}
-            </option>
-          </select>
-        </label>
+        <div class="report-picker">
+          <label class="report-picker__field">
+            <span class="filter__label">報表快照</span>
+            <select v-model="selectedReportId" class="filter__input">
+              <option v-for="r in reports" :key="r.id" :value="r.id">
+                {{ REPORT_TYPE_LABELS[r.reportType] ?? r.reportType }}｜{{ formatDate(r.periodStart) }} –
+                {{ formatDate(r.periodEnd) }}
+              </option>
+            </select>
+          </label>
+          <!-- 下載的是所選快照的完整報表（含排行、分佈、每日營收），不是畫面上的圖 -->
+          <button
+            type="button"
+            class="btn"
+            :disabled="!detail || downloadingPdf"
+            @click="onDownloadPdf"
+          >
+            {{ downloadingPdf ? '產生中…' : '下載 PDF' }}
+          </button>
+        </div>
       </header>
 
       <p v-if="detail?.staleAt" class="stale-notice">
@@ -526,8 +567,14 @@ onBeforeUnmount(() => {
 .report-picker {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
   margin-left: auto;
+}
+
+.report-picker__field {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .chart {
