@@ -248,10 +248,17 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-md);
 }
 
+/*
+ * 高度固定住，不隨訊息數量長高：只有 min-height 的話 grid 會被內容撐開，
+ * 訊息一多整頁就越拉越長，輸入框被推到視窗外。改用 height 上限搭配
+ * 內層 .message-list 的 overflow-y，讓捲動發生在訊息區內部。
+ * 用 vh 而非固定 px，小螢幕不會超出視窗、大螢幕也不浪費空間。
+ */
 .chat-shell {
   display: grid;
   grid-template-columns: 280px 1fr;
-  min-height: 560px;
+  height: clamp(560px, 72vh, 820px);
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -260,6 +267,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  /* grid 項目預設 min-height:auto，不加這行會被內容撐開而不捲動 */
+  min-height: 0;
 }
 
 .conversation-list__header {
@@ -332,6 +341,8 @@ onBeforeUnmount(() => {
 .conversation-thread {
   display: flex;
   flex-direction: column;
+  /* 同上：讓內層 .message-list 的 flex:1 + overflow 能真正生效 */
+  min-height: 0;
 }
 
 .conversation-thread__header {
@@ -352,6 +363,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 0.6rem;
   padding: 1rem 1.25rem;
+  min-height: 0;
 }
 
 .message-row {
