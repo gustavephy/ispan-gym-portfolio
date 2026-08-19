@@ -51,13 +51,19 @@ onMounted(() => {
       show('請重新登入', e.message)
       // 攔截器已清除 token，這裡只負責導向。用 router 而非 window.location，
       // 避免整頁重載並保留原本要去的頁面以便登入後導回。
-      router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
+      //
+      // 用 replace 而非 push：被 401 擋下的那頁不該留在歷史裡。
+      // 若用 push，使用者在登入頁按「上一頁」會回到那頁、再次 401、
+      // 又被導回登入頁，形成回不去的迴圈。
+      router.replace({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
         .catch(() => {})
     },
 
     onSubscriptionRequired: (e) => {
       show('需要訂閱', e.message, 'warning')
-      router.push('/subscription').catch(() => {})
+      // 同上：被「需要訂閱」擋下的頁面也不該留在歷史裡，
+      // 否則從訂閱頁按上一頁會又被彈回來。
+      router.replace('/subscription').catch(() => {})
     },
 
     // 任意組件經 notify() 發出的一般通知（成功／資訊等），沿用同一條提示條

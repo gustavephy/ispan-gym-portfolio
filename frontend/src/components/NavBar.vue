@@ -1,19 +1,100 @@
 <script setup>
-  import { computed } from 'vue'
+  import { computed, onMounted, ref, watch } from 'vue'
   import { RouterLink, useRoute, useRouter } from 'vue-router'
   import { useAuthStore } from '@/stores/auth.js'
+  import { useCartStore } from '@/stores/cart.js'
 
-  const navLinks = [
-    { to: '/', label: '首頁' },
-    { to: '/courses', label: '課程方案' },
-    { to: '/reservation', label: '預約課程' },
-    { to: '/products', label: '補給商城' },
-    { to: '/subscription', label: '會籍方案' },
+  /**
+   * 工作區（workspace）：同一帳號可同時具會員、教練、管理者身分（見 TestDataSeedRunner
+   * 的 emp-trainer 帳號），但同一時間通常只在做一件事。全部連結平鋪會讓教練看到 8 個
+   * 與工作無關的項目，改成依工作區分組、一次只顯示一組。
+   *
+   * requires 為進入該工作區所需的角色；null 代表任何人（含未登入）皆可。
+   * 這只是選單的可見性，不是安全機制——把關在後端 @PreAuthorize 與路由守衛。
+   */
+  const WORKSPACES = [
+    {
+      key: 'member',
+      label: '會員',
+      requires: null,
+      links: [
+        { to: '/', label: '首頁' },
+        { to: '/courses', label: '課程方案' },
+        { to: '/reservation', label: '預約課程' },
+        { to: '/group-classes', label: '團體課程' },
+        { to: '/products', label: '補給商城' },
+        { to: '/subscription', label: '會籍方案' },
+        { to: '/orders', label: '我的訂單', requires: 'MEMBER' },
+      ],
+    },
+    {
+      key: 'trainer',
+      label: '教練',
+      requires: 'TRAINER',
+      links: [{ to: '/trainer/schedules', label: '教練排班' }],
+    },
+    {
+      key: 'admin',
+      label: '管理',
+      requires: 'ADMIN',
+      links: [
+        { to: '/admin/group-courses', label: '團課主檔' },
+        { to: '/admin/group-classes', label: '團課場次' },
+      ],
+    },
   ]
 
   const auth = useAuthStore()
   const route = useRoute()
   const router = useRouter()
+
+  // 購物車數量徽章：進站就載入一次，之後由 store 自己在加入／移除時更新
+  const cart = useCartStore()
+  onMounted(() => cart.loadCart())
+
+  /** 目前身分進得去的工作區；只有一個時不顯示切換器 */
+  const availableWorkspaces = computed(() =>
+    WORKSPACES.filter((w) => !w.requires || auth.roles.includes(w.requires)),
+  )
+
+  /**
+   * 目前工作區：以「網址落在哪個工作區」為準，而不是另外存一份選中狀態——
+   * 使用者從外部連結或重新整理進來時，選單才不會停在別的工作區。
+   */
+  const activeKey = ref('member')
+  const currentWorkspace = computed(
+    () => availableWorkspaces.value.find((w) => w.key === activeKey.value) ?? availableWorkspaces.value[0],
+  )
+
+  function workspaceOf(path) {
+    const hit = WORKSPACES.find((w) => w.links.some((l) => l.to !== '/' && path.startsWith(l.to)))
+    return hit?.key ?? 'member'
+  }
+
+  watch(
+    () => route.path,
+    (path) => {
+      activeKey.value = workspaceOf(path)
+    },
+    { immediate: true },
+  )
+
+  // 登出後角色歸零，若當時停在教練／管理工作區會變成空選單，拉回會員工作區
+  watch(
+    () => auth.roles,
+    () => {
+      if (!availableWorkspaces.value.some((w) => w.key === activeKey.value)) {
+        activeKey.value = 'member'
+      }
+    },
+    { deep: true },
+  )
+
+  const visibleLinks = computed(() =>
+    (currentWorkspace.value?.links ?? []).filter(
+      (link) => !link.requires || auth.roles.includes(link.requires),
+    ),
+  )
 
   // roles 是疊加式清單（如 ["MEMBER","EMPLOYEE","ADMIN"]），全列出來很吵——
   // 徽章只顯示化簡後的「對外身分」：ADMIN/TRAINER 蘊含 EMPLOYEE（基底角色）故不重複列；
@@ -49,35 +130,64 @@
       <span class="brand-sub">健身房管理系統</span>
     </RouterLink>
 
+    <!-- 兩個以上工作區才顯示切換器；只有會員身分的人看不到多餘的 UI -->
+    <div v-if="availableWorkspaces.length > 1" class="ws-switch" role="tablist" aria-label="工作區">
+      <button
+        v-for="ws in availableWorkspaces"
+        :key="ws.key"
+        type="button"
+        role="tab"
+        class="ws-tab"
+        :class="{ 'ws-tab--active': ws.key === currentWorkspace?.key }"
+        :aria-selected="ws.key === currentWorkspace?.key"
+        @click="activeKey = ws.key"
+      >
+        {{ ws.label }}
+      </button>
+    </div>
+
     <nav class="nav-links">
       <RouterLink
-        v-for="link in navLinks"
+        v-for="link in visibleLinks"
         :key="link.to"
         :to="link.to"
         class="nav-link"
       >
         {{ link.label }}
       </RouterLink>
+      <!-- 購物車只在會員工作區出現；要掛數量徽章，無法塞進上面的 v-for -->
+      <RouterLink
+        v-if="currentWorkspace?.key === 'member' && auth.isMember"
+        to="/cart"
+        class="nav-link cart-link"
+      >
+        購物車
+        <span v-if="cart.itemCount > 0" class="cart-badge">{{ cart.itemCount }}</span>
+      </RouterLink>
     </nav>
 
     <div class="nav-auth">
-      <template v-if="auth.isLoggedIn">
+      <!-- mode="out-in"：登入／登出兩種狀態高度不同，同時存在會互相推擠，
+           改成舊的先退場、新的才進場 -->
+      <Transition name="auth" mode="out-in">
+      <div v-if="auth.isLoggedIn" key="in" class="nav-auth__panel">
         <span class="nav-auth__email" :title="auth.email">{{ auth.email }}</span>
         <ul class="nav-auth__roles" aria-label="目前身分" :title="`完整身分：${fullRoleList}`">
           <li v-for="label in roleLabels" :key="label" class="nav-auth__role">{{ label }}</li>
         </ul>
         <button type="button" class="nav-auth__button" @click="onLogout">登出</button>
-      </template>
+      </div>
       <RouterLink
         v-else
+        key="out"
         class="nav-auth__button nav-auth__button--primary"
         :to="{ name: 'login', query: route.fullPath !== '/' ? { redirect: route.fullPath } : {} }"
       >
         登入
       </RouterLink>
+      </Transition>
     </div>
 
-    <div class="nav-footer">© 2026 威力健身房</div>
   </aside>
 </template>
 
@@ -116,6 +226,35 @@
     color: var(--text-muted);
   }
 
+  .ws-switch {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    margin-bottom: 1rem;
+    border-radius: var(--radius-sm);
+    background: #e6d8c6;
+  }
+  .ws-tab {
+    flex: 1;
+    padding: 0.4rem 0.2rem;
+    border: none;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .ws-tab:hover {
+    color: var(--primary-dark);
+  }
+  .ws-tab--active {
+    background: #f2e8dc;
+    color: var(--primary-dark);
+    box-shadow: 0 1px 3px rgba(60, 48, 43, 0.15);
+  }
+
   .nav-links {
     display: flex;
     flex-direction: column;
@@ -134,17 +273,58 @@
     background: #e6d8c6;
     color: var(--primary-dark);
   }
+  .cart-link {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .cart-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #e03131;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
   .nav-link.router-link-exact-active {
     background: var(--accent);
     color: #fff;
     font-weight: 700;
   }
 
+  /* nav-links 佔滿剩餘空間把這塊推到底；原本的 margin-bottom 是為了跟版權字隔開，
+     版權字移除後不再需要，留著只會讓登入區浮在離底部一段距離的地方 */
+  /* Transition 內只能有一個根節點，已登入的三個元素包成 panel */
+  .nav-auth__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* 登入／登出切換：淡入淡出＋輕微位移，時間短到不拖慢操作感 */
+  .auth-enter-active,
+  .auth-leave-active {
+    transition: opacity 0.22s ease, transform 0.22s ease;
+  }
+  .auth-enter-from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  .auth-leave-to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
   .nav-auth {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    margin-bottom: 1rem;
   }
   .nav-auth__email {
     font-size: 0.78rem;
@@ -198,11 +378,6 @@
     color: #fff;
   }
 
-  .nav-footer {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    text-align: center;
-  }
 
   @media (max-width: 900px) {
     .navbar {
@@ -252,6 +427,5 @@
       font-size: 0.82rem;
       white-space: nowrap;
     }
-    .nav-footer { display: none; }
   }
 </style>

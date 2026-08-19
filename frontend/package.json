@@ -10,6 +10,10 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.21",
+    "@fullcalendar/daygrid": "^6.1.21",
+    "@fullcalendar/timegrid": "^6.1.21",
+    "@fullcalendar/vue3": "^6.1.21",
     "axios": "^1.19.0",
     "pinia": "^4.0.2",
     "vue": "^3.5.40",
