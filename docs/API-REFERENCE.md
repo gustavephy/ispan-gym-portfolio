@@ -4,7 +4,7 @@
 >
 > 標記說明：🔓 免登入｜🔒 需登入｜👤 MEMBER｜🧑‍💼 EMPLOYEE｜🛡️ ADMIN｜🏋️ TRAINER
 >
-> 全文共 26 支 controller、約 100 個端點，另有 2 條 WebSocket 訊息目的地。
+> 全文共 28 支 controller、約 108 個端點，另有 2 條 WebSocket 訊息目的地。
 
 ---
 
@@ -18,6 +18,8 @@
 | 員工註冊／審核 | `/api/employees` | [2.4](#24-employeeregistercontroller)、[2.5](#25-employeereviewcontroller) |
 | 會員資料（自助） | `/api/member/profile` | [2.6](#26-memberprofilecontrollerapimemberprofile) |
 | 會員管理（後台） | `/api/admin/members` | [2.7](#27-adminmembercontrollerapiadminmembers-admin) |
+| 員工資料（自助） | `/api/employee/profile` | [2.8](#28-employeeprofilecontrollerapiemployeeprofile) |
+| 員工管理（後台） | `/api/admin/employees` | [2.9](#29-adminemployeecontrollerapiadminemployees-admin) |
 | 商品／分類 | `/api/products`、`/api/product-categories` | [3](#3-商品) |
 | 購物車 | `/api/cart` | [4](#4-購物車) |
 | 訂單 | `/api/orders`、`/api/admin/orders` | [5](#5-訂單) |
@@ -406,6 +408,97 @@ Email 或密碼錯誤／此帳號沒有可重新申請的員工紀錄／此員�
 > `PENDING` 兩個方向都擋：該狀態要靠會員自己點驗證信轉為 `ACTIVE`，管理者不代為跳過。
 
 主要錯誤：`400 INVALID_REQUEST` 頁碼不可小於 0／每頁筆數必須介於 1 到 100；`404` 查無此會員
+
+---
+
+### 2.8 EmployeeProfileController（`/api/employee/profile`）
+
+不動既有的員工申請（2.4）、同儕審核（2.5）、拒絕後重新申請流程。
+
+| 方法 | 路徑 | 權限 | 成功狀態 | 說明 |
+|---|---|---|---|---|
+| GET | `/api/employee/profile` | 🧑‍💼 EMPLOYEE | 200 | 查自己的員工資料 |
+| PUT | `/api/employee/profile` | 🧑‍💼 EMPLOYEE | 200 | 修改自己的電話 |
+
+> GET／PUT 都掛 `hasRole('EMPLOYEE')`——跟 `MemberProfileController` 的 GET 只要求已登入不同，
+> 是刻意的：若只要求已登入，同一帳號若還有其他啟用中身分（例如同時是 `ACTIVE` 會員），
+> `INACTIVE` 的員工身分仍會被看到並讀出資料。用 `hasRole('EMPLOYEE')` 才能把員工身分本身
+> 是否 `ACTIVE` 的判斷跟同帳號其他身分脫鉤——`INACTIVE` 員工完全看不到、也改不了自己的資料。
+
+`EmployeeProfileUpdateRequest`：`phone`（`@NotBlank`，≤20，無格式限制，比照 `EmployeeRegisterRequest`）
+
+> 姓名屬正式人事資料，本人不可自行修改，只能由 ADMIN 透過 2.9 代改。
+
+`EmployeeProfileResponse`：`employeeId`、`email`（來自 account）、`firstName`、`lastName`、`phone`、
+`role`、`status`、`hireDate`、`isTrainer`、`createdAt`（無 `updatedAt`，比照 `MemberProfileResponse`）
+
+主要錯誤：`403 FORBIDDEN_ACCESS` 此帳號沒有可用的員工資料（無 Employee、已軟刪除，或非 `ACTIVE`）
+
+> **實作重點**：GET 用 `requireCurrentEmployeeId()`（`hasRole('EMPLOYEE')` 已在安全層保證
+> `ACTIVE`，GET 沒有後續鎖定步驟）；PUT 用 `requireCurrentUserId()`（只回傳 accountId，不在
+> Controller 層載入 Employee entity），Service 內以 `findByAccountIdForUpdate()` 一次鎖定——
+> 理由同 `MemberProfileController`，避免 identity map 讓鎖形同白鎖。
+
+---
+
+### 2.9 AdminEmployeeController（`/api/admin/employees`，🛡️ ADMIN）
+
+| 方法 | 路徑 | 成功狀態 | 說明 |
+|---|---|---|---|
+| GET | `/api/admin/employees` | 200 | 員工列表（分頁） |
+| GET | `/api/admin/employees/{employeeId}` | 200 | 單筆詳細 |
+| PUT | `/api/admin/employees/{employeeId}` | 200 | 代改姓名／電話／到職日 |
+| POST | `/api/admin/employees/{employeeId}/role` | 200 | 角色調整（`EMPLOYEE`⇄`ADMIN`） |
+| POST | `/api/admin/employees/{employeeId}/suspend` | 200 | 停用 |
+| POST | `/api/admin/employees/{employeeId}/activate` | 200 | 恢復 |
+
+**列表查詢參數**：`keyword`（不分大小寫比對姓名／手機／登入 email）、`status`、`role`（皆不傳＝全部）、
+`page`（預設 0）、`size`（預設 10，**上限 100**）、`sort`（`id`預設／`name`／`hireDate`／`createdAt`，
+白名單外靜默回退 `id`）、`direction`（`asc`／`desc`，僅 `desc` 生效，其餘回退 `asc`）
+
+> 列表以 `JOIN FETCH` 帶出 account，避免映射時逐筆 lazy load 造成 N+1；一律排除軟刪除的員工。
+> 排序皆附加 `id ASC` 當穩定 tiebreaker（主排序本身就是 `id` 時例外，不重複附加）。
+
+`AdminEmployeeUpdateRequest`：`firstName`／`lastName`（`@NotBlank`，≤50）、`phone`（`@NotBlank`，≤20）、
+`hireDate`（`@NotNull`）——PUT 為完整覆蓋語意，四欄皆必填，不含 `role`／`status`。
+
+`AdminEmployeeRoleUpdateRequest`：`role`（`@NotNull`，`EmployeeRole`）
+
+> **Trainer 姓名快照同步（2026-08-19 補丁）**：PUT 修改姓名時，若該員工有 Trainer 資料列
+> （不論 `ACTIVE`／`UNAVAILABLE`／已軟刪除），同一交易內一併同步 `Trainer.firstName`／`lastName`。
+> 這兩欄是 `Trainer` 建立時自 Employee 複製的快照（`SchemaFixupRunner.addTrainerProfileColumns()`）。
+> `SchemaFixupRunner` 確實有 `fixReversedTestAccountNames()` 會在每次應用**啟動**時把所有不同步的
+> Trainer 姓名重新對齊 Employee，但只在重啟當下跑一次；正式修改（本端點）到下次部署或重啟之間，
+> 兩邊姓名仍會不一致，因此這裡的即時同步仍必要，不是被那個機制取代。
+> 不同步 `Trainer.email`——Account email 修改不在本階段範圍內。
+
+**狀態轉換規則**：
+
+| 動作 | 目前狀態 | 結果 |
+|---|---|---|
+| suspend | `ACTIVE`（無有效 Trainer、非最後一位有效 ADMIN） | → `INACTIVE` |
+| suspend | `ACTIVE` 但具有效 Trainer 身分 | `409` 此員工仍具有效教練身分，須待 Trainer 管理階段釋出教練身分後才能停用 |
+| suspend | `ACTIVE` 但是最後一位有效 ADMIN | `409` 必須至少保留一位有效管理員，無法停用最後一位 |
+| suspend | `INACTIVE` | `409` 此員工已是停用狀態 |
+| suspend | `PENDING_APPROVAL` | `409` 此員工尚未通過審核，無法停用 |
+| suspend | `REJECTED` | `409` 此員工申請已被拒絕，無法停用 |
+| activate | `INACTIVE` | → `ACTIVE` |
+| activate | `ACTIVE` | `409` 此員工已是啟用狀態 |
+| activate | `PENDING_APPROVAL` | `409` 此員工尚未通過審核，請由審核流程處理 |
+| activate | `REJECTED` | `409` 此員工申請已被拒絕，請走重新申請流程 |
+| role→相同角色 | 任何狀態 | `409` 此員工已經是指定角色 |
+| role→任何值 | 非 `ACTIVE` 或已軟刪除 | `409` 此員工目前不是在職狀態，無法調整角色 |
+| role→`EMPLOYEE`（降級） | `ACTIVE` `ADMIN`，是最後一位有效 ADMIN | `409` 必須至少保留一位有效管理員，無法降級最後一位 |
+
+> **有效 Trainer**＝`trainer.deletedAt IS NULL`（`ACTIVE`／`UNAVAILABLE` 皆算），已軟刪除不算。
+> **有效 ADMIN**＝`role=ADMIN && status=ACTIVE && deletedAt=null`。判定與寫入皆在悲觀鎖下完成：
+> 會減少有效 ADMIN 數量的操作（降級、停用）一律先鎖定整組有效 ADMIN（依 `employeeId ASC`），
+> 避免兩個併發請求各自用鎖定前讀到的數量通過檢查、一起把系統的 ADMIN 降到零。
+> **允許 ADMIN 對自己執行降級／停用**，只要通過上述數量檢查——不額外禁止自我操作。
+> 「第一位 ADMIN 怎麼生」由既有的 `AdminSeedRunner`（預設關閉）處理，這裡的角色調整
+> 端點是後續新增 ADMIN 的一般路徑。
+
+主要錯誤：`400 INVALID_REQUEST` 頁碼不可小於 0／每頁筆數必須介於 1 到 100；`404` 查無此員工（含已軟刪除）；`409` 見上表
 
 ---
 

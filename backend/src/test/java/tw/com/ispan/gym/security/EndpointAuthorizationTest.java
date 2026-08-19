@@ -42,6 +42,8 @@ import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
 import tw.com.ispan.gym.service.coach.GroupClassService;
 import tw.com.ispan.gym.service.coupon.EmployeeCouponService;
+import tw.com.ispan.gym.service.employee.AdminEmployeeService;
+import tw.com.ispan.gym.service.employee.EmployeeProfileService;
 import tw.com.ispan.gym.service.employee.EmployeeReviewService;
 import tw.com.ispan.gym.service.order.OrderQueryService;
 import tw.com.ispan.gym.service.order.OrderService;
@@ -93,6 +95,8 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.coach.CoachSlotController.class,
         tw.com.ispan.gym.controller.coach.GroupClassController.class,
         tw.com.ispan.gym.controller.employee.EmployeeReviewController.class,
+        tw.com.ispan.gym.controller.employee.AdminEmployeeController.class,
+        tw.com.ispan.gym.controller.employee.EmployeeProfileController.class,
         tw.com.ispan.gym.controller.coupon.EmployeeCouponController.class,
         tw.com.ispan.gym.controller.member.AdminMemberController.class,
         tw.com.ispan.gym.controller.member.MemberProfileController.class,
@@ -144,6 +148,12 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary EmployeeReviewService employeeReviewService() {
             return Mockito.mock(EmployeeReviewService.class);
+        }
+        @Bean @Primary AdminEmployeeService adminEmployeeService() {
+            return Mockito.mock(AdminEmployeeService.class);
+        }
+        @Bean @Primary EmployeeProfileService employeeProfileService() {
+            return Mockito.mock(EmployeeProfileService.class);
         }
         @Bean @Primary MemberProfileService memberProfileService() {
             return Mockito.mock(MemberProfileService.class);
@@ -286,6 +296,48 @@ class EndpointAuthorizationTest {
         return jwtUtil.generateToken(account);
     }
 
+    /**
+     * 純 INACTIVE 員工，帳號沒有其他啟用中身分：AccountAuthorityResolver 回空權限清單，
+     * JwtAuthFilter 會直接當匿名處理，完全不寫入 SecurityContext——這個帳號打
+     * /api/employee/profile 是 401，不是方法層級的 403，跟 suspendedMemberToken() 是同一種情境。
+     */
+    private String inactiveEmployeeToken() {
+        Account account = account(7, "inactive-employee@example.com", AccountType.EMPLOYEE);
+        Employee employee = new Employee();
+        employee.setId(77);
+        employee.setAccount(account);
+        employee.setRole(EmployeeRole.EMPLOYEE);
+        employee.setStatus(EmployeeStatus.INACTIVE);
+        Mockito.when(employees.findByAccountId(7)).thenReturn(Optional.of(employee));
+        return jwtUtil.generateToken(account);
+    }
+
+    /**
+     * 同一帳號兼具 ACTIVE 會員與 INACTIVE 員工：會員身分本身就讓 AccountAuthorityResolver
+     * 回傳非空權限清單（ROLE_MEMBER），帳號因此能通過 JwtAuthFilter 的認證關卡，不會被當成
+     * 匿名；但員工身分是 INACTIVE，拿不到 ROLE_EMPLOYEE，員工自助端點仍應被方法層級的
+     * hasRole('EMPLOYEE') 擋下——這正是 EmployeeProfileController 選 hasRole('EMPLOYEE') 而不是
+     * 比照 Member 用 .authenticated() 的理由：只要求已登入會讓這種雙身分帳號繞過 INACTIVE 限制。
+     */
+    private String activeMemberWithInactiveEmployeeToken() {
+        Account account = account(8, "dual-inactive-employee@example.com", AccountType.MEMBER, AccountType.EMPLOYEE);
+
+        Member member = new Member();
+        member.setId(88);
+        member.setAccount(account);
+        member.setStatus(UserStatus.ACTIVE);
+        Mockito.when(members.findByAccountId(8)).thenReturn(Optional.of(member));
+
+        Employee employee = new Employee();
+        employee.setId(288);
+        employee.setAccount(account);
+        employee.setRole(EmployeeRole.EMPLOYEE);
+        employee.setStatus(EmployeeStatus.INACTIVE);
+        Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
+
+        return jwtUtil.generateToken(account);
+    }
+
     /** 教練＝有 trainer 資料列的員工（身分由 trainer 表決定，與 role 無關） */
     private String trainerToken() {
         Account account = account(4, "trainer@example.com", AccountType.EMPLOYEE);
@@ -329,7 +381,9 @@ class EndpointAuthorizationTest {
               "bio": "自我介紹",
               "firstName": "小美",
               "lastName": "王",
-              "phone": "0912345678"
+              "phone": "0912345678",
+              "hireDate": "2020-01-01",
+              "role": "ADMIN"
             }
             """;
 
@@ -555,6 +609,84 @@ class EndpointAuthorizationTest {
         expectForbidden(post("/api/admin/members/1/activate"), memberToken());
         expectAuthorized(post("/api/admin/members/1/suspend"), adminToken());
         expectAuthorized(post("/api/admin/members/1/activate"), adminToken());
+    }
+
+    // === ADMIN：員工管理（僅驗 URL 層，方法層 @PreAuthorize 由 AdminEmployeeMethodSecurityTest 負責）====
+    //
+    // /api/admin/** 在正式 SecurityConfig 有 URL matcher hasRole("ADMIN")，filter 階段就會
+    // 攔截非 ADMIN，AdminEmployeeController 方法上的 @PreAuthorize 永遠執行不到——這支測試因此
+    // 只能證明「URL 層規則生效」，不能宣稱已驗證方法層 @PreAuthorize 本身是否正確（跟
+    // 會員管理那組測試的分工說明相同）。不動既有的員工申請、同儕審核、拒絕後重新申請測試。
+
+    @Test
+    void 員工列表僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/employees"));
+        expectForbidden(get("/api/admin/employees"), memberToken());
+        expectForbidden(get("/api/admin/employees"), employeeToken());
+        expectAuthorized(get("/api/admin/employees"), adminToken());
+    }
+
+    @Test
+    void 單一員工查詢與代改僅限管理者() throws Exception {
+        expectForbidden(get("/api/admin/employees/1"), employeeToken());
+        expectForbidden(put("/api/admin/employees/1"), employeeToken());
+        expectAuthorized(get("/api/admin/employees/1"), adminToken());
+        expectAuthorized(put("/api/admin/employees/1"), adminToken());
+    }
+
+    @Test
+    void 角色調整僅限管理者() throws Exception {
+        expectForbidden(post("/api/admin/employees/1/role"), employeeToken());
+        expectAuthorized(post("/api/admin/employees/1/role"), adminToken());
+    }
+
+    @Test
+    void 停用與恢復僅限管理者_員工版() throws Exception {
+        expectForbidden(post("/api/admin/employees/1/suspend"), employeeToken());
+        expectForbidden(post("/api/admin/employees/1/activate"), memberToken());
+        expectAuthorized(post("/api/admin/employees/1/suspend"), adminToken());
+        expectAuthorized(post("/api/admin/employees/1/activate"), adminToken());
+    }
+
+    // === EMPLOYEE：自助查詢／修改個人資料 ==========================================
+
+    @Test
+    void 員工查詢與修改自己資料需在職員工身分() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/employee/profile"));
+        expectForbidden(get("/api/employee/profile"), memberToken());
+        expectAuthorized(get("/api/employee/profile"), employeeToken());
+
+        expectUnauthorizedWhenAnonymous(put("/api/employee/profile"));
+        expectForbidden(put("/api/employee/profile"), memberToken());
+        expectAuthorized(put("/api/employee/profile"), employeeToken());
+    }
+
+    /**
+     * 純 INACTIVE 員工（帳號沒有其他啟用中身分）完全打不進安全層——不是方法層級的 403，
+     * 是 JwtAuthFilter 把空權限清單的帳號當匿名處理，跟沒帶 token 是同一種 401。
+     * 這是這次規格刻意的設計：INACTIVE 員工停用後連查自己的資料都看不到。
+     */
+    @Test
+    void 純INACTIVE員工完全打不進安全層() throws Exception {
+        mockMvc.perform(get("/api/employee/profile")
+                        .header("Authorization", "Bearer " + inactiveEmployeeToken()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/employee/profile")
+                        .header("Authorization", "Bearer " + inactiveEmployeeToken())
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * 同帳號若還有 ACTIVE 會員身分，該身分本身就讓帳號能通過認證關卡，與員工是否 INACTIVE
+     * 無關——GET／PUT 因此都能通過安全層的認證，但仍因為員工身分本身缺少 ROLE_EMPLOYEE
+     * 被方法層級擋下 403。這正是驗證 hasRole('EMPLOYEE') 而非 .authenticated() 的關鍵情境：
+     * 若員工自助端點也比照 Member 只要求已登入，這個雙身分帳號就會繞過 INACTIVE 限制看到資料。
+     */
+    @Test
+    void 雙身分帳號的ACTIVE會員身分讓帳號能通過認證但INACTIVE員工的profile仍被擋下() throws Exception {
+        expectForbidden(get("/api/employee/profile"), activeMemberWithInactiveEmployeeToken());
+        expectForbidden(put("/api/employee/profile"), activeMemberWithInactiveEmployeeToken());
     }
 
     @Test
