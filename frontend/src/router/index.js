@@ -46,7 +46,8 @@ const router = createRouter({
         {
           path: 'admin/group-courses',
           component: () => import('@/views/admin/AdminGroupCourseView.vue'),
-          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+          // 團課主檔屬日常課務，一般員工即可維護（後端 /api/employee/group-courses 同此權限）
+          meta: { requiresAuth: true, requiresRole: 'EMPLOYEE' },
         },
         {
           path: 'admin/group-classes',

@@ -43,12 +43,14 @@
       ],
     },
     {
+      // 工作區開放給所有員工；只有管理員能用的連結各自標 requires: 'ADMIN'。
+      // 團課主檔與場次屬日常課務，一般員工即可維護（後端也是 /api/employee/**）。
       key: 'admin',
       label: '管理',
-      requires: 'ADMIN',
+      requires: 'EMPLOYEE',
       links: [
         { to: '/admin/group-courses', label: '團課主檔' },
-        { to: '/admin/group-classes', label: '團課場次' },
+        { to: '/admin/group-classes', label: '團課場次', requires: 'ADMIN' },
       ],
     },
   ]
