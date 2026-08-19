@@ -30,3 +30,9 @@ export const updateCourse = (id, payload) => api.put(`/api/admin/group-courses/$
  * @param {number} id 要下架的課程主檔 id
  */
 export const deactivateCourse = (id) => api.delete(`/api/admin/group-courses/${id}`)
+
+/**
+ * 重新上架團課主檔，需登入且為 ADMIN。底層是把 status 改回 ACTIVE
+ * @param {number} id 要重新上架的課程主檔 id
+ */
+export const activateCourse = (id) => api.post(`/api/admin/group-courses/${id}/activate`)

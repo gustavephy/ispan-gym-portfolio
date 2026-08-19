@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { getAllCourses, createCourse, updateCourse, deactivateCourse } from '@/api/adminGroupCourse.js'
+import { getAllCourses, createCourse, updateCourse, deactivateCourse, activateCourse } from '@/api/adminGroupCourse.js'
 import { getTrainers } from '@/api/coachBooking.js'
 import { getCourseCategories } from '@/api/product.js'
 import { isInlineError } from '@/api/api-error.js'
@@ -192,6 +192,22 @@ async function handleDeactivate(course) {
   }
 }
 
+// 點擊「重新上架」：不需二次確認（可逆操作，風險低於下架），成功後刷新列表讓狀態變成「上架中」
+async function handleActivate(course) {
+  courseListMessage.value = ''
+  try {
+    await activateCourse(course.id)
+    await fetchCourses()
+  } catch (err) {
+    const apiError = err
+    if (isInlineError(apiError)) {
+      courseListMessage.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
+  }
+}
+
 // 點擊「編輯」：開啟 modal，並把這筆課程既有的內容帶入編輯表單；授課教練唯讀顯示，不可編輯
 function openEditModal(course) {
   editFormError.value = ''
@@ -361,6 +377,14 @@ onUnmounted(() => {
                   @click="handleDeactivate(course)"
                 >
                   下架
+                </button>
+                <button
+                  v-if="course.status === 'INACTIVE'"
+                  class="btn btn-outline"
+                  type="button"
+                  @click="handleActivate(course)"
+                >
+                  重新上架
                 </button>
               </div>
             </td>

@@ -26,6 +26,10 @@ const { feedback, showFeedback } = useFeedback(2500)
 const sessions = ref([])
 const loading = ref(true)
 
+// 行事曆／我的預約 頁籤切換；純前端狀態，兩邊資料都已經在 onMounted 抓過，
+// 切換不重打 API。只有登入會員看得到這個切換器，未登入者固定看行事曆。
+const viewMode = ref('calendar')
+
 // 我的團課報名列表，跟行事曆的 loading 各自獨立、互不影響
 const myBookings = ref([])
 const myBookingsLoading = ref(true)
@@ -63,6 +67,12 @@ const visibleSessions = computed(() =>
 
 // 從目前抓到的場次動態取出不重複的教室名稱，不寫死教室清單
 const rooms = computed(() => [...new Set(visibleSessions.value.map((session) => session.roomName))])
+
+// 教室篩選只在「行事曆模式、已載入完成、且有場次資料」時有意義；
+// 其他情況（我的預約模式、loading 中、空清單）顯示這個下拉選單沒有實際作用
+const showRoomFilter = computed(
+  () => viewMode.value === 'calendar' && !loading.value && visibleSessions.value.length > 0,
+)
 
 const roomFilteredSessions = computed(() =>
   selectedRoom.value === 'all'
@@ -159,8 +169,13 @@ async function handleBookInModal() {
     closeDetailModal()
     showFeedback('報名成功')
     // 行事曆要更新剩餘名額，「我的團課報名」要出現這筆新紀錄——兩邊都得重抓，
-    // 只抓其中一邊會讓使用者以為報名沒成功（寫法比照 handleCancelBooking）
-    await Promise.all([fetchSessions(), fetchMyBookings()])
+    // 只抓其中一邊會讓使用者以為報名沒成功（寫法比照 handleCancelBooking）。
+    // fetchMyBookings 需要 MEMBER 身分，跟 onMounted 的判斷式一致才呼叫。
+    if (auth.isMember) {
+      await Promise.all([fetchSessions(), fetchMyBookings()])
+    } else {
+      await fetchSessions()
+    }
   } catch (err) {
     const apiError = err
     if (isInlineError(apiError)) {
@@ -189,6 +204,8 @@ const calendarOptions = computed(() => ({
     right: '',
   },
   allDaySlot: false,
+  slotMinTime: '10:00:00',
+  slotMaxTime: '22:00:00',
   height: 'auto',
   events: calendarEvents.value,
   eventClick: handleEventClick,
@@ -286,34 +303,57 @@ onUnmounted(() => {
     <h2 class="section-title">團體課程</h2>
     <p class="section-desc">依教室篩選，以週曆檢視瀏覽即將開課的團體課程場次。</p>
 
+    <!-- 固定在這裡、不受 loading／viewMode 影響：使用者無論在哪個載入狀態、哪個
+         viewMode，都要能看到並點擊教室篩選（行事曆模式才有意義，用 showRoomFilter
+         控制）與「行事曆／我的預約」切換器（僅登入會員看得到）。
+         room-select-wrap 這層外殼固定存在，讓 view-switch 的位置不會因為
+         select 消失而跳動 -->
+    <div class="toolbar-row">
+      <div class="room-select-wrap">
+        <select
+          v-if="showRoomFilter"
+          id="roomFilter"
+          v-model="selectedRoom"
+          class="room-select"
+          aria-label="篩選教室"
+        >
+          <option value="all">所有教室</option>
+          <option v-for="room in rooms" :key="room" :value="room">{{ room }}</option>
+        </select>
+      </div>
+
+      <div v-if="auth.isMember" class="view-switch" role="tablist" aria-label="檢視切換">
+        <button
+          type="button"
+          role="tab"
+          class="view-tab"
+          :class="{ 'view-tab--active': viewMode === 'calendar' }"
+          :aria-selected="viewMode === 'calendar'"
+          @click="viewMode = 'calendar'"
+        >
+          行事曆
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="view-tab"
+          :class="{ 'view-tab--active': viewMode === 'bookings' }"
+          :aria-selected="viewMode === 'bookings'"
+          @click="viewMode = 'bookings'"
+        >
+          我的預約
+        </button>
+      </div>
+    </div>
+
     <!--
       行事曆必須「永遠掛載」，不能用 v-if/v-else 換掉：
       場次資料是由 FullCalendar 的 datesSet 事件觸發載入的，一旦它被移除，
       事件就不會再發生——載入中會卡在轉圈圈、切到沒課的那週則再也切不回來。
       因此 loading 與「本週沒課」都只作為疊加提示，不影響行事曆本身的存在。
+      切到「我的預約」時同理：用 v-show 隱藏而非 v-if 移除，回切才不會失去資料來源。
     -->
-    <div class="room-tabs">
-      <button
-        type="button"
-        class="room-tab"
-        :class="{ 'room-tab-active': selectedRoom === 'all' }"
-        @click="selectedRoom = 'all'"
-      >
-        所有教室
-      </button>
-      <button
-        v-for="room in rooms"
-        :key="room"
-        type="button"
-        class="room-tab"
-        :class="{ 'room-tab-active': selectedRoom === room }"
-        @click="selectedRoom = room"
-      >
-        {{ room }}
-      </button>
-    </div>
-
-    <div class="calendar-wrap">
+    <div v-show="viewMode === 'calendar'" class="calendar-wrap">
       <div v-if="loading" class="calendar-notice"><div class="spinner"></div></div>
       <p v-else-if="visibleSessions.length === 0" class="empty-state calendar-notice">
         這一週沒有開放報名的團課場次，可切換到其他週次查看。
@@ -321,8 +361,9 @@ onUnmounted(() => {
       <FullCalendar :options="calendarOptions" />
     </div>
 
-    <!-- 未登入時整塊隱藏：沒有資料來源，顯示空區塊反而困惑 -->
-    <div v-if="auth.isMember" class="my-bookings-section">
+    <!-- 未登入時整塊隱藏：沒有資料來源，顯示空區塊反而困惑。
+         已登入會員則依 viewMode 切換顯示，不是跟行事曆同時出現 -->
+    <div v-if="auth.isMember && viewMode === 'bookings'" class="my-bookings-section">
       <h3 class="schedule-title">我的團課報名</h3>
 
       <div class="search-field">
@@ -415,34 +456,61 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.room-tabs {
+.toolbar-row {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   flex-wrap: wrap;
-  gap: 0.5rem;
   margin-bottom: 1.25rem;
 }
 
-.room-tab {
-  padding: 0.5rem 1.1rem;
-  border: 1.5px solid var(--border);
-  border-radius: 999px;
+.room-select-wrap {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.room-select {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: var(--bg-section);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font: inherit;
   font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.view-switch {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  background: #e6d8c6;
+  flex-shrink: 0;
+}
+
+.view-tab {
+  padding: 0.5rem 1.1rem;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
   transition: var(--transition);
 }
 
-.room-tab:hover {
-  border-color: var(--accent);
+.view-tab:hover {
+  color: var(--primary-dark);
 }
 
-.room-tab-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  font-weight: 700;
+.view-tab--active {
+  background: #f2e8dc;
+  color: var(--primary-dark);
 }
 
 .calendar-notice {

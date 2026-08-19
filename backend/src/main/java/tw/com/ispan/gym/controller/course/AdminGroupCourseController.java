@@ -67,4 +67,12 @@ public class AdminGroupCourseController {
         GroupCourseResponse resp = groupCourseService.deactivateCourse(id);
         return ResponseEntity.status(HttpStatus.OK).body(resp);
     }
+
+    /** 重新上架團課主檔，成功回 200（更新既有資源的狀態，不是新建立）。 */
+    @PostMapping("/{id}/activate")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<GroupCourseResponse> activateCourse(@PathVariable Integer id) {
+        GroupCourseResponse resp = groupCourseService.activateCourse(id);
+        return ResponseEntity.status(HttpStatus.OK).body(resp);
+    }
 }
