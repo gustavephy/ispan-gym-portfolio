@@ -115,7 +115,8 @@ async function fetchTrainers() {
   trainersLoading.value = true
   try {
     const res = await getTrainers()
-    trainers.value = res.data
+    // 新 API 會回傳 UNAVAILABLE 教練，這裡過濾只留 ACTIVE，避免把課排給已停用的教練
+    trainers.value = res.data.filter((trainer) => trainer.status === 'ACTIVE')
   } finally {
     trainersLoading.value = false
   }
@@ -277,7 +278,7 @@ onUnmounted(() => {
         <select id="courseTrainer" v-model="form.trainerId" required :disabled="trainersLoading">
           <option value="" disabled>請選擇</option>
           <option v-for="trainer in trainers" :key="trainer.trainerId" :value="trainer.trainerId">
-            {{ trainer.name }}（{{ trainer.specialty }}）
+            {{ trainer.displayName }}（{{ trainer.specialty }}）
           </option>
         </select>
         <p v-if="selectedTrainer" class="field-hint">此教練專長：{{ selectedTrainer.specialty }}</p>
