@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { getUpcomingSessions, bookSession, getMyBookings, cancelBooking } from '@/api/groupClass.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { isInlineError } from '@/api/api-error.js'
@@ -29,6 +29,19 @@ const loading = ref(true)
 // 行事曆／我的預約 頁籤切換；純前端狀態，兩邊資料都已經在 onMounted 抓過，
 // 切換不重打 API。只有登入會員看得到這個切換器，未登入者固定看行事曆。
 const viewMode = ref('calendar')
+
+// 行事曆用 v-show 隱藏（不是 v-if 移除）——移除掉再掛載會讓已載入的場次消失、
+// 也會失去捲動位置。但 FullCalendar 的版面是掛載當下量出來的，在 display:none
+// 的容器裡量到的高度是 0，切回來時 v-show 只是還原 display，不會通知它重算，
+// 表格會塌成一條線。因此切回行事曆時要主動呼叫 updateSize() 重新量測。
+const calendarRef = ref(null)
+
+watch(viewMode, async (mode) => {
+  if (mode !== 'calendar') return
+  // 等 v-show 還原 display 後才量得到真實尺寸
+  await nextTick()
+  calendarRef.value?.getApi()?.updateSize()
+})
 
 // 我的團課報名列表，跟行事曆的 loading 各自獨立、互不影響
 const myBookings = ref([])
@@ -347,18 +360,18 @@ onUnmounted(() => {
     </div>
 
     <!--
-      行事曆必須「永遠掛載」，不能用 v-if/v-else 換掉：
-      場次資料是由 FullCalendar 的 datesSet 事件觸發載入的，一旦它被移除，
-      事件就不會再發生——載入中會卡在轉圈圈、切到沒課的那週則再也切不回來。
-      因此 loading 與「本週沒課」都只作為疊加提示，不影響行事曆本身的存在。
-      切到「我的預約」時同理：用 v-show 隱藏而非 v-if 移除，回切才不會失去資料來源。
+      行事曆必須「永遠掛載」，不能用 v-if/v-else 換掉：被 loading 的 v-else 擋住時
+      根本不會掛載，畫面就卡在轉圈圈（見 6f30ac1）。因此 loading 與「本週沒課」
+      都只作為疊加提示，不影響行事曆本身的存在。
+      切換到「我的預約」時同理用 v-show 隱藏，但 FullCalendar 在 display:none 下
+      量到的高度是 0，切回來要主動 updateSize()——見上方 watch(viewMode)。
     -->
     <div v-show="viewMode === 'calendar'" class="calendar-wrap">
       <div v-if="loading" class="calendar-notice"><div class="spinner"></div></div>
       <p v-else-if="visibleSessions.length === 0" class="empty-state calendar-notice">
         這一週沒有開放報名的團課場次，可切換到其他週次查看。
       </p>
-      <FullCalendar :options="calendarOptions" />
+      <FullCalendar ref="calendarRef" :options="calendarOptions" />
     </div>
 
     <!-- 未登入時整塊隱藏：沒有資料來源，顯示空區塊反而困惑。
@@ -514,7 +527,7 @@ onUnmounted(() => {
 }
 
 .calendar-notice {
-  /* 提示疊在行事曆上方，行事曆本身保持掛載——datesSet 是資料載入的觸發點，不能讓它被移除 */
+  /* 提示疊在行事曆上方，行事曆本身保持掛載（被 v-else 擋住就不會掛載，畫面會卡在轉圈圈） */
   margin-bottom: 0.75rem;
   text-align: center;
 }
