@@ -117,6 +117,12 @@ const INK = '#2b2320'
 
 function renderTrend() {
   if (!trendEl.value) return
+  // 載入中時容器會被 v-else 的 spinner 換掉再重新掛載，舊 instance 綁的是已經
+  // 脫離文件的節點，畫上去看不到。發現節點換人就先 dispose 再重建。
+  if (trendChart && trendChart.getDom() !== trendEl.value) {
+    trendChart.dispose()
+    trendChart = null
+  }
   if (!trendChart) trendChart = echarts.init(trendEl.value)
   const rows = dailyTotals.value
   trendChart.setOption(
@@ -250,13 +256,16 @@ async function fetchDetail(reportId) {
   try {
     const { data } = await getReportDetail(reportId)
     detail.value = data
-    await nextTick()
-    if (dailyTotals.value.length > 0) renderTrend()
   } catch (e) {
     notifyApiError(e)
   } finally {
     detailLoading.value = false
   }
+  // 必須等 detailLoading 轉回 false 之後才畫：載入中時圖表容器被 v-else 的 spinner
+  // 換掉、根本不在 DOM 裡，trendEl 是 null，renderTrend() 會靜靜地什麼都不做，
+  // 切換快照後畫面就一片空白。nextTick 等 v-else 分支重新掛載完成。
+  await nextTick()
+  if (dailyTotals.value.length > 0) renderTrend()
 }
 
 watch(selectedReportId, (id) => fetchDetail(id))
