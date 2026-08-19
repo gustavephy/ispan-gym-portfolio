@@ -21,7 +21,6 @@ import tw.com.ispan.gym.exception.GlobalExceptionHandler;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
-import tw.com.ispan.gym.service.coach.TrainerDirectoryService;
 
 /**
  * GET /api/member/bookings（預約歷史查詢）的 controller 層測試：standalone MockMvc，
@@ -35,11 +34,9 @@ class CoachBookingControllerHistoryTest {
     private final CurrentUserProvider currentUser = mock(CurrentUserProvider.class);
     private final CoachBookingService coachBookingService = mock(CoachBookingService.class);
     private final CoachSlotService coachSlotService = mock(CoachSlotService.class);
-    private final TrainerDirectoryService trainerDirectoryService = mock(TrainerDirectoryService.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new CoachBookingController(currentUser, coachBookingService, coachSlotService,
-                    trainerDirectoryService))
+            .standaloneSetup(new CoachBookingController(currentUser, coachBookingService, coachSlotService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 

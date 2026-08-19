@@ -119,7 +119,6 @@ POST    /api/accounts/resend-verification-email
 GET     /api/products/**
 GET     /api/product-categories          （精確路徑，無 /**）
 GET     /api/course-categories           （精確路徑，無 /**）
-GET     /api/member/trainers            （在職教練清單，精確路徑）
 GET     /api/member/trainers/*/schedules
 GET     /api/member/group-classes        （精確路徑，無 /**）
 GET     /api/trainers、/api/trainers/*   （公開教練介紹）

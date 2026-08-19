@@ -64,7 +64,7 @@ function bookingStatusInfo(status) {
 // 我的預約只有 trainerId，姓名要從已經抓到的教練清單反查，不用再多打一次 API；
 // 查不到（例如教練已離職不在在職清單裡）就顯示代號，至少不會整列空白
 function trainerName(trainerId) {
-  return trainers.value.find((t) => t.trainerId === trainerId)?.name ?? `教練 #${trainerId}`
+  return trainers.value.find((t) => t.trainerId === trainerId)?.displayName ?? `教練 #${trainerId}`
 }
 
 function formatDateTime(value) {
@@ -90,7 +90,8 @@ async function fetchTrainers() {
   trainersLoading.value = true
   try {
     const res = await getTrainers()
-    trainers.value = res.data
+    // 新 API 會回傳 UNAVAILABLE 教練，這裡過濾只留 ACTIVE，維持跟舊 API（只回傳在職教練）一致的既有行為
+    trainers.value = res.data.filter((trainer) => trainer.status === 'ACTIVE')
   } finally {
     trainersLoading.value = false
   }
@@ -177,7 +178,7 @@ function selectTrainer(trainer) {
 // 確定才送出請求；成功後把核銷碼顯示給使用者，並刷新列表讓已被約走的時段消失，
 // 失敗則顯示錯誤訊息、維持列表原狀，讓使用者可以再試一次或選別的時段
 async function handleBook(slot) {
-  const trainerLabel = selectedTrainer.value?.name ?? ''
+  const trainerLabel = selectedTrainer.value?.displayName ?? ''
   const confirmed = window.confirm(
     `確定要預約 ${trainerLabel} ${formatDateTime(slot.startAt)}~${timeOnly(slot.endAt)} 這堂課嗎？`,
   )
@@ -227,7 +228,7 @@ onMounted(() => {
           :class="{ 'trainer-card-selected': trainer.trainerId === selectedTrainerId }"
           @click="selectTrainer(trainer)"
         >
-          <h3 class="trainer-name">{{ trainer.name }}</h3>
+          <h3 class="trainer-name">{{ trainer.displayName }}</h3>
           <p class="trainer-specialty">{{ trainer.specialty }}</p>
           <p class="trainer-experience">{{ trainer.experience }}</p>
         </button>
