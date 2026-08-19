@@ -63,9 +63,20 @@
   const cart = useCartStore()
   onMounted(() => cart.loadCart())
 
-  /** 目前身分進得去的工作區；只有一個時不顯示切換器 */
+  /**
+   * 目前身分進得去的工作區；只有一個時不顯示切換器。
+   *
+   * 會員工作區的 requires 是 null（前台商城要讓未登入訪客也能瀏覽），但「已登入卻沒有
+   * 會員身分」的帳號（純員工／純管理員）不該看到它——那些頁面多半需要 member_id，
+   * 點進去只會拿到錯誤。因此已登入時額外要求 MEMBER 角色，未登入則維持開放。
+   */
   const availableWorkspaces = computed(() =>
-    WORKSPACES.filter((w) => !w.requires || auth.roles.includes(w.requires)),
+    WORKSPACES.filter((w) => {
+      if (w.key === 'member') {
+        return !auth.isLoggedIn || auth.isMember
+      }
+      return !w.requires || auth.roles.includes(w.requires)
+    }),
   )
 
   /**
@@ -77,9 +88,14 @@
     () => availableWorkspaces.value.find((w) => w.key === activeKey.value) ?? availableWorkspaces.value[0],
   )
 
+  // 網址對不到任何工作區時（例如首頁 '/'）退回第一個可用的，而不是寫死 'member'——
+  // 純員工／純管理員沒有會員工作區，退回去會讓 currentWorkspace 落空、選單整個空白
   function workspaceOf(path) {
     const hit = WORKSPACES.find((w) => w.links.some((l) => l.to !== '/' && path.startsWith(l.to)))
-    return hit?.key ?? 'member'
+    if (hit && availableWorkspaces.value.some((w) => w.key === hit.key)) {
+      return hit.key
+    }
+    return availableWorkspaces.value[0]?.key ?? 'member'
   }
 
   watch(
@@ -90,12 +106,13 @@
     { immediate: true },
   )
 
-  // 登出後角色歸零，若當時停在教練／管理工作區會變成空選單，拉回會員工作區
+  // 角色變動（登入／登出）後，若當時停在已不可用的工作區會變成空選單，拉回第一個可用的。
+  // 不寫死 'member'：純員工／純管理員沒有會員工作區，第一個可用的會是教練或管理
   watch(
     () => auth.roles,
     () => {
       if (!availableWorkspaces.value.some((w) => w.key === activeKey.value)) {
-        activeKey.value = 'member'
+        activeKey.value = availableWorkspaces.value[0]?.key ?? 'member'
       }
     },
     { deep: true },
