@@ -65,14 +65,20 @@ async function refreshUnread() {
   }
 }
 
-function onIncoming(msg) {
+async function onIncoming(msg) {
   messages.value.push(msg)
   nextTick(scrollToBottom)
   if (!isMine(msg)) {
-    markChatRead({
-      counterpartType: currentCounterpartType.value,
-      employeeId: currentEmployeeId.value,
-    }).catch(() => {})
+    // 必須等標記已讀完成才重查未讀數：兩者同時發出的話，unread-count 常在
+    // mark-read 的交易 commit 前就讀到舊值，畫面就會卡在「1 則未讀」不消失。
+    try {
+      await markChatRead({
+        counterpartType: currentCounterpartType.value,
+        employeeId: currentEmployeeId.value,
+      })
+    } catch {
+      // 標記失敗不影響訊息顯示，下次進房間或收到新訊息還會再試
+    }
     refreshUnread()
   }
 }
