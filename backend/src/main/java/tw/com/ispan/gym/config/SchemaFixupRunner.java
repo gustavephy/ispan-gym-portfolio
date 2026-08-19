@@ -60,6 +60,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         widenOrderStatusCheck();
         dropDuplicateUniqueIndexes();
         migrateEmployeeReviewModel();
+        addTrainerProfileColumns();
     }
 
     // === 員工審核模型修正（2026-08-14 定案：EmployeeRole/EmployeeStatus 改版）========
@@ -1086,5 +1087,47 @@ public class SchemaFixupRunner implements CommandLineRunner {
                     WHERE object_id = OBJECT_ID(?) AND name = ?
                 """, Integer.class, table, column);
         return found != null && found > 0;
+    }
+
+    // === trainer 個人資料欄位補建（2026-08-18 Trainer entity 擴充）================
+    // entity 新增了 first_name／last_name／email 三個 nullable=false 欄位，但
+    // SQL Server 不允許對「已有資料」的表新增無預設值的 NOT NULL 欄位——ddl-auto 的
+    // ALTER 會失敗且只默默記 log，欄位根本不存在，之後任何查詢 trainer 的請求都會因
+    //「無效的資料行名稱 'email'」而炸，且應用啟動時就會失敗（TestDataSeedRunner 會查 trainer）。
+    // 只要資料庫跑過測試資料播種就必然中招，因此在這裡以「可空」補上欄位並回填。
+    //
+    // 刻意補成可空而非 NOT NULL：既有列補完值後雖然可以收緊，但這三欄的值本來就
+    // 重複自 employee（姓名）與 account（email），屬於待清理的設計；收成 NOT NULL 等於
+    // 把重複固化得更死。新資料一律由程式填值，可空不影響運作。
+    // 全新資料庫由 ddl-auto 直接建出 NOT NULL 版本，本方法會因欄位已存在而整段略過。
+    private void addTrainerProfileColumns() {
+        if (!tableExists("trainer") || !tableExists("employee") || !tableExists("account")) {
+            return;
+        }
+        addNullableNvarcharIfAbsent("trainer", "first_name", 255);
+        addNullableNvarcharIfAbsent("trainer", "last_name", 255);
+        addNullableNvarcharIfAbsent("trainer", "email", 255);
+
+        // 回填既有教練：姓名取自 employee、email 取自 account（單一來源仍是那兩張表）
+        if (columnExists("trainer", "first_name")) {
+            backfill("trainer 個人資料欄位（自 employee／account 回填）", """
+                    UPDATE t SET t.first_name = e.first_name,
+                                 t.last_name = e.last_name,
+                                 t.email = a.email
+                        FROM trainer t
+                        JOIN employee e ON e.employee_id = t.employee_id
+                        JOIN account a ON a.account_id = e.account_id
+                        WHERE t.first_name IS NULL OR t.last_name IS NULL OR t.email IS NULL
+                    """);
+        }
+    }
+
+    /** 補上可空的 nvarchar 欄位；已存在就跳過（冪等） */
+    private void addNullableNvarcharIfAbsent(String table, String column, int length) {
+        if (columnExists(table, column)) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE " + table + " ADD " + column + " nvarchar(" + length + ") NULL");
+        log.info("已為 {} 補上可空欄位 {}（ddl-auto 對非空表加不了 NOT NULL 欄位）", table, column);
     }
 }
