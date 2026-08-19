@@ -30,7 +30,9 @@ const showTestAccounts = import.meta.env.DEV
 const TEST_ACCOUNTS = [
   { label: '會員', email: 'wendy-test@local.test', password: 'Admin@12345' },
   { label: '教練', email: 'emp-trainer@local.test', password: 'Admin@12345' },
-  { label: '管理員', email: 'emp-admin@local.test', password: 'Admin@12345' },
+  // 純管理員（無會員身分），登入後只會看到管理工作區；
+  // emp-admin 另外帶會員身分，要展示角色疊加時才用
+  { label: '管理員', email: 'admin-only@local.test', password: 'Admin@12345' },
   { label: '管理員（種子）', email: 'admin@wpgym.local', password: 'Admin@12345' },
 ]
 

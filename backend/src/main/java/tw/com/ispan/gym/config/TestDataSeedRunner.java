@@ -44,10 +44,11 @@ import java.time.LocalDateTime;
  * 開發用測試帳號播種：讓每位組員的本機資料庫收斂到同一組已知帳號，
  * 前端登入頁的測試帳號面板（LoginView.vue 的 TEST_ACCOUNTS）即以此為準。
  *
- * <p>三組固定帳號（密碼一律 {@value #TEST_PASSWORD}）：
+ * <p>四組固定帳號（密碼一律 {@value #TEST_PASSWORD}）：
  * <ul>
  * <li>wendy-test@local.test —— 純會員</li>
  * <li>emp-admin@local.test —— 會員＋管理員（雙重身分）</li>
+ * <li>admin-only@local.test —— 純管理員，無會員身分（管理端畫面較乾淨）</li>
  * <li>emp-trainer@local.test —— 會員＋員工＋教練（三重身分，適合展示角色疊加）</li>
  * </ul>
  *
@@ -124,6 +125,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
         Account admin = ensureAccount("emp-admin@local.test", AccountType.MEMBER, AccountType.EMPLOYEE);
         ensureMember(admin, "管理", "測試", "0922222222");
         ensureEmployee(admin, "管理", "測試", "0922222222", EmployeeRole.ADMIN);
+
+        // 純管理員：刻意不建 member 列，roles 只有 ["EMPLOYEE","ADMIN"]。
+        // emp-admin 帶著會員身分（適合展示角色疊加），但那也讓 NavBar 同時出現會員與管理
+        // 兩個工作區；要呈現乾淨的管理端畫面時用這組，不必動用 AdminSeedRunner 的始祖帳號。
+        Account adminOnly = ensureAccount("admin-only@local.test", AccountType.EMPLOYEE);
+        ensureEmployee(adminOnly, "純管", "測試", "0944444444", EmployeeRole.ADMIN);
 
         Account coach = ensureAccount("emp-trainer@local.test", AccountType.MEMBER, AccountType.EMPLOYEE);
         ensureMember(coach, "教練", "測試", "0933333333");
