@@ -32,6 +32,8 @@ import tw.com.ispan.gym.repository.course.GroupCourseRepository;
 import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
+import tw.com.ispan.gym.repository.payment.PaymentTransactionRepository;
+import tw.com.ispan.gym.entity.payment.PaymentTransaction;
 import tw.com.ispan.gym.entity.order.OrderItem;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.entity.product.ProductCategory;
@@ -92,6 +94,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final GroupClassSessionRepository groupClassSessions;
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
+    private final PaymentTransactionRepository paymentTransactions;
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
@@ -109,6 +112,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             GroupClassSessionRepository groupClassSessions,
             OrderRepository orders,
             OrderItemRepository orderItems,
+            PaymentTransactionRepository paymentTransactions,
             JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
             @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
@@ -124,6 +128,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         this.groupClassSessions = groupClassSessions;
         this.orders = orders;
         this.orderItems = orderItems;
+        this.paymentTransactions = paymentTransactions;
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
@@ -352,6 +357,22 @@ public class TestDataSeedRunner implements CommandLineRunner {
             tw.com.ispan.gym.entity.order.Order savedOrder = orders.save(order);
             orderItems.save(new OrderItem(savedOrder, product, product.getName(), unit,
                     seed.quantity()));
+
+            // 付款過的訂單要一併補 PaymentTransaction：退款流程是以它為起點
+            //（OrderService.requestRefund 找不到付款紀錄會回 404「找不到這筆訂單的付款紀錄」），
+            // 只把 orders.status 設成 PAID 而沒有這筆，後台退款流程根本走不了。
+            // 正式流程由 ECPay webhook 建立（見 EcpayService），這裡比照它成功時的欄位設定。
+            if (seed.status() == OrderStatus.PAID || seed.status() == OrderStatus.REFUNDED) {
+                PaymentTransaction payment = new PaymentTransaction(
+                        savedOrder, "ECPAY", no, amount, "TWD");
+                payment.setTradeNo(no);
+                payment.setPaymentMethod("Credit_CreditCard");
+                payment.setStatus("SUCCESS");
+                payment.setPaidAt(placedAt);
+                payment.setRtnCode(1);
+                payment.setRtnMsg("交易成功");
+                paymentTransactions.save(payment);
+            }
 
             // created_at 由 TaipeiTimestampEntity 的 @PrePersist 強制設成「現在」，
             // 不改的話十筆訂單全部落在同一天，趨勢圖只會有一個點。這裡直接下 SQL 回填
