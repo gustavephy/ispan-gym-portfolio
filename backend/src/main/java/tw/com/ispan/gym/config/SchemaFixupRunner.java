@@ -61,6 +61,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         dropDuplicateUniqueIndexes();
         migrateEmployeeReviewModel();
         addTrainerProfileColumns();
+        fixReversedTestAccountNames();
     }
 
     // === 員工審核模型修正（2026-08-14 定案：EmployeeRole/EmployeeStatus 改版）========
@@ -1129,5 +1130,58 @@ public class SchemaFixupRunner implements CommandLineRunner {
         }
         jdbc.execute("ALTER TABLE " + table + " ADD " + column + " nvarchar(" + length + ") NULL");
         log.info("已為 {} 補上可空欄位 {}（ddl-auto 對非空表加不了 NOT NULL 欄位）", table, column);
+    }
+
+    /**
+     * 導正早期測試帳號被存反的姓名。欄位語意是 first_name 存名、last_name 存姓，
+     * 早期版本卻把「管理員」「教練」硬拆成兩欄（管理／員、教／練），member 也留下
+     * Wen／Dy 這類機械式拆字。
+     *
+     * <p>
+     * TestDataSeedRunner 是 auto-repair 語意、只補不改，不會覆寫既有列，所以這批舊值
+     * 會一直留著，讓 TrainerResponse 以 last_name + first_name 組出的顯示名變成「練教」。
+     *
+     * <p>
+     * 只鎖定三個測試帳號，且只在欄位仍等於當初那組錯值時才更新，改過一次後條件就不再
+     * 成立（冪等），也不會覆寫任何人自行改過的姓名。
+     */
+    private void fixReversedTestAccountNames() {
+        if (!tableExists("account")) {
+            return;
+        }
+        if (tableExists("member")) {
+            fixReversedName("member", "wendy-test@local.test", "Wen", "Dy", "斐凝", "測試");
+            fixReversedName("member", "emp-admin@local.test", "Ad", "Min", "管理", "測試");
+            fixReversedName("member", "emp-trainer@local.test", "Trai", "Ner", "教練", "測試");
+        }
+        if (tableExists("employee")) {
+            fixReversedName("employee", "emp-admin@local.test", "管理", "員", "管理", "測試");
+            fixReversedName("employee", "emp-trainer@local.test", "教", "練", "教練", "測試");
+        }
+        // trainer 的姓名是建立當下自 employee 複製的快照，employee 改了要跟著對齊，
+        // 否則兩邊不同步（單一來源仍是 employee，見 addTrainerProfileColumns）
+        if (tableExists("employee") && tableExists("trainer")
+                && columnExists("trainer", "first_name") && columnExists("trainer", "last_name")) {
+            backfill("trainer 姓名（與 employee 對齊）", """
+                    UPDATE t SET t.first_name = e.first_name, t.last_name = e.last_name
+                        FROM trainer t
+                        JOIN employee e ON e.employee_id = t.employee_id
+                        WHERE t.first_name <> e.first_name OR t.last_name <> e.last_name
+                    """);
+        }
+    }
+
+    /** 只在該帳號姓名仍等於當初那組錯值時才改寫，改過就不再符合條件（冪等） */
+    private void fixReversedName(String table, String email, String wrongFirst, String wrongLast,
+            String rightFirst, String rightLast) {
+        int rows = jdbc.update("""
+                UPDATE x SET x.first_name = ?, x.last_name = ?
+                    FROM %s x
+                    JOIN account a ON a.account_id = x.account_id
+                    WHERE a.email = ? AND x.first_name = ? AND x.last_name = ?
+                """.formatted(table), rightFirst, rightLast, email, wrongFirst, wrongLast);
+        if (rows > 0) {
+            log.info("已導正 {} 的測試帳號姓名（{}）：{} 列", table, email, rows);
+        }
     }
 }
