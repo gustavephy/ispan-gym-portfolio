@@ -7,18 +7,13 @@ import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import Pagination from '@/components/Pagination.vue'
 import { TIME_OPTIONS } from '@/utils/businessHours.js'
+import { ROOM_OPTIONS } from '@/utils/rooms.js'
 
 // 場次狀態對照表：後端回傳 SCHEDULED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
   SCHEDULED: { label: '已排定', className: 'status-available' },
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
 }
-
-// 團課教室清單：目前只有這 4 間，對應現有 3 種團課類型（瑜珈/拳擊/重量訓練）
-// 加一間測試用教室。之後要新增教室，只需要在這個陣列加一筆，不用動後端或資料庫
-// ——roomName 在後端只是純字串欄位，沒有教室主檔表（見專案技術債討論，暫不建 Room
-// entity，避免期末專題過度設計）。
-const ROOM_OPTIONS = ['瑜珈教室', '拳擊教室', '團體重訓室', '測試用教室A']
 
 const courses = ref([])
 const coursesLoading = ref(true)
