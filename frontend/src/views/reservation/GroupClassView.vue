@@ -12,6 +12,7 @@ import FullCalendar from '@fullcalendar/vue3'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import zhTwLocale from '@fullcalendar/core/locales/zh-tw'
+import { getRoomColor } from '@/utils/rooms.js'
 
 // 我的報名狀態對照表：後端回傳 BOOKED/CANCELLED，畫面顯示中文與顏色
 const MY_BOOKING_STATUS_MAP = {
@@ -117,9 +118,10 @@ const calendarEvents = computed(() =>
       : `${session.courseName}｜${session.trainerName}`,
     start: session.startAt,
     end: session.endAt,
-    backgroundColor: session.isFull ? 'var(--bg-soft)' : 'var(--accent)',
-    borderColor: session.isFull ? 'var(--border)' : 'var(--accent-hover)',
-    textColor: session.isFull ? 'var(--text-muted)' : '#fff',
+    backgroundColor: getRoomColor(session.roomName),
+    borderColor: getRoomColor(session.roomName),
+    textColor: '#fff',
+    classNames: session.isFull ? ['gcs-event-full'] : [],
     // 存整筆場次資料，點擊事件時不用再回頭用 id 查一次 sessions 陣列
     extendedProps: { session },
   })),
@@ -222,6 +224,26 @@ const calendarOptions = computed(() => ({
   height: 'auto',
   events: calendarEvents.value,
   eventClick: handleEventClick,
+  displayEventTime: false,
+  eventContent(arg) {
+    const session = arg.event.extendedProps.session
+    const wrapper = document.createElement('div')
+    wrapper.className = 'gcs-event-content'
+
+    const courseLine = document.createElement('div')
+    courseLine.className = 'gcs-event-course'
+    courseLine.textContent = session.isFull
+      ? `${session.courseName}（已額滿）`
+      : session.courseName
+
+    const trainerLine = document.createElement('div')
+    trainerLine.className = 'gcs-event-trainer'
+    trainerLine.textContent = session.trainerName
+
+    wrapper.appendChild(courseLine)
+    wrapper.appendChild(trainerLine)
+    return { domNodes: [wrapper] }
+  },
 }))
 
 async function fetchSessions() {
@@ -558,6 +580,30 @@ onUnmounted(() => {
   --fc-button-active-bg-color: var(--accent-hover);
   --fc-button-active-border-color: var(--accent-hover);
   font-family: inherit;
+}
+
+/* 額滿場次：保留教室色相（方便辨認教室），整體變淡表示「不用特別注意」，
+   不用另外換一個跟教室無關的顏色，避免額滿時反而看不出是哪間教室 */
+.calendar-wrap :deep(.gcs-event-full) {
+  opacity: 0.45;
+}
+
+.calendar-wrap :deep(.gcs-event-content) {
+  padding: 2px 4px;
+  overflow: hidden;
+}
+.calendar-wrap :deep(.gcs-event-course),
+.calendar-wrap :deep(.gcs-event-trainer) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.calendar-wrap :deep(.gcs-event-course) {
+  font-weight: 600;
+}
+.calendar-wrap :deep(.gcs-event-trainer) {
+  font-size: 0.85em;
+  opacity: 0.9;
 }
 
 .modal-overlay {
