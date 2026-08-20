@@ -85,6 +85,17 @@
    * 使用者從外部連結或重新整理進來時，選單才不會停在別的工作區。
    */
   const activeKey = ref('member')
+
+  /**
+   * 連結是否該亮起：自己比對路徑前綴，不用 router-link-exact-active——
+   * exact 在巢狀路由下永遠不亮（/health 進頁即轉址 /health/inbody，路徑不再「完全等於」/health；
+   * 商品內頁 /products/5 也同理）。也不能用 router-link-active：首頁「/」是萬用前綴，會永遠亮著。
+   * 比對時補上「/」邊界，避免 /course 誤亮 /courses 這種同前綴不同路由。
+   */
+  function isLinkActive(to) {
+    if (to === '/') return route.path === '/'
+    return route.path === to || route.path.startsWith(to + '/')
+  }
   const currentWorkspace = computed(
     () => availableWorkspaces.value.find((w) => w.key === activeKey.value) ?? availableWorkspaces.value[0],
   )
@@ -181,6 +192,7 @@
         :key="link.to"
         :to="link.to"
         class="nav-link"
+        :class="{ 'nav-link--active': isLinkActive(link.to) }"
       >
         {{ link.label }}
       </RouterLink>
@@ -189,6 +201,7 @@
         v-if="currentWorkspace?.key === 'member' && auth.isMember"
         to="/cart"
         class="nav-link cart-link"
+        :class="{ 'nav-link--active': isLinkActive('/cart') }"
       >
         購物車
         <span v-if="cart.itemCount > 0" class="cart-badge">{{ cart.itemCount }}</span>
@@ -321,7 +334,7 @@
     font-weight: 700;
   }
 
-  .nav-link.router-link-exact-active {
+  .nav-link--active {
     background: var(--accent);
     color: #fff;
     font-weight: 700;
