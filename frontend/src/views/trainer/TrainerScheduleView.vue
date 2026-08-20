@@ -5,6 +5,7 @@ import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import Pagination from '@/components/Pagination.vue'
+import { TIME_OPTIONS } from '@/utils/businessHours.js'
 
 // 狀態對照表：後端回傳 AVAILABLE/BOOKED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
@@ -54,17 +55,6 @@ watch(
     }
   },
 )
-
-// 24 小時、每 10 分鐘一個選項，自己產生選單內容，不依賴瀏覽器對 <input type="time"> step 的支援
-// （不同瀏覽器版本表現不一致，直接用 <select> 才能保證選項一定是 10 分鐘一格）
-// 只開放 10:00~22:00、每 10 分鐘一個選項（含 22:00 這個端點），對應健身房營業時間。
-// length 73 = 從 10:00 到 22:00 共 72 個 10 分鐘間隔 + 1（含頭尾兩端點）
-const TIME_OPTIONS = Array.from({ length: 73 }, (_, i) => {
-  const totalMinutes = 10 * 60 + i * 10
-  const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0')
-  const mm = String(totalMinutes % 60).padStart(2, '0')
-  return `${hh}:${mm}`
-})
 
 function statusInfo(status) {
   return STATUS_MAP[status] || { label: status, className: '' }

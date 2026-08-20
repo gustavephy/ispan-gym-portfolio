@@ -6,6 +6,7 @@ import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import Pagination from '@/components/Pagination.vue'
+import { TIME_OPTIONS } from '@/utils/businessHours.js'
 
 // 場次狀態對照表：後端回傳 SCHEDULED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
@@ -76,16 +77,6 @@ watch(
     }
   },
 )
-
-// 24 小時、每 10 分鐘一個選項，寫法比照 TrainerScheduleView.vue
-// 只開放 10:00~22:00、每 10 分鐘一個選項（含 22:00 這個端點），對應健身房營業時間。
-// length 73 = 從 10:00 到 22:00 共 72 個 10 分鐘間隔 + 1（含頭尾兩端點）
-const TIME_OPTIONS = Array.from({ length: 73 }, (_, i) => {
-  const totalMinutes = 10 * 60 + i * 10
-  const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0')
-  const mm = String(totalMinutes % 60).padStart(2, '0')
-  return `${hh}:${mm}`
-})
 
 // 依開始時間排序；status 為 CANCELLED 的場次理論上後端不會回傳，這裡仍加一層防呆篩選
 const visibleSessions = computed(() =>
