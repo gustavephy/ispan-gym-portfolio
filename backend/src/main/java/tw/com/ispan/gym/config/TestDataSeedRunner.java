@@ -33,7 +33,12 @@ import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
 import tw.com.ispan.gym.repository.payment.PaymentTransactionRepository;
+import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
+import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
 import tw.com.ispan.gym.entity.payment.PaymentTransaction;
+import tw.com.ispan.gym.entity.member.MemberSubscription;
+import tw.com.ispan.gym.entity.coach.MemberCourseQuota;
+import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
 import tw.com.ispan.gym.entity.order.OrderItem;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.entity.product.ProductCategory;
@@ -95,6 +100,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
     private final PaymentTransactionRepository paymentTransactions;
+    private final MemberSubscriptionRepository memberSubscriptions;
+    private final MemberCourseQuotaRepository memberCourseQuotas;
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
@@ -113,6 +120,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
             OrderRepository orders,
             OrderItemRepository orderItems,
             PaymentTransactionRepository paymentTransactions,
+            MemberSubscriptionRepository memberSubscriptions,
+            MemberCourseQuotaRepository memberCourseQuotas,
             JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
             @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
@@ -129,6 +138,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
         this.orders = orders;
         this.orderItems = orderItems;
         this.paymentTransactions = paymentTransactions;
+        this.memberSubscriptions = memberSubscriptions;
+        this.memberCourseQuotas = memberCourseQuotas;
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
@@ -143,7 +154,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         }
 
         Account wendy = ensureAccount("wendy-test@local.test", AccountType.MEMBER);
-        ensureMember(wendy, "斐凝", "測試", "0911111111");
+        Member wendyMember = ensureMember(wendy, "斐凝", "測試", "0911111111");
 
         Account admin = ensureAccount("emp-admin@local.test", AccountType.MEMBER, AccountType.EMPLOYEE);
         ensureMember(admin, "管理", "測試", "0922222222");
@@ -158,9 +169,15 @@ public class TestDataSeedRunner implements CommandLineRunner {
         Account coach = ensureAccount("emp-trainer@local.test", AccountType.MEMBER, AccountType.EMPLOYEE);
         ensureMember(coach, "教練", "測試", "0933333333");
         Employee coachEmployee = ensureEmployee(coach, "教練", "測試", "0933333333", EmployeeRole.EMPLOYEE);
-        ensureTrainer(coachEmployee);
+        Trainer coachTrainer = ensureTrainer(coachEmployee);
 
         ensureCatalogData(coachEmployee);
+
+        // 預約資格要等目錄資料就緒（訂閱要指向方案、堂數要指向教練）。
+        // 放在種子最後而不是併進 ensureCatalogData：目錄資料是「大家看的展示資料」，
+        // 這兩樣是「wendy 這個帳號的個人狀態」，語意不同。
+        ensureActiveSubscription(wendyMember);
+        ensureCourseQuota(wendyMember, coachTrainer);
 
         log.info("測試帳號播種完成（密碼一律 {}；正式環境請以 SEED_TEST_DATA_ENABLED=false 停用）", TEST_PASSWORD);
     }
@@ -192,7 +209,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
     }
 
     /** 會員列不存在就建立；存在則導正為 ACTIVE、未刪除 */
-    private void ensureMember(Account account, String firstName, String lastName, String phone) {
+    private Member ensureMember(Account account, String firstName, String lastName, String phone) {
         Member member = members.findByAccountId(account.getId()).orElse(null);
         if (member == null) {
             member = new Member();
@@ -201,16 +218,16 @@ public class TestDataSeedRunner implements CommandLineRunner {
             member.setLastName(lastName);
             member.setPhone(phone);
             member.setStatus(UserStatus.ACTIVE);
-            members.save(member);
             log.info("已建立測試會員 {}", account.getEmail());
-            return;
+            return members.save(member);
         }
         if (member.getStatus() != UserStatus.ACTIVE || member.getDeletedAt() != null) {
             member.setStatus(UserStatus.ACTIVE);
             member.setDeletedAt(null);
-            members.save(member);
+            member = members.save(member);
             log.info("已將測試會員 {} 導正為 ACTIVE", account.getEmail());
         }
+        return member;
     }
 
     /** 員工列不存在就建立；存在則導正為 ACTIVE、指定職級、未刪除 */
@@ -247,7 +264,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
     }
 
     /** 教練列不存在就建立；存在則導正為未刪除（status 不動，UNAVAILABLE 是合法展示情境） */
-    private void ensureTrainer(Employee employee) {
+    private Trainer ensureTrainer(Employee employee) {
         Trainer trainer = trainers.findByEmployeeId(employee.getId()).orElse(null);
         if (trainer == null) {
             trainer = new Trainer();
@@ -259,17 +276,111 @@ public class TestDataSeedRunner implements CommandLineRunner {
             trainer.setSpecialty("重量訓練、體態雕塑");
             trainer.setExperience("五年一對一私人教練經驗");
             trainer.setBio("測試用教練帳號，供本機開發與功能展示。");
-            trainers.save(trainer);
             log.info("已建立測試教練（employee={}）", employee.getId());
-            return;
+            return trainers.save(trainer);
         }
         if (trainer.getDeletedAt() != null) {
             trainer.setDeletedAt(null);
-            trainers.save(trainer);
+            trainer = trainers.save(trainer);
             log.info("已將測試教練（employee={}）導正為未刪除", employee.getId());
         }
+        return trainer;
     }
 
+
+    // ─────────────── 預約資格：沒有這些，wendy 按報名／預約只會被擋 ───────────────
+
+    /** 播種訂閱所建訂單的 order_no／merchantTradeNo；固定值以便辨識與冪等（見 ensureActiveSubscription） */
+    private static final String SEED_SUBSCRIPTION_ORDER_NO = "SEED-SUB-001";
+
+    /**
+     * 讓 wendy 持有一筆有效訂閱：團課報名的資格檢查（GroupClassService#bookSession）
+     * 查的是「未過期且 ACTIVE 的 MemberSubscription」，沒有它整條團課流程無從測起。
+     *
+     * <p>之所以連訂單一起建：member_subscription.order_id 是 NOT NULL。也因為這條 FK，
+     * orders 主鍵型別遷移（PreSchemaFixupRunner）會把訂閱整列刪除——所以這個方法每次啟動
+     * 都會重查重補，遷移清掉後下次啟動自動長回來。
+     *
+     * <p>訂單比照 ensureSampleOrders 的規矩：走正式建構子＋markPaid()，並補 PaymentTransaction
+     *（退款後台以它為起點，缺了會 404）；以固定 order_no 冪等，不重複建單。
+     */
+    private void ensureActiveSubscription(Member member) {
+        boolean hasActive = memberSubscriptions
+                .findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(
+                        member.getId(), LocalDateTime.now(), SubscriptionStatus.ACTIVE)
+                .isPresent();
+        if (hasActive) {
+            return;
+        }
+
+        SubscriptionPlan plan = subscriptionPlans.findAll().stream().findFirst().orElse(null);
+        if (plan == null) {
+            log.warn("沒有任何訂閱方案，略過測試訂閱播種");
+            return;
+        }
+
+        // 訂單可能在前次播種留下（訂閱被遷移刪除但訂單是新表重建後才建的），有就重用
+        tw.com.ispan.gym.entity.order.Order order = orders.findAll().stream()
+                .filter(o -> SEED_SUBSCRIPTION_ORDER_NO.equals(o.getOrderNo()))
+                .findFirst()
+                .orElse(null);
+        if (order == null) {
+            order = new tw.com.ispan.gym.entity.order.Order(
+                    member, SEED_SUBSCRIPTION_ORDER_NO, SEED_SUBSCRIPTION_ORDER_NO,
+                    plan.getPrice(), BigDecimal.ZERO, plan.getPrice(), plan.getPrice(), null,
+                    member.getLastName() + member.getFirstName(), member.getPhone(), null,
+                    member.getAccount().getEmail());
+            order.markPaid("Credit_CreditCard", SEED_SUBSCRIPTION_ORDER_NO);
+            order.setSubscriptionPlan(plan);
+            order = orders.save(order);
+
+            PaymentTransaction payment = new PaymentTransaction(
+                    order, "ECPAY", SEED_SUBSCRIPTION_ORDER_NO, plan.getPrice(), "TWD");
+            payment.setTradeNo(SEED_SUBSCRIPTION_ORDER_NO);
+            payment.setPaymentMethod("Credit_CreditCard");
+            payment.setStatus("SUCCESS");
+            payment.setPaidAt(LocalDateTime.now());
+            payment.setRtnCode(1);
+            payment.setRtnMsg("交易成功");
+            paymentTransactions.save(payment);
+        }
+
+        MemberSubscription subscription = new MemberSubscription();
+        subscription.setMember(member);
+        subscription.setOrder(order);
+        subscription.setSubscriptionPlan(plan);
+        subscription.setPlanName(plan.getName());
+        // 起日往前推一天：閉區間邊界在「剛好現在」的比較上容易剛好差一瞬間，測試資料不玩這種邊緣
+        subscription.setStartDate(LocalDateTime.now().minusDays(1));
+        subscription.setEndDate(LocalDateTime.now().plusMonths(3));
+        subscription.setStatus(SubscriptionStatus.ACTIVE);
+        memberSubscriptions.save(subscription);
+        log.info("已為測試會員 {} 播種有效訂閱（方案：{}，效期 3 個月）",
+                member.getAccount().getEmail(), plan.getName());
+    }
+
+    /**
+     * 讓 wendy 有私教堂數可扣：預約檢查（MemberCourseQuotaRepository#findEligibleQuota）
+     * 篩 remainingCourse > 0 且未過期，額度綁「會員＋教練」。
+     * private_course 與 order_item 皆可為 null——正式流程是買課後產生，這裡是直接發放。
+     */
+    private void ensureCourseQuota(Member member, Trainer trainer) {
+        if (!memberCourseQuotas.findEligibleQuota(member.getId(), trainer.getId()).isEmpty()) {
+            return;
+        }
+
+        MemberCourseQuota quota = new MemberCourseQuota();
+        quota.setMember(member);
+        quota.setTrainer(trainer);
+        quota.setCourseName("測試用私教堂數");
+        quota.setRemainingCourse(10);
+        quota.setReservedCourse(0);
+        quota.setUsedCourse(0);
+        quota.setExpiryDate(LocalDateTime.now().plusMonths(6));
+        memberCourseQuotas.save(quota);
+        log.info("已為測試會員 {} 播種私教堂數 10 堂（教練 id={}）",
+                member.getAccount().getEmail(), trainer.getId());
+    }
 
     // ─────────────── 目錄資料：讓前端頁面有東西可顯示 ───────────────
 
