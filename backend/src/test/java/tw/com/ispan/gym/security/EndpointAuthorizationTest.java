@@ -50,7 +50,10 @@ import tw.com.ispan.gym.service.order.OrderService;
 import tw.com.ispan.gym.service.payment.EcpayService;
 import tw.com.ispan.gym.service.member.AdminMemberService;
 import tw.com.ispan.gym.service.member.MemberProfileService;
+import tw.com.ispan.gym.service.course.PrivateCourseService;
 import tw.com.ispan.gym.service.product.ProductService;
+import tw.com.ispan.gym.service.trainer.AdminTrainerService;
+import tw.com.ispan.gym.service.trainer.TrainerProfileService;
 import tw.com.ispan.gym.service.trainer.TrainerService;
 import tw.com.ispan.gym.service.report.OperationReportService;
 import tw.com.ispan.gym.service.report.ReportPdfService;
@@ -102,6 +105,9 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.member.MemberProfileController.class,
         tw.com.ispan.gym.controller.product.ProductController.class,
         tw.com.ispan.gym.controller.trainer.TrainerController.class,
+        tw.com.ispan.gym.controller.trainer.TrainerProfileController.class,
+        tw.com.ispan.gym.controller.trainer.AdminTrainerController.class,
+        tw.com.ispan.gym.controller.course.AdminPrivateCourseController.class,
         tw.com.ispan.gym.controller.cart.CartController.class,
         tw.com.ispan.gym.controller.order.OrderController.class,
         tw.com.ispan.gym.controller.order.AdminOrderController.class,
@@ -169,6 +175,15 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary TrainerService trainerService() {
             return Mockito.mock(TrainerService.class);
+        }
+        @Bean @Primary TrainerProfileService trainerProfileService() {
+            return Mockito.mock(TrainerProfileService.class);
+        }
+        @Bean @Primary AdminTrainerService adminTrainerService() {
+            return Mockito.mock(AdminTrainerService.class);
+        }
+        @Bean @Primary PrivateCourseService privateCourseService() {
+            return Mockito.mock(PrivateCourseService.class);
         }
         @Bean @Primary CartService cartService() {
             return Mockito.mock(CartService.class);
@@ -383,7 +398,9 @@ class EndpointAuthorizationTest {
               "lastName": "王",
               "phone": "0912345678",
               "hireDate": "2020-01-01",
-              "role": "ADMIN"
+              "role": "ADMIN",
+              "status": "ACTIVE",
+              "profileImageUrl": "https://example.com/trainer/7.jpg"
             }
             """;
 
@@ -531,6 +548,20 @@ class EndpointAuthorizationTest {
         expectAuthorized(post("/api/employees/22/trainer"), adminToken());
     }
 
+    // === TRAINER：教練本人專業資料 ===============================================
+
+    @Test
+    void 教練本人查詢與修改需教練身分而非只是員工() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/trainer/profile"));
+        expectForbidden(get("/api/trainer/profile"), memberToken());
+        // 關鍵：一般員工沒有 trainer 資料列，拿不到 ROLE_TRAINER
+        expectForbidden(get("/api/trainer/profile"), employeeToken());
+        expectAuthorized(get("/api/trainer/profile"), trainerToken());
+
+        expectForbidden(put("/api/trainer/profile"), employeeToken());
+        expectAuthorized(put("/api/trainer/profile"), trainerToken());
+    }
+
     // === MEMBER：自助查詢／修改個人資料 ==========================================
 
     @Test
@@ -648,6 +679,61 @@ class EndpointAuthorizationTest {
         expectAuthorized(post("/api/admin/employees/1/activate"), adminToken());
     }
 
+    // === ADMIN：教練管理（僅驗 URL 層，方法層 @PreAuthorize 由 TrainerMethodSecurityTest 負責）====
+    //
+    // /api/admin/** 在正式 SecurityConfig 有 URL matcher hasRole("ADMIN")，理由與分工說明
+    // 同上方「ADMIN：員工管理」區塊。教練本人（trainerToken）也不例外——教練管理是管理者的
+    // 權責，不是教練自己的權責，故用 employeeToken／trainerToken 兩種身分都驗一次 forbidden。
+
+    @Test
+    void 教練列表與單筆查詢僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/trainers"));
+        expectForbidden(get("/api/admin/trainers"), employeeToken());
+        expectForbidden(get("/api/admin/trainers"), trainerToken());
+        expectAuthorized(get("/api/admin/trainers"), adminToken());
+
+        expectForbidden(get("/api/admin/trainers/1"), trainerToken());
+        expectAuthorized(get("/api/admin/trainers/1"), adminToken());
+    }
+
+    @Test
+    void 教練代改專業資料僅限管理者() throws Exception {
+        expectForbidden(put("/api/admin/trainers/1"), trainerToken());
+        expectAuthorized(put("/api/admin/trainers/1"), adminToken());
+    }
+
+    @Test
+    void 教練狀態切換僅限管理者() throws Exception {
+        expectForbidden(post("/api/admin/trainers/1/status"), trainerToken());
+        expectAuthorized(post("/api/admin/trainers/1/status"), adminToken());
+    }
+
+    @Test
+    void 教練停用預檢停用與恢復僅限管理者() throws Exception {
+        expectForbidden(get("/api/admin/trainers/1/suspension-check"), trainerToken());
+        expectForbidden(post("/api/admin/trainers/1/suspend"), trainerToken());
+        expectForbidden(post("/api/admin/trainers/1/restore"), employeeToken());
+        expectAuthorized(get("/api/admin/trainers/1/suspension-check"), adminToken());
+        expectAuthorized(post("/api/admin/trainers/1/suspend"), adminToken());
+        expectAuthorized(post("/api/admin/trainers/1/restore"), adminToken());
+    }
+
+    /**
+     * 這幾個端點是 code review（2026-08-19）後新增的：教練停用前會檢查名下是否還有
+     * 生效中的私教課，在此之前完全沒有辦法把 PrivateCourse 設回 INACTIVE，
+     * 等於停用流程被卡死（見 trainer_management_next_phase 規格基準）。
+     */
+    @Test
+    void 私教課下架與重新上架僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/private-courses").param("trainerId", "1"));
+        expectForbidden(get("/api/admin/private-courses").param("trainerId", "1"), trainerToken());
+        expectForbidden(post("/api/admin/private-courses/1/deactivate"), employeeToken());
+        expectForbidden(post("/api/admin/private-courses/1/activate"), trainerToken());
+        expectAuthorized(get("/api/admin/private-courses").param("trainerId", "1"), adminToken());
+        expectAuthorized(post("/api/admin/private-courses/1/deactivate"), adminToken());
+        expectAuthorized(post("/api/admin/private-courses/1/activate"), adminToken());
+    }
+
     // === EMPLOYEE：自助查詢／修改個人資料 ==========================================
 
     @Test
@@ -697,6 +783,18 @@ class EndpointAuthorizationTest {
         org.assertj.core.api.Assertions.assertThat(status)
                 .as("公開單筆查詢不該被安全層擋下（實際 %d）", status)
                 .isNotIn(401, 403);
+    }
+
+    /**
+     * 聊天室選教練用的 chat-directory 含 employeeId，跟公開列表不同 DTO、不同權限層級——
+     * 必須登入且限會員身分，驗證沒有因為路徑掛在 /api/trainers 之下而誤被公開 matcher 放行。
+     */
+    @Test
+    void 聊天室教練名冊需要會員登入() throws Exception {
+        mockMvc.perform(get("/api/member/trainers/chat-directory"))
+                .andExpect(status().isUnauthorized());
+        expectForbidden(get("/api/member/trainers/chat-directory"), employeeToken());
+        expectAuthorized(get("/api/member/trainers/chat-directory"), memberToken());
     }
 
     // === MEMBER：購物車、訂單、綠界結帳 =========================================

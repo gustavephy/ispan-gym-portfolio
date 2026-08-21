@@ -23,6 +23,7 @@ import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.aihealthchat.ChatMessageRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * 聊天室（2.4）核心邏輯。對外分兩種入口：
@@ -41,14 +42,17 @@ public class ChatService {
     private final ChatMessageRepository chatMessages;
     private final MemberRepository members;
     private final EmployeeRepository employees;
+    private final TrainerRepository trainers;
     private final ChatMessagePublisher publisher;
     private final ChatAiResponderService aiResponder;
 
     public ChatService(ChatMessageRepository chatMessages, MemberRepository members,
-            EmployeeRepository employees, ChatMessagePublisher publisher, ChatAiResponderService aiResponder) {
+            EmployeeRepository employees, TrainerRepository trainers, ChatMessagePublisher publisher,
+            ChatAiResponderService aiResponder) {
         this.chatMessages = chatMessages;
         this.members = members;
         this.employees = employees;
+        this.trainers = trainers;
         this.publisher = publisher;
         this.aiResponder = aiResponder;
     }
@@ -219,10 +223,24 @@ public class ChatService {
         return employee.getId();
     }
 
+    /**
+     * 會員發起聊天室的對象限定教練，不是任意在職員工——聊天目錄（chat-directory）
+     * 只列教練，但 request.employeeId() 是前端自帶的欄位，光靠 ACTIVE 員工檢查
+     * 擋不住會員竄改成任意在職員工（含 ADMIN）的 id 也能建立聊天室。這裡額外要求
+     * 有對應未軟刪除的 Trainer 資料列，跟 ROLE_TRAINER（AccountAuthorityResolver）
+     * 用同一個判斷標準（只看 deletedAt，不看 status——UNAVAILABLE 教練仍可被聊天，
+     * 只是不能被預約，見 code review 發現，2026-08-19）。
+     */
     private void requireActiveEmployee(Integer employeeId) {
         Employee employee = employees.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到教練／員工：" + employeeId));
         if (employee.getDeletedAt() != null || employee.getStatus() != EmployeeStatus.ACTIVE) {
+            throw new ResourceNotFoundException("找不到教練／員工：" + employeeId);
+        }
+        boolean hasActiveTrainer = trainers.findByEmployeeId(employeeId)
+                .filter(t -> t.getDeletedAt() == null)
+                .isPresent();
+        if (!hasActiveTrainer) {
             throw new ResourceNotFoundException("找不到教練／員工：" + employeeId);
         }
     }

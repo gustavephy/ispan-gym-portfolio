@@ -97,6 +97,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // 員工基底角色由 AccountAuthorityResolver 對所有 ACTIVE 員工加發（職位另有 ROLE_ADMIN/ROLE_TRAINER）
                         .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")
+                        // 教練本人專業資料：ROLE_TRAINER 由 AccountAuthorityResolver 算出
+                        // （員工 ACTIVE 且有對應未軟刪除的 Trainer 資料列才授予），不與 EMPLOYEE/ADMIN 互斥
+                        .requestMatchers("/api/trainer/**").hasRole("TRAINER")
                         // 員工審核：任何在職員工皆可審核，不限管理者，獨立於 /api/admin/** 之外
                         // （/api/admin/** 還掛著訂單、商品等真正的管理員專屬後台，不能共用同一條規則）
                         .requestMatchers("/api/employees/reviews/**").hasRole("EMPLOYEE")
