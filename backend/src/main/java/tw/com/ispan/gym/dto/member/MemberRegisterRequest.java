@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import tw.com.ispan.gym.enums.member.Gender;
+import tw.com.ispan.gym.validation.ValidPassword;
 
 @Getter
 @Setter
@@ -36,7 +37,7 @@ public class MemberRegisterRequest {
     private String phone;
 
     @NotBlank(message = "密碼為必填")
-    @Pattern(regexp = "^(?=\\S+$)(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,72}$", message = "密碼需為8至72個字元，包含大小寫英文字母及數字，且不可包含空白")
+    @ValidPassword
     @ToString.Exclude
     private String password;
 
