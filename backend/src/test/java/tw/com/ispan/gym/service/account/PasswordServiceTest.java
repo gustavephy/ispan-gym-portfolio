@@ -441,40 +441,73 @@ class PasswordServiceTest {
     }
 
     // === resetPassword()：Token 驗證 ============================================
+    //
+    // 鎖序已改為 Account-first：先用不鎖的 scalar 查詢（findAccountIdByTokenHash）
+    // 定位 accountId，再鎖 Account、再鎖 token，鎖內重新驗證一次所有狀態。刻意用
+    // scalar Integer 而不是回傳整個 Entity——同一個 persistence context 內對同一
+    // id 的重複查詢，Hibernate 會回傳同一個已受管理的 instance（identity map），
+    // 如果第一次查詢就把 Entity 查出來，之後 findByTokenHashForUpdate 即使真的下了
+    // SELECT ... FOR UPDATE，Java 端拿到的欄位值也未必是鎖定後的最新值。因此
+    // 「定位」跟「鎖內複查」在這些測試裡永遠是兩個獨立的 stub，鎖內複查一律用
+    // validToken()（或其他手動建構的狀態）單獨表達。
 
     @Test
-    void resetPassword_Token不存在丟ResetTokenInvalid() {
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.empty());
+    void resetPassword_定位時Token不存在丟ResetTokenInvalid() {
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.resetPassword("raw-token", "Newpass@2026"))
+                .isInstanceOf(ResetTokenInvalidException.class);
+
+        verify(accounts, never()).findByIdForUpdate(any());
+        verify(passwordResetTokens, never()).findByTokenHashForUpdate(any());
+    }
+
+    @Test
+    void resetPassword_定位後鎖內Token已被使用丟ResetTokenInvalid() {
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("old-hash")));
+        PasswordResetToken lockedToken = validToken();
+        lockedToken.setUsedAt(LocalDateTime.now().minusMinutes(1));
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(lockedToken));
 
         assertThatThrownBy(() -> service.resetPassword("raw-token", "Newpass@2026"))
                 .isInstanceOf(ResetTokenInvalidException.class);
     }
 
     @Test
-    void resetPassword_Token已使用丟ResetTokenInvalid() {
-        PasswordResetToken token = validToken();
-        token.setUsedAt(LocalDateTime.now().minusMinutes(1));
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
+    void resetPassword_定位後鎖內Token已被作廢丟ResetTokenInvalid() {
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("old-hash")));
+        PasswordResetToken lockedToken = validToken();
+        lockedToken.setInvalidatedAt(LocalDateTime.now().minusMinutes(1));
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(lockedToken));
 
         assertThatThrownBy(() -> service.resetPassword("raw-token", "Newpass@2026"))
                 .isInstanceOf(ResetTokenInvalidException.class);
     }
 
     @Test
-    void resetPassword_Token已作廢丟ResetTokenInvalid() {
-        PasswordResetToken token = validToken();
-        token.setInvalidatedAt(LocalDateTime.now().minusMinutes(1));
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
+    void resetPassword_定位後鎖內Token已過期丟ResetTokenInvalid() {
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("old-hash")));
+        PasswordResetToken lockedToken = validToken();
+        lockedToken.setExpiresAt(LocalDateTime.now().minusMinutes(1));
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(lockedToken));
 
         assertThatThrownBy(() -> service.resetPassword("raw-token", "Newpass@2026"))
                 .isInstanceOf(ResetTokenInvalidException.class);
     }
 
     @Test
-    void resetPassword_Token已過期丟ResetTokenInvalid() {
-        PasswordResetToken token = validToken();
-        token.setExpiresAt(LocalDateTime.now().minusMinutes(1));
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
+    void resetPassword_定位與鎖定後TokenAccountId不一致丟ResetTokenInvalid() {
+        // 理論上不該發生，但明確擋一次：不能假設兩次查詢之間 token 所屬帳號沒有變動。
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("old-hash")));
+        PasswordResetToken lockedToken = validToken();
+        Account otherAccount = accountOf("other-hash");
+        otherAccount.setId(ACCOUNT_ID + 1);
+        lockedToken.setAccount(otherAccount);
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(lockedToken));
 
         assertThatThrownBy(() -> service.resetPassword("raw-token", "Newpass@2026"))
                 .isInstanceOf(ResetTokenInvalidException.class);
@@ -482,21 +515,23 @@ class PasswordServiceTest {
 
     @Test
     void resetPassword_對應帳號不存在丟ResetTokenInvalid() {
-        PasswordResetToken token = validToken();
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
         when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.resetPassword("raw-token", "Newpass@2026"))
                 .isInstanceOf(ResetTokenInvalidException.class);
+
+        // Account 鎖失敗就必須直接中止，不該再去鎖 token
+        verify(passwordResetTokens, never()).findByTokenHashForUpdate(any());
     }
 
     @Test
     void resetPassword_帳號已軟刪除丟ResetTokenInvalid() {
-        PasswordResetToken token = validToken();
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
         Account deleted = accountOf("hash");
         deleted.softDelete();
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
         when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(deleted));
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(validToken()));
 
         assertThatThrownBy(() -> service.resetPassword("raw-token", "Newpass@2026"))
                 .isInstanceOf(ResetTokenInvalidException.class);
@@ -504,9 +539,9 @@ class PasswordServiceTest {
 
     @Test
     void resetPassword_帳號已變成OAuthOnly時防禦性擋下() {
-        PasswordResetToken token = validToken();
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
         when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(accountOf(null)));
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(validToken()));
 
         assertThatThrownBy(() -> service.resetPassword("raw-token", "Newpass@2026"))
                 .isInstanceOf(ResetTokenInvalidException.class);
@@ -514,14 +549,36 @@ class PasswordServiceTest {
 
     @Test
     void resetPassword_新密碼重用丟PasswordReused() {
-        PasswordResetToken token = validToken();
         Account account = accountOf("old-hash");
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
         when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(validToken()));
         when(passwordEncoder.matches("SamePass@2026", "old-hash")).thenReturn(true);
 
         assertThatThrownBy(() -> service.resetPassword("raw-token", "SamePass@2026"))
                 .isInstanceOf(PasswordReusedException.class);
+    }
+
+    @Test
+    void resetPassword_鎖定順序為Account先於Token() {
+        Account account = accountOf("old-hash");
+        PasswordResetToken lockedToken = validToken();
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(lockedToken));
+        when(passwordEncoder.matches(any(), any())).thenReturn(false);
+        when(passwordEncoder.encode(any())).thenReturn("new-hash");
+        when(passwordHistories.findTop4ByAccountIdOrderByCreatedAtDescIdDesc(ACCOUNT_ID)).thenReturn(List.of());
+        when(passwordHistories.findByAccountIdOrderByCreatedAtDescIdDesc(ACCOUNT_ID)).thenReturn(List.of());
+        when(passwordResetTokens.findByAccountIdAndIdNotAndUsedAtIsNullAndInvalidatedAtIsNull(
+                eq(ACCOUNT_ID), any())).thenReturn(List.of());
+
+        service.resetPassword("raw-token", "Newpass@2026");
+
+        org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(accounts, passwordResetTokens);
+        inOrder.verify(passwordResetTokens).findAccountIdByTokenHash(any());
+        inOrder.verify(accounts).findByIdForUpdate(ACCOUNT_ID);
+        inOrder.verify(passwordResetTokens).findByTokenHashForUpdate(any());
     }
 
     // === resetPassword()：成功路徑 ===============================================
@@ -530,8 +587,9 @@ class PasswordServiceTest {
     void resetPassword_成功時更新密碼遞增版本標記已使用_且不簽發JWT() {
         PasswordResetToken token = validToken();
         Account account = accountOf("old-hash");
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
         when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
         when(passwordEncoder.matches("Newpass@2026", "old-hash")).thenReturn(false);
         when(passwordEncoder.encode("Newpass@2026")).thenReturn("new-hash");
         when(passwordHistories.findTop4ByAccountIdOrderByCreatedAtDescIdDesc(ACCOUNT_ID)).thenReturn(List.of());
@@ -552,8 +610,9 @@ class PasswordServiceTest {
         PasswordResetToken token = validToken();
         Account account = accountOf("old-hash");
         PasswordResetToken otherStillValid = new PasswordResetToken();
-        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
+        when(passwordResetTokens.findAccountIdByTokenHash(any())).thenReturn(Optional.of(ACCOUNT_ID));
         when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(passwordResetTokens.findByTokenHashForUpdate(any())).thenReturn(Optional.of(token));
         when(passwordEncoder.matches(any(), any())).thenReturn(false);
         when(passwordEncoder.encode(any())).thenReturn("new-hash");
         when(passwordHistories.findTop4ByAccountIdOrderByCreatedAtDescIdDesc(ACCOUNT_ID)).thenReturn(List.of());
