@@ -57,6 +57,7 @@ import tw.com.ispan.gym.service.trainer.TrainerProfileService;
 import tw.com.ispan.gym.service.trainer.TrainerService;
 import tw.com.ispan.gym.service.report.OperationReportService;
 import tw.com.ispan.gym.service.report.ReportPdfService;
+import tw.com.ispan.gym.service.account.PasswordService;
 
 /**
  * 用「真實的 controller」驗證方法層級的 @PreAuthorize 是否確實生效。
@@ -113,6 +114,8 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.order.AdminOrderController.class,
         tw.com.ispan.gym.controller.payment.PaymentController.class,
         tw.com.ispan.gym.controller.report.OperationReportController.class,
+        tw.com.ispan.gym.controller.account.PasswordController.class,
+        tw.com.ispan.gym.controller.account.PasswordResetController.class,
         // 安全基礎設施
         JwtUtil.class,
         JwtAuthFilter.class,
@@ -207,6 +210,9 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary OrderRepository orderRepository() {
             return Mockito.mock(OrderRepository.class);
+        }
+        @Bean @Primary PasswordService passwordService() {
+            return Mockito.mock(PasswordService.class);
         }
     }
 
@@ -842,5 +848,35 @@ class EndpointAuthorizationTest {
         expectForbidden(get("/api/admin/reports"), memberToken());
         expectForbidden(get("/api/admin/reports"), employeeToken());
         expectAuthorized(get("/api/admin/reports"), adminToken());
+    }
+
+    // === 密碼管理 ================================================================
+    // PasswordController／PasswordResetController 都沒有 @PreAuthorize，
+    // 不需要另開方法層級測試類別（見 memory/password_management_phase_scope.md）。
+
+    /** 密碼是 Account 層級概念，不分會員／員工，任何已登入帳號都能改自己的密碼 */
+    @Test
+    void 修改密碼需要登入_任何已登入身分皆可() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/account/me/change-password"));
+        expectAuthorized(post("/api/account/me/change-password"), memberToken());
+        expectAuthorized(post("/api/account/me/change-password"), employeeToken());
+    }
+
+    /** 忘記密碼申請／憑 Token 重設密碼都是匿名端點，落在既有 /api/auth/** permitAll 規則裡 */
+    @Test
+    void 忘記密碼與重設密碼不需登入() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "email": "someone@example.com" }
+                                """))
+                .andExpect(status().isAccepted());
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "token": "t", "newPassword": "Newpass@2026", "confirmPassword": "Newpass@2026" }
+                                """))
+                .andExpect(status().isNoContent());
     }
 }

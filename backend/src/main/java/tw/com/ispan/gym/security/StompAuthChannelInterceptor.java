@@ -35,6 +35,11 @@ import tw.com.ispan.gym.repository.member.MemberRepository;
  * <p>刻意不比照 REST API 在 dev profile 下放行匿名連線：WebSocket 是全新的
  * 通道，沒有對應的 DevSecurityConfig 可以連動放寬，維持「一律要求有效 JWT」
  * 最簡單也最不容易留下認證漏洞；本機測試時一樣先呼叫 /api/auth/login 換 token。
+ *
+ * <p>CONNECT 時也會比對 token 的 cv claim 與 account.credentialsVersion（比照
+ * {@link JwtAuthFilter}），密碼變更前簽發的舊 token 一律視同無效——但只在
+ * CONNECT 檢查，已經建立的連線不會被主動中斷，只是密碼變更後無法再用舊 token
+ * 重新連線（見 memory/password_management_phase_scope.md 的說明）。
  */
 @Component
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
@@ -80,8 +85,10 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private StompPrincipal authenticate(StompHeaderAccessor accessor) {
         String token = extractToken(accessor.getFirstNativeHeader("Authorization"));
         Integer accountId;
+        int credentialsVersion;
         try {
             accountId = jwtUtil.extractAccountId(token);
+            credentialsVersion = jwtUtil.extractCredentialsVersion(token);
         } catch (JwtException | IllegalArgumentException ex) {
             throw new BadCredentialsException("聊天室連線的 token 無效或已過期");
         }
@@ -89,6 +96,10 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         Account account = accounts.findById(accountId).orElse(null);
         if (account == null || account.getDeletedAt() != null) {
             throw new BadCredentialsException("聊天室連線對應的帳號不存在或已停用");
+        }
+        if (credentialsVersion != account.getCredentialsVersion()) {
+            // 沿用同一句訊息，不額外揭露「是因為密碼被改過」
+            throw new BadCredentialsException("聊天室連線的 token 無效或已過期");
         }
         return new StompPrincipal(account.getId());
     }

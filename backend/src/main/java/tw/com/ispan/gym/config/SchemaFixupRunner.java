@@ -63,6 +63,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
         migrateEmployeeReviewModel();
         addTrainerProfileColumns();
         fixReversedTestAccountNames();
+        addAccountCredentialsVersionColumn();
+        migratePasswordResetTokenToHashedFormat();
     }
 
     // === 員工審核模型修正（2026-08-14 定案：EmployeeRole/EmployeeStatus 改版）========
@@ -1215,5 +1217,86 @@ public class SchemaFixupRunner implements CommandLineRunner {
         if (rows > 0) {
             log.info("已導正 {} 的測試帳號姓名（{}）：{} 列", table, email, rows);
         }
+    }
+
+    // === 密碼管理（2026-08-21 定案：credentialsVersion 全裝置登出機制）===========
+
+    /**
+     * account 新增 credentials_version（int, NOT NULL, 預設 0）。
+     *
+     * <p>修正（code review 抓到的原始版本 bug）：原本的守衛寫成「欄位已存在就直接
+     * return」，只在欄位完全不存在時才補值收緊。但欄位存在與否不能拿來判斷「是否已經
+     * 處理過」——account 表非空時，Hibernate ddl-auto 對 nullable=false 的欄位會直接嘗試
+     * ADD ... NOT NULL 而整段失敗（欄位不會被建立，只默默記 log，見 addTrainerProfileColumns
+     * 的說明）；但如果 account 剛好是空表，Hibernate 反而會一次成功建出 NOT NULL 版本。
+     * 舊寫法只覆蓋了「欄位不存在」這一種情況，沒有覆蓋「欄位存在但仍是 nullable、還沒回填」
+     * 的情況，等於在某些環境下會漏掉回填與收緊。現在改成：欄位不存在才新增（一定是 nullable，
+     * 避免重蹈 Hibernate 那個 NOT NULL-on-非空表 的錯），接著不論欄位是新建的還是本來就在，
+     * 一律回填＋收緊，兩步都是冪等操作，多跑一次沒有副作用。
+     */
+    private void addAccountCredentialsVersionColumn() {
+        if (!tableExists("account")) {
+            return;
+        }
+        if (!columnExists("account", "credentials_version")) {
+            jdbc.execute("ALTER TABLE account ADD credentials_version int NULL");
+        }
+        backfill("account.credentials_version",
+                "UPDATE account SET credentials_version = 0 WHERE credentials_version IS NULL");
+        tightenColumnNotNull("account", "credentials_version", "int");
+    }
+
+    /**
+     * password_reset_token 從明文 UUID 改成雜湊儲存。
+     *
+     * <p>修正（code review 抓到的原始版本 bug）：原本把「清掉舊資料、砍掉 token 欄位」
+     * 跟「確保 token_hash 是 NOT NULL、有唯一索引」全部包在同一個「舊 token 欄位是否還在」
+     * 的守衛裡。這在全新資料庫（從來沒有過舊 token 欄位）會整段被跳過，連唯一索引都不會建
+     * ——這張表沒有在 entity 上宣告 @UniqueConstraint（唯一索引刻意改由這裡手動建立，
+     * 理由見下方 createFilteredUniqueIndex 呼叫），所以少了這段就真的完全沒有唯一約束。
+     * 現在拆成兩段：舊格式遷移只在舊欄位還在時執行一次；NOT NULL 與唯一索引的存在性
+     * 檢查每次開機都跑，不管有沒有走過舊格式遷移都要補齊。
+     */
+    private void migratePasswordResetTokenToHashedFormat() {
+        if (!tableExists("password_reset_token")) {
+            return;
+        }
+
+        // 舊格式遷移：只在還有舊明文 token 欄位時執行一次，用它的存在與否當一次性旗標
+        // ——不能寫成無條件執行，這個 runner 每次開機都跑，若 DELETE 沒有守衛條件，
+        // 上線後每次重啟都會把當時已核發、合法有效的重設信 token 全部清空。這張表目前
+        // 完全沒有實際流程在寫入，清空既有資料沒有相容性成本；即使真的有測試資料，
+        // 舊的明文格式在新方案下本來就不該繼續視為有效。
+        if (columnExists("password_reset_token", "token")) {
+            jdbc.update("DELETE FROM password_reset_token");
+            dropColumnIfExists("password_reset_token", "token");
+            log.info("password_reset_token 已升級為雜湊儲存格式（舊明文 token 資料已清空）");
+        }
+
+        // token_hash 是 NOT NULL＋唯一索引：不論剛剛是否走過上面的舊格式遷移都要跑。
+        // 全新資料庫從沒有過舊 token 欄位，一樣要靠這裡補齊唯一索引；account 非空時
+        // Hibernate 新增 NOT NULL 欄位會失敗（同 credentials_version 的情況），這裡也要
+        // 補上欄位本身，不能只假設它已經被 Hibernate 建好。
+        if (!columnExists("password_reset_token", "token_hash")) {
+            jdbc.execute("ALTER TABLE password_reset_token ADD token_hash varchar(255) NULL");
+        }
+        tightenColumnNotNull("password_reset_token", "token_hash", "varchar(255)");
+        createFilteredUniqueIndex("UX_password_reset_token_token_hash", """
+                CREATE UNIQUE INDEX UX_password_reset_token_token_hash
+                    ON password_reset_token(token_hash)
+                """);
+    }
+
+    /** 跟既有的 alterColumnNullable 相反方向：只在目前是 nullable 時才收緊為 NOT NULL */
+    private void tightenColumnNotNull(String table, String column, String type) {
+        Boolean nullable = jdbc.queryForObject("""
+                SELECT is_nullable FROM sys.columns
+                    WHERE object_id = OBJECT_ID(?) AND name = ?
+                """, Boolean.class, table, column);
+        if (!Boolean.TRUE.equals(nullable)) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE " + table + " ALTER COLUMN " + column + " " + type + " NOT NULL");
+        log.info("已將 {}.{} 收緊為 NOT NULL", table, column);
     }
 }
