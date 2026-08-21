@@ -5,6 +5,8 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import tw.com.ispan.gym.entity.coach.CoachBooking;
 import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
@@ -30,4 +32,13 @@ public interface CoachBookingRepository extends JpaRepository<CoachBooking, Inte
      * UX_coach_bookings_active_slot 已確保同一時段最多只有一筆非 CANCELLED 的預約。
      */
     Optional<CoachBooking> findByCoachSlotIdAndStatusNot(Integer coachSlotId, CoachBookingStatus status);
+
+    /**
+     * 教練停用前檢查用：名下還有多少「未完成」預約。CoachBookingStatus 只有
+     * PENDING／COMPLETED／CANCELLED，沒有 CONFIRMED，故只看 PENDING（見
+     * trainer_management_next_phase 規格基準的核對結果）。教練是透過 coachSlot 關聯，
+     * 沒有直接欄位可用衍生查詢方法名稱表達，故手寫 JPQL。
+     */
+    @Query("SELECT COUNT(b) FROM CoachBooking b WHERE b.coachSlot.trainer.id = :trainerId AND b.status = :status")
+    long countByTrainerIdAndStatus(@Param("trainerId") Integer trainerId, @Param("status") CoachBookingStatus status);
 }

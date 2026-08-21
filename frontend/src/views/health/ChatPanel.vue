@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { getChatHistory, markChatRead, getUnreadCount, recommendCourse } from '@/api/aihealthchat/chat.js'
-import { getTrainers } from '@/api/aihealthchat/trainer.js'
+import { getTrainerChatDirectory } from '@/api/aihealthchat/trainer.js'
 import { getMyMemberId } from '@/api/aihealthchat/member.js'
 import { createChatSocket } from '@/api/aihealthchat/chatSocket.js'
 import { notify } from '@/api/error-bus.js'
@@ -153,7 +153,10 @@ function changeTrainer() {
 
 onMounted(async () => {
   try {
-    const [{ data: me }, { data: trainerList }] = await Promise.all([getMyMemberId(), getTrainers()])
+    const [{ data: me }, { data: trainerList }] = await Promise.all([
+      getMyMemberId(),
+      getTrainerChatDirectory(),
+    ])
     myMemberId.value = me.memberId
     trainers.value = trainerList
   } catch (e) {

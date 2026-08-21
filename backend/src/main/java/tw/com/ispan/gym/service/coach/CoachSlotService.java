@@ -29,6 +29,7 @@ import tw.com.ispan.gym.repository.coach.CoachBookingRepository;
 import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 /**
  * 教練排班（私教課時段）的商業邏輯，涵蓋建立／查詢／修改／取消四個功能，
@@ -50,6 +51,7 @@ public class CoachSlotService {
         private final TrainerRepository trainerRepository;
         private final EmployeeRepository employeeRepository;
         private final CoachBookingRepository coachBookingRepository;
+        private final TrainerService trainerService;
 
         /**
          * 由登入者的帳號 id 解析出教練資料（account → employee → trainer 兩段查詢）。
@@ -100,7 +102,21 @@ public class CoachSlotService {
          */
         @Transactional
         public CoachSlotResponse createSlot(Integer accountId, CreateCoachSlotRequest request) {
-                Trainer trainer = requireTrainerByAccount(accountId);
+                // §9 跨模組防護：UNAVAILABLE／已軟刪除的教練不可新增排班，不能只靠前端隱藏按鈕擋
+                // （見 trainer_management_next_phase 規格基準）。這裡刻意不呼叫
+                // requireTrainerByAccount()（它是不鎖定的讀取）——若在鎖定前先把完整 Trainer
+                // 實體讀進這個交易的 persistence context，之後 lockAndAssertAvailableForNewBusiness()
+                // 的鎖定查詢會命中 Hibernate 的 identity map、直接拿到先前那個未鎖定讀到的舊物件，
+                // 鎖形同虛設（同一顆鎖必須跟 AdminTrainerService.suspend() 搶到，才能真正擋住
+                // 「新增排班」跟「停用教練」交錯執行的競態，見 TrainerService 的方法註解）。
+                // 改用純量投影 findIdByEmployeeId 解出 trainerId，不會把 Trainer 實體放進
+                // persistence context，鎖定查詢才會是這個交易第一次、也是唯一一次真正讀取它。
+                Integer employeeId = employeeRepository.findByAccountId(accountId)
+                                .orElseThrow(() -> new ForbiddenAccessException("目前帳號沒有教練身分"))
+                                .getId();
+                Integer trainerId = trainerRepository.findIdByEmployeeId(employeeId)
+                                .orElseThrow(() -> new ForbiddenAccessException("目前帳號沒有教練身分"));
+                Trainer trainer = trainerService.lockAndAssertAvailableForNewBusiness(trainerId);
 
                 // 查詢重疊
                 List<CoachSlot> existing = coachSlotRepository.findOverlapping(trainer.getId(),

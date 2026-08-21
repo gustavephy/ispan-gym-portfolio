@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -41,6 +42,7 @@ import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
 import tw.com.ispan.gym.repository.course.GroupCourseRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 /**
  * 純 Mockito 單元測試，風格比照 CoachBookingServiceTest：
@@ -69,8 +71,9 @@ class GroupClassServiceTest {
     private final MemberSubscriptionRepository subscriptions = mock(MemberSubscriptionRepository.class);
     private final GroupClassBookingRepository classBookings = mock(GroupClassBookingRepository.class);
     private final MemberRepository members = mock(MemberRepository.class);
+    private final TrainerService trainerService = mock(TrainerService.class);
     private final GroupClassService service = new GroupClassService(sessions, courses, subscriptions, classBookings,
-            members);
+            members, trainerService);
 
     // === 共用測試資料 ========================================================
 
@@ -420,6 +423,27 @@ class GroupClassServiceTest {
         assertThatThrownBy(() -> service.createSession(request))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("重疊");
+        verify(sessions, never()).save(any());
+    }
+
+    @Test
+    void 建立_教練非可服務狀態擋下且不建立場次() {
+        // §9 跨模組防護：教練 UNAVAILABLE／已軟刪除時，即使課程本身仍是 ACTIVE，
+        // 也不可再指派新的團課場次。TrainerService 本身的判斷邏輯由 TrainerServiceTest
+        // 驗證，這裡只驗證 GroupClassService 有沒有在建立場次前就先擋下。
+        GroupCourse course = course();
+        CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
+        request.setGroupCourseId(COURSE_ID);
+        request.setRoomName("B教室");
+        request.setStartAt(LocalDateTime.now().plusDays(5));
+        request.setEndAt(LocalDateTime.now().plusDays(5).plusHours(1));
+        when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
+        when(trainerService.lockAndAssertAvailableForNewBusiness(TRAINER_ID))
+                .thenThrow(new BusinessRuleException("教練目前無法承接新業務（非在職或非可服務狀態）"));
+
+        assertThatThrownBy(() -> service.createSession(request))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("無法承接新業務");
         verify(sessions, never()).save(any());
     }
 

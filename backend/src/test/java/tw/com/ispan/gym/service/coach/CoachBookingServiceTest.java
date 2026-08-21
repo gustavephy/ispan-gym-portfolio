@@ -33,6 +33,7 @@ import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
 import tw.com.ispan.gym.repository.coach.SessionDeductionLogRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 /**
  * 純 Mockito 單元測試（沿用 InbodyServiceTest 的做法：專案無內嵌測試資料庫，
@@ -65,8 +66,9 @@ class CoachBookingServiceTest {
     // SessionDeductionLogRepository 欄位，@RequiredArgsConstructor 生成的建構子因此多一個參數，
     // 這裡跟著補一個 mock；save() 不需要 stub 行為，稽核紀錄寫入成功與否不是這批測試的驗證目標。
     private final SessionDeductionLogRepository deductionLogs = mock(SessionDeductionLogRepository.class);
+    private final TrainerService trainerService = mock(TrainerService.class);
     private final CoachBookingService service = new CoachBookingService(slots, quotas, bookings, members, slotService,
-            deductionLogs);
+            trainerService, deductionLogs);
 
     // === 共用測試資料 ========================================================
 
@@ -156,6 +158,23 @@ class CoachBookingServiceTest {
         assertThat(response.getTrainerId()).isEqualTo(TRAINER_ID);
         assertThat(response.getStatus()).isEqualTo(CoachBookingStatus.PENDING);
         assertThat(response.getRemainingCourse()).isEqualTo(4);
+    }
+
+    @Test
+    void 預約_教練非可服務狀態擋下且不動額度不標記時段() {
+        // §9 跨模組防護：即使時段本身仍是 AVAILABLE，教練 UNAVAILABLE／已軟刪除時
+        // 一樣不可接受新預約。TrainerService 本身的判斷邏輯由 TrainerServiceTest 驗證，
+        // 這裡只驗證 CoachBookingService 有沒有在扣額度／標記時段前就先擋下。
+        CoachSlot slot = slot(LocalDateTime.of(2026, 9, 1, 10, 0));
+        when(slots.findById(SLOT_ID)).thenReturn(Optional.of(slot));
+        when(trainerService.lockAndAssertAvailableForNewBusiness(TRAINER_ID))
+                .thenThrow(new BusinessRuleException("教練目前無法承接新業務（非在職或非可服務狀態）"));
+
+        assertThatThrownBy(() -> service.createBooking(MEMBER_ID, SLOT_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("無法承接新業務");
+        verify(slotService, never()).markAsBooked(anyInt());
+        verify(bookings, never()).save(any());
     }
 
     @Test

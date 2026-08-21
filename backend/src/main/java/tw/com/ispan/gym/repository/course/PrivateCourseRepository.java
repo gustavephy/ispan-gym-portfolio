@@ -17,6 +17,13 @@ public interface PrivateCourseRepository extends JpaRepository<PrivateCourse, In
 	List<PrivateCourse> findByStatus(CourseStatus status);
 
 	/**
+	 * 教練停用前檢查用：名下還有幾筆生效中（未下架）的私教課商品。trainer_id 是必填 FK，
+	 * 商品本身沒有「解除指派」的中間狀態，故只看 status，不看日期——本表沒有到期日欄位
+	 * （見 trainer_management_next_phase 規格基準的核對結果）。
+	 */
+	long countByTrainerIdAndStatus(Integer trainerId, CourseStatus status);
+
+	/**
 	 * AI 課程推薦（ChatAiResponderService）專用：category 是 LAZY 關聯，該服務組 prompt
 	 * 時要讀 category 名稱，但查詢與讀取分屬呼叫 Gemini 前後兩段（刻意不把整個非同步方法包
 	 * 在同一個交易裡，避免佔用 DB 連線等 Gemini 回應），一般的 findByStatus 查完後 session

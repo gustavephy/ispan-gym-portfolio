@@ -33,6 +33,7 @@ import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
 import tw.com.ispan.gym.repository.course.GroupCourseRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 @Service
 @RequiredArgsConstructor
@@ -54,6 +55,7 @@ public class GroupClassService {
         private final GroupClassBookingRepository groupClassBookingRepository;
 
         private final MemberRepository memberRepository;
+        private final TrainerService trainerService;
 
         @Transactional(readOnly = true)
         public List<GroupClassSessionResponse> getUpcomingSessions() {
@@ -146,6 +148,16 @@ public class GroupClassService {
                 Integer groupCourseId = request.getGroupCourseId();
                 GroupCourse groupCourse = groupCourseRepository.findById(groupCourseId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此課程"));
+                // §9 跨模組防護：教練若已 UNAVAILABLE 或軟刪除，不可再指派新的團課場次，
+                // 不能只靠前端隱藏按鈕擋（見 trainer_management_next_phase 規格基準）。
+                // GroupCourseService#createCourse／activateCourse 現在也有同一道檢查
+                // （2026-08-19 code review 後補上，原規格§9 本來就把「建立或指派 GroupClass」
+                // 跟這裡的「建立或指派 GroupClassSession」列成兩個獨立防護點）——這裡仍然要查，
+                // 因為課程主檔 ACTIVE 不代表底下每一場次建立時教練仍可服務，兩層互相獨立。
+                // 只取 .getId()（lazy proxy，不觸發初始化，見 TrainerService 的方法註解），
+                // 真正的鎖定讀取交給 lockAndAssertAvailableForNewBusiness()，這樣才能跟
+                // AdminTrainerService.suspend() 搶同一顆鎖，堵住競態。
+                trainerService.lockAndAssertAvailableForNewBusiness(groupCourse.getTrainer().getId());
 
                 List<GroupClassSession> existing = groupClassSessionRepository
                                 .findOverlappingByRoom(request.getRoomName(), request.getStartAt(), request.getEndAt());

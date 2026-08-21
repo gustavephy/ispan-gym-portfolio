@@ -21,7 +21,7 @@ import tw.com.ispan.gym.enums.course.CourseStatus;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.course.CourseCategoryRepository;
 import tw.com.ispan.gym.repository.course.GroupCourseRepository;
-import tw.com.ispan.gym.repository.trainer.TrainerRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 /**
  * 管理員維護團課主檔（GroupCourse）的商業邏輯：建立與查詢。
@@ -33,7 +33,7 @@ import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 public class GroupCourseService {
 
     private final GroupCourseRepository groupCourseRepository;
-    private final TrainerRepository trainerRepository;
+    private final TrainerService trainerService;
     private final CourseCategoryRepository courseCategoryRepository;
 
     /**
@@ -43,11 +43,15 @@ public class GroupCourseService {
      * Jackson 是先建構空物件再用 setter 逐一灌值，一旦以後改用建構子反序列化
      * 或欄位定義順序調整，initializer 設的預設值不保證還會生效，
      * 所以預設值邏輯明確寫在這裡而不是 DTO。
+     *
+     * <p>§9 跨模組防護：UNAVAILABLE／已軟刪除的教練不可被指派新的團課主檔（原規格§9
+     * 「建立或指派 GroupClass」本來就明列這一項，先前遺漏，code review 發現，
+     * 2026-08-19）。改用 trainerService.lockAndAssertAvailableForNewBusiness() 一次
+     * 完成「查無此教練」的 404 與可服務狀態的 409，不再直接用 trainerRepository.findById()。
      */
     @Transactional
     public GroupCourseResponse createCourse(GroupCourseRequest request) {
-        Trainer trainer = trainerRepository.findById(request.getTrainerId())
-                .orElseThrow(() -> new ResourceNotFoundException("查無此教練"));
+        Trainer trainer = trainerService.lockAndAssertAvailableForNewBusiness(request.getTrainerId());
 
         CourseCategory category = null;
         if (request.getCourseCategoryId() != null) {
@@ -117,10 +121,11 @@ public class GroupCourseService {
      * 重新上架已下架的團課主檔：把 status 改回 ACTIVE。與 deactivateCourse() 對稱，
      * 已經是 ACTIVE 的課程可以重複呼叫（冪等，不會報錯），直接回傳現有資料即可。
      *
-     * 刻意不檢查底下授課教練目前的狀態（是否離職／暫停接案）：createCourse() 本身
-     * 也沒有這層檢查，維持一致，避免同一個 Service 對「教練狀態」出現不同標準。
-     * 若之後要補這類防護，應該加在 GroupClassService#createSession()（建立場次時
-     * 檢查教練可用性），那才是真正會影響會員報名的風險點，不屬於這個方法的職責。
+     * <p>實際觸發狀態轉換時才檢查教練可服務狀態（§9 跨模組防護，跟 createCourse() 現在
+     * 用同一套標準，不再各自不同——先前這裡刻意不檢查，理由是「真正的風險點在
+     * GroupClassService#createSession()」，但原規格§9 本來就把「建立或指派 GroupClass」
+     * 跟「建立或指派 GroupClassSession」列成兩個獨立防護點，code review 發現，
+     * 2026-08-19，改成兩層都查，不是互斥選項）。已是 ACTIVE 時視為 no-op，不重新檢查。
      */
     @Transactional
     public GroupCourseResponse activateCourse(Integer id) {
@@ -128,6 +133,7 @@ public class GroupCourseService {
                 .orElseThrow(() -> new ResourceNotFoundException("查無此課程主檔"));
 
         if (groupCourse.getStatus() != CourseStatus.ACTIVE) {
+            trainerService.lockAndAssertAvailableForNewBusiness(groupCourse.getTrainer().getId());
             groupCourse.setStatus(CourseStatus.ACTIVE);
             groupCourse = groupCourseRepository.save(groupCourse);
         }

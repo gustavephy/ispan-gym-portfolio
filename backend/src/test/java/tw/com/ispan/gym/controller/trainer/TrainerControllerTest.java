@@ -85,6 +85,7 @@ class TrainerControllerTest {
         trainer.setSpecialty("重量訓練");
         trainer.setExperience("五年健身房授課經驗");
         trainer.setBio("專注於初學者的肌力養成。");
+        trainer.setProfileImageUrl("https://example.com/trainer/avatar.jpg");
         trainer.setStatus(status);
         return TrainerResponse.from(trainer);
     }
@@ -215,15 +216,16 @@ class TrainerControllerTest {
         mockMvc.perform(get("/api/trainers/7"))
                 .andExpect(status().isOk())
                 // 白名單：多一個欄位就會失敗，之後有人往 DTO 加東西會被這條擋下。
-                // employeeId 是聊天室（§14）用來定址教練對話對象所需的內部數字 FK，
-                // 不是 email/電話/生日等個資，故加入白名單而非視為外洩（見 TrainerResponse 註解）。
+                // employeeId 刻意不在白名單內——這是內部關聯 FK，匿名公開端點不該外洩
+                // （聊天室要用的版本改走登入限定的 GET /api/member/trainers/chat-directory）。
                 .andExpect(jsonPath("$.length()").value(7))
                 .andExpect(jsonPath("$.trainerId").exists())
-                .andExpect(jsonPath("$.employeeId").exists())
+                .andExpect(jsonPath("$.employeeId").doesNotExist())
                 .andExpect(jsonPath("$.displayName").exists())
                 .andExpect(jsonPath("$.specialty").exists())
                 .andExpect(jsonPath("$.experience").exists())
                 .andExpect(jsonPath("$.bio").exists())
+                .andExpect(jsonPath("$.profileImageUrl").exists())
                 .andExpect(jsonPath("$.status").exists())
                 // 黑名單：逐一點名確認個資、角色與審核欄位都沒混進來
                 .andExpect(jsonPath("$.employee").doesNotExist())

@@ -12,17 +12,21 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import tw.com.ispan.gym.dto.trainer.TrainerChatDirectoryResponse;
 import tw.com.ispan.gym.dto.trainer.TrainerCreateRequest;
 import tw.com.ispan.gym.dto.trainer.TrainerResponse;
 import tw.com.ispan.gym.service.trainer.TrainerService;
 
 /**
- * 建立與公開查詢分屬兩個路徑前綴（/api/employees/{id}/trainer 與 /api/trainers），
- * 故不設 class 層級的 @RequestMapping，各方法自帶完整路徑。
+ * 建立、公開查詢與聊天室用查詢分屬不同路徑前綴（/api/employees/{id}/trainer、
+ * /api/trainers、/api/member/trainers/chat-directory），故不設 class 層級的
+ * @RequestMapping，各方法自帶完整路徑。
  *
  * <p>建立限 ADMIN：SecurityConfig 有對應 matcher，方法層級再加一次 @PreAuthorize 雙重把關，
- * 比照 EmployeeReviewController 既有風格。兩個 GET 是公開教練介紹頁用，
+ * 比照 EmployeeReviewController 既有風格。兩個公開 GET 是教練介紹頁用，
  * SecurityConfig 已 permitAll，這裡刻意不加任何權限 annotation。
+ * chat-directory 沒有對應的 SecurityConfig permitAll matcher，落回 anyRequest().authenticated()，
+ * 再由 @PreAuthorize("hasRole('MEMBER')") narrow 到會員限定，比照 CoachBookingController 的既有風格。
  */
 @RestController
 public class TrainerController {
@@ -49,5 +53,11 @@ public class TrainerController {
     @GetMapping("/api/trainers/{trainerId}")
     public TrainerResponse getById(@PathVariable Integer trainerId) {
         return trainerService.getById(trainerId);
+    }
+
+    @PreAuthorize("hasRole('MEMBER')")
+    @GetMapping("/api/member/trainers/chat-directory")
+    public List<TrainerChatDirectoryResponse> listForChat() {
+        return trainerService.listForChat();
     }
 }
