@@ -42,7 +42,7 @@ public class AdminOrderController {
     /** 後台人工完成一筆退款：還原庫存/優惠券、訂單轉 REFUNDED */
     @PostMapping("/refunds/{refundId}/complete")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void completeRefund(@PathVariable Long refundId) {
+    public void completeRefund(@PathVariable Integer refundId) {
         orderService.completeRefund(refundId);
     }
 }

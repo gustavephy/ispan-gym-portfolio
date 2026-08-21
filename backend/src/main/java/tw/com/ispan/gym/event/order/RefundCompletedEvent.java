@@ -9,5 +9,5 @@ import java.time.LocalDate;
  *
  * @param paidDate 原訂單的付款日（營收歸屬日），下游據此找出受影響的統計區間
  */
-public record RefundCompletedEvent(Long orderId, LocalDate paidDate) {
+public record RefundCompletedEvent(Integer orderId, LocalDate paidDate) {
 }

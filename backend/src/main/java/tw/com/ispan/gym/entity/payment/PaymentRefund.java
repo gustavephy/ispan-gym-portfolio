@@ -17,7 +17,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 @Getter
 @Setter
 public class PaymentRefund {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Integer id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "payment_id") private PaymentTransaction payment;
     @Column(name = "refund_no", nullable = false, length = 30) private String refundNo;
     @Column(nullable = false, precision = 10, scale = 2) private BigDecimal amount;

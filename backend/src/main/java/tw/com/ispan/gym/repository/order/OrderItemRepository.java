@@ -10,8 +10,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
-    List<OrderItem> findAllByOrderIdOrderByIdAsc(Long orderId);
+public interface OrderItemRepository extends JpaRepository<OrderItem, Integer> {
+    List<OrderItem> findAllByOrderIdOrderByIdAsc(Integer orderId);
 
     /**
      * 商品／私教課銷售聚合（報表用）。統計以 order_item 為準（成交當下的快照數字），

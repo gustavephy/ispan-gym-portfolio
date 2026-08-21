@@ -6,18 +6,14 @@ import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import Pagination from '@/components/Pagination.vue'
+import { TIME_OPTIONS } from '@/utils/businessHours.js'
+import { ROOM_OPTIONS } from '@/utils/rooms.js'
 
 // 場次狀態對照表：後端回傳 SCHEDULED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
   SCHEDULED: { label: '已排定', className: 'status-available' },
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
 }
-
-// 團課教室清單：目前只有這 4 間，對應現有 3 種團課類型（瑜珈/拳擊/重量訓練）
-// 加一間測試用教室。之後要新增教室，只需要在這個陣列加一筆，不用動後端或資料庫
-// ——roomName 在後端只是純字串欄位，沒有教室主檔表（見專案技術債討論，暫不建 Room
-// entity，避免期末專題過度設計）。
-const ROOM_OPTIONS = ['瑜珈教室', '拳擊教室', '團體重訓室', '測試用教室A']
 
 const courses = ref([])
 const coursesLoading = ref(true)
@@ -76,16 +72,6 @@ watch(
     }
   },
 )
-
-// 24 小時、每 10 分鐘一個選項，寫法比照 TrainerScheduleView.vue
-// 只開放 10:00~22:00、每 10 分鐘一個選項（含 22:00 這個端點），對應健身房營業時間。
-// length 73 = 從 10:00 到 22:00 共 72 個 10 分鐘間隔 + 1（含頭尾兩端點）
-const TIME_OPTIONS = Array.from({ length: 73 }, (_, i) => {
-  const totalMinutes = 10 * 60 + i * 10
-  const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0')
-  const mm = String(totalMinutes % 60).padStart(2, '0')
-  return `${hh}:${mm}`
-})
 
 // 依開始時間排序；status 為 CANCELLED 的場次理論上後端不會回傳，這裡仍加一層防呆篩選
 const visibleSessions = computed(() =>
