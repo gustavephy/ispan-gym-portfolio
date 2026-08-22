@@ -15,6 +15,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -56,6 +57,28 @@ class GoogleOAuthLinkInitiationServiceTest {
 
     private final GoogleOAuthLinkInitiationService service = new GoogleOAuthLinkInitiationService(
             accounts, oauthAccounts, transactions, passwordEncoder, rateLimiter, tokenGenerator, properties, clock);
+
+    /** 其他案例都測「功能已啟用」下的行為，停用本身的行為見下面獨立案例 */
+    @BeforeEach
+    void enableByDefault() {
+        when(properties.isEnabled()).thenReturn(true);
+    }
+
+    /** 對應「阻止停用狀態發起 Google 帳號綁定」：最前面直接中止，完全不碰任何後續邏輯 */
+    @Test
+    void initiate_功能停用時_最前面直接丟ResourceNotFound_不做任何事() {
+        when(properties.isEnabled()).thenReturn(false);
+
+        assertThatThrownBy(() -> service.initiate(ACCOUNT_ID, CURRENT_PASSWORD))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(accounts, never()).findById(any());
+        verify(accounts, never()).findByIdForUpdate(any());
+        verify(rateLimiter, never()).tryAcquire(anyString(), anyInt(), any());
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+        verify(transactions, never()).supersedePendingLinkTransactions(any(), any());
+        verify(transactions, never()).save(any());
+    }
 
     @Test
     void initiate_Account不存在_丟ResourceNotFound() {

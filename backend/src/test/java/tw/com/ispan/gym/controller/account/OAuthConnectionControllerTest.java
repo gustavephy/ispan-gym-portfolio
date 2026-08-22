@@ -108,6 +108,19 @@ class OAuthConnectionControllerTest {
                 .andExpect(jsonPath("$.code").value("OAUTH_ALREADY_LINKED"));
     }
 
+    /** 對應「Controller 回應與停用 LOGIN 一致，維持 404」 */
+    @Test
+    void link_功能停用時回傳404() throws Exception {
+        when(currentUser.requireCurrentUserId()).thenReturn(ACCOUNT_ID);
+        when(linkInitiationService.initiate(any(), any()))
+                .thenThrow(new tw.com.ispan.gym.exception.ResourceNotFoundException("找不到此功能"));
+
+        mockMvc.perform(post("/api/account/me/oauth/google/link")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BODY))
+                .andExpect(status().isNotFound());
+    }
+
     @Test
     void unlink_成功時回傳204() throws Exception {
         when(currentUser.requireCurrentUserId()).thenReturn(ACCOUNT_ID);

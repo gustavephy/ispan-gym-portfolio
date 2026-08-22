@@ -47,6 +47,14 @@ import tw.com.ispan.gym.security.OpaqueTokenGenerator;
  * ID（這裡已經是通過密碼驗證、已知身分的請求，不必再用 IP），在真的要 supersede／
  * 建立 transaction 之前檢查——每次成功發起都會佔一個額度，不因為這次操作本身合法
  * 就免費。
+ *
+ * <p>{@code app.oauth.google.enabled=false} 時整個方法在最前面直接中止——不查／鎖
+ * Account、不占用任一組限流額度、不比對密碼、不 supersede、不建立 transaction，跟
+ * {@link tw.com.ispan.gym.security.oauth.GoogleOAuthAuthorizationRequestResolver}
+ * 對 LOGIN 停用時的處理是同一個決定：停用不是「查完才發現不能用」，是一開始就不做
+ * 任何事。對外一律回 404，不區分「功能沒開」與其他原因，跟 LOGIN 停用時的行為一致
+ * （2026-08-22 補上——原本這裡漏了這個檢查，是既有 feature flag 設計沒有貫徹到
+ * LINK，不是新需求）。
  */
 @Service
 public class GoogleOAuthLinkInitiationService {
@@ -83,6 +91,10 @@ public class GoogleOAuthLinkInitiationService {
     /** @return 一次性 state（原始值）；前端導向 {@code /oauth2/authorization/google?transaction=<這個值>} */
     @Transactional
     public String initiate(Integer accountId, String currentPassword) {
+        if (!properties.isEnabled()) {
+            throw new ResourceNotFoundException("找不到此功能");
+        }
+
         Account account = accounts.findById(accountId)
                 .orElseThrow(() -> new ResourceNotFoundException("帳號不存在"));
         if (account.getPasswordHash() == null) {
