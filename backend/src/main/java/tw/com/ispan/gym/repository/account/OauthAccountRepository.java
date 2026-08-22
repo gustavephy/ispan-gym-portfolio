@@ -17,4 +17,10 @@ public interface OauthAccountRepository extends JpaRepository<OauthAccount, Inte
             """)
     Optional<Account> findAccountByProviderAndSubject(
             @Param("provider") OAuthProvider provider, @Param("subject") String subject);
+
+    /** 完整的綁定列——更新 providerEmail／lastLoginAt，或 LINK／UNLINK 需要操作綁定本身時用這個 */
+    Optional<OauthAccount> findByOauthProviderAndProviderUserId(OAuthProvider provider, String subject);
+
+    /** 一個 Account 最多綁一筆同 provider 的紀錄（UX_oauth_account_account_id_provider 保證） */
+    Optional<OauthAccount> findByAccountIdAndOauthProvider(Integer accountId, OAuthProvider provider);
 }

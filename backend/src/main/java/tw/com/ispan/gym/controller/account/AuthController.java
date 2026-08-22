@@ -3,12 +3,10 @@ package tw.com.ispan.gym.controller.account;
 import tw.com.ispan.gym.dto.account.LoginRequest;
 import tw.com.ispan.gym.dto.account.LoginResponse;
 import tw.com.ispan.gym.entity.account.Account;
-import tw.com.ispan.gym.enums.employee.EmployeeStatus;
-import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
-import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.security.AccountAuthorityResolver;
+import tw.com.ispan.gym.security.AccountLoginPolicy;
 import tw.com.ispan.gym.security.JwtUtil;
 
 import jakarta.validation.Valid;
@@ -20,11 +18,12 @@ import org.springframework.web.bind.annotation.*;
 /**
  * 最小的 email/密碼登入端點。SecurityConfig 已對 /api/auth/** permitAll。
  *
- * <p>密碼驗證通過後，還會檢查帳號是否至少有一個目前可用的身分（ACTIVE Member 或
- * ACTIVE Employee）——都沒有的話不簽發 token，改依 Employee 狀態回覆具體訊息
- * （例如「尚待審核」），而不是讓前端拿到一個實際上什麼都做不了的 JWT。這不算新的
- * 匿名洩漏：密碼已經驗證過，等於已經證明是本人，跟這個專案 verifyEmail() 已經用過的
- * 「持有憑證即視為本人」原則一致。若同一帳號還有其他可用身分（例如 Member ACTIVE），
+ * <p>密碼驗證通過後，還會檢查帳號是否至少有一個目前可用的身分（見
+ * {@link AccountLoginPolicy}，Google OAuth 登入／JWT 兌換共用同一套判定）——
+ * 都沒有的話不簽發 token，改依 Employee 狀態回覆具體訊息（例如「尚待審核」），
+ * 而不是讓前端拿到一個實際上什麼都做不了的 JWT。這不算新的匿名洩漏：密碼已經
+ * 驗證過，等於已經證明是本人，跟這個專案 verifyEmail() 已經用過的「持有憑證即
+ * 視為本人」原則一致。若同一帳號還有其他可用身分（例如 Member ACTIVE），
  * 仍正常發 token——JwtAuthFilter 本來就會依各身分狀態個別授權，這裡沒有新增行為，
  * 只是決定要不要一開始就發 token。
  */
@@ -32,20 +31,21 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AccountRepository accounts;
-    private final MemberRepository members;
     private final EmployeeRepository employees;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AccountAuthorityResolver authorityResolver;
+    private final AccountLoginPolicy loginPolicy;
 
-    public AuthController(AccountRepository accounts, MemberRepository members, EmployeeRepository employees,
-            PasswordEncoder passwordEncoder, JwtUtil jwtUtil, AccountAuthorityResolver authorityResolver) {
+    public AuthController(AccountRepository accounts, EmployeeRepository employees,
+            PasswordEncoder passwordEncoder, JwtUtil jwtUtil, AccountAuthorityResolver authorityResolver,
+            AccountLoginPolicy loginPolicy) {
         this.accounts = accounts;
-        this.members = members;
         this.employees = employees;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.authorityResolver = authorityResolver;
+        this.loginPolicy = loginPolicy;
     }
 
     @PostMapping("/login")
@@ -57,14 +57,7 @@ public class AuthController {
             throw new BadCredentialsException("帳號或密碼錯誤");
         }
 
-        boolean hasActiveMember = members.findByAccountId(account.getId())
-                .filter(m -> m.getDeletedAt() == null && m.getStatus() == UserStatus.ACTIVE)
-                .isPresent();
-        boolean hasActiveEmployee = employees.findByAccountId(account.getId())
-                .filter(e -> e.getDeletedAt() == null && e.getStatus() == EmployeeStatus.ACTIVE)
-                .isPresent();
-
-        if (!hasActiveMember && !hasActiveEmployee) {
+        if (!loginPolicy.isLoginAllowed(account)) {
             throw employeeStatusMessage(account);
         }
 

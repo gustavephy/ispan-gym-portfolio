@@ -3,6 +3,7 @@ package tw.com.ispan.gym.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
@@ -16,12 +17,29 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import tw.com.ispan.gym.security.JsonAccessDeniedHandler;
 import tw.com.ispan.gym.security.JsonAuthenticationEntryPoint;
 import tw.com.ispan.gym.security.JwtAuthFilter;
+import tw.com.ispan.gym.security.oauth.GoogleOAuthAuthorizationRequestResolver;
+import tw.com.ispan.gym.security.oauth.GoogleOAuthFailureHandler;
+import tw.com.ispan.gym.security.oauth.GoogleOAuthSuccessHandler;
 
 /**
- * 正式（非 dev）安全設定：JWT 驗證 + 方法層級授權。
+ * 正式（非 dev）安全設定：JWT 驗證 + 方法層級授權，另外拆出一條 OAuth 協定專用鏈。
  * dev profile 時整類停用，改由 security.DevSecurityConfig 的全放行 chain
  * 搭配 DevCurrentUserProvider（app.dev-current-user-id）提供固定登入者，
  * 方便本機不帶 token 測試；兩者以 @Profile 互斥，不會同時存在兩條 filter chain。
+ *
+ * <p>兩條鏈刻意分開（2026-08-22 定案，見 memory/google_oauth_phase_scope.md）：
+ * <ul>
+ * <li>{@code oauthSecurityFilterChain}（{@code @Order(1)}）只匹配 {@code /oauth2/**}／
+ * {@code /login/oauth2/**}，用 {@code IF_REQUIRED} session——這個 session 只保存
+ * Spring Security 自己的 {@code AuthorizationRequestRepository}（PKCE verifier、
+ * redirect URI 等協定資料），<b>不代表系統登入狀態</b>。
+ * <li>{@code apiSecurityFilterChain}（{@code @Order(2)}）維持 {@code STATELESS}，
+ * 永遠只信任 JWT——即使瀏覽器帶著 OAuth 握手期間留下的 {@code JSESSIONID} 呼叫 API，
+ * 這條鏈也不會把 session 當登入依據。
+ * </ul>
+ * v1 用 Spring 預設的 {@code HttpSession} 版 {@code AuthorizationRequestRepository}，
+ * 因此僅限單 instance 部署；多 instance 需要 sticky session 或改用共用/持久化的
+ * repository，屬已知限制，尚未實作。
  */
 @Configuration
 @EnableWebSecurity
@@ -32,17 +50,45 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final JsonAuthenticationEntryPoint authenticationEntryPoint;
     private final JsonAccessDeniedHandler accessDeniedHandler;
+    private final GoogleOAuthAuthorizationRequestResolver oauthAuthorizationRequestResolver;
+    private final GoogleOAuthSuccessHandler oauthSuccessHandler;
+    private final GoogleOAuthFailureHandler oauthFailureHandler;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter,
             JsonAuthenticationEntryPoint authenticationEntryPoint,
-            JsonAccessDeniedHandler accessDeniedHandler) {
+            JsonAccessDeniedHandler accessDeniedHandler,
+            GoogleOAuthAuthorizationRequestResolver oauthAuthorizationRequestResolver,
+            GoogleOAuthSuccessHandler oauthSuccessHandler,
+            GoogleOAuthFailureHandler oauthFailureHandler) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
+        this.oauthAuthorizationRequestResolver = oauthAuthorizationRequestResolver;
+        this.oauthSuccessHandler = oauthSuccessHandler;
+        this.oauthFailureHandler = oauthFailureHandler;
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    @Order(1)
+    SecurityFilterChain oauthSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/oauth2/**", "/login/oauth2/**")
+                .csrf(csrf -> csrf.disable())
+                .cors(Customizer.withDefaults())
+                // 只保存協定握手資料，不是系統登入態；API 鏈仍然只信任 JWT（見類別註解）
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .oauth2Login(oauth -> oauth
+                        .authorizationEndpoint(endpoint -> endpoint
+                                .authorizationRequestResolver(oauthAuthorizationRequestResolver))
+                        .successHandler(oauthSuccessHandler)
+                        .failureHandler(oauthFailureHandler));
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
+    SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 // 純 token 驗證、不使用 cookie session，故關閉 CSRF
                 .csrf(csrf -> csrf.disable())
@@ -88,7 +134,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/subscription-plans").permitAll()
                         // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）
                         .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
-                        .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+                        // 注意：POST /api/auth/oauth/exchange 與
+                        // /api/auth/oauth/google/registration/complete 不需要在這裡另外列——
+                        // 已經落在上面 "/api/auth/**" permitAll 規則裡；安全性不是靠端點層級
+                        // 的登入驗證，而是靠持有一次性交換碼／registration token，見兩個
+                        // Controller 各自的類別註解
                         // SockJS 交握本身是一般 HTTP 請求（GET /ws-chat/info、POST .../xhr 等），
                         // 不會帶 JWT bearer header；真正的登入驗證在 STOMP CONNECT frame 階段
                         // 由 StompAuthChannelInterceptor 處理，這裡放行純粹是為了讓交握能建立
