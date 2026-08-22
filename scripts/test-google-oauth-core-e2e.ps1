@@ -1,19 +1,27 @@
 ﻿<#
 .SYNOPSIS
-    Google OAuth 核心（首次註冊）功能的真實 SQL Server opt-in E2E 驗證腳本。
+    Google OAuth 核心（首次註冊＋LINK 併發）功能的真實 SQL Server opt-in E2E 驗證腳本。
 
 .DESCRIPTION
-    只涵蓋 Mockito 測不到的兩個真實行為（見 memory/google_oauth_phase_scope.md 的必補案例）：
+    只涵蓋 Mockito 測不到的真實行為（見 memory/google_oauth_phase_scope.md 的必補案例）：
 
       1. 同一張 Registration Ticket 被兩個並行請求提交，悲觀鎖保證最多一個成功。
       2. 建立途中（OauthAccount 唯一約束衝突）失敗時，Account／Member／OauthAccount／
          ExchangeCode 全部真的 rollback，Ticket 保持 PENDING（不是卡在 USED 卻沒有帳號
          的不可回復狀態——這正是這次 code review P1 修正要保證的事）。
+      3. 同一 Account 併發發起 LINK，Account-first 悲觀鎖序列化兩個請求，最終最多一筆
+         PENDING transaction（不是「兩個請求只有一個成功」——第二個請求會在鎖內把第一個
+         supersede 掉再建立自己的，兩次呼叫都可能回 200，DB 層的「最多一筆 PENDING」
+         才是真正的保證）。
+      4. 同一 Google (provider, subject) 併發寫入 oauth_account，唯一約束保證最多一筆
+         成功——這裡直接對 oauth_account 做並行寫入，不經過真實 Google Callback（那需要
+         真實 Google 憑證，屬於之後「真實 Google E2E」階段的範圍，這裡只驗證 Callback
+         邏輯（見 GoogleOAuthLinkServiceTest）實際依賴的 DB 約束在真正併發下真的擋得住）。
 
-    刻意不擴大範圍去涵蓋 LOGIN callback、LINK／UNLINK、限流或清理——那些不在這次要收斂
-    的範圍內（見同一份 memory 的分支定位）。比照 scripts/test-password-management-e2e.ps1
-    的安全慣例：預設唯讀預覽，需要 -ConfirmTestDatabase 才真的執行；只操作帶本次執行專屬
-    前綴的測試資料；不執行任何 DROP／ALTER／TRUNCATE；結束前一律在 finally 清理。
+    刻意不擴大範圍去涵蓋 LOGIN callback、UNLINK、限流或清理——那些不在這次要收斂的範圍內
+    （見同一份 memory 的分支定位）。比照 scripts/test-password-management-e2e.ps1 的安全
+    慣例：預設唯讀預覽，需要 -ConfirmTestDatabase 才真的執行；只操作帶本次執行專屬前綴的
+    測試資料；不執行任何 DROP／ALTER／TRUNCATE；結束前一律在 finally 清理。
 
     需要後端已經在跑（本機執行 `mvnw spring-boot:run`，預設 http://localhost:8080）——
     這支腳本不負責啟動/停止後端，跟 password 那支的既有慣例一致。
@@ -210,12 +218,16 @@ function Invoke-ApiCall {
     param(
         [Parameter(Mandatory)][string]$Method,
         [Parameter(Mandatory)][string]$Path,
-        $Body = $null
+        $Body = $null,
+        [string]$BearerToken = $null
     )
     $uri = "$BaseUrl$Path"
+    $headers = @{}
+    if ($BearerToken) { $headers["Authorization"] = "Bearer $BearerToken" }
     $params = @{
         Method  = $Method
         Uri     = $uri
+        Headers = $headers
         ErrorAction = "Stop"
         # Windows PowerShell 5.1 的 Invoke-WebRequest 若不加這個，在沒完成過 IE 首次執行
         # 設定的機器上會直接丟 NullReferenceException，跟目標伺服器無關
@@ -273,16 +285,60 @@ function Remove-TestData {
         $prefixParam = @{ prefix = "$EmailPrefix%" }
 
         Invoke-SqlNonQuery -Sql "DELETE FROM oauth_exchange_code WHERE account_id IN ($accountIdFilter)" -Params $prefixParam | Out-Null
+        Invoke-SqlNonQuery -Sql "DELETE FROM oauth_transaction WHERE account_id IN ($accountIdFilter)" -Params $prefixParam | Out-Null
         Invoke-SqlNonQuery -Sql "DELETE FROM oauth_account WHERE account_id IN ($accountIdFilter)" -Params $prefixParam | Out-Null
+        Invoke-SqlNonQuery -Sql "DELETE FROM email_verification WHERE account_id IN ($accountIdFilter)" -Params $prefixParam | Out-Null
         Invoke-SqlNonQuery -Sql "DELETE FROM account_role WHERE account_id IN ($accountIdFilter)" -Params $prefixParam | Out-Null
         Invoke-SqlNonQuery -Sql "DELETE FROM member WHERE account_id IN ($accountIdFilter)" -Params $prefixParam | Out-Null
         # Registration ticket 沒有 account_id（首次註冊前根本還沒有 Account），要另外用
         # provider_email 篩選——不論這次流程最後有沒有真的建出 Account 都要清得掉。
         Invoke-SqlNonQuery -Sql "DELETE FROM oauth_registration_ticket WHERE provider_email LIKE @prefix" -Params $prefixParam | Out-Null
         $deleted = Invoke-SqlNonQuery -Sql "DELETE FROM account WHERE email LIKE @prefix" -Params $prefixParam
-        Write-Host "  已刪除 $deleted 筆 account（及其關聯的 oauth_account／member／account_role／exchange_code）" -ForegroundColor Cyan
+        Write-Host "  已刪除 $deleted 筆 account（及其關聯的 oauth_account／oauth_transaction／member／account_role／exchange_code／email_verification）" -ForegroundColor Cyan
     } catch {
         Write-Host "  清理時發生錯誤（可能需要手動檢查殘留資料）：$($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
+# ============================================================================
+# 測試帳號建立——比照 test-password-management-e2e.ps1 的既有做法：走真實
+# POST /api/members/register → email_verification 拿 token → GET verify-email
+# → POST /api/auth/login 拿 JWT，而不是直接塞一筆假 BCrypt hash 進 DB。
+# ============================================================================
+
+function New-TestMemberAccount {
+    param([Parameter(Mandatory)][string]$Email, [Parameter(Mandatory)][string]$Password)
+
+    $registerBody = @{
+        firstName = "測試"; lastName = "帳號"; email = $Email; phone = "0955555555"
+        password = $Password
+    }
+    $registerResult = Invoke-ApiCall -Method POST -Path "/api/members/register" -Body $registerBody
+    if ($registerResult.StatusCode -ne 201) {
+        throw "建立測試帳號失敗（register 回 $($registerResult.StatusCode)）：$($registerResult.Body)"
+    }
+
+    $token = Invoke-SqlScalar -Sql @"
+SELECT TOP 1 ev.token FROM email_verification ev
+JOIN account a ON a.account_id = ev.account_id
+WHERE a.email = @email AND ev.verified_at IS NULL
+ORDER BY ev.created_at DESC
+"@ -Params @{ email = $Email }
+    if (-not $token) { throw "找不到 $Email 的 email_verification token" }
+
+    $verifyResult = Invoke-ApiCall -Method GET -Path "/api/accounts/verify-email?token=$token"
+    if ($verifyResult.StatusCode -ne 200) {
+        throw "驗證測試帳號 Email 失敗（回 $($verifyResult.StatusCode)）"
+    }
+
+    $loginResult = Invoke-ApiCall -Method POST -Path "/api/auth/login" -Body @{ email = $Email; password = $Password }
+    if ($loginResult.StatusCode -ne 200) {
+        throw "測試帳號登入失敗（回 $($loginResult.StatusCode)）：$($loginResult.Body)"
+    }
+
+    return [pscustomobject]@{
+        AccountId = [int]$loginResult.Body.accountId
+        AccessToken = [string]$loginResult.Body.accessToken
     }
 }
 
@@ -433,6 +489,160 @@ VALUES
     Test-Case "衝突失敗後，Ticket 仍保持 PENDING（可以重試，不是卡死在 USED）" ($ticketStatusB -eq "PENDING") "實際=$ticketStatusB"
     $ticketFinalizedB = Invoke-SqlScalar -Sql "SELECT finalized_at FROM oauth_registration_ticket WHERE token_hash = @tokenHash" -Params @{ tokenHash = $tokenHashB }
     Test-Case "衝突失敗後，Ticket 的 finalized_at 仍是 NULL" ([System.DBNull]::Value.Equals($ticketFinalizedB) -or $null -eq $ticketFinalizedB)
+
+    # ------------------------------------------------------------------
+    # 案例三：同一 Account 併發發起 LINK，最終最多一筆 PENDING transaction
+    # ------------------------------------------------------------------
+    Write-Host ""
+    Write-Host "--- 同一 Account 併發發起 LINK ---" -ForegroundColor Cyan
+
+    $linkEmail = "$emailPrefix-link@test.local"
+    $linkPassword = "E2eLink@01"
+    $testAccount = New-TestMemberAccount -Email $linkEmail -Password $linkPassword
+
+    Add-Type -AssemblyName System.Net.Http
+    $httpClient2 = New-Object System.Net.Http.HttpClient
+    try {
+        $linkBodyJson = @{ currentPassword = $linkPassword } | ConvertTo-Json
+        $linkContent1 = New-Object System.Net.Http.StringContent($linkBodyJson, [System.Text.Encoding]::UTF8, "application/json")
+        $linkContent2 = New-Object System.Net.Http.StringContent($linkBodyJson, [System.Text.Encoding]::UTF8, "application/json")
+
+        $linkRequest1 = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Post, "$BaseUrl/api/account/me/oauth/google/link")
+        $linkRequest1.Headers.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", $testAccount.AccessToken)
+        $linkRequest1.Content = $linkContent1
+        $linkRequest2 = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Post, "$BaseUrl/api/account/me/oauth/google/link")
+        $linkRequest2.Headers.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", $testAccount.AccessToken)
+        $linkRequest2.Content = $linkContent2
+
+        $linkTask1 = $httpClient2.SendAsync($linkRequest1)
+        $linkTask2 = $httpClient2.SendAsync($linkRequest2)
+        [System.Threading.Tasks.Task]::WaitAll(@($linkTask1, $linkTask2))
+
+        $linkStatus1 = [int]$linkTask1.Result.StatusCode
+        $linkStatus2 = [int]$linkTask2.Result.StatusCode
+        Test-Case "兩個併發發起請求都被安全處理（200 或已知的 4xx，不是 500）" (
+            (@(200, 401, 409) -contains $linkStatus1) -and (@(200, 401, 409) -contains $linkStatus2)
+        ) "狀態碼=$linkStatus1,$linkStatus2"
+    } finally {
+        $httpClient2.Dispose()
+    }
+
+    $pendingLinkCount = Invoke-SqlScalar -Sql @"
+SELECT COUNT(*) FROM oauth_transaction
+WHERE account_id = @accountId AND oauth_provider = 'GOOGLE' AND purpose = 'LINK' AND status = 'PENDING'
+"@ -Params @{ accountId = $testAccount.AccountId }
+    Test-Case "併發發起後最多只有一筆 PENDING LINK transaction（Account-first 鎖序列化了兩個請求）" (
+        [int]$pendingLinkCount -eq 1
+    ) "實際 PENDING 筆數=$pendingLinkCount"
+
+    # ------------------------------------------------------------------
+    # 案例四：同一 (provider, subject) 併發寫入 oauth_account，唯一約束保證最多一筆成功
+    #
+    # 這裡直接對 oauth_account 做並行寫入，不經過真實 Google Callback（那需要真實
+    # Google 憑證，屬於之後「真實 Google E2E」階段）——目的是驗證 GoogleOAuthLinkService
+    # 的業務判斷（見 GoogleOAuthLinkServiceTest）背後真正依賴的 DB 約束，在真正的併發
+    # 寫入下依然成立，不只是「理論上應該擋得住」。
+    # ------------------------------------------------------------------
+    Write-Host ""
+    Write-Host "--- 同一 Google (provider, subject) 併發寫入 oauth_account ---" -ForegroundColor Cyan
+
+    $subjectD = "$emailPrefix-sub-race"
+    $accountEmailD1 = "$emailPrefix-race1@test.local"
+    $accountEmailD2 = "$emailPrefix-race2@test.local"
+    $accountIdD1 = Invoke-SqlInsertGetIdentity -Sql @"
+INSERT INTO account (email, password_hash, credentials_version, created_at, updated_at)
+VALUES (@email, NULL, 0, SYSDATETIME(), SYSDATETIME())
+"@ -Params @{ email = $accountEmailD1 }
+    $accountIdD2 = Invoke-SqlInsertGetIdentity -Sql @"
+INSERT INTO account (email, password_hash, credentials_version, created_at, updated_at)
+VALUES (@email, NULL, 0, SYSDATETIME(), SYSDATETIME())
+"@ -Params @{ email = $accountEmailD2 }
+
+    $raceConn1 = New-Object System.Data.SqlClient.SqlConnection($script:SqlConnectionString)
+    $raceConn2 = New-Object System.Data.SqlClient.SqlConnection($script:SqlConnectionString)
+    try {
+        $raceConn1.Open()
+        $raceConn2.Open()
+        $insertSql = @"
+INSERT INTO oauth_account (account_id, oauth_provider, provider_user_id, provider_email, provider_email_verified, last_login_at, created_at)
+VALUES (@accountId, 'GOOGLE', @subject, @email, 1, SYSDATETIME(), SYSDATETIME())
+"@
+        $raceCmd1 = $raceConn1.CreateCommand()
+        $raceCmd1.CommandText = $insertSql
+        [void]$raceCmd1.Parameters.AddWithValue("@accountId", $accountIdD1)
+        [void]$raceCmd1.Parameters.AddWithValue("@subject", $subjectD)
+        [void]$raceCmd1.Parameters.AddWithValue("@email", $accountEmailD1)
+
+        $raceCmd2 = $raceConn2.CreateCommand()
+        $raceCmd2.CommandText = $insertSql
+        [void]$raceCmd2.Parameters.AddWithValue("@accountId", $accountIdD2)
+        [void]$raceCmd2.Parameters.AddWithValue("@subject", $subjectD)
+        [void]$raceCmd2.Parameters.AddWithValue("@email", $accountEmailD2)
+
+        $raceTask1 = $raceCmd1.ExecuteNonQueryAsync()
+        $raceTask2 = $raceCmd2.ExecuteNonQueryAsync()
+        $raceResults = @()
+        foreach ($t in @($raceTask1, $raceTask2)) {
+            try { [void]$t.GetAwaiter().GetResult(); $raceResults += "OK" }
+            catch { $raceResults += "FAIL" }
+        }
+        $successCount = ($raceResults | Where-Object { $_ -eq "OK" }).Count
+        Test-Case "同一 (provider, subject) 的兩筆併發 INSERT 只有一筆成功（唯一約束擋下另一筆）" (
+            $successCount -eq 1
+        ) "結果=$($raceResults -join ',')"
+    } finally {
+        $raceConn1.Close()
+        $raceConn2.Close()
+    }
+
+    $boundCount = Invoke-SqlScalar -Sql "SELECT COUNT(*) FROM oauth_account WHERE oauth_provider = 'GOOGLE' AND provider_user_id = @subject" -Params @{ subject = $subjectD }
+    Test-Case "最終該 subject 只綁定了一個 Account" ([int]$boundCount -eq 1) "實際=$boundCount"
+
+    # ------------------------------------------------------------------
+    # 案例五：完整 UNLINK 回合——真實密碼驗證、真實刪除、credentialsVersion 遞增、
+    # 舊 JWT 真的被拒絕、新 JWT 仍然可用
+    # ------------------------------------------------------------------
+    Write-Host ""
+    Write-Host "--- 完整 UNLINK 回合 ---" -ForegroundColor Cyan
+
+    $unlinkEmail = "$emailPrefix-unlink@test.local"
+    $unlinkPassword = "E2eUnlink@01"
+    $unlinkAccount = New-TestMemberAccount -Email $unlinkEmail -Password $unlinkPassword
+    $oldToken = $unlinkAccount.AccessToken
+
+    # 直接插入一筆綁定（不經過真實 Google Callback，理由同案例四）
+    Invoke-SqlNonQuery -Sql @"
+INSERT INTO oauth_account (account_id, oauth_provider, provider_user_id, provider_email, provider_email_verified, last_login_at, created_at)
+VALUES (@accountId, 'GOOGLE', @subject, @email, 1, SYSDATETIME(), SYSDATETIME())
+"@ -Params @{ accountId = $unlinkAccount.AccountId; subject = "$emailPrefix-sub-unlink"; email = $unlinkEmail } | Out-Null
+
+    $profileBeforeUnlink = Invoke-ApiCall -Method GET -Path "/api/member/profile" -BearerToken $oldToken
+    Test-Case "解除前，舊 JWT 可以正常存取受保護 API" ($profileBeforeUnlink.StatusCode -eq 200) "實際=$($profileBeforeUnlink.StatusCode)"
+
+    $unlinkResult = Invoke-ApiCall -Method DELETE -Path "/api/account/me/oauth/google" `
+        -Body @{ currentPassword = $unlinkPassword } -BearerToken $oldToken
+    Test-Case "有密碼時可以成功解除（204）" ($unlinkResult.StatusCode -eq 204) "實際=$($unlinkResult.StatusCode)"
+
+    $bindingGone = Invoke-SqlScalar -Sql "SELECT COUNT(*) FROM oauth_account WHERE account_id = @accountId" -Params @{ accountId = $unlinkAccount.AccountId }
+    Test-Case "解除後 oauth_account 綁定真的被刪除" ([int]$bindingGone -eq 0) "實際=$bindingGone"
+
+    $credentialsVersionAfter = Invoke-SqlScalar -Sql "SELECT credentials_version FROM account WHERE account_id = @accountId" -Params @{ accountId = $unlinkAccount.AccountId }
+    Test-Case "解除後 credentialsVersion 遞增為 1" ([int]$credentialsVersionAfter -eq 1) "實際=$credentialsVersionAfter"
+
+    $profileWithOldToken = Invoke-ApiCall -Method GET -Path "/api/member/profile" -BearerToken $oldToken
+    Test-Case "解除後，舊 JWT 立即失效（401）" ($profileWithOldToken.StatusCode -eq 401) "實際=$($profileWithOldToken.StatusCode)"
+
+    $reloginResult = Invoke-ApiCall -Method POST -Path "/api/auth/login" -Body @{ email = $unlinkEmail; password = $unlinkPassword }
+    Test-Case "解除後仍可用密碼重新登入" ($reloginResult.StatusCode -eq 200) "實際=$($reloginResult.StatusCode)"
+    if ($reloginResult.StatusCode -eq 200) {
+        $newToken = [string]$reloginResult.Body.accessToken
+        $profileWithNewToken = Invoke-ApiCall -Method GET -Path "/api/member/profile" -BearerToken $newToken
+        Test-Case "重新登入後的新 JWT 可以正常存取受保護 API" ($profileWithNewToken.StatusCode -eq 200) "實際=$($profileWithNewToken.StatusCode)"
+    }
+
+    # 對應必補案例「唯一登入方式不能解除」的真實回合：OAuth-only（無密碼）帳號沒有
+    # 密碼可以登入，無法透過真實 HTTP 走到這個端點驗證——這一項留給
+    # GoogleOAuthUnlinkServiceTest 的 Mockito 測試覆蓋（見該檔案），這裡不重複硬湊。
 
     Write-Host ""
     Write-Host "=== 驗證完成：$($script:TotalCases) 個案例，$($script:FailedCases) 個失敗 ===" -ForegroundColor $(if ($script:FailedCases -eq 0) { "Green" } else { "Red" })

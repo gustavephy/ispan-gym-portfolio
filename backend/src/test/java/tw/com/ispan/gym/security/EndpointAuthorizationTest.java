@@ -124,6 +124,7 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.report.OperationReportController.class,
         tw.com.ispan.gym.controller.account.PasswordController.class,
         tw.com.ispan.gym.controller.account.PasswordResetController.class,
+        tw.com.ispan.gym.controller.account.OAuthConnectionController.class,
         // 安全基礎設施
         JwtUtil.class,
         JwtAuthFilter.class,
@@ -242,6 +243,15 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary PasswordService passwordService() {
             return Mockito.mock(PasswordService.class);
+        }
+        @Bean @Primary tw.com.ispan.gym.service.account.oauth.GoogleOAuthConnectionsService oauthConnectionsService() {
+            return Mockito.mock(tw.com.ispan.gym.service.account.oauth.GoogleOAuthConnectionsService.class);
+        }
+        @Bean @Primary tw.com.ispan.gym.service.account.oauth.GoogleOAuthLinkInitiationService oauthLinkInitiationService() {
+            return Mockito.mock(tw.com.ispan.gym.service.account.oauth.GoogleOAuthLinkInitiationService.class);
+        }
+        @Bean @Primary tw.com.ispan.gym.service.account.oauth.GoogleOAuthUnlinkService oauthUnlinkService() {
+            return Mockito.mock(tw.com.ispan.gym.service.account.oauth.GoogleOAuthUnlinkService.class);
         }
     }
 
@@ -907,5 +917,31 @@ class EndpointAuthorizationTest {
                                 { "token": "t", "newPassword": "Newpass@2026", "confirmPassword": "Newpass@2026" }
                                 """))
                 .andExpect(status().isNoContent());
+    }
+
+    // === Google OAuth 綁定管理 ====================================================
+    // OAuthConnectionController 都沒有 @PreAuthorize，跟密碼管理一樣，
+    // Account 層級概念不分會員／員工，任何已登入帳號都能操作自己的 Google 綁定。
+
+    /** 對應必補案例「未登入不能查詢／發起／解除」 */
+    @Test
+    void 查詢Google綁定狀態需要登入_任何已登入身分皆可() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/account/me/oauth-connections"));
+        expectAuthorized(get("/api/account/me/oauth-connections"), memberToken());
+        expectAuthorized(get("/api/account/me/oauth-connections"), employeeToken());
+    }
+
+    @Test
+    void 發起Google綁定需要登入_任何已登入身分皆可() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/account/me/oauth/google/link"));
+        expectAuthorized(post("/api/account/me/oauth/google/link"), memberToken());
+        expectAuthorized(post("/api/account/me/oauth/google/link"), employeeToken());
+    }
+
+    @Test
+    void 解除Google綁定需要登入_任何已登入身分皆可() throws Exception {
+        expectUnauthorizedWhenAnonymous(delete("/api/account/me/oauth/google"));
+        expectAuthorized(delete("/api/account/me/oauth/google"), memberToken());
+        expectAuthorized(delete("/api/account/me/oauth/google"), employeeToken());
     }
 }

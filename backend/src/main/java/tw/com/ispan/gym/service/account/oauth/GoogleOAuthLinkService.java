@@ -18,9 +18,9 @@ import tw.com.ispan.gym.security.oauth.GoogleIdentity;
 
 /**
  * Google LINK 的業務判定，在 Callback 階段執行——發起 LINK 時（見
- * {@code service.account.oauth.GoogleOAuthLinkInitiationService}）已經檢查過密碼、
- * 是否已綁定，但 Google 授權期間可能有其他請求插入變化，這裡是取得 transaction
- * 之後的最後一道防禦性複查，不可省略。
+ * {@link GoogleOAuthLinkInitiationService}）已經檢查過密碼、是否已綁定，但 Google
+ * 授權期間可能有其他請求插入變化，這裡是取得 transaction 之後的最後一道防禦性複查，
+ * 不可省略。
  */
 @Service
 public class GoogleOAuthLinkService {
