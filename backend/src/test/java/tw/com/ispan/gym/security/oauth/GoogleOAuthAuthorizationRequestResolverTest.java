@@ -2,6 +2,8 @@ package tw.com.ispan.gym.security.oauth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,6 +30,7 @@ import tw.com.ispan.gym.enums.account.OAuthTransactionPurpose;
 import tw.com.ispan.gym.enums.account.OAuthTransactionStatus;
 import tw.com.ispan.gym.repository.account.OAuthTransactionRepository;
 import tw.com.ispan.gym.repository.account.OAuthTransactionView;
+import tw.com.ispan.gym.security.InMemoryRateLimiter;
 import tw.com.ispan.gym.security.OpaqueTokenGenerator;
 
 /**
@@ -43,16 +46,18 @@ class GoogleOAuthAuthorizationRequestResolverTest {
     private final OAuthTransactionRepository transactions = mock(OAuthTransactionRepository.class);
     private final OpaqueTokenGenerator tokenGenerator = mock(OpaqueTokenGenerator.class);
     private final GoogleOAuthProperties properties = mock(GoogleOAuthProperties.class);
+    private final InMemoryRateLimiter rateLimiter = mock(InMemoryRateLimiter.class);
 
     private final Clock clock = Clock.systemDefaultZone();
 
     private final GoogleOAuthAuthorizationRequestResolver resolver = new GoogleOAuthAuthorizationRequestResolver(
-            clientRegistrations(), transactions, tokenGenerator, properties, clock);
+            clientRegistrations(), transactions, tokenGenerator, properties, rateLimiter, clock);
 
-    /** 其他案例都測「功能已啟用」下的行為，停用本身的行為見下面兩個獨立案例 */
+    /** 其他案例都測「功能已啟用、限流額度充足」下的行為，停用／限流本身的行為見各自獨立案例 */
     @BeforeEach
     void enableByDefault() {
         when(properties.isEnabled()).thenReturn(true);
+        when(rateLimiter.tryAcquire(any(), anyInt(), any())).thenReturn(true);
     }
 
     /** 對應 step 3「讓 feature flag 真正生效」：停用時兩個 resolve() 都直接回 null，
@@ -76,6 +81,47 @@ class GoogleOAuthAuthorizationRequestResolverTest {
 
         assertThat(result).isNull();
         verify(transactions, never()).save(any());
+    }
+
+    /** 對應必補案例「LOGIN 超額不建立 transaction」 */
+    @Test
+    void resolve_Login超過IP限流_直接回Null_不建立Transaction() {
+        when(rateLimiter.tryAcquire(eq("oauth-login-initiate:ip-10min:127.0.0.1"), anyInt(), any()))
+                .thenReturn(false);
+
+        OAuth2AuthorizationRequest result = resolver.resolve(loginRequest(null));
+
+        assertThat(result).isNull();
+        verify(transactions, never()).save(any());
+        verify(tokenGenerator, never()).generate();
+    }
+
+    @Test
+    void resolve_Login小時額度超過但十分鐘額度未超過_仍中止() {
+        when(rateLimiter.tryAcquire(eq("oauth-login-initiate:ip-10min:127.0.0.1"), anyInt(), any()))
+                .thenReturn(true);
+        when(rateLimiter.tryAcquire(eq("oauth-login-initiate:ip-hourly:127.0.0.1"), anyInt(), any()))
+                .thenReturn(false);
+
+        assertThat(resolver.resolve(loginRequest(null))).isNull();
+        verify(transactions, never()).save(any());
+    }
+
+    /** 對應必補案例「不信任 X-Forwarded-For」：限流 key 只能用 getRemoteAddr()，
+     *  不能被請求自帶的 header 影響——否則任何人換一個假 IP 就能繞過 */
+    @Test
+    void resolve_限流只採信RemoteAddr_不採信XForwardedFor() {
+        when(tokenGenerator.generate()).thenReturn("raw-state");
+        when(properties.transactionTtl()).thenReturn(Duration.ofMinutes(10));
+        MockHttpServletRequest request = loginRequest(null);
+        request.addHeader("X-Forwarded-For", "203.0.113.99");
+        // MockHttpServletRequest 預設 getRemoteAddr() 就是 127.0.0.1，不需要另外設定
+
+        resolver.resolve(request);
+
+        verify(rateLimiter).tryAcquire(eq("oauth-login-initiate:ip-10min:127.0.0.1"), anyInt(), any());
+        verify(rateLimiter, never()).tryAcquire(
+                org.mockito.ArgumentMatchers.contains("203.0.113.99"), anyInt(), any());
     }
 
     @Test

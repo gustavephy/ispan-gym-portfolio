@@ -17,11 +17,27 @@
          成功——這裡直接對 oauth_account 做並行寫入，不經過真實 Google Callback（那需要
          真實 Google 憑證，屬於之後「真實 Google E2E」階段的範圍，這裡只驗證 Callback
          邏輯（見 GoogleOAuthLinkServiceTest）實際依賴的 DB 約束在真正併發下真的擋得住）。
+      5. 完整 UNLINK 回合：真實密碼驗證、真實刪除 oauth_account、credentialsVersion
+         真的遞增、解除後舊 JWT 立即失效、重新登入的新 JWT 仍可用。
+      6. LOGIN 發起端點（GET /oauth2/authorization/google）的 IP 限流：連續打超過額度，
+         確認超額後真的被擋下（404），不是無限放行。
+      7. LINK 發起端點（POST /api/account/me/oauth/google/link）的 initiate 限流：用
+         「正確密碼」連續發起超過額度，確認即使密碼答對、reauth 額度被清除，initiate
+         額度仍然把過量請求擋下（429 OAUTH_LINK_RATE_LIMITED）。
 
-    刻意不擴大範圍去涵蓋 LOGIN callback、UNLINK、限流或清理——那些不在這次要收斂的範圍內
-    （見同一份 memory 的分支定位）。比照 scripts/test-password-management-e2e.ps1 的安全
-    慣例：預設唯讀預覽，需要 -ConfirmTestDatabase 才真的執行；只操作帶本次執行專屬前綴的
-    測試資料；不執行任何 DROP／ALTER／TRUNCATE；結束前一律在 finally 清理。
+    案例六（LOGIN 限流）需要後端啟動時帶 GOOGLE_OAUTH_ENABLED=true 與任意非 placeholder
+    的 GOOGLE_CLIENT_ID／GOOGLE_CLIENT_SECRET——這條路徑在 enabled=false（.env 沒有真實
+    Google 憑證時的預設值）會在碰到限流邏輯之前就被 feature flag 擋掉，回傳恆定的 404，
+    那樣不管限流有沒有生效都會「看起來像通過」，反而測不出東西。StartupValidator 只檢查
+    這兩個值格式上不是 placeholder，不會真的呼叫 Google，所以可以用假值啟動——這個案例
+    完全不需要真的把使用者導到 Google 那一步。
+
+    刻意不擴大範圍去涵蓋清理排程以外的其他 housekeeping、真實 Google 登入本身——那些
+    不在這次要收斂的範圍內（見同一份 memory 的分支定位）。比照
+    scripts/test-password-management-e2e.ps1 的安全慣例：預設唯讀預覽，需要
+    -ConfirmTestDatabase 才真的執行；只操作帶本次執行專屬前綴的測試資料（LOGIN 限流案例
+    的 transaction 沒有 account_id 可用，改用 oauth_transaction_id 分水嶺清理，見該案例
+    的程式碼註解）；不執行任何 DROP／ALTER／TRUNCATE；結束前一律在 finally 清理。
 
     需要後端已經在跑（本機執行 `mvnw spring-boot:run`，預設 http://localhost:8080）——
     這支腳本不負責啟動/停止後端，跟 password 那支的既有慣例一致。
@@ -643,6 +659,102 @@ VALUES (@accountId, 'GOOGLE', @subject, @email, 1, SYSDATETIME(), SYSDATETIME())
     # 對應必補案例「唯一登入方式不能解除」的真實回合：OAuth-only（無密碼）帳號沒有
     # 密碼可以登入，無法透過真實 HTTP 走到這個端點驗證——這一項留給
     # GoogleOAuthUnlinkServiceTest 的 Mockito 測試覆蓋（見該檔案），這裡不重複硬湊。
+
+    Write-Host ""
+    # ------------------------------------------------------------------
+    # 案例六：LOGIN 發起端點的 IP 限流
+    #
+    # 這條路徑（GET /oauth2/authorization/google）在 app.oauth.google.enabled=false
+    # 時，Resolver 會在碰到限流邏輯之前就直接回 null（見 step 3 的 feature flag 設計），
+    # 也就是說要真的驗證限流本身，後端這次啟動時必須帶：
+    #   GOOGLE_OAUTH_ENABLED=true
+    #   GOOGLE_CLIENT_ID=<任意非 placeholder 值，不需要是真的能用的 Google 憑證>
+    #   GOOGLE_CLIENT_SECRET=<同上>
+    # StartupValidator 只檢查這兩個值格式上不是 placeholder，不會真的呼叫 Google，
+    # 所以可以用假值啟動——這裡完全不需要真的把使用者導到 Google 那一步，只驗證
+    # Resolver 在超過額度前後回傳的 HTTP 狀態碼差異。
+    # ------------------------------------------------------------------
+    Write-Host ""
+    Write-Host "--- LOGIN 發起端點的 IP 限流 ---" -ForegroundColor Cyan
+
+    $loginRateBeforeId = [int](Invoke-SqlScalar -Sql "SELECT ISNULL(MAX(oauth_transaction_id), 0) FROM oauth_transaction")
+    $loginHandler = New-Object System.Net.Http.HttpClientHandler
+    $loginHandler.AllowAutoRedirect = $false
+    $loginRateClient = New-Object System.Net.Http.HttpClient($loginHandler)
+    try {
+        # 不預設「額度剩多少」——同一支後端行程可能已經被其他呼叫（例如手動 curl 驗證
+        # 過一次）用掉幾次額度，這裡改成打到「連續 3 次都是同一個狀態碼」為止，
+        # 用來判斷是否真的發生了 302→404 的轉換，而不是硬編一個確切次數。
+        $loginStatuses = @()
+        for ($i = 1; $i -le 25; $i++) {
+            $resp = $loginRateClient.GetAsync("$BaseUrl/oauth2/authorization/google").GetAwaiter().GetResult()
+            $loginStatuses += [int]$resp.StatusCode
+        }
+        $blockedCount = ($loginStatuses | Where-Object { $_ -eq 404 }).Count
+        $allowedCount = ($loginStatuses | Where-Object { $_ -eq 302 }).Count
+        $unexpectedCount = ($loginStatuses | Where-Object { $_ -ne 404 -and $_ -ne 302 }).Count
+
+        Test-Case "LOGIN 限流：連續 25 次請求裡出現過被擋下的情況（額度用完後回 404，不是 500）" (
+            $blockedCount -gt 0
+        ) "302 次數=$allowedCount, 404 次數=$blockedCount, 其他=$unexpectedCount, 完整序列=$($loginStatuses -join ',')"
+        Test-Case "LOGIN 限流：沒有出現非預期狀態碼（只有 302 或 404）" ($unexpectedCount -eq 0) "完整序列=$($loginStatuses -join ',')"
+        # 一旦開始被擋，後續應該持續被擋（同一個 10 分鐘視窗內不會忽然又放行）
+        $firstBlockedIndex = [array]::IndexOf($loginStatuses, 404)
+        if ($firstBlockedIndex -ge 0) {
+            $afterFirstBlock = $loginStatuses[$firstBlockedIndex..($loginStatuses.Length - 1)]
+            $allBlockedAfter = ($afterFirstBlock | Where-Object { $_ -ne 404 }).Count -eq 0
+            Test-Case "LOGIN 限流：一旦開始被擋，同一批請求內持續被擋（不會忽冷忽熱）" $allBlockedAfter "被擋之後的序列=$($afterFirstBlock -join ',')"
+        }
+    } finally {
+        $loginRateClient.Dispose()
+        # 這些 LOGIN transaction 沒有 account_id 可以用來篩選清理對象，改用執行前記下的
+        # oauth_transaction_id 分水嶺——這批之後新增的、account_id 為 NULL 的 LOGIN
+        # transaction 都是這次測試建立的
+        Invoke-SqlNonQuery -Sql @"
+DELETE FROM oauth_transaction
+WHERE oauth_transaction_id > @beforeId AND purpose = 'LOGIN' AND account_id IS NULL
+"@ -Params @{ beforeId = $loginRateBeforeId } | Out-Null
+    }
+
+    # ------------------------------------------------------------------
+    # 案例七：LINK 發起端點的 initiate 限流（跟 reauth 限流是兩件不同的事，
+    # 密碼答對後 reauth 額度會被清除，但 initiate 額度不會——見
+    # GoogleOAuthLinkInitiationService 的類別註解）
+    # ------------------------------------------------------------------
+    Write-Host ""
+    Write-Host "--- LINK 發起端點的 initiate 限流（正確密碼仍受限） ---" -ForegroundColor Cyan
+
+    $rateLimitEmail = "$emailPrefix-linkrate@test.local"
+    $rateLimitPassword = "E2eRate@01"
+    $rateLimitAccount = New-TestMemberAccount -Email $rateLimitEmail -Password $rateLimitPassword
+
+    $linkRateStatuses = @()
+    $linkRateBodies = @()
+    for ($i = 1; $i -le 6; $i++) {
+        $r = Invoke-ApiCall -Method POST -Path "/api/account/me/oauth/google/link" `
+            -Body @{ currentPassword = $rateLimitPassword } -BearerToken $rateLimitAccount.AccessToken
+        $linkRateStatuses += $r.StatusCode
+        $linkRateBodies += $r.Body
+    }
+
+    $linkSuccessCount = ($linkRateStatuses | Where-Object { $_ -eq 200 }).Count
+    $linkRateLimitedCount = ($linkRateStatuses | Where-Object { $_ -eq 429 }).Count
+    Test-Case "LINK initiate 限流：連續 6 次正確密碼請求中，恰好第 6 次被限流擋下（前 5 次都成功）" (
+        $linkSuccessCount -eq 5 -and $linkRateLimitedCount -eq 1 -and $linkRateStatuses[5] -eq 429
+    ) "狀態碼序列=$($linkRateStatuses -join ',')"
+
+    $lastBody = $linkRateBodies[5]
+    Test-Case "被限流的那次回傳正確的錯誤碼 OAUTH_LINK_RATE_LIMITED" (
+        $lastBody -and $lastBody.code -eq "OAUTH_LINK_RATE_LIMITED"
+    ) "實際 code=$($lastBody.code)"
+
+    $pendingAfterRateLimit = Invoke-SqlScalar -Sql @"
+SELECT COUNT(*) FROM oauth_transaction
+WHERE account_id = @accountId AND oauth_provider = 'GOOGLE' AND purpose = 'LINK' AND status = 'PENDING'
+"@ -Params @{ accountId = $rateLimitAccount.AccountId }
+    Test-Case "被限流時沒有再建立或取代 transaction（仍是前 5 次裡最後一次留下的那筆 PENDING）" (
+        [int]$pendingAfterRateLimit -eq 1
+    ) "實際 PENDING 筆數=$pendingAfterRateLimit"
 
     Write-Host ""
     Write-Host "=== 驗證完成：$($script:TotalCases) 個案例，$($script:FailedCases) 個失敗 ===" -ForegroundColor $(if ($script:FailedCases -eq 0) { "Green" } else { "Red" })

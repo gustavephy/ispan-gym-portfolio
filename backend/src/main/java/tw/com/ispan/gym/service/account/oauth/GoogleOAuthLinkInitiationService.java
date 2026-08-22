@@ -14,6 +14,7 @@ import tw.com.ispan.gym.entity.account.OAuthTransaction;
 import tw.com.ispan.gym.enums.account.OAuthProvider;
 import tw.com.ispan.gym.enums.account.OAuthTransactionPurpose;
 import tw.com.ispan.gym.exception.OAuthAlreadyLinkedException;
+import tw.com.ispan.gym.exception.OAuthLinkRateLimitedException;
 import tw.com.ispan.gym.exception.ReauthenticationRequiredException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.account.AccountRepository;
@@ -38,12 +39,23 @@ import tw.com.ispan.gym.security.OpaqueTokenGenerator;
  * 白花 BCrypt 成本）、鎖前鎖後各驗證一次密碼（鎖後那次擋掉「驗證通過到取得鎖之間
  * 密碼被別的請求改掉」的併發覆寫）。key 用專屬前綴（{@code oauth-link-reauth:}）
  * 與 change-password 的節流各自獨立，不共用同一組計數。
+ *
+ * <p><b>reauth 限流與 initiate 限流是兩件不同的事，缺一不可</b>：密碼答對當下就會
+ * {@code rateLimiter.clear()} 掉 reauth 計數（理由見下方——已證明知道密碼，不該保留
+ * 這次的「扣打」），所以 reauth 限流只防止「用猜的」，防不住「知道正確密碼的人一直
+ * 重複發起」。後者是另一組獨立、成功也不清除的 {@code initiate} 限流，key 用 Account
+ * ID（這裡已經是通過密碼驗證、已知身分的請求，不必再用 IP），在真的要 supersede／
+ * 建立 transaction 之前檢查——每次成功發起都會佔一個額度，不因為這次操作本身合法
+ * 就免費。
  */
 @Service
 public class GoogleOAuthLinkInitiationService {
 
     private static final int REAUTH_MAX_ATTEMPTS = 5;
     private static final Duration REAUTH_WINDOW = Duration.ofMinutes(15);
+
+    private static final int INITIATE_TEN_MINUTE_MAX = 5;
+    private static final int INITIATE_HOURLY_MAX = 15;
 
     private final AccountRepository accounts;
     private final OauthAccountRepository oauthAccounts;
@@ -95,6 +107,15 @@ public class GoogleOAuthLinkInitiationService {
         }
         if (oauthAccounts.findByAccountIdAndOauthProvider(accountId, OAuthProvider.GOOGLE).isPresent()) {
             throw new OAuthAlreadyLinkedException("此帳號已經綁定一個 Google 帳號，請先解除再重新綁定");
+        }
+
+        // initiate 限流：跟上面的 reauth 限流是兩件不同的事（見類別註解）——這裡不因為
+        // 密碼答對就清除，每一次真的要建立／取代 transaction 都會佔一個額度，
+        // 放在其他業務規則（已綁定等）都通過之後才檢查，避免注定失敗的請求也白白
+        // 消耗這組額度。
+        if (!rateLimiter.tryAcquire("oauth-link-initiate:" + accountId, INITIATE_TEN_MINUTE_MAX, Duration.ofMinutes(10))
+                || !rateLimiter.tryAcquire("oauth-link-initiate-hourly:" + accountId, INITIATE_HOURLY_MAX, Duration.ofHours(1))) {
+            throw new OAuthLinkRateLimitedException("發起綁定的次數過於頻繁，請稍後再試");
         }
 
         LocalDateTime now = LocalDateTime.now(clock);

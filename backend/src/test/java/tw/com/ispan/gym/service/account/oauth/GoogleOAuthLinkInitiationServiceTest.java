@@ -3,6 +3,7 @@ package tw.com.ispan.gym.service.account.oauth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -25,6 +26,7 @@ import tw.com.ispan.gym.entity.account.OauthAccount;
 import tw.com.ispan.gym.enums.account.OAuthProvider;
 import tw.com.ispan.gym.enums.account.OAuthTransactionPurpose;
 import tw.com.ispan.gym.exception.OAuthAlreadyLinkedException;
+import tw.com.ispan.gym.exception.OAuthLinkRateLimitedException;
 import tw.com.ispan.gym.exception.ReauthenticationRequiredException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.account.AccountRepository;
@@ -128,6 +130,39 @@ class GoogleOAuthLinkInitiationServiceTest {
         verify(transactions, never()).save(any());
     }
 
+    /** 對應必補案例「LINK 正確密碼仍受 initiate 限流」——已經證明知道密碼不代表可以無限發起 */
+    @Test
+    void initiate_密碼正確但Initiate額度已用完_丟OAuthLinkRateLimited_不Supersede不建立() {
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("hash")));
+        when(rateLimiter.tryAcquire(eq("oauth-link-reauth:" + ACCOUNT_ID), anyInt(), any())).thenReturn(true);
+        when(passwordEncoder.matches(CURRENT_PASSWORD, "hash")).thenReturn(true);
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("hash")));
+        when(oauthAccounts.findByAccountIdAndOauthProvider(ACCOUNT_ID, OAuthProvider.GOOGLE))
+                .thenReturn(Optional.empty());
+        when(rateLimiter.tryAcquire(eq("oauth-link-initiate:" + ACCOUNT_ID), anyInt(), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.initiate(ACCOUNT_ID, CURRENT_PASSWORD))
+                .isInstanceOf(OAuthLinkRateLimitedException.class);
+        verify(transactions, never()).supersedePendingLinkTransactions(any(), any());
+        verify(transactions, never()).save(any());
+    }
+
+    @Test
+    void initiate_Initiate十分鐘額度足夠但小時額度已用完_仍丟OAuthLinkRateLimited() {
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("hash")));
+        when(rateLimiter.tryAcquire(eq("oauth-link-reauth:" + ACCOUNT_ID), anyInt(), any())).thenReturn(true);
+        when(passwordEncoder.matches(CURRENT_PASSWORD, "hash")).thenReturn(true);
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("hash")));
+        when(oauthAccounts.findByAccountIdAndOauthProvider(ACCOUNT_ID, OAuthProvider.GOOGLE))
+                .thenReturn(Optional.empty());
+        when(rateLimiter.tryAcquire(eq("oauth-link-initiate:" + ACCOUNT_ID), anyInt(), any())).thenReturn(true);
+        when(rateLimiter.tryAcquire(eq("oauth-link-initiate-hourly:" + ACCOUNT_ID), anyInt(), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.initiate(ACCOUNT_ID, CURRENT_PASSWORD))
+                .isInstanceOf(OAuthLinkRateLimitedException.class);
+        verify(transactions, never()).save(any());
+    }
+
     /** 對應必補案例「舊 LINK transaction 變成 SUPERSEDED」與成功路徑本身 */
     @Test
     void initiate_成功時先Supersede舊Transaction再建立新的_回傳RawState() {
@@ -145,7 +180,12 @@ class GoogleOAuthLinkInitiationServiceTest {
         String rawState = service.initiate(ACCOUNT_ID, CURRENT_PASSWORD);
 
         assertThat(rawState).isEqualTo("raw-link-state");
+        // 對應必補案例「reauth 成功只清除 reauth 額度」與「LINK initiate 成功不清除資源額度」：
+        // 整個成功路徑只清過 reauth 這一個 key，initiate 的兩個 key 都不曾被 clear
         verify(rateLimiter).clear("oauth-link-reauth:" + ACCOUNT_ID);
+        verify(rateLimiter, org.mockito.Mockito.times(1)).clear(anyString());
+        verify(rateLimiter, never()).clear("oauth-link-initiate:" + ACCOUNT_ID);
+        verify(rateLimiter, never()).clear("oauth-link-initiate-hourly:" + ACCOUNT_ID);
 
         org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(transactions);
         inOrder.verify(transactions).supersedePendingLinkTransactions(eq(ACCOUNT_ID), any());
