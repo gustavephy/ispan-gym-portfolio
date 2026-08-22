@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.service.account.oauth;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
@@ -30,14 +31,17 @@ public class GoogleOAuthExchangeService {
     private final AccountAuthorityResolver authorityResolver;
     private final JwtUtil jwtUtil;
     private final OpaqueTokenGenerator tokenGenerator;
+    private final Clock clock;
 
     public GoogleOAuthExchangeService(OAuthExchangeCodeRepository exchangeCodes, AccountLoginPolicy loginPolicy,
-            AccountAuthorityResolver authorityResolver, JwtUtil jwtUtil, OpaqueTokenGenerator tokenGenerator) {
+            AccountAuthorityResolver authorityResolver, JwtUtil jwtUtil, OpaqueTokenGenerator tokenGenerator,
+            Clock clock) {
         this.exchangeCodes = exchangeCodes;
         this.loginPolicy = loginPolicy;
         this.authorityResolver = authorityResolver;
         this.jwtUtil = jwtUtil;
         this.tokenGenerator = tokenGenerator;
+        this.clock = clock;
     }
 
     @Transactional
@@ -46,7 +50,7 @@ public class GoogleOAuthExchangeService {
         OAuthExchangeCode code = exchangeCodes.findByCodeHash(codeHash)
                 .orElseThrow(() -> new OAuthExchangeCodeInvalidException(INVALID_MESSAGE));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         // 原子單次消耗：即使上面的唯讀查詢看到「還沒用過」，也要靠這個更新的列數才能
         // 確定自己真的贏得了這次兌換，不能只信任上面讀到的狀態
         int consumed = exchangeCodes.consumeIfUnused(codeHash, now);

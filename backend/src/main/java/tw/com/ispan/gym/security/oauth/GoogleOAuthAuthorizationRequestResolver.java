@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.security.oauth;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
@@ -28,6 +29,11 @@ import tw.com.ispan.gym.security.OpaqueTokenGenerator;
  * 綁定 purpose=LINK 與 account id，而不是請求當下的身分驗證。只在這裡做唯讀驗證
  * （PENDING／未過期／provider／purpose 相符），驗證失敗直接回 null 中止，
  * 不建立 authorization request、不打 Google；真正消耗發生在 Callback。
+ *
+ * <p>{@code app.oauth.google.enabled=false} 時，兩個 {@code resolve()} 一律回傳
+ * {@code null}，在建立任何 {@link OAuthTransaction} 或呼叫 delegate 之前就中止——
+ * 停用不只是前端隱藏按鈕的裝飾，這裡是後端真正拒絕開始流程的地方，不依賴「反正
+ * Google 會因為 client id/secret 是 placeholder 而拒絕」這種間接效果。
  */
 @Component
 public class GoogleOAuthAuthorizationRequestResolver implements OAuth2AuthorizationRequestResolver {
@@ -40,23 +46,31 @@ public class GoogleOAuthAuthorizationRequestResolver implements OAuth2Authorizat
     private final OAuthTransactionRepository transactions;
     private final OpaqueTokenGenerator tokenGenerator;
     private final GoogleOAuthProperties properties;
+    private final Clock clock;
 
     public GoogleOAuthAuthorizationRequestResolver(ClientRegistrationRepository clientRegistrations,
             OAuthTransactionRepository transactions, OpaqueTokenGenerator tokenGenerator,
-            GoogleOAuthProperties properties) {
+            GoogleOAuthProperties properties, Clock clock) {
         this.delegate = new DefaultOAuth2AuthorizationRequestResolver(clientRegistrations, AUTHORIZATION_BASE_URI);
         this.transactions = transactions;
         this.tokenGenerator = tokenGenerator;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Override
     public OAuth2AuthorizationRequest resolve(HttpServletRequest request) {
+        if (!properties.isEnabled()) {
+            return null;
+        }
         return customize(delegate.resolve(request), request);
     }
 
     @Override
     public OAuth2AuthorizationRequest resolve(HttpServletRequest request, String clientRegistrationId) {
+        if (!properties.isEnabled()) {
+            return null;
+        }
         return customize(delegate.resolve(request, clientRegistrationId), request);
     }
 
@@ -77,7 +91,7 @@ public class GoogleOAuthAuthorizationRequestResolver implements OAuth2Authorizat
 
     private String resolveLinkState(String rawTransaction) {
         String hash = tokenGenerator.hash(rawTransaction);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         boolean valid = transactions.findViewByStateHash(hash)
                 .filter(t -> t.status() == OAuthTransactionStatus.PENDING)
                 .filter(t -> t.expiresAt().isAfter(now))
@@ -94,7 +108,7 @@ public class GoogleOAuthAuthorizationRequestResolver implements OAuth2Authorizat
         transaction.setOauthProvider(OAuthProvider.GOOGLE);
         transaction.setPurpose(OAuthTransactionPurpose.LOGIN);
         transaction.setReturnPath(ReturnPathValidator.sanitize(rawReturnPath).orElse(null));
-        transaction.setExpiresAt(LocalDateTime.now().plus(properties.transactionTtl()));
+        transaction.setExpiresAt(LocalDateTime.now(clock).plus(properties.transactionTtl()));
         transactions.save(transaction);
         return rawState;
     }

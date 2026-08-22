@@ -8,13 +8,17 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 
+import jakarta.servlet.http.HttpSession;
 import tw.com.ispan.gym.config.GoogleOAuthProperties;
 import tw.com.ispan.gym.repository.account.OAuthTransactionRepository;
 import tw.com.ispan.gym.security.OpaqueTokenGenerator;
@@ -34,8 +38,10 @@ class GoogleOAuthFailureHandlerTest {
     private final OpaqueTokenGenerator tokenGenerator = mock(OpaqueTokenGenerator.class);
     private final GoogleOAuthProperties properties = mock(GoogleOAuthProperties.class);
 
+    private final Clock clock = Clock.systemDefaultZone();
+
     private final GoogleOAuthFailureHandler handler =
-            new GoogleOAuthFailureHandler(transactions, tokenGenerator, properties);
+            new GoogleOAuthFailureHandler(transactions, tokenGenerator, properties, clock);
 
     @Test
     void onFailure_使用者取消Google授權_導向AccessDenied() throws Exception {
@@ -110,5 +116,17 @@ class GoogleOAuthFailureHandlerTest {
 
         assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store");
         assertThat(response.getHeader("Referrer-Policy")).isEqualTo("no-referrer");
+    }
+
+    /** 對應 step 3「Callback 成功或失敗後清除 OAuth Session」 */
+    @Test
+    void onFailure_會清除HttpSession() throws Exception {
+        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        HttpSession session = request.getSession(true);
+
+        handler.onAuthenticationFailure(request, new MockHttpServletResponse(), new BadCredentialsException("x"));
+
+        assertThat(((MockHttpSession) session).isInvalid()).isTrue();
     }
 }

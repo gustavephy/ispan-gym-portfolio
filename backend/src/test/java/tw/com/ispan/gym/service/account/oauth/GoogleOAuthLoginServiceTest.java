@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -45,9 +46,11 @@ class GoogleOAuthLoginServiceTest {
     private final OAuthExchangeCodeRepository exchangeCodes = mock(OAuthExchangeCodeRepository.class);
     private final OpaqueTokenGenerator tokenGenerator = mock(OpaqueTokenGenerator.class);
     private final GoogleOAuthProperties properties = mock(GoogleOAuthProperties.class);
+    private final Clock clock = Clock.systemDefaultZone();
 
     private final GoogleOAuthLoginService service = new GoogleOAuthLoginService(
-            oauthAccounts, accounts, loginPolicy, registrationTickets, exchangeCodes, tokenGenerator, properties);
+            oauthAccounts, accounts, loginPolicy, registrationTickets, exchangeCodes, tokenGenerator, properties,
+            clock);
 
     // === 已綁定 (GOOGLE, sub) ====================================================
 

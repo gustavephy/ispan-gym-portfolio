@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.service.account.oauth;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
@@ -47,11 +48,12 @@ public class GoogleOAuthRegistrationCreationService {
     private final OAuthExchangeCodeRepository exchangeCodes;
     private final OpaqueTokenGenerator tokenGenerator;
     private final GoogleOAuthProperties properties;
+    private final Clock clock;
 
     public GoogleOAuthRegistrationCreationService(OAuthRegistrationTicketRepository tickets,
             AccountRepository accounts, MemberRepository members,
             OauthAccountRepository oauthAccounts, OAuthExchangeCodeRepository exchangeCodes,
-            OpaqueTokenGenerator tokenGenerator, GoogleOAuthProperties properties) {
+            OpaqueTokenGenerator tokenGenerator, GoogleOAuthProperties properties, Clock clock) {
         this.tickets = tickets;
         this.accounts = accounts;
         this.members = members;
@@ -59,6 +61,7 @@ public class GoogleOAuthRegistrationCreationService {
         this.exchangeCodes = exchangeCodes;
         this.tokenGenerator = tokenGenerator;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Transactional
@@ -68,7 +71,7 @@ public class GoogleOAuthRegistrationCreationService {
         // 綁定一起 rollback，ticket 保持 PENDING，使用者可以重試。
         OAuthRegistrationTicket ticket = tickets.findByTokenHashForUpdate(tokenHash)
                 .orElseThrow(() -> new OAuthRegistrationTicketInvalidException(INVALID_MESSAGE));
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (ticket.getStatus() != OAuthRegistrationTicketStatus.PENDING || !ticket.getExpiresAt().isAfter(now)) {
             throw new OAuthRegistrationTicketInvalidException(INVALID_MESSAGE);
         }

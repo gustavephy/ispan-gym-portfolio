@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -49,9 +50,10 @@ class GoogleOAuthRegistrationCreationServiceTest {
     private final OAuthExchangeCodeRepository exchangeCodes = mock(OAuthExchangeCodeRepository.class);
     private final OpaqueTokenGenerator tokenGenerator = mock(OpaqueTokenGenerator.class);
     private final GoogleOAuthProperties properties = mock(GoogleOAuthProperties.class);
+    private final Clock clock = Clock.systemDefaultZone();
 
     private final GoogleOAuthRegistrationCreationService service = new GoogleOAuthRegistrationCreationService(
-            tickets, accounts, members, oauthAccounts, exchangeCodes, tokenGenerator, properties);
+            tickets, accounts, members, oauthAccounts, exchangeCodes, tokenGenerator, properties, clock);
 
     @Test
     void create_Ticket不存在丟RegistrationTicketInvalid() {

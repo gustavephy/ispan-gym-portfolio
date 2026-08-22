@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -16,8 +17,11 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+
+import jakarta.servlet.http.HttpSession;
 
 import tw.com.ispan.gym.config.GoogleOAuthProperties;
 import tw.com.ispan.gym.enums.account.OAuthProvider;
@@ -50,8 +54,10 @@ class GoogleOAuthSuccessHandlerTest {
     private final GoogleOAuthLinkService linkService = mock(GoogleOAuthLinkService.class);
     private final GoogleOAuthProperties properties = mock(GoogleOAuthProperties.class);
 
+    private final Clock clock = Clock.systemDefaultZone();
+
     private final GoogleOAuthSuccessHandler handler = new GoogleOAuthSuccessHandler(
-            transactions, tokenGenerator, identityMapper, loginService, linkService, properties);
+            transactions, tokenGenerator, identityMapper, loginService, linkService, properties, clock);
 
     @Test
     void onSuccess_State缺失_導向FlowExpired_不查Transaction() throws Exception {
@@ -123,6 +129,64 @@ class GoogleOAuthSuccessHandlerTest {
 
         assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=flow_expired");
         verify(loginService, never()).login(any(), any());
+    }
+
+    /** 對應 step 3「Handler 非預期例外的安全出口」：Service 內部丟出非業務判定的
+     *  RuntimeException 時，不能讓它變成一般 500，且已消耗的 transaction 不能復原 */
+    @Test
+    void onSuccess_LoginService丟出非預期RuntimeException_導向UnexpectedError_不洩漏訊息() throws Exception {
+        when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
+        when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(Optional.of(
+                viewOf(OAuthTransactionStatus.PENDING, OAuthTransactionPurpose.LOGIN, null,
+                        LocalDateTime.now().plusMinutes(5))));
+        when(transactions.consumeIfPending(eq(STATE_HASH), any())).thenReturn(1);
+        when(identityMapper.map(any())).thenReturn(identity());
+        when(loginService.login(any(), any()))
+                .thenThrow(new IllegalStateException("some internal detail that must not leak, sub=google-sub-123"));
+        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(stateRequest(), response, authentication());
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=unexpected_error");
+        assertThat(response.getRedirectedUrl()).doesNotContain("google-sub-123", "internal detail");
+        // transaction 已經消耗，不能因為後面出錯就試圖復原成 PENDING
+        verify(transactions, never()).markFailedIfPending(anyString(), any(), anyString());
+    }
+
+    @Test
+    void onSuccess_IdentityMapper丟出非預期RuntimeException_導向UnexpectedError() throws Exception {
+        when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
+        when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(Optional.of(
+                viewOf(OAuthTransactionStatus.PENDING, OAuthTransactionPurpose.LOGIN, null,
+                        LocalDateTime.now().plusMinutes(5))));
+        when(transactions.consumeIfPending(eq(STATE_HASH), any())).thenReturn(1);
+        when(identityMapper.map(any())).thenThrow(new NullPointerException());
+        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(stateRequest(), response, authentication());
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=unexpected_error");
+        verify(loginService, never()).login(any(), any());
+    }
+
+    @Test
+    void onSuccess_LinkService丟出非預期RuntimeException_導向UnexpectedError() throws Exception {
+        Integer accountId = 30;
+        when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
+        when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(Optional.of(
+                viewOf(OAuthTransactionStatus.PENDING, OAuthTransactionPurpose.LINK, accountId,
+                        LocalDateTime.now().plusMinutes(5))));
+        when(transactions.consumeIfPending(eq(STATE_HASH), any())).thenReturn(1);
+        when(identityMapper.map(any())).thenReturn(identity());
+        when(linkService.link(eq(accountId), any())).thenThrow(new RuntimeException("db hiccup"));
+        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(stateRequest(), response, authentication());
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=unexpected_error");
     }
 
     @Test
@@ -220,6 +284,29 @@ class GoogleOAuthSuccessHandlerTest {
         handler.onAuthenticationSuccess(stateRequest(), response, authentication());
 
         assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=identity_in_use");
+    }
+
+    /** 對應 step 3「Callback 成功或失敗後清除 OAuth Session」——不論走哪個分支結束都要清 */
+    @Test
+    void onSuccess_不論結果為何都會清除HttpSession() throws Exception {
+        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+        MockHttpServletRequest request = stateRequest();
+        HttpSession session = request.getSession(true);
+        assertThat(session.isNew()).isTrue();
+
+        handler.onAuthenticationSuccess(request, new MockHttpServletResponse(), authentication());
+
+        assertThat(((MockHttpSession) session).isInvalid()).isTrue();
+    }
+
+    @Test
+    void onSuccess_沒有Session時不建立新的也不出錯() throws Exception {
+        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+        MockHttpServletRequest request = stateRequest();
+
+        handler.onAuthenticationSuccess(request, new MockHttpServletResponse(), authentication());
+
+        assertThat(request.getSession(false)).isNull();
     }
 
     private MockHttpServletRequest stateRequest() {

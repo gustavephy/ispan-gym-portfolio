@@ -1,6 +1,7 @@
 package tw.com.ispan.gym.security.oauth;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.UUID;
@@ -15,6 +16,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import tw.com.ispan.gym.config.GoogleOAuthProperties;
 import tw.com.ispan.gym.enums.account.OAuthRedirectReason;
 import tw.com.ispan.gym.repository.account.OAuthTransactionRepository;
@@ -33,36 +35,52 @@ public class GoogleOAuthFailureHandler implements AuthenticationFailureHandler {
     private final OAuthTransactionRepository transactions;
     private final OpaqueTokenGenerator tokenGenerator;
     private final GoogleOAuthProperties properties;
+    private final Clock clock;
 
     public GoogleOAuthFailureHandler(OAuthTransactionRepository transactions, OpaqueTokenGenerator tokenGenerator,
-            GoogleOAuthProperties properties) {
+            GoogleOAuthProperties properties, Clock clock) {
         this.transactions = transactions;
         this.tokenGenerator = tokenGenerator;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
             AuthenticationException exception) throws IOException {
-        OAuthRedirectReason reason = classify(request, exception);
-        String correlationId = UUID.randomUUID().toString();
+        try {
+            OAuthRedirectReason reason = classify(request, exception);
+            String correlationId = UUID.randomUUID().toString();
 
-        String rawState = request.getParameter("state");
-        if (rawState != null) {
-            transactions.markFailedIfPending(tokenGenerator.hash(rawState), LocalDateTime.now(), reason.name());
+            String rawState = request.getParameter("state");
+            if (rawState != null) {
+                transactions.markFailedIfPending(tokenGenerator.hash(rawState), LocalDateTime.now(clock),
+                        reason.name());
+            }
+
+            // 刻意只記內部分類、例外類別與 correlation ID：exception message 來自
+            // Google 回傳的 error/error_description，屬於外部輸入，不該原樣進正式 log
+            log.info("Google OAuth 授權失敗：reason={} exception={} correlationId={}",
+                    reason, exception.getClass().getSimpleName(), correlationId);
+
+            response.setHeader("Cache-Control", "no-store");
+            response.setHeader("Referrer-Policy", "no-referrer");
+            String url = UriComponentsBuilder.fromUriString(properties.frontendErrorUrl())
+                    .queryParam("oauthError", reason.name().toLowerCase(Locale.ROOT))
+                    .build().toUriString();
+            response.sendRedirect(url);
+        } finally {
+            // HttpSession 只保存 OAuth 協定握手資料，不是系統登入態——見
+            // GoogleOAuthSuccessHandler 的同一段說明，失敗路徑同樣要清乾淨
+            clearOAuthSession(request);
         }
+    }
 
-        // 刻意只記內部分類、例外類別與 correlation ID：exception message 來自
-        // Google 回傳的 error/error_description，屬於外部輸入，不該原樣進正式 log
-        log.info("Google OAuth 授權失敗：reason={} exception={} correlationId={}",
-                reason, exception.getClass().getSimpleName(), correlationId);
-
-        response.setHeader("Cache-Control", "no-store");
-        response.setHeader("Referrer-Policy", "no-referrer");
-        String url = UriComponentsBuilder.fromUriString(properties.frontendErrorUrl())
-                .queryParam("oauthError", reason.name().toLowerCase(Locale.ROOT))
-                .build().toUriString();
-        response.sendRedirect(url);
+    private void clearOAuthSession(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.invalidate();
+        }
     }
 
     private OAuthRedirectReason classify(HttpServletRequest request, AuthenticationException exception) {

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -41,9 +42,10 @@ class GoogleOAuthExchangeServiceTest {
     private final AccountAuthorityResolver authorityResolver = mock(AccountAuthorityResolver.class);
     private final JwtUtil jwtUtil = mock(JwtUtil.class);
     private final OpaqueTokenGenerator tokenGenerator = mock(OpaqueTokenGenerator.class);
+    private final Clock clock = Clock.systemDefaultZone();
 
     private final GoogleOAuthExchangeService service = new GoogleOAuthExchangeService(
-            exchangeCodes, loginPolicy, authorityResolver, jwtUtil, tokenGenerator);
+            exchangeCodes, loginPolicy, authorityResolver, jwtUtil, tokenGenerator, clock);
 
     @Test
     void exchange_正常交換回傳JWT與ReturnPath() {

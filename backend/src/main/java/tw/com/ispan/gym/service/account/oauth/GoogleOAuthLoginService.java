@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.service.account.oauth;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Optional;
@@ -44,11 +45,12 @@ public class GoogleOAuthLoginService {
     private final OAuthExchangeCodeRepository exchangeCodes;
     private final OpaqueTokenGenerator tokenGenerator;
     private final GoogleOAuthProperties properties;
+    private final Clock clock;
 
     public GoogleOAuthLoginService(OauthAccountRepository oauthAccounts, AccountRepository accounts,
             AccountLoginPolicy loginPolicy, OAuthRegistrationTicketRepository registrationTickets,
             OAuthExchangeCodeRepository exchangeCodes, OpaqueTokenGenerator tokenGenerator,
-            GoogleOAuthProperties properties) {
+            GoogleOAuthProperties properties, Clock clock) {
         this.oauthAccounts = oauthAccounts;
         this.accounts = accounts;
         this.loginPolicy = loginPolicy;
@@ -56,6 +58,7 @@ public class GoogleOAuthLoginService {
         this.exchangeCodes = exchangeCodes;
         this.tokenGenerator = tokenGenerator;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Transactional
@@ -79,7 +82,7 @@ public class GoogleOAuthLoginService {
                 .ifPresent(binding -> {
                     binding.setProviderEmail(identity.email());
                     binding.setProviderEmailVerified(identity.emailVerified());
-                    binding.setLastLoginAt(LocalDateTime.now());
+                    binding.setLastLoginAt(LocalDateTime.now(clock));
                 });
 
         return new Authenticated(issueExchangeCode(account, returnPath));
@@ -95,7 +98,7 @@ public class GoogleOAuthLoginService {
             return new Rejected(OAuthRedirectReason.ACCOUNT_LINK_REQUIRED);
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         // 同一個 (provider, sub) 只保留最新一張有效 ticket，避免多分頁各自持有一張
         registrationTickets.supersedePendingTickets(OAuthProvider.GOOGLE, identity.subject(), now);
 
@@ -121,7 +124,7 @@ public class GoogleOAuthLoginService {
         code.setCodeHash(tokenGenerator.hash(rawCode));
         code.setAccount(account);
         code.setReturnPath(returnPath);
-        code.setExpiresAt(LocalDateTime.now().plus(properties.exchangeCodeTtl()));
+        code.setExpiresAt(LocalDateTime.now(clock).plus(properties.exchangeCodeTtl()));
         exchangeCodes.save(code);
         return rawCode;
     }

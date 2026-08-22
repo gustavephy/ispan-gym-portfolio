@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.service.account.oauth;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Locale;
 
@@ -33,12 +34,14 @@ public class GoogleOAuthLinkService {
     private final AccountRepository accounts;
     private final OauthAccountRepository oauthAccounts;
     private final AccountLoginPolicy loginPolicy;
+    private final Clock clock;
 
     public GoogleOAuthLinkService(AccountRepository accounts, OauthAccountRepository oauthAccounts,
-            AccountLoginPolicy loginPolicy) {
+            AccountLoginPolicy loginPolicy, Clock clock) {
         this.accounts = accounts;
         this.oauthAccounts = oauthAccounts;
         this.loginPolicy = loginPolicy;
+        this.clock = clock;
     }
 
     @Transactional
@@ -74,7 +77,7 @@ public class GoogleOAuthLinkService {
         binding.setProviderUserId(identity.subject());
         binding.setProviderEmail(identity.email());
         binding.setProviderEmailVerified(true);
-        binding.setLastLoginAt(LocalDateTime.now());
+        binding.setLastLoginAt(LocalDateTime.now(clock));
         oauthAccounts.save(binding);
 
         return new Linked();

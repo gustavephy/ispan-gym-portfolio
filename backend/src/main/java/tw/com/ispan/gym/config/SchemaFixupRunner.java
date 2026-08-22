@@ -1343,6 +1343,12 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 log.error("oauth_account 有 {} 組 (account_id, oauth_provider) 重複綁定，"
                         + "無法自動判斷哪筆才正確，請人工處理後再重啟：{}",
                         duplicates.size(), duplicates);
+                // 只 log 不夠——約束沒建成，代表這個安全 invariant 目前並未真的被強制，
+                // 讓啟動繼續等於允許系統帶著已知的重複綁定跑下去。必須直接讓啟動失敗，
+                // 逼人工先處理重複資料，而不是留給下一個發現問題的人。
+                throw new IllegalStateException(
+                        "oauth_account 有 " + duplicates.size() + " 組 (account_id, oauth_provider) 重複綁定，"
+                                + "無法自動判斷哪筆才正確，請人工處理後再重啟；詳見上方 log。");
             } else {
                 createFilteredUniqueIndex("UX_oauth_account_account_id_provider", """
                         CREATE UNIQUE INDEX UX_oauth_account_account_id_provider

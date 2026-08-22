@@ -7,10 +7,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -42,8 +44,39 @@ class GoogleOAuthAuthorizationRequestResolverTest {
     private final OpaqueTokenGenerator tokenGenerator = mock(OpaqueTokenGenerator.class);
     private final GoogleOAuthProperties properties = mock(GoogleOAuthProperties.class);
 
+    private final Clock clock = Clock.systemDefaultZone();
+
     private final GoogleOAuthAuthorizationRequestResolver resolver = new GoogleOAuthAuthorizationRequestResolver(
-            clientRegistrations(), transactions, tokenGenerator, properties);
+            clientRegistrations(), transactions, tokenGenerator, properties, clock);
+
+    /** 其他案例都測「功能已啟用」下的行為，停用本身的行為見下面兩個獨立案例 */
+    @BeforeEach
+    void enableByDefault() {
+        when(properties.isEnabled()).thenReturn(true);
+    }
+
+    /** 對應 step 3「讓 feature flag 真正生效」：停用時兩個 resolve() 都直接回 null，
+     *  不建立 transaction、不呼叫 delegate（不解析 client registration、不建授權網址）*/
+    @Test
+    void resolve_功能停用時直接回Null_不建立Transaction() {
+        when(properties.isEnabled()).thenReturn(false);
+
+        OAuth2AuthorizationRequest result = resolver.resolve(loginRequest(null));
+
+        assertThat(result).isNull();
+        verify(transactions, never()).save(any());
+        verify(tokenGenerator, never()).generate();
+    }
+
+    @Test
+    void resolve_功能停用時_帶ClientRegistrationId的多載也直接回Null() {
+        when(properties.isEnabled()).thenReturn(false);
+
+        OAuth2AuthorizationRequest result = resolver.resolve(loginRequest(null), "google");
+
+        assertThat(result).isNull();
+        verify(transactions, never()).save(any());
+    }
 
     @Test
     void resolve_Login無ReturnPath_建立新Transaction並以其State回傳() {

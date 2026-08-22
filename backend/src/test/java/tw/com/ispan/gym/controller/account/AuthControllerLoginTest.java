@@ -99,6 +99,7 @@ class AuthControllerLoginTest {
         // Google OAuth 協定鏈的必要 bean——SecurityConfig 現在同時建立 oauth 鏈，
         // 少了任何一個都會讓 context 組不起來（見 SecurityConfig 建構子）
         tw.com.ispan.gym.config.GoogleOAuthProperties.class,
+        tw.com.ispan.gym.config.ClockConfig.class,
         tw.com.ispan.gym.security.OpaqueTokenGenerator.class,
         tw.com.ispan.gym.security.oauth.GoogleIdentityMapper.class,
         tw.com.ispan.gym.service.account.oauth.GoogleOAuthLoginService.class,
