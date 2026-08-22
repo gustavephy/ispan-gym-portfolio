@@ -27,7 +27,7 @@ import tw.com.ispan.gym.enums.account.OAuthTransactionStatus;
 /**
  * 一次 Google Authorization Code 往返的 server-side 紀錄。對外的 OAuth {@code state}
  * 只是一個不透明高熵值，這裡才是它真正的語意來源（purpose／account／狀態）——
- * state 本身刻意不編碼任何業務資料，見 memory/google_oauth_phase_scope.md。
+ * state 本身刻意不編碼任何業務資料，見 docs/google-oauth-design-notes.md。
  *
  * <p>{@code account} 為 null 代表 LOGIN（登入前不一定知道要落地哪個帳號，
  * 也可能是全新註冊）；LINK 一律要求非 null（發起時就已登入）。兩者互斥由

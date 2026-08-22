@@ -42,7 +42,7 @@ class GoogleOAuthLinkServiceTest {
 
     @Test
     void link_Account不存在_拒絕AccountDisabled() {
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.empty());
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.empty());
 
         GoogleOAuthLinkService.Outcome outcome = service.link(ACCOUNT_ID, matchingIdentity());
 
@@ -54,7 +54,7 @@ class GoogleOAuthLinkServiceTest {
     @Test
     void link_Policy不允許登入_拒絕AccountDisabled() {
         Account account = accountOf(ACCOUNT_ID, "user@example.com");
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
         when(loginPolicy.isLoginAllowed(account)).thenReturn(false);
 
         GoogleOAuthLinkService.Outcome outcome = service.link(ACCOUNT_ID, matchingIdentity());
@@ -68,7 +68,7 @@ class GoogleOAuthLinkServiceTest {
     void link_GoogleSub已綁定其他Account_拒絕IdentityInUse_不洩漏對方資訊() {
         Account account = accountOf(ACCOUNT_ID, "user@example.com");
         Account otherAccount = accountOf(OTHER_ACCOUNT_ID, "other@example.com");
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
         when(loginPolicy.isLoginAllowed(account)).thenReturn(true);
         when(oauthAccounts.findAccountByProviderAndSubject(OAuthProvider.GOOGLE, "google-sub-123"))
                 .thenReturn(Optional.of(otherAccount));
@@ -83,7 +83,7 @@ class GoogleOAuthLinkServiceTest {
     @Test
     void link_GoogleSub已綁定同一Account_視為AlreadyLinked_不是IdentityInUse() {
         Account account = accountOf(ACCOUNT_ID, "user@example.com");
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
         when(loginPolicy.isLoginAllowed(account)).thenReturn(true);
         // sub 綁定的對象就是自己這個 accountId——不屬於「被別人搶先」
         when(oauthAccounts.findAccountByProviderAndSubject(OAuthProvider.GOOGLE, "google-sub-123"))
@@ -99,7 +99,7 @@ class GoogleOAuthLinkServiceTest {
     @Test
     void link_Account已綁定另一個GoogleSub_拒絕AlreadyLinked() {
         Account account = accountOf(ACCOUNT_ID, "user@example.com");
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
         when(loginPolicy.isLoginAllowed(account)).thenReturn(true);
         when(oauthAccounts.findAccountByProviderAndSubject(OAuthProvider.GOOGLE, "google-sub-123"))
                 .thenReturn(Optional.empty());
@@ -115,7 +115,7 @@ class GoogleOAuthLinkServiceTest {
     @Test
     void link_EmailNull_拒絕LinkEmailMismatch() {
         Account account = accountOf(ACCOUNT_ID, "user@example.com");
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
         when(loginPolicy.isLoginAllowed(account)).thenReturn(true);
         when(oauthAccounts.findAccountByProviderAndSubject(OAuthProvider.GOOGLE, "google-sub-123"))
                 .thenReturn(Optional.empty());
@@ -132,7 +132,7 @@ class GoogleOAuthLinkServiceTest {
     @Test
     void link_Email未驗證_拒絕LinkEmailMismatch() {
         Account account = accountOf(ACCOUNT_ID, "user@example.com");
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
         when(loginPolicy.isLoginAllowed(account)).thenReturn(true);
         when(oauthAccounts.findAccountByProviderAndSubject(OAuthProvider.GOOGLE, "google-sub-123"))
                 .thenReturn(Optional.empty());
@@ -150,7 +150,7 @@ class GoogleOAuthLinkServiceTest {
     @Test
     void link_Email與AccountEmail不一致_拒絕LinkEmailMismatch() {
         Account account = accountOf(ACCOUNT_ID, "user@example.com");
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
         when(loginPolicy.isLoginAllowed(account)).thenReturn(true);
         when(oauthAccounts.findAccountByProviderAndSubject(OAuthProvider.GOOGLE, "google-sub-123"))
                 .thenReturn(Optional.empty());
@@ -169,7 +169,7 @@ class GoogleOAuthLinkServiceTest {
     @Test
     void link_全部條件符合_建立綁定並回傳Linked() {
         Account account = accountOf(ACCOUNT_ID, "  User@Example.com  ");
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
         when(loginPolicy.isLoginAllowed(account)).thenReturn(true);
         when(oauthAccounts.findAccountByProviderAndSubject(OAuthProvider.GOOGLE, "google-sub-123"))
                 .thenReturn(Optional.empty());

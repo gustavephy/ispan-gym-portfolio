@@ -189,6 +189,38 @@ class GoogleOAuthSuccessHandlerTest {
         assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=unexpected_error");
     }
 
+    /** 對應 2026-08-22 code review：安全網原本沒蓋到 transaction 查詢這一段 */
+    @Test
+    void onSuccess_TransactionRepository查詢丟出非預期RuntimeException_導向UnexpectedError_不洩漏訊息() throws Exception {
+        when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
+        when(transactions.findViewByStateHash(STATE_HASH))
+                .thenThrow(new RuntimeException("connection reset by peer, host=db.internal"));
+        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(stateRequest(), response, authentication());
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=unexpected_error");
+        assertThat(response.getRedirectedUrl()).doesNotContain("connection reset", "db.internal");
+    }
+
+    /** 對應 2026-08-22 code review：安全網原本沒蓋到原子消耗這一段 */
+    @Test
+    void onSuccess_ConsumeIfPending丟出非預期RuntimeException_導向UnexpectedError_不呼叫LoginService() throws Exception {
+        when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
+        when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(Optional.of(
+                viewOf(OAuthTransactionStatus.PENDING, OAuthTransactionPurpose.LOGIN, null,
+                        LocalDateTime.now().plusMinutes(5))));
+        when(transactions.consumeIfPending(eq(STATE_HASH), any())).thenThrow(new RuntimeException("db hiccup"));
+        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(stateRequest(), response, authentication());
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=unexpected_error");
+        verify(loginService, never()).login(any(), any());
+    }
+
     @Test
     void onSuccess_Login成功_導向SuccessUrl帶Code_不含JWT或Email() throws Exception {
         when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);

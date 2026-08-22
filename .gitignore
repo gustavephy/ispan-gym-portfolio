@@ -5,7 +5,9 @@
 # 資料庫密碼等機敏設定，不進版控
 .env
 
-# 內部設計文件，不進版控；API 文件為對隊友的交付物，單獨放行
+# 內部設計文件，不進版控；API 文件與 Google OAuth 設計筆記是對隊友／reviewer 的
+# 交付物，單獨放行（後者是程式內 Javadoc 實際引用的對象，需要在 repo 裡才看得到）
 # （目錄整個被忽略時內部檔案無法以 ! 放行，故改為 /docs/* 再負向排除）
 /docs/*
 !/docs/API-REFERENCE.md
+!/docs/google-oauth-design-notes.md

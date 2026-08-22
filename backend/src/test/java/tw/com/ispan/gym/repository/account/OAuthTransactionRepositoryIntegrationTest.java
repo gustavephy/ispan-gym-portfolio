@@ -19,7 +19,7 @@ import tw.com.ispan.gym.enums.account.OAuthProvider;
 import tw.com.ispan.gym.enums.account.OAuthTransactionPurpose;
 
 /**
- * 對應 memory/google_oauth_phase_scope.md 必補案例「LOGIN transaction → projection.accountId
+ * 對應 docs/google-oauth-design-notes.md 必補案例「LOGIN transaction → projection.accountId
  * == null」「LINK transaction → projection.accountId == 正確值」——這需要真的執行
  * {@link OAuthTransactionRepository#findViewByStateHash} 的 JPQL {@code LEFT JOIN}，
  * Mockito 對 repository 的 mock 沒辦法驗證這件事，必須連真實 SQL Server。

@@ -115,6 +115,9 @@ public class GoogleOAuthRegistrationCreationService {
         OAuthExchangeCode code = new OAuthExchangeCode();
         code.setCodeHash(tokenGenerator.hash(rawCode));
         code.setAccount(account);
+        // 剛建立的新 Account，credentialsVersion 是 int 預設值 0——見
+        // OAuthExchangeCode 的欄位註解，兌換時會拿目前的 credentialsVersion 跟這裡比對
+        code.setIssuedCredentialsVersion(account.getCredentialsVersion());
         code.setExpiresAt(now.plus(properties.exchangeCodeTtl()));
         exchangeCodes.save(code);
         return rawCode;

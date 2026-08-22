@@ -22,7 +22,7 @@ import tw.com.ispan.gym.security.OpaqueTokenGenerator;
 
 /**
  * 把 OAuth {@code state} 換成不透明高熵值，語意全部存在 server-side
- * {@link OAuthTransaction}——見 memory/google_oauth_phase_scope.md 的 state 模型。
+ * {@link OAuthTransaction}——見 docs/google-oauth-design-notes.md 的 state 模型。
  *
  * <p>LOGIN：{@code /oauth2/authorization/google}，這裡直接建立新 transaction。
  * <p>LINK：{@code /oauth2/authorization/google?transaction=<opaque>}，這個
@@ -42,7 +42,7 @@ import tw.com.ispan.gym.security.OpaqueTokenGenerator;
  * 後面，信任該 header 只會讓限流形同虛設，任何人換一個假 IP 就能繞過）。超過限制時
  * 一律回 {@code null}，跟 {@code enabled=false} 走同一個「中止、不建立 transaction、
  * 不呼叫 Google」的既有出口，落地為一般 404，不額外洩漏「是被限流還是功能剛好關閉」。
- * Callback／Exchange 刻意不做嚴格 IP 限流——理由見 memory/google_oauth_phase_scope.md
+ * Callback／Exchange 刻意不做嚴格 IP 限流——理由見 docs/google-oauth-design-notes.md
  * 的限流小節（行動網路換 IP、VPN、企業 NAT 都可能讓合法使用者的來源 IP 中途改變）。
  */
 @Component

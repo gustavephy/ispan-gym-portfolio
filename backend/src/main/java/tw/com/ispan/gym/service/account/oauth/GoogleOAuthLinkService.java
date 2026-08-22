@@ -21,6 +21,12 @@ import tw.com.ispan.gym.security.oauth.GoogleIdentity;
  * {@link GoogleOAuthLinkInitiationService}）已經檢查過密碼、是否已綁定，但 Google
  * 授權期間可能有其他請求插入變化，這裡是取得 transaction 之後的最後一道防禦性複查，
  * 不可省略。
+ *
+ * <p>這裡會真的寫入一筆登入憑證（{@code OauthAccount} 綁定），鎖 Account 的方式必須
+ * 和 {@link GoogleOAuthLinkInitiationService}／{@code GoogleOAuthUnlinkService}／
+ * {@code PasswordService} 一致，用 {@code findByIdForUpdate}——不是為了防止重複綁定
+ * 本身（那已經有 DB unique constraint 兜底），而是維持整個帳號安全域固定的
+ * Account-first 鎖序，避免併發 LINK／UNLINK 之間互相搶鎖造成 deadlock 或看到過期快照。
  */
 @Service
 public class GoogleOAuthLinkService {
@@ -46,7 +52,7 @@ public class GoogleOAuthLinkService {
 
     @Transactional
     public Outcome link(Integer accountId, GoogleIdentity identity) {
-        Account account = accounts.findById(accountId).orElse(null);
+        Account account = accounts.findByIdForUpdate(accountId).orElse(null);
         if (account == null || !loginPolicy.isLoginAllowed(account)) {
             return new Rejected(OAuthRedirectReason.ACCOUNT_DISABLED);
         }
@@ -64,7 +70,7 @@ public class GoogleOAuthLinkService {
         }
 
         // v1 保守規則：Google email 必須與 Account email 一致，理由見
-        // memory/google_oauth_phase_scope.md「產品規則細節」——密碼重驗證只證明操作者
+        // docs/google-oauth-design-notes.md「產品規則細節」——密碼重驗證只證明操作者
         // 是本人，不代表允許綁一個完全不同 email 的 Google 身分，避免日後客服/稽核混亂
         if (identity.email() == null || !identity.emailVerified()
                 || !normalize(identity.email()).equals(normalize(account.getEmail()))) {

@@ -7,6 +7,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
@@ -26,6 +29,14 @@ class GoogleOAuthStartupValidatorTest {
 
     private final GoogleOAuthStartupValidator validator =
             new GoogleOAuthStartupValidator(properties, clientRegistrations);
+
+    /** 三組 TTL 預設一律回傳正值——只有專門測 TTL 驗證的案例才需要覆寫成 0／負值 */
+    @BeforeEach
+    void stubPositiveTtlsByDefault() {
+        when(properties.transactionTtl()).thenReturn(Duration.ofMinutes(10));
+        when(properties.registrationTicketTtl()).thenReturn(Duration.ofMinutes(15));
+        when(properties.exchangeCodeTtl()).thenReturn(Duration.ofSeconds(90));
+    }
 
     @Test
     void run_停用時完全不檢查_也不查ClientRegistration() {
@@ -128,6 +139,49 @@ class GoogleOAuthStartupValidatorTest {
         assertThatThrownBy(() -> validator.run())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("HTTPS");
+    }
+
+    /** 對應必補案例「拒絕沒有 host 的假 URL」——opaque URI 語法合法、scheme 也對，但沒有 authority */
+    @Test
+    void run_前端Url是Opaque且沒有Host_丟IllegalState() {
+        when(properties.isEnabled()).thenReturn(true);
+        when(clientRegistrations.findByRegistrationId("google"))
+                .thenReturn(registrationOf("real-client-id", "real-secret"));
+        when(properties.frontendSuccessUrl()).thenReturn("https:foo");
+        when(properties.frontendRegistrationUrl()).thenReturn("https://frontend.example/oauth/register");
+        when(properties.frontendLinkResultUrl()).thenReturn("https://frontend.example/account/oauth/callback");
+        when(properties.frontendErrorUrl()).thenReturn("https://frontend.example/login");
+
+        assertThatThrownBy(() -> validator.run())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("缺少有效主機名稱");
+    }
+
+    /** 對應必補案例「TTL 必須大於零」 */
+    @Test
+    void run_TransactionTtl不是正數_丟IllegalState() {
+        when(properties.isEnabled()).thenReturn(true);
+        when(clientRegistrations.findByRegistrationId("google"))
+                .thenReturn(registrationOf("real-client-id", "real-secret"));
+        stubValidFrontendUrls();
+        when(properties.transactionTtl()).thenReturn(Duration.ZERO);
+
+        assertThatThrownBy(() -> validator.run())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("app.oauth.transaction-ttl-minutes");
+    }
+
+    @Test
+    void run_ExchangeCodeTtl是負數_丟IllegalState() {
+        when(properties.isEnabled()).thenReturn(true);
+        when(clientRegistrations.findByRegistrationId("google"))
+                .thenReturn(registrationOf("real-client-id", "real-secret"));
+        stubValidFrontendUrls();
+        when(properties.exchangeCodeTtl()).thenReturn(Duration.ofSeconds(-1));
+
+        assertThatThrownBy(() -> validator.run())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("app.oauth.exchange-code-ttl-seconds");
     }
 
     @Test

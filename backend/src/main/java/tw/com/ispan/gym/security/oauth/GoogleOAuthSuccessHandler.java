@@ -75,38 +75,41 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
 
     private void handle(HttpServletRequest request, HttpServletResponse response, Authentication authentication)
             throws IOException {
-        String rawState = request.getParameter("state");
-        OAuthTransactionView transaction = (rawState == null) ? null
-                : transactions.findViewByStateHash(tokenGenerator.hash(rawState)).orElse(null);
-
-        if (transaction == null) {
-            redirectError(response, OAuthRedirectReason.FLOW_EXPIRED, null);
-            return;
-        }
-
-        LocalDateTime now = LocalDateTime.now(clock);
-        if (transaction.status() != OAuthTransactionStatus.PENDING || !transaction.expiresAt().isAfter(now)) {
-            OAuthRedirectReason reason = transaction.status() == OAuthTransactionStatus.SUPERSEDED
-                    ? OAuthRedirectReason.FLOW_REPLACED
-                    : OAuthRedirectReason.FLOW_EXPIRED;
-            redirectError(response, reason, transaction);
-            return;
-        }
-
-        // 原子消耗：只有真的贏得這次處理權才能繼續，避免併發 callback 重複處理同一 transaction
-        int consumed = transactions.consumeIfPending(transaction.stateHash(), now);
-        if (consumed == 0) {
-            redirectError(response, OAuthRedirectReason.FLOW_EXPIRED, null);
-            return;
-        }
-
-        // transaction 這裡已經是 CONSUMED——Google authorization code 也已經用掉了，
-        // 兩者都不可能重來。以下任何非預期的 RuntimeException（Mapper/Login/Link Service
-        // 內部的臭蟲、暫時性錯誤等，不是這幾個 Service 自己判定的業務拒絕）都必須在這裡
-        // 兜住，不能讓它直接變成一般的 500 頁面：不記 token/state/exception message，
-        // 只記 correlation id 與例外類別，導向固定的 unexpected_error 讓使用者重新發起
-        // 整個 Google 登入——不會、也不能把這筆 transaction 改回 PENDING。
+        // 安全網涵蓋整個方法本體，包括最前面的 transaction 查詢與原子消耗——那兩步
+        // 一樣是真的 DB 呼叫，一樣可能因為暫時性錯誤丟出非預期的 RuntimeException，沒有
+        // 理由只保護「取得 OIDC 身分」之後的部分（2026-08-22 code review 抓到這裡原本
+        // 的安全網只從後半段開始，前半段的例外仍會直接變成一般 500 頁面，修正範圍擴大到
+        // 整個方法）。不記 token/state/exception message，只記 correlation id 與例外類別，
+        // 導向固定的 unexpected_error 讓使用者重新發起整個 Google 登入——已經消耗掉的
+        // transaction 不會、也不能改回 PENDING。
         try {
+            String rawState = request.getParameter("state");
+            OAuthTransactionView transaction = (rawState == null) ? null
+                    : transactions.findViewByStateHash(tokenGenerator.hash(rawState)).orElse(null);
+
+            if (transaction == null) {
+                redirectError(response, OAuthRedirectReason.FLOW_EXPIRED, null);
+                return;
+            }
+
+            LocalDateTime now = LocalDateTime.now(clock);
+            if (transaction.status() != OAuthTransactionStatus.PENDING || !transaction.expiresAt().isAfter(now)) {
+                OAuthRedirectReason reason = transaction.status() == OAuthTransactionStatus.SUPERSEDED
+                        ? OAuthRedirectReason.FLOW_REPLACED
+                        : OAuthRedirectReason.FLOW_EXPIRED;
+                redirectError(response, reason, transaction);
+                return;
+            }
+
+            // 原子消耗：只有真的贏得這次處理權才能繼續，避免併發 callback 重複處理同一 transaction
+            int consumed = transactions.consumeIfPending(transaction.stateHash(), now);
+            if (consumed == 0) {
+                redirectError(response, OAuthRedirectReason.FLOW_EXPIRED, null);
+                return;
+            }
+
+            // transaction 這裡已經是 CONSUMED——Google authorization code 也已經用掉了，
+            // 兩者都不可能重來。
             OidcUser oidcUser = (OidcUser) ((OAuth2AuthenticationToken) authentication).getPrincipal();
             GoogleIdentity identity = identityMapper.map(oidcUser);
 

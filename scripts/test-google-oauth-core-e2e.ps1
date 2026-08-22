@@ -756,6 +756,42 @@ WHERE account_id = @accountId AND oauth_provider = 'GOOGLE' AND purpose = 'LINK'
         [int]$pendingAfterRateLimit -eq 1
     ) "實際 PENDING 筆數=$pendingAfterRateLimit"
 
+    # ------------------------------------------------------------------
+    # 案例八：Exchange Code 核發後 credentialsVersion 改變，兌換必須拒絕
+    # （2026-08-22 code review 補上——GoogleOAuthExchangeServiceTest 已經用 Mockito
+    # 覆蓋過這個比對邏輯本身，這裡額外驗證真實的 JPQL 投影查詢＋Account-first 鎖＋
+    # 原子消耗，在真的 SQL Server 上實際跑起來也是同一個結果，不是只在單元測試裡成立）
+    # ------------------------------------------------------------------
+    Write-Host ""
+    Write-Host "--- Exchange Code 核發後 CredentialsVersion 改變 ---" -ForegroundColor Cyan
+
+    $cvEmail = "$emailPrefix-cvmismatch@test.local"
+    $cvPassword = "E2eCvMismatch@01"
+    $cvAccount = New-TestMemberAccount -Email $cvEmail -Password $cvPassword
+
+    $rawExchangeCode = New-RawOpaqueToken
+    $exchangeCodeHash = Get-Sha256Hex -Text $rawExchangeCode
+    Invoke-SqlNonQuery -Sql @"
+INSERT INTO oauth_exchange_code
+    (code_hash, account_id, issued_credentials_version, expires_at, created_at)
+VALUES
+    (@codeHash, @accountId, 0, DATEADD(SECOND, 90, SYSDATETIME()), SYSDATETIME())
+"@ -Params @{ codeHash = $exchangeCodeHash; accountId = $cvAccount.AccountId } | Out-Null
+
+    # 模擬核發之後、兌換之前發生了一次 UNLINK／改密碼／全裝置登出
+    Invoke-SqlNonQuery -Sql "UPDATE account SET credentials_version = credentials_version + 1 WHERE account_id = @accountId" `
+        -Params @{ accountId = $cvAccount.AccountId } | Out-Null
+
+    $cvExchangeResult = Invoke-ApiCall -Method POST -Path "/api/auth/oauth/exchange" -Body @{ code = $rawExchangeCode }
+    Test-Case "版本不符時兌換回傳 400，不是 200" ($cvExchangeResult.StatusCode -eq 400) "實際狀態碼=$($cvExchangeResult.StatusCode)"
+    Test-Case "版本不符時錯誤碼為 OAUTH_EXCHANGE_CODE_INVALID" (
+        $cvExchangeResult.Body -and $cvExchangeResult.Body.code -eq "OAUTH_EXCHANGE_CODE_INVALID"
+    ) "實際 code=$($cvExchangeResult.Body.code)"
+
+    $cvCodeUsedAt = Invoke-SqlScalar -Sql "SELECT used_at FROM oauth_exchange_code WHERE code_hash = @codeHash" `
+        -Params @{ codeHash = $exchangeCodeHash }
+    Test-Case "被拒絕的 Code 仍然被原子消耗掉（不能留著給人重試猜測）" ($null -ne $cvCodeUsedAt) "used_at=$cvCodeUsedAt"
+
     Write-Host ""
     Write-Host "=== 驗證完成：$($script:TotalCases) 個案例，$($script:FailedCases) 個失敗 ===" -ForegroundColor $(if ($script:FailedCases -eq 0) { "Green" } else { "Red" })
 }

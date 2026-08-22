@@ -31,7 +31,7 @@ public class GoogleOAuthConnectionsService {
         return oauthAccounts.findByAccountIdAndOauthProvider(accountId, OAuthProvider.GOOGLE)
                 .map(binding -> new OAuthConnectionsResponse(
                         new OAuthConnectionsResponse.GoogleConnection(
-                                true, binding.getProviderEmail(), binding.getLastLoginAt()),
+                                true, binding.getProviderEmail(), binding.getCreatedAt()),
                         hasPassword))
                 .orElseGet(() -> OAuthConnectionsResponse.notLinked(hasPassword));
     }

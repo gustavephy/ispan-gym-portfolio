@@ -30,7 +30,7 @@ import tw.com.ispan.gym.security.OpaqueTokenGenerator;
  *
  * <p>鎖序固定 Account → OAuthTransaction，跟 {@code PasswordService}／
  * {@code GoogleOAuthRegistrationCreationService} 走同一套帳號安全域全域鎖序
- * （見 memory/google_oauth_phase_scope.md）。account-lock 本身就序列化了同一
+ * （見 docs/google-oauth-design-notes.md）。account-lock 本身就序列化了同一
  * Account 的並行發起請求，所以「同一 Account 同時最多一筆 PENDING LINK」不是靠
  * DB 唯一索引僥倖擋住，而是鎖本身結構性保證——索引只是最後一道防線。
  *

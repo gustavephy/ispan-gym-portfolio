@@ -52,8 +52,10 @@ class GoogleOAuthConnectionsServiceTest {
         when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(accountOf(null)));
         OauthAccount binding = new OauthAccount();
         binding.setProviderEmail("user@example.com");
-        LocalDateTime linkedAt = LocalDateTime.now();
-        binding.setLastLoginAt(linkedAt);
+        LocalDateTime createdAt = LocalDateTime.now().minusDays(30);
+        binding.setCreatedAt(createdAt);
+        // 最後登入時間不等於綁定時間——確認 linkedAt 不會被之後的登入洗掉
+        binding.setLastLoginAt(LocalDateTime.now());
         when(oauthAccounts.findByAccountIdAndOauthProvider(ACCOUNT_ID, OAuthProvider.GOOGLE))
                 .thenReturn(Optional.of(binding));
 
@@ -61,7 +63,7 @@ class GoogleOAuthConnectionsServiceTest {
 
         assertThat(response.google().linked()).isTrue();
         assertThat(response.google().email()).isEqualTo("user@example.com");
-        assertThat(response.google().linkedAt()).isEqualTo(linkedAt);
+        assertThat(response.google().linkedAt()).isEqualTo(createdAt);
         // OAuth-only account——不能拿去解除唯一登入方式
         assertThat(response.hasPassword()).isFalse();
     }

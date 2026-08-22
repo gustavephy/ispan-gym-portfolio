@@ -25,7 +25,7 @@ import tw.com.ispan.gym.security.oauth.GoogleOAuthSuccessHandler;
  * 搭配 DevCurrentUserProvider（app.dev-current-user-id）提供固定登入者，
  * 方便本機不帶 token 測試；兩者以 @Profile 互斥，不會同時存在兩條 filter chain。
  *
- * <p>兩條鏈刻意分開（2026-08-22 定案，見 memory/google_oauth_phase_scope.md）：
+ * <p>兩條鏈刻意分開（2026-08-22 定案，見 docs/google-oauth-design-notes.md）：
  * <ul>
  * <li>{@code oauthSecurityFilterChain}（{@code @Order(1)}）只匹配 {@code /oauth2/**}／
  * {@code /login/oauth2/**}，用 {@code IF_REQUIRED} session——這個 session 只保存

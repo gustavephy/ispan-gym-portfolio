@@ -20,7 +20,7 @@ import tw.com.ispan.gym.security.InMemoryRateLimiter;
  * 解除 Google 綁定：密碼重新驗證 → Account-first 悲觀鎖 → 刪除 {@code oauth_account}
  * → {@code credentialsVersion + 1}。第一版採已定案的保守策略：解除成功後既有
  * HTTP JWT 與 STOMP session 一律失效，使用者以密碼重新登入
- * （見 memory/google_oauth_phase_scope.md 的「Reauthentication requirement」）。
+ * （見 docs/google-oauth-design-notes.md 的「Reauthentication requirement」）。
  *
  * <p>OAuth-only Account（{@code passwordHash == null}）不能解除唯一登入方式——這是
  * 第一個檢查、在任何密碼比對之前就先擋下，因為這種帳號根本沒有密碼可以拿來重新驗證。

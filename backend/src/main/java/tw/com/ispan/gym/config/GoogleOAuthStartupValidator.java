@@ -2,6 +2,7 @@ package tw.com.ispan.gym.config;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,8 +18,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>{@code enabled=true} 時才檢查：Google client id／secret 是不是還停在 placeholder
  * 預設值（代表宣告啟用但忘了真的設定環境變數）、四個前端 URL 是否為合法 http/https
- * 網址、且指向非本機主機時必須是 HTTPS。任何一項不符就丟例外讓啟動失敗——「宣告啟用卻
- * 設定錯誤」不該讓功能悄悄不能用，必須在啟動當下就發現。
+ * 網址且帶有效主機名稱（opaque URI 如 {@code https:foo} 語法合法但沒有 host，一併擋下）、
+ * 指向非本機主機時必須是 HTTPS、三組 TTL 是否都大於零。任何一項不符就丟例外讓啟動失敗
+ * ——「宣告啟用卻設定錯誤」不該讓功能悄悄不能用，必須在啟動當下就發現。
  *
  * <p>刻意排在 {@link SchemaFixupRunner}（{@code @Order(0)}）之前：設定本身就是錯的，
  * 不需要先浪費時間跑一輪 schema migration 才失敗。
@@ -52,6 +54,9 @@ public class GoogleOAuthStartupValidator implements CommandLineRunner {
         validateFrontendUrl("app.oauth.frontend-registration-url", properties.frontendRegistrationUrl(), problems);
         validateFrontendUrl("app.oauth.frontend-link-result-url", properties.frontendLinkResultUrl(), problems);
         validateFrontendUrl("app.oauth.frontend-error-url", properties.frontendErrorUrl(), problems);
+        validatePositiveTtl("app.oauth.transaction-ttl-minutes", properties.transactionTtl(), problems);
+        validatePositiveTtl("app.oauth.registration-ticket-ttl-minutes", properties.registrationTicketTtl(), problems);
+        validatePositiveTtl("app.oauth.exchange-code-ttl-seconds", properties.exchangeCodeTtl(), problems);
 
         if (!problems.isEmpty()) {
             throw new IllegalStateException(
@@ -91,10 +96,24 @@ public class GoogleOAuthStartupValidator implements CommandLineRunner {
             problems.add(propertyName + " 必須是 http 或 https，實際：" + rawUrl);
             return;
         }
+        // opaque URI（如 "https:foo"）語法上合法、scheme 也對，但沒有 authority／host，
+        // uri.getHost() 會是 null；下面的 isLocal 判斷若不先擋掉這種情況，null 既不等於
+        // "localhost" 也不等於 "127.0.0.1"，會被誤判成「非本機」再去檢查 scheme 是不是
+        // https——而這裡 scheme 剛好就是 https，於是整個 opaque URI 就這樣矇混過關
+        if (uri.isOpaque() || uri.getHost() == null || uri.getHost().isBlank()) {
+            problems.add(propertyName + " 缺少有效主機名稱：" + rawUrl);
+            return;
+        }
         String host = uri.getHost();
         boolean isLocal = "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host);
         if (!isLocal && !"https".equalsIgnoreCase(scheme)) {
             problems.add(propertyName + " 指向非本機主機時必須使用 HTTPS，實際：" + rawUrl);
+        }
+    }
+
+    private void validatePositiveTtl(String propertyName, Duration ttl, List<String> problems) {
+        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
+            problems.add(propertyName + " 必須大於零，實際：" + ttl);
         }
     }
 

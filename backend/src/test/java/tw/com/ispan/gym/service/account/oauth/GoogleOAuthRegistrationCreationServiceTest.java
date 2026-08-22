@@ -37,7 +37,7 @@ import tw.com.ispan.gym.security.OpaqueTokenGenerator;
  * 純 Mockito 單元測試：驗證 ticket 鎖定／驗證／消耗與 Account／Member／OauthAccount／
  * ExchangeCode 建立是不是真的照「全部成功才消耗」的順序寫——即使沒有真實 transaction，
  * 這裡至少能確認程式碼本身不會在建立資料之前就先把 ticket 標成 USED（真正的 rollback
- * 行為要靠真實 DB 才能驗證，見 memory/google_oauth_phase_scope.md 的測試範圍）。
+ * 行為要靠真實 DB 才能驗證，見 docs/google-oauth-design-notes.md 的測試範圍）。
  */
 class GoogleOAuthRegistrationCreationServiceTest {
 
@@ -158,6 +158,8 @@ class GoogleOAuthRegistrationCreationServiceTest {
         OAuthExchangeCode savedCode = codeCaptor.getValue();
         assertThat(savedCode.getCodeHash()).isEqualTo("hash-of-exchange-code");
         assertThat(savedCode.getAccount()).isSameAs(savedAccount);
+        // 剛建立的新 Account，credentialsVersion 是預設值 0——核發快照必須跟著是 0
+        assertThat(savedCode.getIssuedCredentialsVersion()).isEqualTo(0);
     }
 
     private OAuthRegistrationTicket pendingTicket() {

@@ -66,6 +66,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         addAccountCredentialsVersionColumn();
         migratePasswordResetTokenToHashedFormat();
         extendOauthAccountForGoogleLogin();
+        addOauthExchangeCodeVersionColumn();
         createOAuthSecurityConstraints();
     }
 
@@ -1289,7 +1290,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 """);
     }
 
-    // === Google OAuth（2026-08-22 定案：見 memory/google_oauth_phase_scope.md）=======
+    // === Google OAuth（2026-08-22 定案：見 docs/google-oauth-design-notes.md）=======
 
     /**
      * oauth_account 補上三個 Google 端最近一次登入的顯示資訊欄位——既有綁定沒有這些
@@ -1304,6 +1305,29 @@ public class SchemaFixupRunner implements CommandLineRunner {
         addNullableColumnIfAbsent("oauth_account", "provider_email", "varchar(100)");
         addNullableColumnIfAbsent("oauth_account", "provider_email_verified", "bit");
         addNullableColumnIfAbsent("oauth_account", "last_login_at", "datetime2");
+    }
+
+    /**
+     * oauth_exchange_code 新增 issued_credentials_version（int, NOT NULL, 預設 0）——
+     * 核發當下 Account.credentialsVersion 的快照，兌換時比對目前版本是否仍相同，堵住
+     * 核發後、兌換前發生 UNLINK／改密碼／全裝置登出的 TOCTOU 空隙（2026-08-22 code
+     * review 補上）。既有資料（已經核發、可能已使用或已過期的舊 Code）一律回填 0——
+     * 這些列不是被同一次修正影響的對象，回填值只是滿足 NOT NULL，不影響它們原本
+     * 是否已過期／已使用的判定；新舊資料混跑本來就無害，因為每一列的比對基準
+     * 只跟它自己核發當下的版本有關。跟 addAccountCredentialsVersionColumn 同一套
+     * 「不存在才新增（一定是 nullable）→ 無條件回填＋收緊」寫法，理由同上。
+     */
+    private void addOauthExchangeCodeVersionColumn() {
+        if (!tableExists("oauth_exchange_code")) {
+            return;
+        }
+        if (!columnExists("oauth_exchange_code", "issued_credentials_version")) {
+            jdbc.execute("ALTER TABLE oauth_exchange_code ADD issued_credentials_version int NULL");
+        }
+        backfill("oauth_exchange_code.issued_credentials_version",
+                "UPDATE oauth_exchange_code SET issued_credentials_version = 0 "
+                        + "WHERE issued_credentials_version IS NULL");
+        tightenColumnNotNull("oauth_exchange_code", "issued_credentials_version", "int");
     }
 
     private void addNullableColumnIfAbsent(String table, String column, String type) {
