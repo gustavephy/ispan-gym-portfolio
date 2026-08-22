@@ -5,9 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -171,8 +169,11 @@ public class SecurityConfig {
 
     // CORS 設定移至 CorsConfig（dev／非 dev 共用）；PasswordEncoder bean 定義於 PasswordEncoderConfig
 
-    @Bean
-    AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
-        return configuration.getAuthenticationManager();
-    }
+    // 刻意不暴露 AuthenticationManager bean（曾經有、已移除）：整個專案的密碼登入都是
+    // PasswordService 手動比對 BCrypt + 自簽 JWT，沒有任何地方呼叫 AuthenticationManager
+    // .authenticate()；用 configuration.getAuthenticationManager() 建立這個 bean，在
+    // 「多條 SecurityFilterChain + oauth2Login()」這個組合下會觸發 Spring Security 已知的
+    // 初始化順序問題，導致 authenticate() 遞迴呼叫自己而 StackOverflowError（2026-08-22
+    // 用真實 Google 帳號在同意畫面按「取消」時實測炸出來，是這個 bean 本身沒被用到卻仍在
+    // 觸發自我遞迴，不是 access_denied 的處理邏輯有問題）。
 }
