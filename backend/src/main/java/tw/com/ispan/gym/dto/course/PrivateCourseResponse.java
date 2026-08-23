@@ -7,6 +7,7 @@ import tw.com.ispan.gym.dto.trainer.TrainerDto;
 import tw.com.ispan.gym.entity.course.PrivateCourse;
 
 import tw.com.ispan.gym.enums.course.CourseStatus;
+import tw.com.ispan.gym.enums.course.CourseType;
 
 public record PrivateCourseResponse(
         Integer id,
@@ -18,6 +19,7 @@ public record PrivateCourseResponse(
         String imageUrl,
         Boolean isTrial,
         CourseStatus status,
+        CourseType courseType,
         TrainerDto trainer,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
@@ -28,7 +30,7 @@ public record PrivateCourseResponse(
         }
 
         return new PrivateCourseResponse(
-                course.getId(),
+                course.getPrivateCourseId(),
                 course.getName(),
                 course.getMaxCapacity(),
                 course.getSessionPerUnit(),
@@ -37,6 +39,7 @@ public record PrivateCourseResponse(
                 course.getImageUrl(),
                 course.getIsTrial(),
                 course.getStatus(),
+                CourseType.PRIVATE,
                 TrainerDto.from(course.getTrainer()),
                 course.getCreatedAt(),
                 course.getUpdatedAt()

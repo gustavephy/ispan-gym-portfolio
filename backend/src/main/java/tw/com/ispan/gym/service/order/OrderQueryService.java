@@ -33,7 +33,7 @@ public class OrderQueryService {
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
                 .map(item -> new OrderItemResponse(item.getId(),
                         item.isCourseItem() ? null : item.getProduct().getProductId(),
-                        item.isCourseItem() ? item.getCourse().getId() : null,
+                        item.isCourseItem() ? item.getCourse().getPrivateCourseId() : null,
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
                         item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
                 .toList();

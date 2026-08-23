@@ -70,7 +70,7 @@ public class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
         if (employee.getDeletedAt() != null || employee.getStatus() != EmployeeStatus.ACTIVE) {
             throw new DisabledException("此員工帳號目前無法使用");
         }
-        return employee.getId();
+        return employee.getEmployeeId();
     }
 
     private Authentication requireAuthentication() {

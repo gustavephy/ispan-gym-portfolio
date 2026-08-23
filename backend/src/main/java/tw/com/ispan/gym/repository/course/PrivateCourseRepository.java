@@ -22,13 +22,14 @@ public interface PrivateCourseRepository extends JpaRepository<PrivateCourse, In
 	@Query("SELECT p FROM PrivateCourse p " +
 			"WHERE (:status IS NULL OR p.status = :status) " +
 			"AND (:trainerId IS NULL OR p.trainer.trainerId = :trainerId) " +
-			"AND (:keyword IS NULL OR p.name LIKE %:keyword% OR p.trainer.lastName LIKE %:keyword% OR p.trainer.firstName LIKE %:keyword%) "
-			+
+			"AND (:categoryId IS NULL OR p.category.courseCategoryId = :categoryId) " +
+			"AND (:keyword IS NULL OR p.name LIKE %:keyword% OR p.trainer.lastName LIKE %:keyword% OR p.trainer.firstName LIKE %:keyword%) " +
 			"AND (:startDate IS NULL OR p.createdAt >= :startDate) " +
 			"AND (:endDate IS NULL OR p.createdAt <= :endDate)")
 	Page<PrivateCourse> findCoursesWithFilters(
 			@Param("status") CourseStatus status,
 			@Param("trainerId") Integer trainerId,
+			@Param("categoryId") Integer categoryId,
 			@Param("keyword") String keyword,
 			@Param("startDate") LocalDateTime startDate,
 			@Param("endDate") LocalDateTime endDate,

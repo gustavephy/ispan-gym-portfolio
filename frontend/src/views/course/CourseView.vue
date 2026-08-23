@@ -1,67 +1,77 @@
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { RouterLink } from 'vue-router'
-import { getActiveCourses } from '@/api/groupClass.js'
+// Vue 核心響應式 API：定義狀態、生命週期
+import { ref, watch, onMounted, computed } from 'vue'
+// 路由控制 API：跳轉頁面 (RouterLink)
+import { RouterLink, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useCoursesStore } from '@/stores/courses.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import Pagination from '@/components/Pagination.vue'
 
-const courses = ref([])
-const loading = ref(true)
-// 純瀏覽頁，載入失敗沒有「就地顯示在按鈕旁」的情境，改用全域錯誤條 + 頁面內簡短狀態雙軌呈現，
-// 讓使用者知道「不是沒有資料，是讀取失敗」，並提供重新整理的入口
+const route = useRoute()
+const coursesStore = useCoursesStore()
+
+// 從 Pinia Store 中解構出團體課程列表與載入狀態
+const { 
+  loading, 
+  displayedCourses, 
+  currentPageNum: page, 
+  totalSize: size, 
+  courseTotalPages: totalPages,
+  searchQuery: search 
+} = storeToRefs(coursesStore)
+
 const loadError = ref(false)
-
-// 分頁與搜尋狀態
-const page = ref(0)
-const size = ref(10)
-const search = ref('')
-const totalItems = ref(0)
-const totalPages = ref(0)
-let searchDebounceTimer = null
-
-async function fetchCourses() {
-  loading.value = true
-  loadError.value = false
-  try {
-    const res = await getActiveCourses({ page: page.value, size: size.value, search: search.value })
-    courses.value = res.data.items
-    totalItems.value = res.data.totalItems
-    totalPages.value = res.data.totalPages
-  } catch (err) {
-    loadError.value = true
-    notifyApiError(err)
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜尋字串變動時 debounce 400ms 才觸發查詢；換了搜尋條件代表結果集變了，
-// page 一律重設為 0，避免卡在一個搜尋後根本不存在的頁碼（寫法比照 AdminGroupCourseView.vue）
-watch(search, () => {
-  clearTimeout(searchDebounceTimer)
-  searchDebounceTimer = setTimeout(() => {
-    page.value = 0
-    fetchCourses()
-  }, 400)
-})
 
 function handlePageChange(newPage) {
   page.value = newPage
-  fetchCourses()
 }
 
 function handleSizeChange(newSize) {
   size.value = newSize
   page.value = 0
-  fetchCourses()
 }
 
-onMounted(() => {
-  fetchCourses()
+// 向後端請求獲取原始課程資料
+async function fetchCourses() {
+  loadError.value = false
+  try {
+    await coursesStore.loadCourses()
+  } catch (err) {
+    loadError.value = true
+    notifyApiError(err)
+  }
+}
+
+// 監聽搜尋條件改變時，自動將頁碼歸零
+watch(search, () => {
+  page.value = 0
 })
 
-onUnmounted(() => {
-  clearTimeout(searchDebounceTimer)
+// 元件掛載初始化
+onMounted(async () => {
+  // 首頁搜尋跳轉相容
+  if (route.query.search) {
+    search.value = route.query.search
+  }
+
+  // 載入全部課程資料
+  await fetchCourses()
+
+  // 網址攜帶 courseId 時的平滑捲動定位
+  if (route.query.courseId) {
+    const targetId = 'course-card-' + route.query.courseId
+    let attempts = 0
+    const interval = setInterval(() => {
+      const el = document.getElementById(targetId)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        clearInterval(interval)
+      }
+      attempts++
+      if (attempts > 30) clearInterval(interval)
+    }, 100)
+  }
 })
 </script>
 
@@ -83,15 +93,15 @@ onUnmounted(() => {
     </template>
 
     <template v-else>
-      <p v-if="courses.length === 0" class="empty-state">目前沒有開放中的團課</p>
+      <p v-if="displayedCourses.length === 0" class="empty-state">目前沒有開放中的團課</p>
 
       <div v-else class="course-grid">
-        <div v-for="course in courses" :key="course.id" class="course-card">
+        <div v-for="course in displayedCourses" :key="course.id" :id="'course-card-' + course.id" class="course-card">
           <div class="course-card-header">
             <h3 class="course-name">{{ course.name }}</h3>
             <span v-if="course.isTrial" class="status-badge status-trial">體驗課</span>
           </div>
-          <p class="course-trainer">教練：{{ course.trainerName }}</p>
+          <p class="course-trainer">教練：{{ course.trainer?.name || '暫無教練' }}</p>
           <p class="course-description">{{ course.description || '暫無課程簡介' }}</p>
           <p class="course-capacity">最多 {{ course.maxCapacity }} 人</p>
           <RouterLink class="btn btn-accent course-link" to="/group-classes">查看時段並報名</RouterLink>

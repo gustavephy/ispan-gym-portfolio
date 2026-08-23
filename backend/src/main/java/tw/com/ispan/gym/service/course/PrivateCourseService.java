@@ -18,6 +18,7 @@ import tw.com.ispan.gym.dto.course.PrivateCourseResponse;
 import tw.com.ispan.gym.entity.course.PrivateCourse;
 import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.enums.course.CourseStatus;
+import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.course.PrivateCourseRepository;
@@ -29,19 +30,24 @@ import tw.com.ispan.gym.repository.course.PrivateCourseRepository;
 public class PrivateCourseService {
         private final PrivateCourseRepository privateCourseRepository;
 
-        // 取得公開(已購買)的私教課
+        // 取得前台商城販售中的啟用中私人課程方案列表
         public List<PrivateCourseResponse> getPublicCourses() {
                 List<PrivateCourse> courses = privateCourseRepository.findByStatus(CourseStatus.ACTIVE);
-                return courses.stream()
-                                .map(PrivateCourseResponse::from)
-                                .collect(Collectors.toList());
+                return courses.stream().map(PrivateCourseResponse::from).collect(Collectors.toList());
         }
 
-        // 取得教練名下的課程
-        @Transactional
+        // 取得前台商城展示中的啟用中私人課程方案列表 (不分頁)
+        public List<PrivateCourseResponse> getPublicCourses(
+                        String keyword, Integer trainerId, Integer categoryId) {
+                return getAllCourses(keyword, trainerId, categoryId, CourseStatus.ACTIVE, null, null, 0, 9999)
+                                .getContent();
+        }
+
+        // 取得私人課程清單（分頁，支援關鍵字、教練ID與日期過濾）
         public Page<PrivateCourseResponse> getAllCourses(
                         String keyword,
                         Integer trainerId,
+                        Integer categoryId,
                         CourseStatus status,
                         LocalDate startDate,
                         LocalDate endDate,
@@ -62,6 +68,7 @@ public class PrivateCourseService {
                 Page<PrivateCourse> courses = privateCourseRepository.findCoursesWithFilters(
                                 status,
                                 trainerId,
+                                categoryId,
                                 (keyword != null && !keyword.isBlank()) ? keyword.trim() : null,
                                 startLdt,
                                 endLdt,
@@ -69,62 +76,82 @@ public class PrivateCourseService {
                 return courses.map(PrivateCourseResponse::from);
         }
 
-        // 新增私教課
+        // 根據 ID 取得啟用中的單一私人課程詳情 (前台商城呈現用)
+        public PrivateCourseResponse getPublicCourseById(Integer privateCourseId) {
+                PrivateCourse course = privateCourseRepository.findById(privateCourseId)
+                                .orElseThrow(() -> new ResourceNotFoundException("該私人課程方案不存在"));
+                if (course.getStatus() != CourseStatus.ACTIVE) {
+                        throw new BusinessRuleException("該私人課程方案已下架");
+                }
+                return PrivateCourseResponse.from(course);
+        }
+
+        // 取得目前教練名下的私人課程清單
+        public List<PrivateCourseResponse> getMyCourses(Trainer trainer) {
+                List<PrivateCourse> courses = privateCourseRepository.findByTrainerId(trainer.getTrainerId());
+                return courses.stream().map(PrivateCourseResponse::from).collect(Collectors.toList());
+        }
+
+        // 新增私人課程
         @Transactional
-        public PrivateCourseResponse createCourse(PrivateCourseRequest request, Trainer trainer) {
+        public PrivateCourseResponse createCourse(PrivateCourseRequest req, Trainer trainer) {
                 PrivateCourse course = new PrivateCourse();
                 course.setTrainer(trainer);
-                applyRequest(course, request);
+                applyRequest(course, req);
+
                 PrivateCourse saved = privateCourseRepository.save(course);
                 log.info("Trainer (ID: {}) successfully created private course (ID: {}, name: {})",
-                                trainer.getId(),
-                                saved.getId(), saved.getName());
+                                trainer.getTrainerId(),
+                                saved.getPrivateCourseId(), saved.getName());
                 return PrivateCourseResponse.from(saved);
         }
 
-        // 更新私教課
+        // 更新私人課程資訊
         @Transactional
-        public PrivateCourseResponse updatePrivateCourse(Integer privateCourseId, PrivateCourseRequest request,
-                        Trainer trainer) {
-                PrivateCourse privateCourse = privateCourseRepository.findById(privateCourseId)
+        public PrivateCourseResponse updateCourse(Integer id, PrivateCourseRequest req, Trainer trainer) {
+                PrivateCourse course = privateCourseRepository.findById(id)
                                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
-                if (!privateCourse.getTrainer().getId().equals(trainer.getId())) {
+
+                if (!course.getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
                         log.warn("Trainer (ID: {}) attempted to update unauthorized private course (ID: {})",
-                                        trainer.getId(), privateCourse.getId());
+                                        trainer.getTrainerId(), id);
                         throw new ForbiddenAccessException("您無權修改此課程");
                 }
-                applyRequest(privateCourse, request);
-                PrivateCourse saved = privateCourseRepository.save(privateCourse);
-                log.info("Trainer (ID: {}) successfully updated private course (ID: {})", trainer.getId(),
-                                saved.getId());
+
+                applyRequest(course, req);
+
+                PrivateCourse saved = privateCourseRepository.save(course);
+                log.info("Trainer (ID: {}) successfully updated private course (ID: {})", trainer.getTrainerId(),
+                                saved.getPrivateCourseId());
                 return PrivateCourseResponse.from(saved);
         }
 
-        // 下架私教課
+        // 下架/停用私人課程
         @Transactional
-        public void deletePrivateCourse(Integer privateCourseId, Trainer trainer) {
-                PrivateCourse privateCourse = privateCourseRepository.findById(privateCourseId)
+        public void deleteCourse(Integer id, Trainer trainer) {
+                PrivateCourse course = privateCourseRepository.findById(id)
                                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
-                if (!privateCourse.getTrainer().getId().equals(trainer.getId())) {
-                        log.warn("Trainer (ID: {}) attempted to delete unauthorized private course (ID: {})",
-                                        trainer.getId(), privateCourse.getId());
-                        throw new ForbiddenAccessException("您無權刪除此課程");
+
+                if (!course.getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
+                        log.warn("Trainer (ID: {}) attempted to deactivate unauthorized private course (ID: {})",
+                                        trainer.getTrainerId(), id);
+                        throw new ForbiddenAccessException("您無權下架此課程");
                 }
-                privateCourse.setStatus(CourseStatus.INACTIVE);
-                privateCourseRepository.save(privateCourse);
-                log.info("Trainer (ID: {}) successfully deleted private course (ID: {})", trainer.getId(),
-                                privateCourse.getId());
+
+                course.setStatus(CourseStatus.INACTIVE);
+                privateCourseRepository.save(course);
+                log.info("Trainer (ID: {}) successfully deactivated private course (ID: {})", trainer.getTrainerId(),
+                                id);
         }
 
-        // 內用方法，提供給createCourse和updatePrivateCourse使用，不對外開放
-        private void applyRequest(PrivateCourse course, PrivateCourseRequest request) {
-                course.setName(request.name());
-                course.setMaxCapacity(request.maxCapacity() != null ? request.maxCapacity() : 1);
-                course.setSessionPerUnit(request.sessionPerUnit() != null ? request.sessionPerUnit() : 1);
-                course.setPrice(request.price() != null ? request.price() : BigDecimal.ZERO);
-                course.setDescription(request.description());
-                course.setImageUrl(request.imageUrl());
-                course.setIsTrial(request.isTrial() != null ? request.isTrial() : false);
-                course.setStatus(request.status() != null ? request.status() : CourseStatus.ACTIVE);
+        private void applyRequest(PrivateCourse course, PrivateCourseRequest req) {
+                course.setName(req.name());
+                course.setMaxCapacity(req.maxCapacity() != null ? req.maxCapacity() : 1);
+                course.setSessionPerUnit(req.sessionPerUnit() != null ? req.sessionPerUnit() : 1);
+                course.setPrice(req.price() != null ? req.price() : BigDecimal.ZERO);
+                course.setDescription(req.description());
+                course.setImageUrl(req.imageUrl());
+                course.setIsTrial(req.isTrial() != null ? req.isTrial() : false);
+                course.setStatus(req.status() != null ? req.status() : CourseStatus.ACTIVE);
         }
 }

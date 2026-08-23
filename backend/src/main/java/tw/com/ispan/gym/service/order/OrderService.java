@@ -166,7 +166,7 @@ public class OrderService {
         PrivateCourse course = courses.findById(request.privateCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到私教課：" + request.privateCourseId()));
         if (!CourseStatus.ACTIVE.equals(course.getStatus())) {
-            throw new DirectCheckoutNotAllowedException(course.getId());
+            throw new DirectCheckoutNotAllowedException(course.getPrivateCourseId());
         }
         requireActiveSubscription(userId);
 
@@ -519,7 +519,7 @@ public class OrderService {
                 .sorted(Comparator.comparing(OrderItem::getId))
                 .map(item -> new OrderItemResponse(item.getId(),
                         item.isCourseItem() ? null : item.getProduct().getProductId(),
-                        item.isCourseItem() ? item.getCourse().getId() : null,
+                        item.isCourseItem() ? item.getCourse().getPrivateCourseId() : null,
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
                         item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
                 .toList();

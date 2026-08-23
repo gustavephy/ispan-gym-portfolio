@@ -62,7 +62,7 @@ public class AccountAuthorityResolver {
                 if (employee.getRole() == EmployeeRole.ADMIN) {
                     authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + "ADMIN"));
                 }
-                trainers.findByEmployeeId(employee.getId())
+                trainers.findByEmployeeEmployeeId(employee.getEmployeeId())
                         .filter(t -> t.getDeletedAt() == null)
                         .ifPresent(t -> authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + "TRAINER")));
             }

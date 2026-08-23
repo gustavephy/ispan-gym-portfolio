@@ -58,17 +58,17 @@ class CoachSlotServiceTest {
 
     private Trainer trainer(Integer trainerId) {
         Trainer trainer = new Trainer();
-        trainer.setId(trainerId);
+        trainer.setTrainerId(trainerId);
         return trainer;
     }
 
     /** 讓 ACCOUNT_ID 這個帳號解析成 TRAINER_ID 教練（account→employee→trainer 兩段查詢都放行） */
     private Trainer loginAsTrainer() {
         Employee employee = new Employee();
-        employee.setId(EMPLOYEE_ID);
+        employee.setEmployeeId(EMPLOYEE_ID);
         Trainer trainer = trainer(TRAINER_ID);
         when(employees.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
         return trainer;
     }
 
@@ -137,9 +137,9 @@ class CoachSlotServiceTest {
     @Test
     void 建立時段_員工無教練身分拒絕() {
         Employee employee = new Employee();
-        employee.setId(EMPLOYEE_ID);
+        employee.setEmployeeId(EMPLOYEE_ID);
         when(employees.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createSlot(ACCOUNT_ID, createRequest()))
                 .isInstanceOf(ForbiddenAccessException.class);

@@ -1,8 +1,8 @@
 package tw.com.ispan.gym.service.course;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.dto.course.GroupCourseRequest;
@@ -30,52 +29,96 @@ import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 @Transactional(readOnly = true)
 public class GroupCourseService {
 
+    // 取得前台商城展示中的團體課程方案列表 (不分頁)
+    public List<GroupCourseResponse> getPublicCourses(
+            String keyword, Integer trainerId, Integer categoryId, LocalDate startDate, LocalDate endDate) {
+        return getAllCourses(keyword, trainerId, categoryId, CourseStatus.ACTIVE, startDate, endDate, 0, 9999)
+                .getContent();
+    }
+
     private final GroupCourseRepository groupCourseRepository;
-    private final CourseCategoryRepository courseCategoryRepository;
+    private final CourseCategoryRepository categoryRepository;
     private final TrainerRepository trainerRepository;
 
-    // 取得團課清單(分頁，員工/後台管理用)
-    public Page<GroupCourseResponse> getAllCourses(String keyword, Integer trainerId, CourseStatus status,
+    // 取得團體課程清單（分頁，員工/後台管理用）
+    // status = null 表示全部（含下架），與 ProductService.getProducts 同格式
+    public Page<GroupCourseResponse> getAllCourses(
+            String keyword,
+            Integer trainerId,
+            Integer categoryId,
+            CourseStatus status,
             LocalDate startDate,
-            LocalDate endDate, int page, int pageSize) {
+            LocalDate endDate,
+            int page,
+            int pageSize) {
         PageRequest pageRequest = PageRequest.of(page, pageSize, Sort.by("groupCourseId").descending());
+
+        LocalDateTime startLdt = null;
+        if (startDate != null) {
+            startLdt = startDate.atStartOfDay();
+        }
+
+        LocalDateTime endLdt = null;
+        if (endDate != null) {
+            endLdt = endDate.atTime(23, 59, 59, 999999);
+        }
+
         Page<GroupCourse> courses = groupCourseRepository.findCoursesWithFilters(
                 status,
                 trainerId,
                 (keyword != null && !keyword.isBlank()) ? keyword.trim() : null,
-                startDate != null ? startDate.atStartOfDay() : null,
-                endDate != null ? endDate.atTime(23, 59, 59, 999999) : null,
+                startLdt,
+                endLdt,
                 pageRequest);
         return courses.map(GroupCourseResponse::from);
     }
 
+    // 取得團體課程清單（分頁，員工/後台管理用 - 7參數重載）
+    public Page<GroupCourseResponse> getAllCourses(
+            String keyword,
+            Integer trainerId,
+            CourseStatus status,
+            LocalDate startDate,
+            LocalDate endDate,
+            int page,
+            int pageSize) {
+        return getAllCourses(keyword, trainerId, null, status, startDate, endDate, page, pageSize);
+    }
+
+    // 根據 ID 取得團體課程資訊
     public GroupCourseResponse getGroupCourseById(Integer groupCourseId) {
         GroupCourse course = groupCourseRepository.findById(groupCourseId)
                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
         return GroupCourseResponse.from(course);
     }
 
-    // 新增團課
+    // 新增團體課程 (員工)
     @Transactional
     public GroupCourseResponse createGroupCourse(GroupCourseRequest request) {
-        if (request.trainerId() == null) {
+        Trainer trainer = null;
+        if (request.trainerId() != null) {
+            trainer = trainerRepository.findById(request.trainerId())
+                    .orElseThrow(() -> new ResourceNotFoundException("指定的教練不存在"));
+        } else {
             throw new BusinessRuleException("必須指定指導教練");
         }
-
-        Trainer trainer = trainerRepository.findById(request.trainerId())
-                .orElseThrow(() -> new ResourceNotFoundException("指定的教練不存在"));
 
         GroupCourse course = new GroupCourse();
         course.setTrainer(trainer);
         applyRequest(course, request);
 
+        if (request.courseCategoryId() != null) {
+            CourseCategory cat = categoryRepository.findById(request.courseCategoryId()).orElse(null);
+            course.setCategory(cat);
+        }
+
         GroupCourse saved = groupCourseRepository.save(course);
         log.info("Employee successfully created group course (ID: {}, name: {}) for Trainer (ID: {})",
-                saved.getGroupCourseId(), saved.getName(), trainer.getId());
+                saved.getGroupCourseId(), saved.getName(), trainer.getTrainerId());
         return GroupCourseResponse.from(saved);
     }
 
-    // 更新團課
+    // 更新團體課程資訊 (員工)
     @Transactional
     public GroupCourseResponse updateGroupCourse(Integer groupCourseId, GroupCourseRequest request) {
         GroupCourse course = groupCourseRepository.findById(groupCourseId)
@@ -89,33 +132,33 @@ public class GroupCourseService {
 
         applyRequest(course, request);
 
+        if (request.courseCategoryId() != null) {
+            CourseCategory cat = categoryRepository.findById(request.courseCategoryId()).orElse(null);
+            course.setCategory(cat);
+        }
+
         GroupCourse saved = groupCourseRepository.save(course);
         log.info("Employee successfully updated group course (ID: {})", saved.getGroupCourseId());
         return GroupCourseResponse.from(saved);
     }
 
-    // 下架團課
+    // 下架/停用團體課程 (員工)
     @Transactional
     public void deleteGroupCourse(Integer groupCourseId) {
-        log.info("request to delete group course: {}", groupCourseId);
-        GroupCourse groupCourse = groupCourseRepository.findById(groupCourseId)
+        GroupCourse course = groupCourseRepository.findById(groupCourseId)
                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
-        groupCourse.setStatus(CourseStatus.INACTIVE);
-        groupCourseRepository.save(groupCourse);
+
+        course.setStatus(CourseStatus.INACTIVE);
+        groupCourseRepository.save(course);
+        log.info("Employee successfully deactivated group course (ID: {})", groupCourseId);
     }
 
-    // 內用方法，提供給createCourse和updateGroupCourse使用，不對外開放
-    private void applyRequest(GroupCourse groupCourse, GroupCourseRequest request) {
-        groupCourse.setName(request.name());
-        groupCourse.setMaxCapacity(request.maxCapacity() != null ? request.maxCapacity() : 20);
-        groupCourse.setDescription(request.description());
-        groupCourse.setImageUrl(request.imageUrl());
-        groupCourse.setIsTrial(request.isTrial() != null ? request.isTrial() : false);
-        groupCourse.setStatus(request.status() != null ? request.status() : CourseStatus.ACTIVE);
-
-        if (request.courseCategoryId() != null) {
-            CourseCategory cat = courseCategoryRepository.findById(request.courseCategoryId()).orElse(null);
-            groupCourse.setCategory(cat);
-        }
+    private void applyRequest(GroupCourse course, GroupCourseRequest request) {
+        course.setName(request.name());
+        course.setMaxCapacity(request.maxCapacity() != null ? request.maxCapacity() : 20);
+        course.setDescription(request.description());
+        course.setImageUrl(request.imageUrl());
+        course.setIsTrial(request.isTrial() != null ? request.isTrial() : false);
+        course.setStatus(request.status() != null ? request.status() : CourseStatus.ACTIVE);
     }
 }

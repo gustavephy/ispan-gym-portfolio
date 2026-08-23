@@ -48,7 +48,7 @@ public class GroupCourse {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "group_course_id")
-	private Integer id;
+	private Integer groupCourseId;
 
 	/** 授課教練（場次不另記教練，換教練即改主檔） */
 	@ManyToOne(fetch = FetchType.LAZY)
@@ -88,8 +88,4 @@ public class GroupCourse {
 	@Column(columnDefinition = "datetime2")
 	private LocalDateTime updatedAt;
 
-	public Object getGroupCourseId() {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("Unimplemented method 'getGroupCourseId'");
-	}
 }

@@ -62,8 +62,8 @@ public class GroupClassService {
                 List<GroupClassSessionResponse> resp = upcomingSessions.stream()
                                 .map(session -> new GroupClassSessionResponse(
                                                 session.getId(),
-                                                session.getCourse().getId(),
-                                                session.getCourse().getTrainer().getId(),
+                                                session.getCourse().getGroupCourseId(),
+                                                session.getCourse().getTrainer().getTrainerId(),
                                                 session.getCourse().getTrainer().getEmployee().getFirstName() + " "
                                                                 + session.getCourse().getTrainer().getEmployee()
                                                                                 .getLastName(),
@@ -119,8 +119,8 @@ public class GroupClassService {
                                                 : groupCourse.getMaxCapacity());
 
                 GroupClassSession saved = groupClassSessionRepository.save(groupClassSession);
-                return new GroupClassSessionResponse(saved.getId(), groupCourse.getId(),
-                                groupCourse.getTrainer().getId(),
+                return new GroupClassSessionResponse(saved.getId(), groupCourse.getGroupCourseId(),
+                                groupCourse.getTrainer().getTrainerId(),
                                 groupCourse.getTrainer().getEmployee().getFirstName() + " "
                                                 + groupCourse.getTrainer().getEmployee().getLastName(),
                                 groupCourse.getName(), saved.getRoomName(), saved.getStartAt(), saved.getEndAt(),
@@ -187,8 +187,8 @@ public class GroupClassService {
 
                 // 儲存並立即 flush，確保回傳的 DTO 含有最新的 version 與 timestamps
                 GroupClassSession saved = groupClassSessionRepository.saveAndFlush(session);
-                return new GroupClassSessionResponse(saved.getId(), saved.getCourse().getId(),
-                                saved.getCourse().getTrainer().getId(),
+                return new GroupClassSessionResponse(saved.getId(), saved.getCourse().getGroupCourseId(),
+                                saved.getCourse().getTrainer().getTrainerId(),
                                 saved.getCourse().getTrainer().getEmployee().getFirstName() + " "
                                                 + saved.getCourse().getTrainer().getEmployee().getLastName(),
                                 saved.getCourse().getName(), saved.getRoomName(), saved.getStartAt(), saved.getEndAt(),
@@ -356,8 +356,8 @@ public class GroupClassService {
                 // 確保回傳的 version／updatedAt／bookedCount 都是修改後的最新值。
                 GroupClassSession saved = groupClassSessionRepository.saveAndFlush(session);
 
-                return new GroupClassSessionResponse(saved.getId(), saved.getCourse().getId(),
-                                saved.getCourse().getTrainer().getId(),
+                return new GroupClassSessionResponse(saved.getId(), saved.getCourse().getGroupCourseId(),
+                                saved.getCourse().getTrainer().getTrainerId(),
                                 saved.getCourse().getTrainer().getEmployee().getFirstName() + " "
                                                 + saved.getCourse().getTrainer().getEmployee().getLastName(),
                                 saved.getCourse().getName(), saved.getRoomName(), saved.getStartAt(),

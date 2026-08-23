@@ -179,7 +179,7 @@ public class ChatService {
         if (employee.getDeletedAt() != null || employee.getStatus() != EmployeeStatus.ACTIVE) {
             throw new ForbiddenAccessException("此員工帳號目前無法使用");
         }
-        return employee.getId();
+        return employee.getEmployeeId();
     }
 
     private void requireActiveEmployee(Integer employeeId) {

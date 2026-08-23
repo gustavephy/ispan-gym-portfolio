@@ -1,7 +1,5 @@
 package tw.com.ispan.gym.config;
 
-
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -151,7 +149,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
             renameConstraint("FK_email_verifications_account_id", "FK_email_verification_account_id");
         }
         if (renameLegacyTable("password_reset_tokens", "password_reset_token")) {
-            renameUniqueIndex("password_reset_token", "UX_password_reset_tokens_token", "UX_password_reset_token_token");
+            renameUniqueIndex("password_reset_token", "UX_password_reset_tokens_token",
+                    "UX_password_reset_token_token");
             renameConstraint("FK_password_reset_tokens_account_id", "FK_password_reset_token_account_id");
         }
         if (renameLegacyTable("account_roles", "account_role")) {
@@ -173,7 +172,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
     // === 舊欄位改名（user_id → member_id）====================================
     // 與表改名同理：Hibernate 已先在既有表上補了一個空的 member_id 欄位
-    //（連同指向 member 的新 FK），必須先把空欄位連 FK 拆掉再 sp_rename，
+    // （連同指向 member 的新 FK），必須先把空欄位連 FK 拆掉再 sp_rename，
     // 資料才會留在原欄位裡跟著改名。表改名之後執行，清單用的是新表名。
 
     private void renameLegacyColumns() {
@@ -398,7 +397,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // 2. 以 email 回填 account_id（會員與員工同 email 時共用同一個 account，正是新制語意）
     // 3. 在 account_role 補上對應身分
     // 4. 清掉身分表上的舊登入欄位；member 的 role 欄是 users 時代的產物一併移除
-    //    （新制身分由 account_role 表達；舊 ADMIN 使用者請改走員工建檔流程）
+    // （新制身分由 account_role 表達；舊 ADMIN 使用者請改走員工建檔流程）
     // 5. 全部回填成功後把 account_id 收成 NOT NULL + 唯一索引
     // 全新資料庫由 ddl-auto 直接建出新 schema，這裡每一步都會因欄位不存在而跳過。
 
@@ -419,7 +418,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         }
         if (!columnExists(table, "account_id")) {
             // entity 宣告 nullable=false，ddl-auto 對非空表加不了 NOT NULL 欄位
-            //（SQL Server 限制），這裡先以可空型態補上，回填後由 finalizeAccountLink 收緊
+            // （SQL Server 限制），這裡先以可空型態補上，回填後由 finalizeAccountLink 收緊
             jdbc.execute("ALTER TABLE " + table + " ADD account_id int NULL");
             log.info("已為 {} 補上 account_id 欄位（暫為可空，回填後收 NOT NULL）", table);
         }
@@ -466,7 +465,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
             log.info("已將 {}.account_id 收為 NOT NULL", table);
         }
         // 加欄那次啟動 account_id 全為 NULL，SQL Server 唯一約束建不起來
-        //（Hibernate 只默默記一筆錯誤），這裡在回填後補建，名稱與 entity 宣告一致
+        // （Hibernate 只默默記一筆錯誤），這裡在回填後補建，名稱與 entity 宣告一致
         createFilteredUniqueIndex(uniqueIndex,
                 "CREATE UNIQUE INDEX " + uniqueIndex + " ON " + table + "(account_id)");
         // account_id 欄是 runner 自己補的，Hibernate 要到下次啟動才會補 FK，這裡直接建齊
@@ -548,7 +547,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
     // === 課程域拆分：courses → private_course／group_course =====================
     // 2026-08-13 定案：單一 Course 拆為私教課（可購買、綁教練）與團課
-    //（憑訂閱參加、主檔綁預設教練，實際授課者以場次為準）。
+    // （憑訂閱參加、主檔綁預設教練，實際授課者以場次為準）。
     // 既有 courses 資料依 course_type 分流搬遷，
     // id 原值保留（IDENTITY_INSERT），指向它的 FK 欄改名後資料依然有效：
     // order_items.course_id → private_course_id（團課不可購買）
@@ -599,8 +598,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
         }
 
         // 2. FK 欄位改名（renameColumnIfExists 會先拆掉 Hibernate 預建的空新欄）。
-        //    order_items 的舊互斥 CHECK 綁著 course_id，改名前須先卸掉；
-        //    只在改名尚未發生時動作，避免每次啟動都拆建一輪
+        // order_items 的舊互斥 CHECK 綁著 course_id，改名前須先卸掉；
+        // 只在改名尚未發生時動作，避免每次啟動都拆建一輪
         if (columnExists("order_items", "course_id")) {
             dropConstraintIfExists("order_items", "CK_oi_exactly_one_ref");
             renameColumnIfExists("order_items", "course_id", "private_course_id");
@@ -618,7 +617,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         }
 
         // 4. 分流完成後移除舊表（FK 欄改名後仍指向 courses 的殘留外鍵一併拆掉，
-        //    指向新表的 FK 由 ddl-auto 下次啟動補建）
+        // 指向新表的 FK 由 ddl-auto 下次啟動補建）
         if (tableExists("courses")) {
             dropForeignKeysReferencing("courses");
             jdbc.execute("DROP TABLE courses");
@@ -662,8 +661,8 @@ public class SchemaFixupRunner implements CommandLineRunner {
     private void createCheckIfAbsent(String table, String constraint, String ddl) {
         Integer found = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM sys.check_constraints
-                    WHERE name = ? AND parent_object_id = OBJECT_ID(?)
-                """, Integer.class, constraint, table);
+                    WHERE name = ?
+                """, Integer.class, constraint);
         if (found != null && found > 0) {
             return;
         }
@@ -804,7 +803,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // === OAuth 綁定回歸 member_oauth_account ==================================
     // member 表上的 oauth_provider / oauth_sub 是整併重複 entity 時混入的
     // 第二套設計，缺唯一約束。綁定資料遷回 member_oauth_account
-    //（有複合唯一約束）後，移除 member 上的兩個欄位。
+    // （有複合唯一約束）後，移除 member 上的兩個欄位。
     // 註：若歷史資料中兩個會員共用同一組 (provider, sub)，只有第一筆會遷入，
     // 其餘略過 —— 那本來就是缺唯一約束造成的髒資料，遷移量請看啟動 log。
 
@@ -828,7 +827,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // OAuth 是登入方式，屬帳號域：綁定表由 member_oauth_account（member_id FK）
     // 改為 oauth_account（account_id FK），員工帳號同樣能走 OAuth 登入。
     // 舊綁定以 member.account_id 換算；換算不到的孤兒綁定直接刪除
-    //（沒有對應會員的綁定本來就登不進任何帳號）。
+    // （沒有對應會員的綁定本來就登不進任何帳號）。
 
     private void rebindOauthToAccount() {
         if (tableExists("member_oauth_account")) {

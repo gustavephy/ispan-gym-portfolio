@@ -47,7 +47,7 @@ public class TrainerService {
             throw new BusinessRuleException("此員工目前不是在職狀態，無法建立教練身分");
         }
 
-        Optional<Trainer> existing = trainers.findByEmployeeId(employeeId);
+        Optional<Trainer> existing = trainers.findByEmployeeEmployeeId(employeeId);
         if (existing.isPresent()) {
             if (existing.get().getDeletedAt() == null) {
                 throw new BusinessRuleException("此員工已經是教練");

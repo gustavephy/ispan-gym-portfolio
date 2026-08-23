@@ -56,7 +56,7 @@ public class CoachSlotService {
         // 需要跨類別呼叫這個身分解析，這是分支把它改成 public 的原因，予以保留。
         public Trainer requireTrainerByAccount(Integer accountId) {
                 return employeeRepository.findByAccountId(accountId)
-                                .flatMap(employee -> trainerRepository.findByEmployeeId(employee.getId()))
+                                .flatMap(employee -> trainerRepository.findByEmployeeEmployeeId(employee.getEmployeeId()))
                                 .orElseThrow(() -> new ForbiddenAccessException("目前帳號沒有教練身分"));
         }
 
@@ -82,7 +82,7 @@ public class CoachSlotService {
                 Trainer trainer = requireTrainerByAccount(accountId);
 
                 // 查詢重疊
-                List<CoachSlot> existing = coachSlotRepository.findOverlapping(trainer.getId(),
+                List<CoachSlot> existing = coachSlotRepository.findOverlapping(trainer.getTrainerId(),
                                 request.getStartAt(), request.getEndAt());
 
                 if (!existing.isEmpty()) {
@@ -96,11 +96,11 @@ public class CoachSlotService {
                 coachSlot.setStatus(SlotStatus.AVAILABLE);
                 CoachSlot saveSlot = coachSlotRepository.save(coachSlot);
 
-                log.info("教練{}，新增時段, slotId={},{}~{}", trainer.getId(), saveSlot.getId(),
+                log.info("教練{}，新增時段, slotId={},{}~{}", trainer.getTrainerId(), saveSlot.getId(),
                                 request.getStartAt(), request.getEndAt());
 
                 CoachSlotResponse response = new CoachSlotResponse(saveSlot.getId(),
-                                trainer.getId(),
+                                trainer.getTrainerId(),
                                 saveSlot.getStartAt(),
                                 saveSlot.getEndAt(),
                                 saveSlot.getStatus());
@@ -121,7 +121,7 @@ public class CoachSlotService {
                 CoachSlot coachSlot = coachSlotRepository.findById(slotId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此時段"));
 
-                if (!coachSlot.getTrainer().getId().equals(trainer.getId())) {
+                if (!coachSlot.getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
                         throw new ForbiddenAccessException("無權存取此教練時段：" + slotId);
                 }
 
@@ -129,11 +129,11 @@ public class CoachSlotService {
                 coachSlot.setStatus(SlotStatus.CANCELLED);
                 CoachSlot saveSlot = coachSlotRepository.save(coachSlot);
 
-                log.info("教練{}，取消時段, slotId={},{}~{}", trainer.getId(), saveSlot.getId(),
+                log.info("教練{}，取消時段, slotId={},{}~{}", trainer.getTrainerId(), saveSlot.getId(),
                                 coachSlot.getStartAt(), coachSlot.getEndAt());
 
                 CoachSlotResponse response = new CoachSlotResponse(saveSlot.getId(),
-                                trainer.getId(),
+                                trainer.getTrainerId(),
                                 saveSlot.getStartAt(),
                                 saveSlot.getEndAt(),
                                 saveSlot.getStatus());
@@ -148,9 +148,9 @@ public class CoachSlotService {
         @Transactional(readOnly = true)
         public List<CoachSlotResponse> getMySlots(Integer accountId) {
                 Trainer trainer = requireTrainerByAccount(accountId);
-                List<CoachSlot> mySlot = coachSlotRepository.findByTrainerIdOrderByStartAtAsc(trainer.getId());
+                List<CoachSlot> mySlot = coachSlotRepository.findByTrainerIdOrderByStartAtAsc(trainer.getTrainerId());
                 List<CoachSlotResponse> response = mySlot.stream().map(slot -> new CoachSlotResponse(slot.getId(),
-                                slot.getTrainer().getId(), slot.getStartAt(), slot.getEndAt(), slot.getStatus()))
+                                slot.getTrainer().getTrainerId(), slot.getStartAt(), slot.getEndAt(), slot.getStatus()))
                                 .toList();
 
                 return response;
@@ -168,7 +168,7 @@ public class CoachSlotService {
                 Trainer trainer = requireTrainerByAccount(accountId);
                 CoachSlot coachSlot = coachSlotRepository.findById(slotId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此時段"));
-                if (!coachSlot.getTrainer().getId().equals(trainer.getId())) {
+                if (!coachSlot.getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
                         throw new ForbiddenAccessException("無權存取此教練時段：" + slotId);
                 }
                 if (coachSlot.getStatus() == SlotStatus.CANCELLED) {
@@ -176,7 +176,7 @@ public class CoachSlotService {
                 }
                 requireAcknowledgementIfBooked(coachSlot, request.isAcknowledgeExistingBooking());
 
-                List<CoachSlot> existing = coachSlotRepository.findOverlappingExcluding(trainer.getId(), slotId,
+                List<CoachSlot> existing = coachSlotRepository.findOverlappingExcluding(trainer.getTrainerId(), slotId,
                                 request.getStartAt(), request.getEndAt());
 
                 if (!existing.isEmpty()) {
@@ -189,10 +189,10 @@ public class CoachSlotService {
                 CoachSlot saveSlot = coachSlotRepository.save(coachSlot);
 
                 log.info("教練{}，修改時段, slotId={}, {}~{} 改為 {}~{}",
-                                trainer.getId(), saveSlot.getId(), oldStartAt, oldEndAt,
+                                trainer.getTrainerId(), saveSlot.getId(), oldStartAt, oldEndAt,
                                 saveSlot.getStartAt(), saveSlot.getEndAt());
                 CoachSlotResponse response = new CoachSlotResponse(saveSlot.getId(),
-                                trainer.getId(),
+                                trainer.getTrainerId(),
                                 saveSlot.getStartAt(),
                                 saveSlot.getEndAt(),
                                 saveSlot.getStatus());
@@ -228,7 +228,7 @@ public class CoachSlotService {
                 coachSlot.setStatus(SlotStatus.BOOKED);
                 coachSlotRepository.save(coachSlot);
                 log.info("時段標記為已預約, slotId={}, trainer={}, {}~{}",
-                                coachSlot.getId(), coachSlot.getTrainer().getId(),
+                                coachSlot.getId(), coachSlot.getTrainer().getTrainerId(),
                                 coachSlot.getStartAt(), coachSlot.getEndAt());
         }
 
@@ -256,7 +256,7 @@ public class CoachSlotService {
                         coachSlot.setStatus(SlotStatus.AVAILABLE);
                         coachSlotRepository.save(coachSlot);
                         log.info("時段標記為可預約, slotId={}, trainer={}, {}~{}",
-                                        coachSlot.getId(), coachSlot.getTrainer().getId(),
+                                        coachSlot.getId(), coachSlot.getTrainer().getTrainerId(),
                                         coachSlot.getStartAt(), coachSlot.getEndAt());
                 }
         }
@@ -272,7 +272,7 @@ public class CoachSlotService {
                                 .findByTrainerIdAndStatusOrderByStartAtAsc(trainerId, SlotStatus.AVAILABLE);
                 List<CoachSlotResponse> response = availableSlots.stream()
                                 .map(slot -> new CoachSlotResponse(slot.getId(),
-                                                slot.getTrainer().getId(), slot.getStartAt(), slot.getEndAt(),
+                                                slot.getTrainer().getTrainerId(), slot.getStartAt(), slot.getEndAt(),
                                                 slot.getStatus()))
                                 .toList();
 

@@ -47,7 +47,7 @@ class TrainerServiceTest {
         account.setEmail("coach@example.com");
 
         Employee employee = new Employee();
-        employee.setId(EMPLOYEE_ID);
+        employee.setEmployeeId(EMPLOYEE_ID);
         employee.setAccount(account);
         employee.setFirstName("小華");
         employee.setLastName("陳");
@@ -68,7 +68,7 @@ class TrainerServiceTest {
 
     private Trainer trainerOf(Employee employee, TrainerStatus status) {
         Trainer trainer = new Trainer();
-        trainer.setId(TRAINER_ID);
+        trainer.setTrainerId(TRAINER_ID);
         trainer.setEmployee(employee);
         trainer.setSpecialty("重量訓練");
         trainer.setExperience("五年健身房授課經驗");
@@ -81,7 +81,7 @@ class TrainerServiceTest {
     private void stubSaveAssigningId() {
         when(trainers.save(any(Trainer.class))).thenAnswer(invocation -> {
             Trainer saved = invocation.getArgument(0);
-            saved.setId(TRAINER_ID);
+            saved.setTrainerId(TRAINER_ID);
             return saved;
         });
     }
@@ -92,7 +92,7 @@ class TrainerServiceTest {
     void create_成功_回傳trainerId且狀態固定為ACTIVE() {
         Employee employee = activeEmployee();
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
         stubSaveAssigningId();
 
         TrainerResponse response = service.create(EMPLOYEE_ID, request());
@@ -108,7 +108,7 @@ class TrainerServiceTest {
     void create_displayName由姓氏加名字組成() {
         Employee employee = activeEmployee();
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
         stubSaveAssigningId();
 
         TrainerResponse response = service.create(EMPLOYEE_ID, request());
@@ -120,7 +120,7 @@ class TrainerServiceTest {
     void create_以悲觀鎖查詢員工避免併發重複建立() {
         Employee employee = activeEmployee();
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
         stubSaveAssigningId();
 
         service.create(EMPLOYEE_ID, request());
@@ -179,7 +179,7 @@ class TrainerServiceTest {
     void create_已是教練時丟BusinessRule並提示已經是教練() {
         Employee employee = activeEmployee();
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeId(EMPLOYEE_ID))
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID))
                 .thenReturn(Optional.of(trainerOf(employee, TrainerStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.create(EMPLOYEE_ID, request()))
@@ -193,7 +193,7 @@ class TrainerServiceTest {
     void create_已有UNAVAILABLE教練資料時仍丟BusinessRule() {
         Employee employee = activeEmployee();
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeId(EMPLOYEE_ID))
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID))
                 .thenReturn(Optional.of(trainerOf(employee, TrainerStatus.UNAVAILABLE)));
 
         assertThatThrownBy(() -> service.create(EMPLOYEE_ID, request()))
@@ -208,7 +208,7 @@ class TrainerServiceTest {
         Trainer deleted = trainerOf(employee, TrainerStatus.ACTIVE);
         deleted.setDeletedAt(LocalDateTime.now());
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(deleted));
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(deleted));
 
         assertThatThrownBy(() -> service.create(EMPLOYEE_ID, request()))
                 .isInstanceOf(BusinessRuleException.class)
@@ -222,13 +222,13 @@ class TrainerServiceTest {
     void listPublic_同時回傳ACTIVE與UNAVAILABLE教練() {
         Employee active = activeEmployee();
         Employee unavailable = activeEmployee();
-        unavailable.setId(23);
+        unavailable.setEmployeeId(23);
         unavailable.setFirstName("小明");
         unavailable.setLastName("林");
 
         Trainer activeTrainer = trainerOf(active, TrainerStatus.ACTIVE);
         Trainer unavailableTrainer = trainerOf(unavailable, TrainerStatus.UNAVAILABLE);
-        unavailableTrainer.setId(8);
+        unavailableTrainer.setTrainerId(8);
         when(trainers.findByDeletedAtIsNull()).thenReturn(List.of(activeTrainer, unavailableTrainer));
 
         List<TrainerResponse> result = service.listPublic();

@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { getAllCourses, createCourse, updateCourse, deactivateCourse } from '@/api/adminGroupCourse.js'
 import { getTrainers } from '@/api/coachBooking.js'
-import { getCourseCategories } from '@/api/product.js'
+import { getCourseCategories } from '@/api/course/course.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'

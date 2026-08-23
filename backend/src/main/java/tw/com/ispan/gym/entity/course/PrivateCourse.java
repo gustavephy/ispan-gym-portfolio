@@ -32,7 +32,8 @@ import tw.com.ispan.gym.enums.course.CourseStatus;
 /**
  * 私教課主檔（2026-08-13 定案：課程域拆為私教課／團課兩實體，取代單一 Course）。
  *
- * <p>私教課是「可購買」的一方：order_item 的 private_course_id 指向本表
+ * <p>
+ * 私教課是「可購買」的一方：order_item 的 private_course_id 指向本表
  * （與 product_id 互斥），購買後發放 MemberCourseQuota 堂數額度，
  * 再由會員預約教練時段核銷。教練為必填——私教課必定綁定授課教練。
  */
@@ -47,7 +48,7 @@ public class PrivateCourse {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "private_course_id")
-	private Integer id;
+	private Integer privateCourseId;
 
 	@Column(nullable = false, length = 100, columnDefinition = "NVARCHAR(100)")
 	private String name;
@@ -61,7 +62,7 @@ public class PrivateCourse {
 	@Column(nullable = false, precision = 10, scale = 2)
 	private BigDecimal price;
 
-	/** 購買一單位可得的堂數 */
+	// 購買一單位可得的堂數
 	@Column(name = "session_per_unit", nullable = false)
 	private Integer sessionPerUnit = 1;
 
@@ -74,7 +75,7 @@ public class PrivateCourse {
 	@JoinColumn(name = "course_category_id", foreignKey = @ForeignKey(name = "FK_private_course_course_category"))
 	private CourseCategory category;
 
-	/** 私教課以一對一為預設；小班制私教可放寬 */
+	// 私教課以一對一為預設；小班制私教可放寬
 	@Column(nullable = false)
 	private Integer maxCapacity = 1;
 

@@ -24,6 +24,10 @@ import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
+import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
+import tw.com.ispan.gym.repository.subscription.SubscriptionPlanRepository;
+import java.math.BigDecimal;
+
 /**
  * 開發用測試帳號播種：讓每位組員的本機資料庫收斂到同一組已知帳號，
  * 前端登入頁的測試帳號面板（LoginView.vue 的 TEST_ACCOUNTS）即以此為準。
@@ -58,6 +62,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final MemberRepository members;
     private final EmployeeRepository employees;
     private final TrainerRepository trainers;
+    private final SubscriptionPlanRepository subscriptionPlans;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
 
@@ -66,12 +71,14 @@ public class TestDataSeedRunner implements CommandLineRunner {
             MemberRepository members,
             EmployeeRepository employees,
             TrainerRepository trainers,
+            SubscriptionPlanRepository subscriptionPlans,
             PasswordEncoder passwordEncoder,
             @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
         this.accounts = accounts;
         this.members = members;
         this.employees = employees;
         this.trainers = trainers;
+        this.subscriptionPlans = subscriptionPlans;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
     }
@@ -95,6 +102,17 @@ public class TestDataSeedRunner implements CommandLineRunner {
         ensureMember(coach, "教練", "測試", "0933333333");
         Employee coachEmployee = ensureEmployee(coach, "教練", "測試", "0933333333", EmployeeRole.EMPLOYEE);
         ensureTrainer(coachEmployee);
+
+        if (subscriptionPlans.count() == 0) {
+            SubscriptionPlan plan = new SubscriptionPlan();
+            plan.setName("月度暢遊暢練制");
+            plan.setDescription("限大安店通用，適合有長期運動規劃、想要無拘無束自主鍛鍊的學員。");
+            plan.setPrice(new BigDecimal("980"));
+            plan.setDurationDays(30);
+            plan.setStatus("ACTIVE");
+            subscriptionPlans.save(plan);
+            log.info("已建立測試會籍訂閱方案：月度暢遊暢練制 (980元)");
+        }
 
         log.info("測試帳號播種完成（密碼一律 {}；正式環境請以 SEED_TEST_DATA_ENABLED=false 停用）", TEST_PASSWORD);
     }
@@ -182,7 +200,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
 
     /** 教練列不存在就建立；存在則導正為未刪除（status 不動，UNAVAILABLE 是合法展示情境） */
     private void ensureTrainer(Employee employee) {
-        Trainer trainer = trainers.findByEmployeeId(employee.getId()).orElse(null);
+        Trainer trainer = trainers.findByEmployeeEmployeeId(employee.getEmployeeId()).orElse(null);
         if (trainer == null) {
             trainer = new Trainer();
             trainer.setEmployee(employee);
@@ -194,13 +212,13 @@ public class TestDataSeedRunner implements CommandLineRunner {
             trainer.setExperience("五年一對一私人教練經驗");
             trainer.setBio("測試用教練帳號，供本機開發與功能展示。");
             trainers.save(trainer);
-            log.info("已建立測試教練（employee={}）", employee.getId());
+            log.info("已建立測試教練（employee={}）", employee.getEmployeeId());
             return;
         }
         if (trainer.getDeletedAt() != null) {
             trainer.setDeletedAt(null);
             trainers.save(trainer);
-            log.info("已將測試教練（employee={}）導正為未刪除", employee.getId());
+            log.info("已將測試教練（employee={}）導正為未刪除", employee.getEmployeeId());
         }
     }
 }

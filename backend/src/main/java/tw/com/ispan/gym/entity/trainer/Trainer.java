@@ -41,7 +41,7 @@ public class Trainer {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "trainer_id")
-	private Integer id;
+	private Integer trainerId;
 
 	@OneToOne(fetch = FetchType.LAZY, optional = false)
 	@JoinColumn(name = "employee_id", nullable = false, foreignKey = @ForeignKey(name = "FK_trainer_employee"))
@@ -99,10 +99,5 @@ public class Trainer {
 	@PreUpdate
 	protected void onUpdate() {
 		updatedAt = LocalDateTime.now();
-	}
-
-	public Object trainerId() {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("Unimplemented method 'trainerId'");
 	}
 }

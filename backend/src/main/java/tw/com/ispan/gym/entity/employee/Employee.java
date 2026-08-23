@@ -31,10 +31,12 @@ import org.hibernate.annotations.Nationalized;
 /**
  * 員工個人資料；登入用的 email／密碼存於 {@link Account}。
  *
- * <p>employee_id 是獨立流水號，與 account_id 脫鉤（2026-08 定案，捨棄 @MapsId 共享主鍵）；
+ * <p>
+ * employee_id 是獨立流水號，與 account_id 脫鉤（2026-08 定案，捨棄 @MapsId 共享主鍵）；
  * 以 account_id 唯一 FK 連回 {@link Account}。
  * 是否為教練由 {@link Trainer} 是否存在該員工的資料列決定，與 role 無關。
- * 新帳號 status=PENDING_APPROVAL，由任一 ACTIVE 員工核准／拒絕（reviewedBy／reviewedAt／reviewNote）
+ * 新帳號 status=PENDING_APPROVAL，由任一 ACTIVE
+ * 員工核准／拒絕（reviewedBy／reviewedAt／reviewNote）
  * 後轉 ACTIVE／REJECTED。
  */
 @Entity
@@ -46,7 +48,7 @@ public class Employee {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "employee_id")
-	private Integer id;
+	private Integer employeeId;
 
 	@OneToOne(fetch = FetchType.LAZY, optional = false)
 	@JoinColumn(name = "account_id", nullable = false, foreignKey = @ForeignKey(name = "FK_employee_account_id"))
