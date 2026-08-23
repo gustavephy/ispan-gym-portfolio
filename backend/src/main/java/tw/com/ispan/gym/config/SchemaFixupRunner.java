@@ -65,6 +65,9 @@ public class SchemaFixupRunner implements CommandLineRunner {
         fixReversedTestAccountNames();
         addAccountCredentialsVersionColumn();
         migratePasswordResetTokenToHashedFormat();
+        extendOauthAccountForGoogleLogin();
+        addOauthExchangeCodeVersionColumn();
+        createOAuthSecurityConstraints();
     }
 
     // === 員工審核模型修正（2026-08-14 定案：EmployeeRole/EmployeeStatus 改版）========
@@ -1285,6 +1288,116 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 CREATE UNIQUE INDEX UX_password_reset_token_token_hash
                     ON password_reset_token(token_hash)
                 """);
+    }
+
+    // === Google OAuth（2026-08-22 定案：見 docs/google-oauth-design-notes.md）=======
+
+    /**
+     * oauth_account 補上三個 Google 端最近一次登入的顯示資訊欄位——既有綁定沒有這些
+     * 資料，一律以可空補上，不回填假值，下次成功登入時由程式自然補齊（見
+     * OAuthAccount entity 的欄位註解）。全新資料庫由 ddl-auto 直接建出這三欄，
+     * 本方法會因欄位已存在而整段略過。
+     */
+    private void extendOauthAccountForGoogleLogin() {
+        if (!tableExists("oauth_account")) {
+            return;
+        }
+        addNullableColumnIfAbsent("oauth_account", "provider_email", "varchar(100)");
+        addNullableColumnIfAbsent("oauth_account", "provider_email_verified", "bit");
+        addNullableColumnIfAbsent("oauth_account", "last_login_at", "datetime2");
+    }
+
+    /**
+     * oauth_exchange_code 新增 issued_credentials_version（int, NOT NULL, 預設 0）——
+     * 核發當下 Account.credentialsVersion 的快照，兌換時比對目前版本是否仍相同，堵住
+     * 核發後、兌換前發生 UNLINK／改密碼／全裝置登出的 TOCTOU 空隙（2026-08-22 code
+     * review 補上）。既有資料（已經核發、可能已使用或已過期的舊 Code）一律回填 0——
+     * 這些列不是被同一次修正影響的對象，回填值只是滿足 NOT NULL，不影響它們原本
+     * 是否已過期／已使用的判定；新舊資料混跑本來就無害，因為每一列的比對基準
+     * 只跟它自己核發當下的版本有關。跟 addAccountCredentialsVersionColumn 同一套
+     * 「不存在才新增（一定是 nullable）→ 無條件回填＋收緊」寫法，理由同上。
+     */
+    private void addOauthExchangeCodeVersionColumn() {
+        if (!tableExists("oauth_exchange_code")) {
+            return;
+        }
+        if (!columnExists("oauth_exchange_code", "issued_credentials_version")) {
+            jdbc.execute("ALTER TABLE oauth_exchange_code ADD issued_credentials_version int NULL");
+        }
+        backfill("oauth_exchange_code.issued_credentials_version",
+                "UPDATE oauth_exchange_code SET issued_credentials_version = 0 "
+                        + "WHERE issued_credentials_version IS NULL");
+        tightenColumnNotNull("oauth_exchange_code", "issued_credentials_version", "int");
+    }
+
+    private void addNullableColumnIfAbsent(String table, String column, String type) {
+        if (columnExists(table, column)) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE " + table + " ADD " + column + " " + type + " NULL");
+        log.info("已為 {} 補上可空欄位 {}", table, column);
+    }
+
+    /**
+     * Google OAuth 的安全 invariant：
+     * <ul>
+     * <li>oauth_account：一個 Google 帳號只能綁一個 Account（既有 UX_oauth_account_provider
+     * 已保證），一個 Account 也只能綁一個 Google 帳號（這裡新增 UNIQUE(account_id,
+     * oauth_provider)）。既有資料可能已違反後者，建約束前必須 preflight 檢查——
+     * 發現重複時 <b>拒絕建立約束並讓啟動失敗</b>，log 列出需要人工處理的 account_id
+     * （不記 provider subject），不自動刪除任一筆，因為 runner 無法判斷哪筆才是正確綁定。
+     * <li>oauth_transaction：purpose/account_id 與 status/finalized_at 的一致性由 CHECK
+     * 約束在 DB 層再把關一次（Service 已經保證，這裡是 belt-and-suspenders）；
+     * 同一個 (account, provider, LINK) 同時間只能有一筆 PENDING，由篩選唯一索引擋住
+     * 併發下的重複寫入（Service 也會在建立新 LINK 前主動 supersede 舊的，見
+     * OAuthTransactionRepository#supersedePendingLinkTransactions；索引本身無法表達
+     * expires_at 這種動態條件，只能擋「兩筆同時是 PENDING」，不能擋「一筆過期還沒被
+     * 標記」，所以 Service 端的主動 supersede 不可省略）。
+     * </ul>
+     */
+    private void createOAuthSecurityConstraints() {
+        if (tableExists("oauth_account") && columnExists("oauth_account", "account_id")) {
+            var duplicates = jdbc.queryForList("""
+                    SELECT account_id, oauth_provider, COUNT(*) AS cnt
+                        FROM oauth_account
+                        GROUP BY account_id, oauth_provider
+                        HAVING COUNT(*) > 1
+                    """);
+            if (!duplicates.isEmpty()) {
+                log.error("oauth_account 有 {} 組 (account_id, oauth_provider) 重複綁定，"
+                        + "無法自動判斷哪筆才正確，請人工處理後再重啟：{}",
+                        duplicates.size(), duplicates);
+                // 只 log 不夠——約束沒建成，代表這個安全 invariant 目前並未真的被強制，
+                // 讓啟動繼續等於允許系統帶著已知的重複綁定跑下去。必須直接讓啟動失敗，
+                // 逼人工先處理重複資料，而不是留給下一個發現問題的人。
+                throw new IllegalStateException(
+                        "oauth_account 有 " + duplicates.size() + " 組 (account_id, oauth_provider) 重複綁定，"
+                                + "無法自動判斷哪筆才正確，請人工處理後再重啟；詳見上方 log。");
+            } else {
+                createFilteredUniqueIndex("UX_oauth_account_account_id_provider", """
+                        CREATE UNIQUE INDEX UX_oauth_account_account_id_provider
+                            ON oauth_account(account_id, oauth_provider)
+                        """);
+            }
+        }
+
+        if (tableExists("oauth_transaction")) {
+            createCheckIfAbsent("oauth_transaction", "CK_oauth_transaction_purpose_account", """
+                    ALTER TABLE oauth_transaction ADD CONSTRAINT CK_oauth_transaction_purpose_account CHECK (
+                        (purpose = 'LOGIN' AND account_id IS NULL)
+                     OR (purpose = 'LINK' AND account_id IS NOT NULL))
+                    """);
+            createCheckIfAbsent("oauth_transaction", "CK_oauth_transaction_status_finalized", """
+                    ALTER TABLE oauth_transaction ADD CONSTRAINT CK_oauth_transaction_status_finalized CHECK (
+                        (status = 'PENDING' AND finalized_at IS NULL)
+                     OR (status <> 'PENDING' AND finalized_at IS NOT NULL))
+                    """);
+            createFilteredUniqueIndex("UX_oauth_transaction_pending_link", """
+                    CREATE UNIQUE INDEX UX_oauth_transaction_pending_link
+                        ON oauth_transaction(account_id, oauth_provider, purpose)
+                        WHERE status = 'PENDING' AND account_id IS NOT NULL
+                    """);
+        }
     }
 
     /** 跟既有的 alterColumnNullable 相反方向：只在目前是 nullable 時才收緊為 NOT NULL */

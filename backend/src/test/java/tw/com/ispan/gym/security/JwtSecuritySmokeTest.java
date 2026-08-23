@@ -50,7 +50,15 @@ import tw.com.ispan.gym.repository.trainer.TrainerRepository;
         "spring.profiles.active=test",
         "app.jwt.secret=dGVzdC1zZWNyZXQtdGhhdC1pcy1sb25nLWVub3VnaC1mb3ItaHMyNTYtc2lnbmluZyEh",
         "app.jwt.issuer=ispan-gym",
-        "app.jwt.access-token-ttl=PT2H"
+        "app.jwt.access-token-ttl=PT2H",
+        "app.oauth.google.enabled=false",
+        "app.oauth.frontend-success-url=http://localhost:5173/oauth/callback",
+        "app.oauth.frontend-registration-url=http://localhost:5173/oauth/register",
+        "app.oauth.frontend-link-result-url=http://localhost:5173/account/oauth/callback",
+        "app.oauth.frontend-error-url=http://localhost:5173/login",
+        "app.oauth.transaction-ttl-minutes=10",
+        "app.oauth.registration-ticket-ttl-minutes=15",
+        "app.oauth.exchange-code-ttl-seconds=90"
 })
 class JwtSecuritySmokeTest {
 
@@ -70,7 +78,20 @@ class JwtSecuritySmokeTest {
         ApiErrorWriter.class,
         JsonAuthenticationEntryPoint.class,
         JsonAccessDeniedHandler.class,
-        tw.com.ispan.gym.config.SecurityConfig.class
+        tw.com.ispan.gym.config.SecurityConfig.class,
+        // Google OAuth 協定鏈的必要 bean——SecurityConfig 現在同時建立 oauth 鏈，
+        // 少了任何一個都會讓 context 組不起來（見 SecurityConfig 建構子）
+        tw.com.ispan.gym.config.GoogleOAuthProperties.class,
+        tw.com.ispan.gym.config.ClockConfig.class,
+        tw.com.ispan.gym.security.InMemoryRateLimiter.class,
+        tw.com.ispan.gym.security.OpaqueTokenGenerator.class,
+        tw.com.ispan.gym.security.oauth.GoogleIdentityMapper.class,
+        tw.com.ispan.gym.service.account.oauth.GoogleOAuthLoginService.class,
+        tw.com.ispan.gym.service.account.oauth.GoogleOAuthLinkService.class,
+        tw.com.ispan.gym.security.oauth.GoogleOAuthAuthorizationRequestResolver.class,
+        tw.com.ispan.gym.security.oauth.GoogleOAuthSuccessHandler.class,
+        tw.com.ispan.gym.security.oauth.GoogleOAuthFailureHandler.class,
+        tw.com.ispan.gym.security.AccountLoginPolicy.class
     })
     static class TestApp {}
 
@@ -98,6 +119,24 @@ class JwtSecuritySmokeTest {
         @Primary
         tw.com.ispan.gym.repository.account.OauthAccountRepository oauthAccountRepository() {
             return Mockito.mock(tw.com.ispan.gym.repository.account.OauthAccountRepository.class);
+        }
+
+        @Bean
+        @Primary
+        tw.com.ispan.gym.repository.account.OAuthTransactionRepository oauthTransactionRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.account.OAuthTransactionRepository.class);
+        }
+
+        @Bean
+        @Primary
+        tw.com.ispan.gym.repository.account.OAuthRegistrationTicketRepository oauthRegistrationTicketRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.account.OAuthRegistrationTicketRepository.class);
+        }
+
+        @Bean
+        @Primary
+        tw.com.ispan.gym.repository.account.OAuthExchangeCodeRepository oauthExchangeCodeRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.account.OAuthExchangeCodeRepository.class);
         }
 
         @Bean

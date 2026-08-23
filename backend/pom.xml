@@ -29,6 +29,8 @@
 	<properties>
 		<java.version>25</java.version>
 		<jjwt.version>0.12.6</jjwt.version>
+		<!-- 預設排除 db-integration 測試；要跑時用 -DexcludedGroups= 蓋掉這個屬性 -->
+		<excludedGroups>db-integration</excludedGroups>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -134,6 +136,20 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- 專案至今沒有任何測試需要真實 DB 連線（每個 @SpringBootTest 都刻意排除
+					     DataSourceAutoConfiguration）。db-integration 是第一個例外——需要真的連上
+					     SQL Server 才能驗證 JPQL/悲觀鎖/rollback 這類 Mockito 測不到的行為，所以
+					     預設排除，不讓沒設定 .env 的隊友的 `mvnw test` 因為連不到 DB 而失敗。
+					     值來自 ${excludedGroups} 屬性（見上面 <properties>），不是寫死字面值——
+					     這樣才能被 `-DexcludedGroups=` 蓋掉。要跑這類測試：
+					     `mvnw test -DexcludedGroups=` （連同 .env 一起 source）。 -->
+					<excludedGroups>${excludedGroups}</excludedGroups>
+				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

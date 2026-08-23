@@ -236,16 +236,33 @@ public class PasswordService {
     @Transactional
     public void resetPassword(String rawToken, String newPassword) {
         String tokenHash = sha256(rawToken);
+
+        // 帳號安全域統一採「先鎖 Account、再鎖短效憑證」的順序。
+        // Password Reset 與 Google OAuth 目前操作不同的憑證表，沒有已確認的跨功能
+        // deadlock；這裡調整為 Account-first 是為了建立一致的鎖定慣例，降低未來
+        // 新增跨域流程時形成相反鎖序的風險。這裡一開始只有 token，還不知道
+        // accountId，所以先用不鎖的 scalar 查詢定位——只拿 accountId，刻意不把整個
+        // Entity 查出來放進 persistence context，否則下面 findByTokenHashForUpdate
+        // 即使真的下了鎖定查詢，Hibernate 的 identity map 仍可能回傳同一個舊 instance，
+        // 讓「鎖內重新驗證」形同虛設。這次讀取結果不能當有效性或授權判斷，所有狀態
+        // 都必須在下面取得鎖之後重新驗證一次。
+        Integer accountId = passwordResetTokens.findAccountIdByTokenHash(tokenHash)
+                .orElseThrow(() -> new ResetTokenInvalidException(RESET_TOKEN_INVALID_MESSAGE));
+
+        Account account = accounts.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new ResetTokenInvalidException(RESET_TOKEN_INVALID_MESSAGE));
+
         PasswordResetToken token = passwordResetTokens.findByTokenHashForUpdate(tokenHash)
                 .orElseThrow(() -> new ResetTokenInvalidException(RESET_TOKEN_INVALID_MESSAGE));
 
         LocalDateTime now = LocalDateTime.now();
-        if (token.getUsedAt() != null || token.getInvalidatedAt() != null || !token.getExpiresAt().isAfter(now)) {
+        // 鎖內複查：定位時看到的 token 可能在鎖 Account 期間被其他請求使用／作廢／
+        // 剛好跨過期限，且定位到的 accountId 理論上不該跟鎖定後的 token 所屬帳號不同
+        // （正常流程不會發生，但明確擋一次，不假設兩次查詢之間資料不會變動）。
+        if (token.getUsedAt() != null || token.getInvalidatedAt() != null || !token.getExpiresAt().isAfter(now)
+                || !token.getAccount().getId().equals(accountId)) {
             throw new ResetTokenInvalidException(RESET_TOKEN_INVALID_MESSAGE);
         }
-
-        Account account = accounts.findByIdForUpdate(token.getAccount().getId())
-                .orElseThrow(() -> new ResetTokenInvalidException(RESET_TOKEN_INVALID_MESSAGE));
         // 防禦性複查：帳號可能在 token 核發後被軟刪除，或（理論上不會發生，但明確擋一次）
         // 已經不是本機密碼帳號——這兩種狀態都不該讓重設繼續，公開錯誤一律一樣
         if (account.getDeletedAt() != null || account.getPasswordHash() == null) {
