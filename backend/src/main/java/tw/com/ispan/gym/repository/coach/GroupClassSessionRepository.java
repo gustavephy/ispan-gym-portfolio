@@ -14,6 +14,14 @@ import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 
 public interface GroupClassSessionRepository extends JpaRepository<GroupClassSession, Integer> {
 
+        /**
+         * 查詢某教室在指定時間範圍內、狀態未取消的重疊場次。
+         *
+         * 注意：本方法只做「嚴格時間重疊」判斷，不內建任何緩衝時間。
+         * 若業務規則需要清場緩衝（例如兩堂課之間至少間隔 N 分鐘），
+         * 呼叫端必須自行把 startAt/endAt 往外撐大後再傳入，
+         * 見 GroupClassService.ROOM_CLEANUP_BUFFER_MINUTES 的用法。
+         */
         @Query("SELECT s FROM GroupClassSession s WHERE s.roomName = :roomName AND s.startAt < :endAt AND s.endAt > :startAt AND s.status <> 'CANCELLED'")
         List<GroupClassSession> findOverlappingByRoom(
                         @Param("roomName") String roomName,
