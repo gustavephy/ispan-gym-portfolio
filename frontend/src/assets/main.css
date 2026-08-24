@@ -97,6 +97,108 @@ button {
   background: var(--primary-dark);
   color: #fff;
 }
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.btn-block {
+  display: flex;
+  width: 100%;
+}
+
+/* 表單 */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1.1rem;
+}
+.form-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.form-input {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-section);
+  transition: var(--transition);
+}
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(201, 154, 91, 0.15);
+}
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+.form-error {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  color: #b3452f;
+}
+.form-hint {
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* 帳號流程卡片（登入／註冊／忘記密碼／重設密碼／Email 驗證共用） */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  background: var(--bg-body);
+}
+.auth-card {
+  width: 100%;
+  max-width: 26rem;
+  padding: 2.4rem 2rem;
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 30px rgba(60, 48, 43, 0.08);
+}
+.auth-card__title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--primary-dark);
+  text-align: center;
+  margin-bottom: 0.4rem;
+}
+.auth-card__subtitle {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-bottom: 1.8rem;
+  line-height: 1.6;
+}
+.auth-card__links {
+  margin-top: 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.auth-card__links a {
+  color: var(--accent);
+  font-weight: 600;
+}
+.auth-card__links a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
 
 /* 區塊標題 */
 .section-tag {

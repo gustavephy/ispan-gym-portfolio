@@ -246,14 +246,17 @@
         </ul>
         <button type="button" class="nav-auth__button" @click="onLogout">登出</button>
       </div>
-      <RouterLink
-        v-else
-        key="out"
-        class="nav-auth__button nav-auth__button--primary"
-        :to="{ name: 'login', query: route.fullPath !== '/' ? { redirect: route.fullPath } : {} }"
-      >
-        登入
-      </RouterLink>
+      <div v-else key="out" class="nav-auth__panel">
+        <RouterLink
+          class="nav-auth__button nav-auth__button--primary"
+          :to="{ name: 'login', query: route.fullPath !== '/' ? { redirect: route.fullPath } : {} }"
+        >
+          登入
+        </RouterLink>
+        <RouterLink class="nav-auth__button" to="/register">
+          註冊
+        </RouterLink>
+      </div>
       </Transition>
     </div>
 
