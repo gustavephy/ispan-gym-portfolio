@@ -61,7 +61,10 @@ export const useProductsStore = defineStore('products', () => {
   }
 
   //載入單一商品明細與留言
-  async function loadProduct(id) {
+  //留言 API 後端尚未實作，失敗時不影響商品明細顯示
+  async function loadProductDetail(id) {
+    // 先清空舊資料：不清的話，從 A 商品切到 B 商品時模板的 v-if="product"
+    // 仍成立（留著 A 的資料），畫面會先閃一下 A 才換成 B，spinner 也永遠不會出現
     currentProduct.value = null
     comments.value = []
     loading.value = true
@@ -86,9 +89,6 @@ export const useProductsStore = defineStore('products', () => {
       loading.value = false
     }
   }
-
-  // 別名，相容於 dev
-  const loadProductDetail = loadProduct;
 
   // 載入商品評論
   async function loadComments(productId) {
@@ -122,7 +122,6 @@ export const useProductsStore = defineStore('products', () => {
     loading,
     loadCategories,
     loadProducts,
-    loadProduct,
     loadProductDetail,
     submitComment,
     loadComments

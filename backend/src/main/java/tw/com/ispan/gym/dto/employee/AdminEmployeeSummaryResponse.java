@@ -21,7 +21,7 @@ public record AdminEmployeeSummaryResponse(
     public static AdminEmployeeSummaryResponse from(Employee employee) {
         String displayName = employee.getLastName() + employee.getFirstName();
         return new AdminEmployeeSummaryResponse(
-                employee.getEmployeeId(),
+                employee.getId(),
                 displayName,
                 employee.getAccount().getEmail(),
                 employee.getPhone(),

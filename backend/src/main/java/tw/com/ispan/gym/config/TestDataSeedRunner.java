@@ -102,7 +102,6 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final PaymentTransactionRepository paymentTransactions;
     private final MemberSubscriptionRepository memberSubscriptions;
     private final MemberCourseQuotaRepository memberCourseQuotas;
-    private final tw.com.ispan.gym.repository.course.PrivateCourseRepository privateCourses;
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
@@ -123,7 +122,6 @@ public class TestDataSeedRunner implements CommandLineRunner {
             PaymentTransactionRepository paymentTransactions,
             MemberSubscriptionRepository memberSubscriptions,
             MemberCourseQuotaRepository memberCourseQuotas,
-            tw.com.ispan.gym.repository.course.PrivateCourseRepository privateCourses,
             JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
             @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
@@ -142,7 +140,6 @@ public class TestDataSeedRunner implements CommandLineRunner {
         this.paymentTransactions = paymentTransactions;
         this.memberSubscriptions = memberSubscriptions;
         this.memberCourseQuotas = memberCourseQuotas;
-        this.privateCourses = privateCourses;
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
@@ -268,7 +265,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
 
     /** 教練列不存在就建立；存在則導正為未刪除（status 不動，UNAVAILABLE 是合法展示情境） */
     private Trainer ensureTrainer(Employee employee) {
-        Trainer trainer = trainers.findByEmployeeEmployeeId(employee.getEmployeeId()).orElse(null);
+        Trainer trainer = trainers.findByEmployeeId(employee.getId()).orElse(null);
         if (trainer == null) {
             trainer = new Trainer();
             trainer.setEmployee(employee);
@@ -279,13 +276,13 @@ public class TestDataSeedRunner implements CommandLineRunner {
             trainer.setSpecialty("重量訓練、體態雕塑");
             trainer.setExperience("五年一對一私人教練經驗");
             trainer.setBio("測試用教練帳號，供本機開發與功能展示。");
-            log.info("已建立測試教練（employee={}）", employee.getEmployeeId());
+            log.info("已建立測試教練（employee={}）", employee.getId());
             return trainers.save(trainer);
         }
         if (trainer.getDeletedAt() != null) {
             trainer.setDeletedAt(null);
             trainer = trainers.save(trainer);
-            log.info("已將測試教練（employee={}）導正為未刪除", employee.getEmployeeId());
+            log.info("已將測試教練（employee={}）導正為未刪除", employee.getId());
         }
         return trainer;
     }
@@ -368,7 +365,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
      * private_course 與 order_item 皆可為 null——正式流程是買課後產生，這裡是直接發放。
      */
     private void ensureCourseQuota(Member member, Trainer trainer) {
-        if (!memberCourseQuotas.findEligibleQuota(member.getId(), trainer.getTrainerId()).isEmpty()) {
+        if (!memberCourseQuotas.findEligibleQuota(member.getId(), trainer.getId()).isEmpty()) {
             return;
         }
 
@@ -382,7 +379,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         quota.setExpiryDate(LocalDateTime.now().plusMonths(6));
         memberCourseQuotas.save(quota);
         log.info("已為測試會員 {} 播種私教堂數 10 堂（教練 id={}）",
-                member.getAccount().getEmail(), trainer.getTrainerId());
+                member.getAccount().getEmail(), trainer.getId());
     }
 
     // ─────────────── 目錄資料：讓前端頁面有東西可顯示 ───────────────
@@ -395,79 +392,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
      * 組員自己在後台新增的內容不該被本 runner 覆蓋或刪除。
      */
     private void ensureCatalogData(Employee coachEmployee) {
-        java.util.Map<String, ProductCategory> productCats = ensureProductCategories();
-        ensureProducts(productCats);
+        ProductCategory supplementCategory = ensureProductCategory();
+        ensureProducts(supplementCategory);
         ensureSubscriptionPlans();
-        List<CourseCategory> categories = ensureCourseCategories();
-        ensureGroupCourseAndSession(coachEmployee, categories);
-        ensurePrivateCourses(coachEmployee, categories);
+        CourseCategory groupCategory = ensureCourseCategory();
+        ensureGroupCourseAndSession(coachEmployee, groupCategory);
         ensureSampleOrders();
-    }
-
-    private void ensurePrivateCourses(Employee coachEmployee, List<CourseCategory> categories) {
-        Trainer trainer = trainers.findByEmployeeEmployeeId(coachEmployee.getEmployeeId()).orElse(null);
-        if (trainer == null) {
-            log.warn("找不到測試教練，略過私教課播種");
-            return;
-        }
-
-        List<String> names = List.of(
-            "一對一私人重量訓練課", "泰拳與防身格鬥私教課", "高齡伸展與防跌肌力課",
-            "增肌減脂客製化體態管理", "孕婦孕產期安全健體課", "運動按摩與物理放鬆私教"
-        );
-        List<BigDecimal> prices = List.of(
-            new BigDecimal("1600"), new BigDecimal("1800"), new BigDecimal("1400"),
-            new BigDecimal("1700"), new BigDecimal("1500"), new BigDecimal("1650")
-        );
-        List<String> descs = List.of(
-            "針對個人體態目標，提供專屬重訓計畫，涵蓋動作矯正、爆發力與核心控制。",
-            "專業格鬥教練指導，從出拳、防守到實戰反應，大幅提升心肺與自衛能力。",
-            "專為銀髮族規劃，低衝擊、著重平衡感、下肢肌力以及關節活動度訓練。",
-            "結合運動處方與每日飲食監督，突破體態停滯期，精準降低體脂肪率。",
-            "國際孕產證照教練指導，舒緩孕期不適、強化骨盆底肌，為順利生產做準備。",
-            "訓練後的肌筋膜釋放與伸展放鬆，解決長期肌肉痠痛，加速身體機能恢復。"
-        );
-
-        // 分類映射對照
-        // 一對一私人重量訓練課 -> 力量訓練 (index 0)
-        // 泰拳與防身格鬥私教課 -> 核心雕塑 (index 3)
-        // 高齡伸展與防跌肌力課 -> 核心雕塑 (index 3)
-        // 增肌減脂客製化體態管理 -> 核心雕塑 (index 3)
-        // 孕婦孕產期安全健體課 -> 身心瑜珈 (index 1)
-        // 運動按摩與物理放鬆私教 -> 身心瑜珈 (index 1)
-        List<Integer> categoryIndices = List.of(0, 3, 3, 3, 1, 1);
-
-        for (int i = 0; i < names.size(); i++) {
-            final String pcName = names.get(i);
-            final int categoryIndex = categoryIndices.get(i);
-            CourseCategory mappedCategory = categories.stream()
-                .filter(c -> c.getName().equals(getCategoryNameByIndex(categoryIndex)))
-                .findFirst()
-                .orElse(categories.get(0));
-
-            java.util.Optional<tw.com.ispan.gym.entity.course.PrivateCourse> existingOpt = privateCourses.findAll().stream()
-                .filter(p -> pcName.equals(p.getName()))
-                .findFirst();
-
-            if (existingOpt.isPresent()) {
-                tw.com.ispan.gym.entity.course.PrivateCourse pc = existingOpt.get();
-                pc.setCategory(mappedCategory);
-                privateCourses.save(pc);
-                continue;
-            }
-
-            tw.com.ispan.gym.entity.course.PrivateCourse pc = new tw.com.ispan.gym.entity.course.PrivateCourse();
-            pc.setTrainer(trainer);
-            pc.setName(pcName);
-            pc.setDescription(descs.get(i));
-            pc.setCategory(mappedCategory);
-            pc.setPrice(prices.get(i));
-            pc.setSessionPerUnit(10);
-            pc.setMaxCapacity(1);
-            pc.setStatus(tw.com.ispan.gym.enums.course.CourseStatus.ACTIVE);
-            privateCourses.save(pc);
-        }
-        log.info("已建立多個測試私教課方案");
     }
 
     /**
@@ -572,42 +502,33 @@ public class TestDataSeedRunner implements CommandLineRunner {
         }
     }
 
-    private java.util.Map<String, ProductCategory> ensureProductCategories() {
-        List<String> names = List.of("補給品", "器材", "配件");
-        java.util.Map<String, ProductCategory> map = new java.util.LinkedHashMap<>();
-        for (String name : names) {
-            ProductCategory cat = productCategories.findAll().stream()
-                    .filter(c -> name.equals(c.getName()))
-                    .findFirst()
-                    .orElseGet(() -> {
-                        ProductCategory c = new ProductCategory();
-                        c.setName(name);
-                        ProductCategory saved = productCategories.save(c);
-                        log.info("已建立測試商品分類：{}", name);
-                        return saved;
-                    });
-            map.put(name, cat);
-        }
-        return map;
+    private ProductCategory ensureProductCategory() {
+        return productCategories.findAll().stream().findFirst().orElseGet(() -> {
+            ProductCategory category = new ProductCategory();
+            category.setName("運動補給");
+            ProductCategory saved = productCategories.save(category);
+            log.info("已建立測試商品分類：{}", saved.getName());
+            return saved;
+        });
     }
 
     /**
      * 逐筆以名稱比對補建，不是「整張表空的才播種」——早期資料庫已經有一兩筆手動建立的
      * 商品，用整表判斷會讓這批種子永遠不會進去，商城與報表都只有零星資料可看。
      */
-    private void ensureProducts(java.util.Map<String, ProductCategory> catMap) {
-        record Seed(String name, String price, int stock, String brand, Double weight, String flavor, String size, String color, String material, String origin, String cat) {}
+    private void ensureProducts(ProductCategory category) {
+        record Seed(String name, String price, int stock, String brand, String flavor, String desc) {}
         List<Seed> seeds = List.of(
-                new Seed("乳清蛋白 1kg", "1280", 999, "MyProtein", 1.0, "巧克力", "1kg", "無", "粉末", "英國", "補給品"),
-                new Seed("BCAA 支鏈胺基酸", "890", 999, "Optimum", 0.3, "莓果", "300g", "無", "粉末", "美國", "補給品"),
-                new Seed("能量棒（12入）", "600", 999, "Quest", 0.72, "花生", "12入", "無", "固體條狀", "美國", "補給品"),
-                new Seed("肌酸 300g", "780", 999, "Optimum", 0.3, "原味", "300g", "無", "粉末", "美國", "補給品"),
-                new Seed("彈力帶組（5條）", "520", 999, "TheraBand", null, null, "標準組", "彩色", "乳膠", "臺灣", "器材"),
-                new Seed("瑜珈墊 6mm", "990", 999, "Manduka", null, null, "180x61cm", "黑", "TPE", "德國", "器材"),
-                new Seed("搖搖杯 700ml", "250", 999, "Blender", null, null, "700ml", "透明", "PP", "中國", "配件"),
-                new Seed("健身手套", "450", 999, "Harbinger", null, null, "M", "黑", "皮革", "美國", "配件"),
-                new Seed("運動毛巾", "180", 999, "Willy", null, null, "100x20cm", "藍", "純棉", "臺灣", "配件"),
-                new Seed("護腕（一對）", "320", 999, "Harbinger", null, null, "均碼", "黑", "尼龍", "美國", "配件"));
+                new Seed("乳清蛋白 1kg", "1280", 50, "MyProtein", "巧克力", "每份 24g 蛋白質，訓練後補給首選。"),
+                new Seed("BCAA 支鏈胺基酸", "890", 30, "Optimum", "莓果", "訓練中補充，延緩疲勞。"),
+                new Seed("搖搖杯 700ml", "250", 100, "Blender", null, "防漏設計，附攪拌球。"),
+                new Seed("健身手套", "450", 20, "Harbinger", null, "止滑耐磨，保護掌心。"),
+                new Seed("能量棒（12入）", "600", 0, "Quest", "花生", "高蛋白低糖，隨身補給。"),
+                new Seed("肌酸 300g", "780", 40, "Optimum", null, "提升爆發力與訓練表現。"),
+                new Seed("彈力帶組（5條）", "520", 60, "TheraBand", null, "五種阻力，適合暖身與居家訓練。"),
+                new Seed("運動毛巾", "180", 120, "Willy", null, "吸汗快乾，健身房必備。"),
+                new Seed("瑜珈墊 6mm", "990", 25, "Manduka", null, "止滑防潑水，附收納背帶。"),
+                new Seed("護腕（一對）", "320", 45, "Harbinger", null, "大重量訓練穩定腕關節。"));
 
         int created = 0;
         for (Seed seed : seeds) {
@@ -619,13 +540,9 @@ public class TestDataSeedRunner implements CommandLineRunner {
             product.setPrice(new BigDecimal(seed.price()));
             product.setStock(seed.stock());
             product.setBrand(seed.brand());
-            product.setWeight(seed.weight());
             product.setFlavor(seed.flavor());
-            product.setSize(seed.size());
-            product.setColor(seed.color());
-            product.setMaterial(seed.material());
-            product.setOrigin(seed.origin());
-            product.setProductCategory(catMap.getOrDefault(seed.cat(), catMap.values().iterator().next()));
+            product.setDescription(seed.desc());
+            product.setProductCategory(category);
             products.save(product);
             created++;
         }
@@ -655,52 +572,14 @@ public class TestDataSeedRunner implements CommandLineRunner {
         log.info("已建立 {} 筆測試訂閱方案", seeds.size());
     }
 
-    private List<CourseCategory> ensureCourseCategories() {
-        List<String> categoryNames = List.of("力量訓練", "身心瑜珈", "動感飛輪", "核心雕塑");
-        for (int i = 0; i < categoryNames.size(); i++) {
-            final String name = categoryNames.get(i);
-            boolean exists = courseCategories.findAll().stream().anyMatch(c -> name.equals(c.getName()));
-            if (!exists) {
-                CourseCategory category = new CourseCategory();
-                category.setName(name);
-                category.setSortOrder(i + 1);
-                category.setStatus(tw.com.ispan.gym.enums.common.CategoryStatus.ACTIVE);
-                courseCategories.save(category);
-                log.info("已建立測試課程分類：{}", name);
-            }
-        }
-        
-        // 清理 DB 中舊的 "團體有氧" 分類
-        courseCategories.findAll().stream()
-            .filter(c -> "團體有氧".equals(c.getName()))
-            .findFirst()
-            .ifPresent(oldCat -> {
-                // 將所有關聯至 "團體有氧" 的團課與私教課重新指派給新的分類
-                CourseCategory defaultCat = courseCategories.findAll().stream()
-                    .filter(c -> categoryNames.contains(c.getName()))
-                    .findFirst().orElse(null);
-                
-                if (defaultCat != null) {
-                    groupCourses.findAll().stream()
-                        .filter(gc -> gc.getCategory() != null && oldCat.getCourseCategoryId().equals(gc.getCategory().getCourseCategoryId()))
-                        .forEach(gc -> {
-                            gc.setCategory(defaultCat);
-                            groupCourses.save(gc);
-                        });
-                    privateCourses.findAll().stream()
-                        .filter(pc -> pc.getCategory() != null && oldCat.getCourseCategoryId().equals(pc.getCategory().getCourseCategoryId()))
-                        .forEach(pc -> {
-                            pc.setCategory(defaultCat);
-                            privateCourses.save(pc);
-                        });
-                }
-                courseCategories.delete(oldCat);
-                log.info("已清理歷史的 '團體有氧' 分類");
-            });
-
-        return courseCategories.findAll().stream()
-            .filter(c -> categoryNames.contains(c.getName()))
-            .toList();
+    private CourseCategory ensureCourseCategory() {
+        return courseCategories.findAll().stream().findFirst().orElseGet(() -> {
+            CourseCategory category = new CourseCategory();
+            category.setName("團體有氧");
+            CourseCategory saved = courseCategories.save(category);
+            log.info("已建立測試課程分類：{}", saved.getName());
+            return saved;
+        });
     }
 
     /**
@@ -708,74 +587,33 @@ public class TestDataSeedRunner implements CommandLineRunner {
      * （那頁顯示的是「即將開始且開放報名的場次」，不是課程本身）。
      * 場次時間刻意設在未來，才會出現在前台列表。
      */
-    private void ensureGroupCourseAndSession(Employee coachEmployee, List<CourseCategory> categories) {
-        Trainer trainer = trainers.findByEmployeeEmployeeId(coachEmployee.getEmployeeId()).orElse(null);
+    private void ensureGroupCourseAndSession(Employee coachEmployee, CourseCategory category) {
+        if (!groupCourses.findAll().isEmpty()) {
+            return;
+        }
+        Trainer trainer = trainers.findByEmployeeId(coachEmployee.getId()).orElse(null);
         if (trainer == null) {
             log.warn("找不到測試教練，略過團課播種");
             return;
         }
+        GroupCourse course = new GroupCourse();
+        course.setTrainer(trainer);
+        course.setName("燃脂有氧");
+        course.setDescription("高強度間歇訓練，適合想快速燃脂的學員。");
+        course.setCategory(category);
+        course.setMaxCapacity(20);
+        GroupCourse savedCourse = groupCourses.save(course);
 
-        List<String> names = List.of(
-            "燃脂有氧", "核心能量瑜珈", "動感飛輪衝刺", 
-            "TRX 懸吊全身雕塑", "高強度拳擊有氧", "活力槓鈴有氧"
-        );
-        List<String> descs = List.of(
-            "高強度間歇訓練，適合想快速燃脂的學員。", "強化深層核心肌群，改善體態並舒緩緊繃筋骨。", "模擬戶外起伏爬坡，著重爆發力與心肺提升。",
-            "利用自身體重阻力訓練，深層鍛鍊肌耐力。", "結合拳擊步伐與出拳動作，極速爆汗舒壓。", "經典槓鈴負重配合音樂節奏，燃脂並雕塑肌肉線條。"
-        );
-
-        // 分類映射對照
-        // 燃脂有氧 -> 核心雕塑 (index 3)
-        // 核心能量瑜珈 -> 身心瑜珈 (index 1)
-        // 動感飛輪衝刺 -> 動感飛輪 (index 2)
-        // TRX -> 力量訓練 (index 0)
-        // 高強度拳擊有氧 -> 核心雕塑 (index 3)
-        // 活力槓鈴有氧 -> 力量訓練 (index 0)
-        List<Integer> categoryIndices = List.of(3, 1, 2, 0, 3, 0);
-
-        for (int i = 0; i < names.size(); i++) {
-            final String gcName = names.get(i);
-            final int categoryIndex = categoryIndices.get(i);
-            CourseCategory mappedCategory = categories.stream()
-                .filter(c -> c.getName().equals(getCategoryNameByIndex(categoryIndex)))
-                .findFirst()
-                .orElse(categories.get(0));
-
-            java.util.Optional<GroupCourse> existingOpt = groupCourses.findAll().stream()
-                .filter(g -> gcName.equals(g.getName()))
-                .findFirst();
-
-            if (existingOpt.isPresent()) {
-                GroupCourse gc = existingOpt.get();
-                gc.setCategory(mappedCategory);
-                groupCourses.save(gc);
-                continue;
-            }
-
-            GroupCourse course = new GroupCourse();
-            course.setTrainer(trainer);
-            course.setName(gcName);
-            course.setDescription(descs.get(i));
-            course.setCategory(mappedCategory);
-            course.setMaxCapacity(20);
-            GroupCourse savedCourse = groupCourses.save(course);
-
-            LocalDateTime start = LocalDateTime.now().plusDays(3 + i).withHour(19).withMinute(0)
-                    .withSecond(0).withNano(0);
-            GroupClassSession session = new GroupClassSession();
-            session.setCourse(savedCourse);
-            session.setRoomName("A 教室");
-            session.setStartAt(start);
-            session.setEndAt(start.plusHours(1));
-            session.setCapacity(20);
-            session.setStatus(GroupClassSessionStatus.SCHEDULED);
-            groupClassSessions.save(session);
-        }
-        log.info("已建立多個測試團課主檔與未來場次");
-    }
-
-    private String getCategoryNameByIndex(int index) {
-        List<String> names = List.of("力量訓練", "身心瑜珈", "動感飛輪", "核心雕塑");
-        return names.get(index);
+        LocalDateTime start = LocalDateTime.now().plusDays(3).withHour(19).withMinute(0)
+                .withSecond(0).withNano(0);
+        GroupClassSession session = new GroupClassSession();
+        session.setCourse(savedCourse);
+        session.setRoomName("A 教室");
+        session.setStartAt(start);
+        session.setEndAt(start.plusHours(1));
+        session.setCapacity(20);
+        session.setStatus(GroupClassSessionStatus.SCHEDULED);
+        groupClassSessions.save(session);
+        log.info("已建立測試團課主檔與 1 筆未來場次（{}）", start);
     }
 }

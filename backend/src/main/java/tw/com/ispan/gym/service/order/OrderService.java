@@ -166,9 +166,9 @@ public class OrderService {
         PrivateCourse course = courses.findById(request.privateCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到私教課：" + request.privateCourseId()));
         if (!CourseStatus.ACTIVE.equals(course.getStatus())) {
-            throw new DirectCheckoutNotAllowedException(course.getPrivateCourseId());
+            throw new DirectCheckoutNotAllowedException(course.getId());
         }
-        // requireActiveSubscription(memberId);
+        requireActiveSubscription(memberId);
 
         Order order = createCourseOrder(member, course, request.quantity(), request.couponCode());
         return toDetailResponse(order);
@@ -383,6 +383,32 @@ public class OrderService {
         }
     }
 
+    /**
+     * 後台標記已出貨：PAID → SHIPPED。僅適用於含實體商品的訂單，
+     * 課程/訂閱訂單請直接用 {@link #completeOrder} 完成（無出貨步驟）。
+     */
+    @Transactional
+    public OrderDetailResponse shipOrder(Integer orderId) {
+        Order order = orders.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
+        String fromStatus = order.getStatus().name();
+        order.markShipped();
+        orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
+                order.getMember(), "ADMIN", "SHIP"));
+        return toDetailResponse(order);
+    }
+
+    /** 後台標記訂單完成：SHIPPED → COMPLETED，或無出貨步驟的訂單直接 PAID → COMPLETED */
+    @Transactional
+    public OrderDetailResponse completeOrder(Integer orderId) {
+        Order order = orders.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
+        String fromStatus = order.getStatus().name();
+        // 含實體商品就要求先出貨；私教課／訂閱沒有實體要寄，付款後可直接完成
+        order.markCompleted(orderItems.existsByOrderIdAndProductIsNotNull(orderId));
+        orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
+                order.getMember(), "ADMIN", "COMPLETE"));
+        return toDetailResponse(order);
+    }
+
     /** 後台待處理退款清單，供人工執行退款前查看 */
     public List<PendingRefundResponse> listPendingRefunds() {
         return paymentRefunds.findByStatusOrderByRequestedAtAsc("PENDING").stream()
@@ -538,7 +564,7 @@ public class OrderService {
                 .sorted(Comparator.comparing(OrderItem::getId))
                 .map(item -> new OrderItemResponse(item.getId(),
                         item.isCourseItem() ? null : item.getProduct().getProductId(),
-                        item.isCourseItem() ? item.getCourse().getPrivateCourseId() : null,
+                        item.isCourseItem() ? item.getCourse().getId() : null,
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
                         item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
                 .toList();

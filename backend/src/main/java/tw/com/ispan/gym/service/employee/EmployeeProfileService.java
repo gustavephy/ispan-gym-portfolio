@@ -43,7 +43,7 @@ public class EmployeeProfileService {
         Employee employee = employees.findById(employeeId)
                 .filter(e -> e.getDeletedAt() == null && e.getStatus() == EmployeeStatus.ACTIVE)
                 .orElseThrow(() -> new ForbiddenAccessException("此帳號沒有可用的員工資料"));
-        return EmployeeProfileResponse.from(employee, isTrainer(employee.getEmployeeId()));
+        return EmployeeProfileResponse.from(employee, isTrainer(employee.getId()));
     }
 
     @Transactional
@@ -54,10 +54,10 @@ public class EmployeeProfileService {
 
         employee.setPhone(request.getPhone());
 
-        return EmployeeProfileResponse.from(employee, isTrainer(employee.getEmployeeId()));
+        return EmployeeProfileResponse.from(employee, isTrainer(employee.getId()));
     }
 
     private boolean isTrainer(Integer employeeId) {
-        return trainers.findByEmployeeEmployeeId(employeeId).filter(t -> t.getDeletedAt() == null).isPresent();
+        return trainers.findByEmployeeId(employeeId).filter(t -> t.getDeletedAt() == null).isPresent();
     }
 }

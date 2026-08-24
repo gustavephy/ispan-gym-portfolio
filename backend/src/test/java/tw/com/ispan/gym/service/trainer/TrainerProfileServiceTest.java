@@ -44,7 +44,7 @@ class TrainerProfileServiceTest {
         account.setEmail("trainer@example.com");
 
         Employee employee = new Employee();
-        employee.setEmployeeId(EMPLOYEE_ID);
+        employee.setId(EMPLOYEE_ID);
         employee.setAccount(account);
         employee.setFirstName("小華");
         employee.setLastName("陳");
@@ -54,7 +54,7 @@ class TrainerProfileServiceTest {
 
     private Trainer trainerOf(Employee employee, TrainerStatus status) {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(TRAINER_ID);
+        trainer.setId(TRAINER_ID);
         trainer.setEmployee(employee);
         trainer.setSpecialty("重量訓練");
         trainer.setExperience("五年健身房授課經驗");
@@ -78,7 +78,7 @@ class TrainerProfileServiceTest {
     void getMyProfile_ACTIVE教練查自己_回傳完整資料() {
         Employee employee = employeeOf(EmployeeStatus.ACTIVE);
         Trainer trainer = trainerOf(employee, TrainerStatus.ACTIVE);
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         TrainerProfileResponse response = service.getMyProfile(EMPLOYEE_ID);
 
@@ -93,7 +93,7 @@ class TrainerProfileServiceTest {
     void getMyProfile_UNAVAILABLE教練仍可查自己() {
         Employee employee = employeeOf(EmployeeStatus.ACTIVE);
         Trainer trainer = trainerOf(employee, TrainerStatus.UNAVAILABLE);
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         TrainerProfileResponse response = service.getMyProfile(EMPLOYEE_ID);
 
@@ -105,7 +105,7 @@ class TrainerProfileServiceTest {
         Employee employee = employeeOf(EmployeeStatus.ACTIVE);
         Trainer trainer = trainerOf(employee, TrainerStatus.ACTIVE);
         trainer.setDeletedAt(LocalDateTime.now());
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         assertThatThrownBy(() -> service.getMyProfile(EMPLOYEE_ID))
                 .isInstanceOf(ForbiddenAccessException.class);
@@ -116,7 +116,7 @@ class TrainerProfileServiceTest {
         Employee employee = employeeOf(EmployeeStatus.ACTIVE);
         employee.setDeletedAt(LocalDateTime.now());
         Trainer trainer = trainerOf(employee, TrainerStatus.ACTIVE);
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         assertThatThrownBy(() -> service.getMyProfile(EMPLOYEE_ID))
                 .isInstanceOf(ForbiddenAccessException.class);
@@ -126,7 +126,7 @@ class TrainerProfileServiceTest {
     void getMyProfile_EmployeeINACTIVE_丟ForbiddenAccess() {
         Employee employee = employeeOf(EmployeeStatus.INACTIVE);
         Trainer trainer = trainerOf(employee, TrainerStatus.ACTIVE);
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         assertThatThrownBy(() -> service.getMyProfile(EMPLOYEE_ID))
                 .isInstanceOf(ForbiddenAccessException.class);
@@ -134,7 +134,7 @@ class TrainerProfileServiceTest {
 
     @Test
     void getMyProfile_沒有Trainer資料_丟ForbiddenAccess() {
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getMyProfile(EMPLOYEE_ID))
                 .isInstanceOf(ForbiddenAccessException.class);
@@ -157,7 +157,7 @@ class TrainerProfileServiceTest {
         service.updateMyProfile(ACCOUNT_ID, validRequest());
 
         verify(trainers).findByEmployeeIdForUpdate(EMPLOYEE_ID);
-        verify(trainers, never()).findByEmployeeEmployeeId(any());
+        verify(trainers, never()).findByEmployeeId(any());
     }
 
     @Test

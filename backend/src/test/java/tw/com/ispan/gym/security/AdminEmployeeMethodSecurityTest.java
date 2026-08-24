@@ -203,12 +203,12 @@ class AdminEmployeeMethodSecurityTest {
         Mockito.when(accounts.findByEmailIgnoreCase(email)).thenReturn(Optional.of(account));
 
         Employee employee = new Employee();
-        employee.setEmployeeId(employeeId);
+        employee.setId(employeeId);
         employee.setAccount(account);
         employee.setRole(role);
         employee.setStatus(EmployeeStatus.ACTIVE);
         Mockito.when(employees.findByAccountId(accountId)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(employeeId)).thenReturn(Optional.empty());
+        Mockito.when(trainers.findByEmployeeId(employeeId)).thenReturn(Optional.empty());
 
         return jwtUtil.generateToken(account);
     }

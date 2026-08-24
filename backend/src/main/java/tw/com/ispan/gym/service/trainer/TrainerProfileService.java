@@ -40,7 +40,7 @@ public class TrainerProfileService {
     }
 
     public TrainerProfileResponse getMyProfile(Integer employeeId) {
-        Trainer trainer = trainers.findByEmployeeEmployeeId(employeeId)
+        Trainer trainer = trainers.findByEmployeeId(employeeId)
                 .filter(TrainerProfileService::isUsable)
                 .orElseThrow(() -> new ForbiddenAccessException("此帳號沒有可用的教練資料"));
         return TrainerProfileResponse.from(trainer);
@@ -49,7 +49,7 @@ public class TrainerProfileService {
     @Transactional
     public TrainerProfileResponse updateMyProfile(Integer accountId, TrainerProfileUpdateRequest request) {
         Integer employeeId = employees.findByAccountId(accountId)
-                .map(Employee::getEmployeeId)
+                .map(Employee::getId)
                 .orElseThrow(() -> new ForbiddenAccessException("此帳號沒有可用的教練資料"));
         Trainer trainer = trainers.findByEmployeeIdForUpdate(employeeId)
                 .filter(TrainerProfileService::isUsable)

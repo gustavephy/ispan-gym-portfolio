@@ -19,8 +19,8 @@ public record TrainerProfileResponse(
 
     public static TrainerProfileResponse from(Trainer trainer) {
         return new TrainerProfileResponse(
-                trainer.getTrainerId(),
-                trainer.getEmployee().getEmployeeId(),
+                trainer.getId(),
+                trainer.getEmployee().getId(),
                 trainer.getSpecialty(),
                 trainer.getExperience(),
                 trainer.getBio(),

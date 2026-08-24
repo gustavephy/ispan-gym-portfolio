@@ -8,8 +8,8 @@ import api from './axios.instance.js'
  * 不需登入即可呼叫，對應 GroupCourseController
  * @param {{page?: number, size?: number, search?: string}} params page 從 0 開始
  */
-export const getActiveCourses = ({ keyword = '', trainerId = null, categoryId = null } = {}) =>
-  api.get('/api/group-courses/public', { params: { keyword: keyword || undefined, trainerId: trainerId || undefined, categoryId: categoryId || undefined } })
+export const getActiveCourses = ({ page = 0, size = 10, search = '' } = {}) =>
+  api.get('/api/group-courses', { params: { page, size, search } })
 
 /** 查詢即將開始、開放報名的團課場次，不需登入即可呼叫。行事曆用，一次回傳全部資料，不分頁 */
 export const getUpcomingSessions = () => api.get('/api/member/group-classes')

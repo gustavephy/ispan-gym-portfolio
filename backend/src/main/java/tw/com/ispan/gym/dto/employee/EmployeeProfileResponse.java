@@ -25,7 +25,7 @@ public record EmployeeProfileResponse(
 
     public static EmployeeProfileResponse from(Employee employee, boolean isTrainer) {
         return new EmployeeProfileResponse(
-                employee.getEmployeeId(),
+                employee.getId(),
                 employee.getAccount().getEmail(),
                 employee.getFirstName(),
                 employee.getLastName(),

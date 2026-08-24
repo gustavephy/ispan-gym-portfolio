@@ -81,7 +81,7 @@ public class DevCurrentUserProvider implements CurrentUserProvider {
         return resolveRealAccount()
                 .flatMap(account -> employees.findByAccountId(account.getId()))
                 .filter(e -> e.getDeletedAt() == null && e.getStatus() == EmployeeStatus.ACTIVE)
-                .map(Employee::getEmployeeId)
+                .map(Employee::getId)
                 .orElse(fallbackEmployeeId);
     }
 

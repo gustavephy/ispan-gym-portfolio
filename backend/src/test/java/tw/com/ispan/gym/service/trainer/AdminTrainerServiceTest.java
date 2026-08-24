@@ -66,7 +66,7 @@ class AdminTrainerServiceTest {
         account.setEmail("coach@example.com");
 
         Employee employee = new Employee();
-        employee.setEmployeeId(EMPLOYEE_ID);
+        employee.setId(EMPLOYEE_ID);
         employee.setAccount(account);
         employee.setFirstName("小華");
         employee.setLastName("陳");
@@ -76,7 +76,7 @@ class AdminTrainerServiceTest {
 
     private Trainer trainerOf(Employee employee, TrainerStatus status) {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(TRAINER_ID);
+        trainer.setId(TRAINER_ID);
         trainer.setEmployee(employee);
         trainer.setSpecialty("重量訓練");
         trainer.setExperience("五年健身房授課經驗");
@@ -89,7 +89,7 @@ class AdminTrainerServiceTest {
     private void stubNoBlockers() {
         when(coachSlots.countOpenByTrainerId(eq(TRAINER_ID), any())).thenReturn(0L);
         when(coachBookings.countByTrainerIdAndStatus(TRAINER_ID, CoachBookingStatus.PENDING)).thenReturn(0L);
-        when(privateCourses.countByTrainerTrainerIdAndStatus(TRAINER_ID, CourseStatus.ACTIVE)).thenReturn(0L);
+        when(privateCourses.countByTrainerIdAndStatus(TRAINER_ID, CourseStatus.ACTIVE)).thenReturn(0L);
         when(groupClassSessions.countByTrainerIdAndStatusAndEndAtAfter(eq(TRAINER_ID),
                 eq(GroupClassSessionStatus.SCHEDULED), any())).thenReturn(0L);
     }
@@ -367,7 +367,7 @@ class AdminTrainerServiceTest {
         Trainer trainer = trainerOf(employeeOf(EmployeeStatus.ACTIVE), TrainerStatus.ACTIVE);
         when(trainers.findByIdForUpdate(TRAINER_ID)).thenReturn(Optional.of(trainer));
         stubNoBlockers();
-        when(privateCourses.countByTrainerTrainerIdAndStatus(TRAINER_ID, CourseStatus.ACTIVE)).thenReturn(1L);
+        when(privateCourses.countByTrainerIdAndStatus(TRAINER_ID, CourseStatus.ACTIVE)).thenReturn(1L);
 
         assertThatThrownBy(() -> service.suspend(TRAINER_ID))
                 .isInstanceOf(BusinessRuleException.class);
@@ -489,6 +489,6 @@ class AdminTrainerServiceTest {
         service.restore(TRAINER_ID);
 
         verify(trainers, never()).save(any());
-        assertThat(trainer.getTrainerId()).isEqualTo(TRAINER_ID);
+        assertThat(trainer.getId()).isEqualTo(TRAINER_ID);
     }
 }

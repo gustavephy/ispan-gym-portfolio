@@ -73,14 +73,14 @@ class ChatServiceTest {
 
     private Employee employee(EmployeeStatus status) {
         Employee employee = new Employee();
-        ReflectionTestUtils.setField(employee, "employeeId", EMPLOYEE_ID);
+        ReflectionTestUtils.setField(employee, "id", EMPLOYEE_ID);
         employee.setStatus(status);
         return employee;
     }
 
     private Trainer activeTrainer() {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(99);
+        trainer.setId(99);
         return trainer;
     }
 
@@ -136,7 +136,7 @@ class ChatServiceTest {
     void 學員傳訊給教練不觸發AI回覆() {
         stubActiveMemberAccount();
         when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee(EmployeeStatus.ACTIVE)));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(activeTrainer()));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(activeTrainer()));
         stubPublisherEchoes("member_10_employee_20");
 
         service.sendFromMember(ACCOUNT_ID,
@@ -159,7 +159,7 @@ class ChatServiceTest {
     void 指定的員工是ACTIVE但不是教練時擋下() {
         stubActiveMemberAccount();
         when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee(EmployeeStatus.ACTIVE)));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.sendFromMember(ACCOUNT_ID,
                 new ChatSendRequest("hi", ChatCounterpartType.EMPLOYEE, EMPLOYEE_ID)))
@@ -174,7 +174,7 @@ class ChatServiceTest {
         when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee(EmployeeStatus.ACTIVE)));
         Trainer deletedTrainer = activeTrainer();
         deletedTrainer.setDeletedAt(java.time.LocalDateTime.now());
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(deletedTrainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(deletedTrainer));
 
         assertThatThrownBy(() -> service.sendFromMember(ACCOUNT_ID,
                 new ChatSendRequest("hi", ChatCounterpartType.EMPLOYEE, EMPLOYEE_ID)))

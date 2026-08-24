@@ -1,6 +1,5 @@
 package tw.com.ispan.gym.repository.course;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,33 +10,18 @@ import tw.com.ispan.gym.entity.course.PrivateCourse;
 import tw.com.ispan.gym.enums.course.CourseStatus;
 
 public interface PrivateCourseRepository extends JpaRepository<PrivateCourse, Integer> {
-	@Query("SELECT p FROM PrivateCourse p WHERE p.trainer.trainerId = :trainerId")
+
+	/** 某教練授課的私教課 */
 	List<PrivateCourse> findByTrainerId(Integer trainerId);
 
 	List<PrivateCourse> findByStatus(CourseStatus status);
-
-	@Query("SELECT p FROM PrivateCourse p " +
-			"WHERE (:status IS NULL OR p.status = :status) " +
-			"AND (:trainerId IS NULL OR p.trainer.trainerId = :trainerId) " +
-			"AND (:categoryId IS NULL OR p.category.courseCategoryId = :categoryId) " +
-			"AND (:keyword IS NULL OR p.name LIKE %:keyword% OR p.trainer.lastName LIKE %:keyword% OR p.trainer.firstName LIKE %:keyword%) " +
-			"AND (:startDate IS NULL OR p.createdAt >= :startDate) " +
-			"AND (:endDate IS NULL OR p.createdAt <= :endDate) " +
-			"ORDER BY p.privateCourseId DESC")
-	List<PrivateCourse> findCoursesWithFilters(
-			@Param("status") CourseStatus status,
-			@Param("trainerId") Integer trainerId,
-			@Param("categoryId") Integer categoryId,
-			@Param("keyword") String keyword,
-			@Param("startDate") LocalDateTime startDate,
-			@Param("endDate") LocalDateTime endDate);
 
 	/**
 	 * 教練停用前檢查用：名下還有幾筆生效中（未下架）的私教課商品。trainer_id 是必填 FK，
 	 * 商品本身沒有「解除指派」的中間狀態，故只看 status，不看日期——本表沒有到期日欄位
 	 * （見 trainer_management_next_phase 規格基準的核對結果）。
 	 */
-	long countByTrainerTrainerIdAndStatus(Integer trainerId, CourseStatus status);
+	long countByTrainerIdAndStatus(Integer trainerId, CourseStatus status);
 
 	/**
 	 * AI 課程推薦（ChatAiResponderService）專用：category 是 LAZY 關聯，該服務組 prompt

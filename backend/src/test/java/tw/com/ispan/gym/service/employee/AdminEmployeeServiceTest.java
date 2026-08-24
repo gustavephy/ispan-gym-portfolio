@@ -41,7 +41,7 @@ import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * 純 Mockito 單元測試（比照 AdminMemberServiceTest），不連資料庫。
- * findEmployeesForAdmin()／findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc() 已 mock：
+ * findEmployeesForAdmin()／findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc() 已 mock：
  * 這裡只驗證 Service 有沒有把參數正確傳給 Repository、狀態機與最後一位 ADMIN 保護是否正確，
  * 驗不到「查得到」——那是 JPQL 本身的正確性，留給真實 DB E2E。
  */
@@ -59,7 +59,7 @@ class AdminEmployeeServiceTest {
         account.setEmail("employee@example.com");
 
         Employee employee = new Employee();
-        employee.setEmployeeId(EMPLOYEE_ID);
+        employee.setId(EMPLOYEE_ID);
         employee.setAccount(account);
         employee.setFirstName("小美");
         employee.setLastName("王");
@@ -87,7 +87,7 @@ class AdminEmployeeServiceTest {
     }
 
     private void noOtherActiveAdmins() {
-        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
+        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
                 .thenReturn(List.of());
     }
 
@@ -271,7 +271,7 @@ class AdminEmployeeServiceTest {
     void getById_成功回傳完整資料() {
         Employee employee = employeeOf(EmployeeRole.EMPLOYEE, EmployeeStatus.ACTIVE);
         when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         AdminEmployeeResponse response = service.getById(EMPLOYEE_ID);
 
@@ -284,7 +284,7 @@ class AdminEmployeeServiceTest {
     void getById_具有效Trainer身分時isTrainer為true() {
         Employee employee = employeeOf(EmployeeRole.EMPLOYEE, EmployeeStatus.ACTIVE);
         when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(new Trainer()));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(new Trainer()));
 
         AdminEmployeeResponse response = service.getById(EMPLOYEE_ID);
 
@@ -315,7 +315,7 @@ class AdminEmployeeServiceTest {
     void update_成功寫入四個欄位() {
         Employee employee = employeeOf(EmployeeRole.EMPLOYEE, EmployeeStatus.ACTIVE);
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         AdminEmployeeResponse response = service.update(EMPLOYEE_ID, validUpdateRequest());
 
@@ -329,7 +329,7 @@ class AdminEmployeeServiceTest {
     void update_不影響role與status() {
         Employee employee = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         service.update(EMPLOYEE_ID, validUpdateRequest());
 
@@ -341,7 +341,7 @@ class AdminEmployeeServiceTest {
     void update_使用悲觀鎖_不呼叫普通findById() {
         Employee employee = employeeOf(EmployeeRole.EMPLOYEE, EmployeeStatus.ACTIVE);
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         service.update(EMPLOYEE_ID, validUpdateRequest());
 
@@ -373,7 +373,7 @@ class AdminEmployeeServiceTest {
     void update_沒有Trainer時一般更新不受影響() {
         Employee employee = employeeOf(EmployeeRole.EMPLOYEE, EmployeeStatus.ACTIVE);
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         assertThatCode(() -> service.update(EMPLOYEE_ID, validUpdateRequest())).doesNotThrowAnyException();
     }
@@ -386,7 +386,7 @@ class AdminEmployeeServiceTest {
         trainer.setFirstName("小美");
         trainer.setLastName("王");
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         service.update(EMPLOYEE_ID, validUpdateRequest());
 
@@ -402,7 +402,7 @@ class AdminEmployeeServiceTest {
         trainer.setFirstName("小美");
         trainer.setLastName("王");
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         service.update(EMPLOYEE_ID, validUpdateRequest());
 
@@ -419,7 +419,7 @@ class AdminEmployeeServiceTest {
         trainer.setFirstName("小美");
         trainer.setLastName("王");
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         service.update(EMPLOYEE_ID, validUpdateRequest());
 
@@ -433,7 +433,7 @@ class AdminEmployeeServiceTest {
         Trainer trainer = new Trainer();
         trainer.setEmail("old-trainer-email@example.com");
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         service.update(EMPLOYEE_ID, validUpdateRequest());
 
@@ -447,7 +447,7 @@ class AdminEmployeeServiceTest {
         trainer.setFirstName("小美");
         trainer.setLastName("王");
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         AdminEmployeeUpdateRequest request = validUpdateRequest();
         request.setFirstName("小美");
@@ -465,12 +465,12 @@ class AdminEmployeeServiceTest {
     void changeRole_升級成功_不查有效ADMIN集合() {
         Employee employee = employeeOf(EmployeeRole.EMPLOYEE, EmployeeStatus.ACTIVE);
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         AdminEmployeeResponse response = service.changeRole(EMPLOYEE_ID, roleRequest(EmployeeRole.ADMIN));
 
         assertThat(response.role()).isEqualTo(EmployeeRole.ADMIN);
-        verify(employees, never()).findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(any(), any());
+        verify(employees, never()).findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(any(), any());
     }
 
     @Test
@@ -505,10 +505,10 @@ class AdminEmployeeServiceTest {
     void changeRole_降級成功_當有其他有效ADMIN時() {
         Employee employee = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
         Employee otherAdmin = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
-        otherAdmin.setEmployeeId(99);
-        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
+        otherAdmin.setId(99);
+        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(employee, otherAdmin));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         AdminEmployeeResponse response = service.changeRole(EMPLOYEE_ID, roleRequest(EmployeeRole.EMPLOYEE));
 
@@ -518,7 +518,7 @@ class AdminEmployeeServiceTest {
     @Test
     void changeRole_降級最後一位有效ADMIN時丟BusinessRule() {
         Employee employee = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
-        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
+        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(employee));
 
         assertThatThrownBy(() -> service.changeRole(EMPLOYEE_ID, roleRequest(EmployeeRole.EMPLOYEE)))
@@ -571,8 +571,8 @@ class AdminEmployeeServiceTest {
     void changeRole_ADMIN可以降級自己_只要不是最後一位() {
         Employee self = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
         Employee otherAdmin = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
-        otherAdmin.setEmployeeId(99);
-        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
+        otherAdmin.setId(99);
+        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(self, otherAdmin));
 
         assertThatCode(() -> service.changeRole(EMPLOYEE_ID, roleRequest(EmployeeRole.EMPLOYEE)))
@@ -586,7 +586,7 @@ class AdminEmployeeServiceTest {
         Employee employee = employeeOf(EmployeeRole.EMPLOYEE, EmployeeStatus.ACTIVE);
         noOtherActiveAdmins();
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         service.suspend(EMPLOYEE_ID);
 
@@ -597,10 +597,10 @@ class AdminEmployeeServiceTest {
     void suspend_ACTIVE的ADMIN當還有其他有效ADMIN時可停用() {
         Employee employee = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
         Employee otherAdmin = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
-        otherAdmin.setEmployeeId(99);
-        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
+        otherAdmin.setId(99);
+        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(employee, otherAdmin));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         service.suspend(EMPLOYEE_ID);
 
@@ -610,7 +610,7 @@ class AdminEmployeeServiceTest {
     @Test
     void suspend_最後一位有效ADMIN時丟BusinessRule() {
         Employee employee = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
-        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
+        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(employee));
 
         assertThatThrownBy(() -> service.suspend(EMPLOYEE_ID))
@@ -623,10 +623,10 @@ class AdminEmployeeServiceTest {
     void suspend_ADMIN可以停用自己_只要不是最後一位() {
         Employee self = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
         Employee otherAdmin = employeeOf(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
-        otherAdmin.setEmployeeId(99);
-        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
+        otherAdmin.setId(99);
+        when(employees.findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(EmployeeRole.ADMIN, EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(self, otherAdmin));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         assertThatCode(() -> service.suspend(EMPLOYEE_ID)).doesNotThrowAnyException();
         assertThat(self.getStatus()).isEqualTo(EmployeeStatus.INACTIVE);
@@ -683,7 +683,7 @@ class AdminEmployeeServiceTest {
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
         Trainer trainer = new Trainer();
         trainer.setStatus(TrainerStatus.ACTIVE);
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         assertThatThrownBy(() -> service.suspend(EMPLOYEE_ID))
                 .isInstanceOf(BusinessRuleException.class);
@@ -697,7 +697,7 @@ class AdminEmployeeServiceTest {
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
         Trainer trainer = new Trainer();
         trainer.setStatus(TrainerStatus.UNAVAILABLE);
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         assertThatThrownBy(() -> service.suspend(EMPLOYEE_ID))
                 .isInstanceOf(BusinessRuleException.class);
@@ -710,7 +710,7 @@ class AdminEmployeeServiceTest {
         when(employees.findByIdForUpdate(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
         Trainer trainer = new Trainer();
         trainer.setDeletedAt(LocalDateTime.now());
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         service.suspend(EMPLOYEE_ID);
 
@@ -774,6 +774,6 @@ class AdminEmployeeServiceTest {
 
         service.activate(EMPLOYEE_ID);
 
-        verify(employees, never()).findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(any(), any());
+        verify(employees, never()).findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(any(), any());
     }
 }

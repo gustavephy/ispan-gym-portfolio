@@ -51,14 +51,14 @@ class GroupCourseServiceTest {
         employee.setAccount(account);
 
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(TRAINER_ID);
+        trainer.setId(TRAINER_ID);
         trainer.setEmployee(employee);
         return trainer;
     }
 
     private GroupCourse course(CourseStatus status) {
         GroupCourse course = new GroupCourse();
-        course.setGroupCourseId(COURSE_ID);
+        course.setId(COURSE_ID);
         course.setName("戰鬥有氧");
         course.setMaxCapacity(15);
         course.setTrainer(trainer());
@@ -81,13 +81,13 @@ class GroupCourseServiceTest {
         when(trainerService.lockAndAssertAvailableForNewBusiness(TRAINER_ID)).thenReturn(trainer());
         when(courses.save(any(GroupCourse.class))).thenAnswer(inv -> {
             GroupCourse c = inv.getArgument(0);
-            c.setGroupCourseId(COURSE_ID);
+            c.setId(COURSE_ID);
             return c;
         });
 
         GroupCourseResponse response = service.createCourse(request());
 
-        assertThat(response.id()).isEqualTo(COURSE_ID);
+        assertThat(response.getId()).isEqualTo(COURSE_ID);
         verify(trainerService).lockAndAssertAvailableForNewBusiness(TRAINER_ID);
     }
 
@@ -122,7 +122,7 @@ class GroupCourseServiceTest {
 
         GroupCourseResponse response = service.activateCourse(COURSE_ID);
 
-        assertThat(response.status()).isEqualTo(CourseStatus.ACTIVE);
+        assertThat(response.getStatus()).isEqualTo(CourseStatus.ACTIVE);
         verify(trainerService).lockAndAssertAvailableForNewBusiness(TRAINER_ID);
     }
 
@@ -146,7 +146,7 @@ class GroupCourseServiceTest {
 
         GroupCourseResponse response = service.activateCourse(COURSE_ID);
 
-        assertThat(response.status()).isEqualTo(CourseStatus.ACTIVE);
+        assertThat(response.getStatus()).isEqualTo(CourseStatus.ACTIVE);
         verify(trainerService, never()).lockAndAssertAvailableForNewBusiness(any());
         verify(courses, never()).save(any());
     }

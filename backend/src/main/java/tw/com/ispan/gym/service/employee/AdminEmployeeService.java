@@ -82,7 +82,7 @@ public class AdminEmployeeService {
         // 之後、下次部署或重啟之前，這段時間內兩邊姓名仍會不一致，所以這裡的同步仍然必要，
         // 用來即時維持一致，不是被那個機制取代。涵蓋已軟刪除的 Trainer（revive-not-recreate，
         // 恢復後才不會看到舊姓名），不同步 email——Account email 修改不在本階段範圍內。
-        trainers.findByEmployeeEmployeeId(employeeId).ifPresent(trainer -> {
+        trainers.findByEmployeeId(employeeId).ifPresent(trainer -> {
             trainer.setFirstName(employee.getFirstName());
             trainer.setLastName(employee.getLastName());
         });
@@ -101,10 +101,10 @@ public class AdminEmployeeService {
     private AdminEmployeeResponse demoteToEmployee(Integer employeeId) {
         // 降級一定先鎖整組有效 ADMIN——目標若真的是可降級的 ACTIVE ADMIN，必然在這個集合裡；
         // 若不在（不是 ADMIN、不是 ACTIVE，或不存在），回退成一般鎖定查詢以取得正確的錯誤訊息。
-        List<Employee> activeAdmins = employees.findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(
+        List<Employee> activeAdmins = employees.findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(
                 EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
         Employee employee = activeAdmins.stream()
-                .filter(e -> e.getEmployeeId().equals(employeeId))
+                .filter(e -> e.getId().equals(employeeId))
                 .findFirst()
                 .orElseGet(() -> lockOrThrow(employeeId));
 
@@ -139,10 +139,10 @@ public class AdminEmployeeService {
 
     @Transactional
     public void suspend(Integer employeeId) {
-        List<Employee> activeAdmins = employees.findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(
+        List<Employee> activeAdmins = employees.findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(
                 EmployeeRole.ADMIN, EmployeeStatus.ACTIVE);
         Employee employee = activeAdmins.stream()
-                .filter(e -> e.getEmployeeId().equals(employeeId))
+                .filter(e -> e.getId().equals(employeeId))
                 .findFirst()
                 .orElseGet(() -> lockOrThrow(employeeId));
 
@@ -157,7 +157,7 @@ public class AdminEmployeeService {
             throw new BusinessRuleException("必須至少保留一位有效管理員，無法停用最後一位");
         }
 
-        trainers.findByEmployeeEmployeeId(employeeId)
+        trainers.findByEmployeeId(employeeId)
                 .filter(t -> t.getDeletedAt() == null)
                 .ifPresent(t -> {
                     throw new BusinessRuleException("此員工仍具有效教練身分，須待 Trainer 管理階段釋出教練身分後才能停用");
@@ -178,7 +178,7 @@ public class AdminEmployeeService {
     }
 
     private boolean isTrainer(Integer employeeId) {
-        return trainers.findByEmployeeEmployeeId(employeeId).filter(t -> t.getDeletedAt() == null).isPresent();
+        return trainers.findByEmployeeId(employeeId).filter(t -> t.getDeletedAt() == null).isPresent();
     }
 
     private Employee lockOrThrow(Integer employeeId) {

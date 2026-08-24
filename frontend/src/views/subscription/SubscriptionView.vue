@@ -39,6 +39,8 @@ async function loadPlans() {
 }
 
 async function loadMySubscription() {
+  // 未登入者不查：這支 API 需要登入，401 會被 axios 攔截器當成 session 過期，
+  // 強制登出並導向 /login，把原本可以匿名瀏覽方案的訪客也一併踢出去
   if (!auth.isLoggedIn) {
     mySubscription.value = null
     return
@@ -47,7 +49,7 @@ async function loadMySubscription() {
     const res = await getMySubscription()
     mySubscription.value = res.data
   } catch {
-    mySubscription.value = null
+    mySubscription.value = null // 尚無任何訂閱紀錄，後端回 404，屬正常情況
   }
 }
 
@@ -63,7 +65,9 @@ async function purchase(plan) {
       couponCode: null,
     })
     submitEcpayForm(res.data.ecpayForm)
+    // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 purchasingId，避免使用者在轉導期間重複點擊
   } catch (err) {
+    // 攔截器已正規化錯誤，訊息在 err.message；err.response 不存在（見 normalizeApiError）
     showFeedback(err.message || '訂閱失敗，請稍後再試', 'error')
     purchasingId.value = null
   }
@@ -101,6 +105,10 @@ onMounted(() => {
         {{ mySubscription.isActive ? statusLabels.ACTIVE : (statusLabels[mySubscription.status] || mySubscription.status) }}
       </span>
     </div>
+
+    <p v-if="hasActiveSubscription" class="active-notice">
+      您目前已有有效訂閱，到期後才能購買下一期方案。
+    </p>
 
     <div v-if="loading" class="spinner"></div>
 
@@ -360,10 +368,6 @@ onMounted(() => {
   margin: 0;
 }
 
-.panel-icon {
-  font-size: 1.2rem;
-}
-
 .faq-list {
   display: flex;
   flex-direction: column;
@@ -430,7 +434,14 @@ onMounted(() => {
   background: #d4f4dd;
   color: #157347;
 }
-
+.active-notice {
+  font-size: 0.85rem;
+  color: var(--accent-hover);
+  background: var(--bg-soft);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  margin-bottom: 1.5rem;
+}
 .empty-state {
   text-align: center;
   padding: 4rem 0;

@@ -25,7 +25,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Integer> {
 	List<Employee> findByRoleAndStatusAndDeletedAtIsNull(EmployeeRole role, EmployeeStatus status);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@Query("select e from Employee e where e.employeeId = :id")
+	@Query("select e from Employee e where e.id = :id")
 	Optional<Employee> findByIdForUpdate(@Param("id") Integer id);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -35,10 +35,10 @@ public interface EmployeeRepository extends JpaRepository<Employee, Integer> {
 	/**
 	 * 悲觀鎖定整組有效 ADMIN（role=ADMIN 且 status=ACTIVE 且未軟刪除），依 employeeId 升冪排序。
 	 * 降級／停用會減少有效 ADMIN 數量的操作皆須先鎖定這個集合再檢查數量，且鎖定順序必須固定
-	 * 為 employeeId ASC，避免兩個併發交易以相反順序鎖定造成 deadlock（見 employee_management_phase_scope）。
+	 * 為 id ASC，避免兩個併發交易以相反順序鎖定造成 deadlock（見 employee_management_phase_scope）。
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	List<Employee> findByRoleAndStatusAndDeletedAtIsNullOrderByEmployeeIdAsc(EmployeeRole role, EmployeeStatus status);
+	List<Employee> findByRoleAndStatusAndDeletedAtIsNullOrderByIdAsc(EmployeeRole role, EmployeeStatus status);
 
 	/**
 	 * ADMIN 員工列表：關鍵字不分大小寫比對姓名／手機／登入 email，狀態與角色可篩選（不傳＝全部），

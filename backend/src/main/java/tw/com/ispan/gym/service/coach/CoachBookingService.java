@@ -147,10 +147,10 @@ public class CoachBookingService {
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此時段"));
                 // §9 跨模組防護：教練若已 UNAVAILABLE 或軟刪除，即使時段本身還顯示 AVAILABLE
                 // 也不可接受新預約，不能只靠前端隱藏按鈕擋（見 trainer_management_next_phase 規格基準）。
-                // 只取 .getTrainerId()（lazy proxy，不觸發初始化，見 TrainerService 的方法註解），
+                // 只取 .getId()（lazy proxy，不觸發初始化，見 TrainerService 的方法註解），
                 // 真正的鎖定讀取交給 lockAndAssertAvailableForNewBusiness()，
                 // 這樣才能跟 AdminTrainerService.suspend() 搶同一顆鎖，堵住競態。
-                Integer trainerId = coachSlot.getTrainer().getTrainerId();
+                Integer trainerId = coachSlot.getTrainer().getId();
                 trainerService.lockAndAssertAvailableForNewBusiness(trainerId);
                 List<MemberCourseQuota> eligibleQuota = memberCourseQuotaRepository.findEligibleQuota(memberId,
                                 trainerId);
@@ -271,7 +271,7 @@ public class CoachBookingService {
 
                 CoachBookingResponse response = new CoachBookingResponse(bookingId,
                                 saveBooking.getCoachSlot().getId(),
-                                saveBooking.getCoachSlot().getTrainer().getTrainerId(),
+                                saveBooking.getCoachSlot().getTrainer().getId(),
                                 saveBooking.getCoachSlot().getStartAt(), saveBooking.getCoachSlot().getEndAt(),
                                 saveBooking.getStatus(), saveBooking.getCheckInKey(),
                                 quota.getRemainingCourse());
@@ -295,7 +295,7 @@ public class CoachBookingService {
                 CoachBooking coachBooking = coachBookingRepository.findById(bookingId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此預約"));
 
-                if (!coachBooking.getCoachSlot().getTrainer().getTrainerId().equals(trainer.getTrainerId())) {
+                if (!coachBooking.getCoachSlot().getTrainer().getId().equals(trainer.getId())) {
                         throw new ForbiddenAccessException("無權核銷此預約：" + bookingId);
                 }
 
@@ -335,11 +335,11 @@ public class CoachBookingService {
                                 "教練核銷到場上課", trainer);
 
                 log.info("教練{}核銷預約, bookingId={}, memberId={}, quotaId={}",
-                                trainer.getTrainerId(), bookingId, coachBooking.getMember().getId(), quota.getId());
+                                trainer.getId(), bookingId, coachBooking.getMember().getId(), quota.getId());
 
                 CoachBookingResponse response = new CoachBookingResponse(saveBooking.getId(),
                                 saveBooking.getCoachSlot().getId(),
-                                trainer.getTrainerId(),
+                                trainer.getId(),
                                 saveBooking.getCoachSlot().getStartAt(), saveBooking.getCoachSlot().getEndAt(),
                                 saveBooking.getStatus(), saveBooking.getCheckInKey(),
                                 quota.getRemainingCourse());
@@ -443,7 +443,7 @@ public class CoachBookingService {
                                         return new CoachBookingHistoryResponse(
                                                         booking.getId(),
                                                         booking.getCoachSlot().getId(),
-                                                        booking.getCoachSlot().getTrainer().getTrainerId(),
+                                                        booking.getCoachSlot().getTrainer().getId(),
                                                         booking.getCoachSlot().getStartAt(),
                                                         booking.getCoachSlot().getEndAt(),
                                                         booking.getStatus(), booking.getCheckInKey(),

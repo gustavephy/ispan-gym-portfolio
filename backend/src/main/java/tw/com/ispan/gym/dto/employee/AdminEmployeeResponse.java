@@ -30,9 +30,9 @@ public record AdminEmployeeResponse(
         Employee reviewer = employee.getReviewedBy();
         EmployeeReviewerSummary reviewedBy = reviewer == null
                 ? null
-                : new EmployeeReviewerSummary(reviewer.getEmployeeId(), reviewer.getLastName() + reviewer.getFirstName());
+                : new EmployeeReviewerSummary(reviewer.getId(), reviewer.getLastName() + reviewer.getFirstName());
         return new AdminEmployeeResponse(
-                employee.getEmployeeId(),
+                employee.getId(),
                 displayName,
                 employee.getAccount().getEmail(),
                 employee.getFirstName(),

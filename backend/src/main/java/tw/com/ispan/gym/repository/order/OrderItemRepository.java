@@ -14,6 +14,13 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Integer> {
     List<OrderItem> findAllByOrderIdOrderByIdAsc(Integer orderId);
 
     /**
+     * 這筆訂單是否含實體商品（product_id 非空的明細列）。
+     * 用於「完成訂單」前判斷該不該要求先出貨——私教課與訂閱方案沒有實體要寄，
+     * 付款後即可直接完成；實體商品則必須經過出貨。
+     */
+    boolean existsByOrderIdAndProductIsNotNull(Integer orderId);
+
+    /**
      * 商品／私教課銷售聚合（報表用）。統計以 order_item 為準（成交當下的快照數字），
      * 名稱取 MAX(productNameAtBuy) 快照，改名後不影響歷史統計。
      * 雙 FK 用 LEFT JOIN 各自帶出 id，品項型別由 service 依哪一側非空判別

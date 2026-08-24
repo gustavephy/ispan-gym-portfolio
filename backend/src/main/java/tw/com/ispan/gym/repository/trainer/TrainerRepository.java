@@ -17,7 +17,7 @@ import tw.com.ispan.gym.enums.trainer.TrainerStatus;
 public interface TrainerRepository extends JpaRepository<Trainer, Integer> {
 
 	/** 依員工帳號查教練檔案；一位員工至多一筆（不分軟刪除，建立前的重複檢查要用這個） */
-	Optional<Trainer> findByEmployeeEmployeeId(Integer employeeId);
+	Optional<Trainer> findByEmployeeId(Integer employeeId);
 
 	List<Trainer> findByStatusAndDeletedAtIsNull(TrainerStatus status);
 
@@ -26,7 +26,7 @@ public interface TrainerRepository extends JpaRepository<Trainer, Integer> {
 
 	/** 教練本人 PUT 用：依 employeeId 悲觀鎖定，不分軟刪除（Service 自行判斷是否可用） */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@Query("select t from Trainer t where t.employee.employeeId = :employeeId")
+	@Query("select t from Trainer t where t.employee.id = :employeeId")
 	Optional<Trainer> findByEmployeeIdForUpdate(@Param("employeeId") Integer employeeId);
 
 	/**
@@ -38,12 +38,12 @@ public interface TrainerRepository extends JpaRepository<Trainer, Integer> {
 	 * 舊物件，鎖形同虛設。純量投影不會把實體放進 persistence context，可以安全地
 	 * 用來解出 id 而不影響後續的鎖定讀取。
 	 */
-	@Query("select t.trainerId from Trainer t where t.employee.employeeId = :employeeId")
+	@Query("select t.id from Trainer t where t.employee.id = :employeeId")
 	Optional<Integer> findIdByEmployeeId(@Param("employeeId") Integer employeeId);
 
 	/** ADMIN 修改／狀態切換／停用／恢復共用：依 trainerId 悲觀鎖定，不分軟刪除 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@Query("select t from Trainer t where t.trainerId = :trainerId")
+	@Query("select t from Trainer t where t.id = :trainerId")
 	Optional<Trainer> findByIdForUpdate(@Param("trainerId") Integer trainerId);
 
 	/**

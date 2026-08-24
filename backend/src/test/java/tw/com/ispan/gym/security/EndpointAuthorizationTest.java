@@ -45,6 +45,8 @@ import tw.com.ispan.gym.service.coupon.EmployeeCouponService;
 import tw.com.ispan.gym.service.employee.AdminEmployeeService;
 import tw.com.ispan.gym.service.employee.EmployeeProfileService;
 import tw.com.ispan.gym.service.employee.EmployeeReviewService;
+import tw.com.ispan.gym.service.idempotency.IdempotencyService;
+import tw.com.ispan.gym.service.order.AdminOrderQueryService;
 import tw.com.ispan.gym.service.order.OrderQueryService;
 import tw.com.ispan.gym.service.order.OrderService;
 import tw.com.ispan.gym.service.payment.EcpayService;
@@ -228,6 +230,12 @@ class EndpointAuthorizationTest {
         @Bean @Primary OrderQueryService orderQueryService() {
             return Mockito.mock(OrderQueryService.class);
         }
+        @Bean @Primary AdminOrderQueryService adminOrderQueryService() {
+            return Mockito.mock(AdminOrderQueryService.class);
+        }
+        @Bean @Primary IdempotencyService idempotencyService() {
+            return Mockito.mock(IdempotencyService.class);
+        }
         @Bean @Primary EcpayService ecpayService() {
             return Mockito.mock(EcpayService.class);
         }
@@ -321,12 +329,12 @@ class EndpointAuthorizationTest {
         Mockito.when(members.findByAccountId(6)).thenReturn(Optional.of(member));
 
         Employee employee = new Employee();
-        employee.setEmployeeId(266);
+        employee.setId(266);
         employee.setAccount(account);
         employee.setRole(EmployeeRole.EMPLOYEE);
         employee.setStatus(EmployeeStatus.ACTIVE);
         Mockito.when(employees.findByAccountId(6)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(266)).thenReturn(Optional.empty());
+        Mockito.when(trainers.findByEmployeeId(266)).thenReturn(Optional.empty());
 
         return jwtUtil.generateToken(account);
     }
@@ -335,12 +343,12 @@ class EndpointAuthorizationTest {
     private String employeeToken() {
         Account account = account(2, "employee@example.com", AccountType.EMPLOYEE);
         Employee employee = new Employee();
-        employee.setEmployeeId(22);
+        employee.setId(22);
         employee.setAccount(account);
         employee.setRole(EmployeeRole.EMPLOYEE);
         employee.setStatus(EmployeeStatus.ACTIVE);
         Mockito.when(employees.findByAccountId(2)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(22)).thenReturn(Optional.empty());
+        Mockito.when(trainers.findByEmployeeId(22)).thenReturn(Optional.empty());
         return jwtUtil.generateToken(account);
     }
 
@@ -348,12 +356,12 @@ class EndpointAuthorizationTest {
     private String adminToken() {
         Account account = account(3, "admin@example.com", AccountType.EMPLOYEE);
         Employee employee = new Employee();
-        employee.setEmployeeId(33);
+        employee.setId(33);
         employee.setAccount(account);
         employee.setRole(EmployeeRole.ADMIN);
         employee.setStatus(EmployeeStatus.ACTIVE);
         Mockito.when(employees.findByAccountId(3)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(33)).thenReturn(Optional.empty());
+        Mockito.when(trainers.findByEmployeeId(33)).thenReturn(Optional.empty());
         return jwtUtil.generateToken(account);
     }
 
@@ -365,7 +373,7 @@ class EndpointAuthorizationTest {
     private String inactiveEmployeeToken() {
         Account account = account(7, "inactive-employee@example.com", AccountType.EMPLOYEE);
         Employee employee = new Employee();
-        employee.setEmployeeId(77);
+        employee.setId(77);
         employee.setAccount(account);
         employee.setRole(EmployeeRole.EMPLOYEE);
         employee.setStatus(EmployeeStatus.INACTIVE);
@@ -390,7 +398,7 @@ class EndpointAuthorizationTest {
         Mockito.when(members.findByAccountId(8)).thenReturn(Optional.of(member));
 
         Employee employee = new Employee();
-        employee.setEmployeeId(288);
+        employee.setId(288);
         employee.setAccount(account);
         employee.setRole(EmployeeRole.EMPLOYEE);
         employee.setStatus(EmployeeStatus.INACTIVE);
@@ -403,7 +411,7 @@ class EndpointAuthorizationTest {
     private String trainerToken() {
         Account account = account(4, "trainer@example.com", AccountType.EMPLOYEE);
         Employee employee = new Employee();
-        employee.setEmployeeId(44);
+        employee.setId(44);
         employee.setAccount(account);
         employee.setRole(EmployeeRole.EMPLOYEE);
         employee.setStatus(EmployeeStatus.ACTIVE);
@@ -412,7 +420,7 @@ class EndpointAuthorizationTest {
         trainer.setEmployee(employee);
         // 教練身分只看 trainer 資料列是否存在且未軟刪除，與 status 無關（見 AccountAuthorityResolver）
         trainer.setStatus(TrainerStatus.ACTIVE);
-        Mockito.when(trainers.findByEmployeeEmployeeId(44)).thenReturn(Optional.of(trainer));
+        Mockito.when(trainers.findByEmployeeId(44)).thenReturn(Optional.of(trainer));
         return jwtUtil.generateToken(account);
     }
 

@@ -47,8 +47,11 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
         @Query("SELECT s FROM CoachSlot s WHERE s.trainer.id = :trainerId AND s.status = :status ORDER BY s.startAt ASC")
         List<CoachSlot> findByTrainerIdAndStatusOrderByStartAtAsc(@Param("trainerId") Integer trainerId, @Param("status") SlotStatus status);
 
-        @Query("SELECT s FROM CoachSlot s WHERE s.trainer.trainerId = :trainerId")
-        Page<CoachSlot> findByTrainerId(@Param("trainerId") Integer trainerId, Pageable pageable);
+        /**
+         * 分頁查詢某位教練的所有時段（含所有狀態），排序交給呼叫端組出的 Pageable 決定。
+         * 不需要搜尋參數，衍生查詢方法名稱就能處理，不用寫 JPQL。
+         */
+        Page<CoachSlot> findByTrainerId(Integer trainerId, Pageable pageable);
 
         /**
          * 教練停用前檢查用：名下還有多少「未完成」時段——排除 CANCELLED，且結束時間仍在未來。

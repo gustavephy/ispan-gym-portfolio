@@ -45,7 +45,7 @@ class EmployeeProfileServiceTest {
         account.setEmail("employee@example.com");
 
         Employee employee = new Employee();
-        employee.setEmployeeId(EMPLOYEE_ID);
+        employee.setId(EMPLOYEE_ID);
         employee.setAccount(account);
         employee.setFirstName("小美");
         employee.setLastName("王");
@@ -69,7 +69,7 @@ class EmployeeProfileServiceTest {
     void getMyProfile_ACTIVE員工查自己_回傳完整資料() {
         Employee employee = employeeOf(EmployeeStatus.ACTIVE);
         when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         EmployeeProfileResponse response = service.getMyProfile(EMPLOYEE_ID);
 
@@ -83,7 +83,7 @@ class EmployeeProfileServiceTest {
     void getMyProfile_具有效Trainer身分時isTrainer為true() {
         Employee employee = employeeOf(EmployeeStatus.ACTIVE);
         when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(new Trainer()));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(new Trainer()));
 
         EmployeeProfileResponse response = service.getMyProfile(EMPLOYEE_ID);
 
@@ -96,7 +96,7 @@ class EmployeeProfileServiceTest {
         Trainer trainer = new Trainer();
         trainer.setDeletedAt(LocalDateTime.now());
         when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
 
         EmployeeProfileResponse response = service.getMyProfile(EMPLOYEE_ID);
 
@@ -159,7 +159,7 @@ class EmployeeProfileServiceTest {
     void updateMyProfile_以account_id悲觀鎖讀取_不預先載入Employee() {
         Employee employee = employeeOf(EmployeeStatus.ACTIVE);
         when(employees.findByAccountIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         service.updateMyProfile(ACCOUNT_ID, validRequest());
 
@@ -173,7 +173,7 @@ class EmployeeProfileServiceTest {
     void updateMyProfile_成功寫入phone_不影響姓名() {
         Employee employee = employeeOf(EmployeeStatus.ACTIVE);
         when(employees.findByAccountIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         EmployeeProfileResponse response = service.updateMyProfile(ACCOUNT_ID, validRequest());
 
@@ -224,7 +224,7 @@ class EmployeeProfileServiceTest {
     void updateMyProfile_不會更動role或status() {
         Employee employee = employeeOf(EmployeeStatus.ACTIVE);
         when(employees.findByAccountIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         service.updateMyProfile(ACCOUNT_ID, validRequest());
 

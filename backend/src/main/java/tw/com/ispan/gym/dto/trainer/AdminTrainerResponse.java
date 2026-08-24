@@ -29,8 +29,8 @@ public record AdminTrainerResponse(
     public static AdminTrainerResponse from(Trainer trainer) {
         String displayName = trainer.getEmployee().getLastName() + trainer.getEmployee().getFirstName();
         return new AdminTrainerResponse(
-                trainer.getTrainerId(),
-                trainer.getEmployee().getEmployeeId(),
+                trainer.getId(),
+                trainer.getEmployee().getId(),
                 displayName,
                 trainer.getEmployee().getAccount().getEmail(),
                 trainer.getEmployee().getStatus(),

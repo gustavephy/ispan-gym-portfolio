@@ -87,6 +87,7 @@ class TrainerMethodSecurityTest {
     @Import({
         MockedBeans.class,
         RelaxedUrlSecurityConfig.class,
+        // 受測的正牌 controller，未做任何調整
         tw.com.ispan.gym.controller.trainer.TrainerController.class,
         tw.com.ispan.gym.controller.trainer.TrainerProfileController.class,
         tw.com.ispan.gym.controller.trainer.AdminTrainerController.class,
@@ -220,12 +221,12 @@ class TrainerMethodSecurityTest {
         Mockito.when(accounts.findByEmailIgnoreCase(email)).thenReturn(Optional.of(account));
 
         Employee employee = new Employee();
-        employee.setEmployeeId(employeeId);
+        employee.setId(employeeId);
         employee.setAccount(account);
         employee.setRole(role);
         employee.setStatus(EmployeeStatus.ACTIVE);
         Mockito.when(employees.findByAccountId(accountId)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(employeeId)).thenReturn(Optional.empty());
+        Mockito.when(trainers.findByEmployeeId(employeeId)).thenReturn(Optional.empty());
 
         return jwtUtil.generateToken(account);
     }
@@ -250,17 +251,17 @@ class TrainerMethodSecurityTest {
         Mockito.when(accounts.findByEmailIgnoreCase("trainer@example.com")).thenReturn(Optional.of(account));
 
         Employee employee = new Employee();
-        employee.setEmployeeId(employeeId);
+        employee.setId(employeeId);
         employee.setAccount(account);
         employee.setRole(EmployeeRole.EMPLOYEE);
         employee.setStatus(EmployeeStatus.ACTIVE);
         Mockito.when(employees.findByAccountId(accountId)).thenReturn(Optional.of(employee));
 
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(77);
+        trainer.setId(77);
         trainer.setEmployee(employee);
         trainer.setStatus(TrainerStatus.ACTIVE);
-        Mockito.when(trainers.findByEmployeeEmployeeId(employeeId)).thenReturn(Optional.of(trainer));
+        Mockito.when(trainers.findByEmployeeId(employeeId)).thenReturn(Optional.of(trainer));
 
         return jwtUtil.generateToken(account);
     }

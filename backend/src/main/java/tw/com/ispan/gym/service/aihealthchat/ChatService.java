@@ -220,7 +220,7 @@ public class ChatService {
         if (employee.getDeletedAt() != null || employee.getStatus() != EmployeeStatus.ACTIVE) {
             throw new ForbiddenAccessException("此員工帳號目前無法使用");
         }
-        return employee.getEmployeeId();
+        return employee.getId();
     }
 
     /**
@@ -237,7 +237,7 @@ public class ChatService {
         if (employee.getDeletedAt() != null || employee.getStatus() != EmployeeStatus.ACTIVE) {
             throw new ResourceNotFoundException("找不到教練／員工：" + employeeId);
         }
-        boolean hasActiveTrainer = trainers.findByEmployeeEmployeeId(employeeId)
+        boolean hasActiveTrainer = trainers.findByEmployeeId(employeeId)
                 .filter(t -> t.getDeletedAt() == null)
                 .isPresent();
         if (!hasActiveTrainer) {
