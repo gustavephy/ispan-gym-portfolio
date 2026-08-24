@@ -84,7 +84,7 @@ watch(
 
       <div class="product-info">
         <h1 class="product-name">{{ product.name }}</h1>
-        <p class="product-category" v-if="product.categoryName">分類：{{ product.categoryName }}</p>
+        <p class="product-category" v-if="product.productCategoryName">分類：{{ product.productCategoryName }}</p>
         <p class="product-desc">{{ product.description }}</p>
 
         <div class="price-row">

@@ -395,8 +395,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
      * 組員自己在後台新增的內容不該被本 runner 覆蓋或刪除。
      */
     private void ensureCatalogData(Employee coachEmployee) {
-        ProductCategory supplementCategory = ensureProductCategory();
-        ensureProducts(supplementCategory);
+        java.util.Map<String, ProductCategory> productCats = ensureProductCategories();
+        ensureProducts(productCats);
         ensureSubscriptionPlans();
         List<CourseCategory> categories = ensureCourseCategories();
         ensureGroupCourseAndSession(coachEmployee, categories);
@@ -572,33 +572,42 @@ public class TestDataSeedRunner implements CommandLineRunner {
         }
     }
 
-    private ProductCategory ensureProductCategory() {
-        return productCategories.findAll().stream().findFirst().orElseGet(() -> {
-            ProductCategory category = new ProductCategory();
-            category.setName("運動補給");
-            ProductCategory saved = productCategories.save(category);
-            log.info("已建立測試商品分類：{}", saved.getName());
-            return saved;
-        });
+    private java.util.Map<String, ProductCategory> ensureProductCategories() {
+        List<String> names = List.of("補給品", "器材", "配件");
+        java.util.Map<String, ProductCategory> map = new java.util.LinkedHashMap<>();
+        for (String name : names) {
+            ProductCategory cat = productCategories.findAll().stream()
+                    .filter(c -> name.equals(c.getName()))
+                    .findFirst()
+                    .orElseGet(() -> {
+                        ProductCategory c = new ProductCategory();
+                        c.setName(name);
+                        ProductCategory saved = productCategories.save(c);
+                        log.info("已建立測試商品分類：{}", name);
+                        return saved;
+                    });
+            map.put(name, cat);
+        }
+        return map;
     }
 
     /**
      * 逐筆以名稱比對補建，不是「整張表空的才播種」——早期資料庫已經有一兩筆手動建立的
      * 商品，用整表判斷會讓這批種子永遠不會進去，商城與報表都只有零星資料可看。
      */
-    private void ensureProducts(ProductCategory category) {
-        record Seed(String name, String price, int stock, String brand, String flavor, String desc) {}
+    private void ensureProducts(java.util.Map<String, ProductCategory> catMap) {
+        record Seed(String name, String price, int stock, String brand, Double weight, String flavor, String size, String color, String material, String origin, String cat) {}
         List<Seed> seeds = List.of(
-                new Seed("乳清蛋白 1kg", "1280", 50, "MyProtein", "巧克力", "每份 24g 蛋白質，訓練後補給首選。"),
-                new Seed("BCAA 支鏈胺基酸", "890", 30, "Optimum", "莓果", "訓練中補充，延緩疲勞。"),
-                new Seed("搖搖杯 700ml", "250", 100, "Blender", null, "防漏設計，附攪拌球。"),
-                new Seed("健身手套", "450", 20, "Harbinger", null, "止滑耐磨，保護掌心。"),
-                new Seed("能量棒（12入）", "600", 0, "Quest", "花生", "高蛋白低糖，隨身補給。"),
-                new Seed("肌酸 300g", "780", 40, "Optimum", null, "提升爆發力與訓練表現。"),
-                new Seed("彈力帶組（5條）", "520", 60, "TheraBand", null, "五種阻力，適合暖身與居家訓練。"),
-                new Seed("運動毛巾", "180", 120, "Willy", null, "吸汗快乾，健身房必備。"),
-                new Seed("瑜珈墊 6mm", "990", 25, "Manduka", null, "止滑防潑水，附收納背帶。"),
-                new Seed("護腕（一對）", "320", 45, "Harbinger", null, "大重量訓練穩定腕關節。"));
+                new Seed("乳清蛋白 1kg", "1280", 999, "MyProtein", 1.0, "巧克力", "1kg", "無", "粉末", "英國", "補給品"),
+                new Seed("BCAA 支鏈胺基酸", "890", 999, "Optimum", 0.3, "莓果", "300g", "無", "粉末", "美國", "補給品"),
+                new Seed("能量棒（12入）", "600", 999, "Quest", 0.72, "花生", "12入", "無", "固體條狀", "美國", "補給品"),
+                new Seed("肌酸 300g", "780", 999, "Optimum", 0.3, "原味", "300g", "無", "粉末", "美國", "補給品"),
+                new Seed("彈力帶組（5條）", "520", 999, "TheraBand", null, null, "標準組", "彩色", "乳膠", "臺灣", "器材"),
+                new Seed("瑜珈墊 6mm", "990", 999, "Manduka", null, null, "180x61cm", "黑", "TPE", "德國", "器材"),
+                new Seed("搖搖杯 700ml", "250", 999, "Blender", null, null, "700ml", "透明", "PP", "中國", "配件"),
+                new Seed("健身手套", "450", 999, "Harbinger", null, null, "M", "黑", "皮革", "美國", "配件"),
+                new Seed("運動毛巾", "180", 999, "Willy", null, null, "100x20cm", "藍", "純棉", "臺灣", "配件"),
+                new Seed("護腕（一對）", "320", 999, "Harbinger", null, null, "均碼", "黑", "尼龍", "美國", "配件"));
 
         int created = 0;
         for (Seed seed : seeds) {
@@ -610,9 +619,13 @@ public class TestDataSeedRunner implements CommandLineRunner {
             product.setPrice(new BigDecimal(seed.price()));
             product.setStock(seed.stock());
             product.setBrand(seed.brand());
+            product.setWeight(seed.weight());
             product.setFlavor(seed.flavor());
-            product.setDescription(seed.desc());
-            product.setProductCategory(category);
+            product.setSize(seed.size());
+            product.setColor(seed.color());
+            product.setMaterial(seed.material());
+            product.setOrigin(seed.origin());
+            product.setProductCategory(catMap.getOrDefault(seed.cat(), catMap.values().iterator().next()));
             products.save(product);
             created++;
         }

@@ -14,7 +14,7 @@ public record ProductResponse(
         Integer stock,
         ProductStatus status,
         String imageUrl,
-        Integer categoryId,
+        Integer productCategoryId,
         String categoryName,
         LocalDateTime createdAt,
         String brand,
@@ -23,14 +23,16 @@ public record ProductResponse(
         String size,
         String color,
         String material,
-        String origin
-) {
+        String origin) {
     public static ProductResponse from(Product product) {
         if (product == null) {
             return null;
         }
-        Integer categoryId = product.getProductCategory() != null ? product.getProductCategory().getProductCategoryId() : null;
-        String categoryName = product.getProductCategory() != null ? product.getProductCategory().getName() : null;
+        Integer productCategoryId = product.getProductCategory() != null
+                ? product.getProductCategory().getProductCategoryId()
+                : null;
+        String productCategoryName = product.getProductCategory() != null ? product.getProductCategory().getName()
+                : null;
 
         return new ProductResponse(
                 product.getProductId(),
@@ -40,8 +42,8 @@ public record ProductResponse(
                 product.getStock(),
                 product.getStatus(),
                 product.getImageUrl(),
-                categoryId,
-                categoryName,
+                productCategoryId,
+                productCategoryName,
                 product.getCreatedAt(),
                 product.getBrand(),
                 product.getWeight(),
@@ -49,7 +51,6 @@ public record ProductResponse(
                 product.getSize(),
                 product.getColor(),
                 product.getMaterial(),
-                product.getOrigin()
-        );
+                product.getOrigin());
     }
 }

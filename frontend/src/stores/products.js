@@ -71,12 +71,14 @@ export const useProductsStore = defineStore('products', () => {
         ...res.data,
         id: res.data.productId || res.data.id
       } : null
-      try {
-        const commentRes = await getProductComments(id)
-        comments.value = commentRes.data
-      } catch {
-        comments.value = []
-      }
+      // 暫時關閉留言功能以避免後端未開發留言 API 導致 404 報錯
+      // try {
+      //   const commentRes = await getProductComments(id)
+      //   comments.value = commentRes.data || []
+      // } catch (err) {
+      //   comments.value = []
+      // }
+      comments.value = []
     } catch (e) {
       currentProduct.value = null
       throw e;
