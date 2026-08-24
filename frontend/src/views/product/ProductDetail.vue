@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useProductsStore } from '@/stores/products.js'
@@ -16,7 +16,9 @@ const auth = useAuthStore()
 const { currentProduct: product, loading } = storeToRefs(productsStore)
 
 const qty = ref(1)
-const { feedback, showFeedback } = useFeedback(2000)
+// 按鈕的「已加入 ✓」與 toast 是同一次操作的兩個回饋，共用同一個時長才會同進同出
+const FEEDBACK_MS = 2000
+const { feedback, showFeedback } = useFeedback(FEEDBACK_MS)
 
 const specLabels = {
   brand: '品牌',
@@ -47,6 +49,10 @@ function decreaseQty() {
   if (qty.value > 1) qty.value--
 }
 
+// 加入成功後按鈕短暫顯示「已加入 ✓」，與 toast 同時結束（寫法比照 ProductView）
+const justAdded = ref(false)
+let justAddedTimer = null
+
 async function addToCart() {
   if (!auth.isLoggedIn) {
     showFeedback('請先登入會員後再加入購物車', 'error')
@@ -54,6 +60,12 @@ async function addToCart() {
   }
   const res = await cart.addItem(product.value.productId, qty.value)
   showFeedback(res.success ? '已加入購物車' : res.message, res.success ? 'success' : 'error')
+  if (!res.success) return
+  justAdded.value = true
+  clearTimeout(justAddedTimer)
+  justAddedTimer = setTimeout(() => {
+    justAdded.value = false
+  }, FEEDBACK_MS)
 }
 
 // 用 watch(immediate) 而不是 onMounted：同一條路由只換 params（例如日後加「相關商品」
@@ -66,6 +78,8 @@ watch(
   },
   { immediate: true },
 )
+
+onUnmounted(() => clearTimeout(justAddedTimer))
 </script>
 
 <template>
@@ -106,10 +120,13 @@ watch(
             <button class="qty-btn" @click="increaseQty">＋</button>
           </div>
           <button
-            class="btn btn-accent"
+            class="btn btn-accent add-btn"
+            :class="{ 'add-btn--added': justAdded }"
             :disabled="product.stock === 0"
             @click="addToCart"
-          >{{ product.stock === 0 ? '已售完' : '加入購物車' }}</button>
+          >
+            {{ product.stock === 0 ? '已售完' : justAdded ? '已加入 ✓' : '加入購物車' }}
+          </button>
         </div>
       </div>
     </div>
@@ -120,6 +137,15 @@ watch(
 </template>
 
 <style scoped>
+.add-btn {
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+/* 加入成功後短暫轉綠，讓使用者不必移開視線就知道成功了 */
+.add-btn--added {
+  background: #2f9e44;
+  border-color: #2f9e44;
+}
 .breadcrumb {
   display: flex;
   gap: 0.5rem;

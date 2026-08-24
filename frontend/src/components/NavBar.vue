@@ -1,5 +1,5 @@
 <script setup>
-  import { computed, onMounted, ref, watch } from 'vue'
+  import { computed, nextTick, onMounted, ref, watch } from 'vue'
   import { RouterLink, useRoute, useRouter } from 'vue-router'
   import { useAuthStore } from '@/stores/auth.js'
   import { useCartStore } from '@/stores/cart.js'
@@ -63,6 +63,23 @@
   // 購物車數量徽章：進站就載入一次，之後由 store 自己在加入／移除時更新
   const cart = useCartStore()
   onMounted(() => cart.loadCart())
+
+  // 數量變多時讓徽章彈一下，作為「加入成功」的視覺回饋。
+  // 監看 store 而不是讓各個頁面自己觸發：無論從商城列表、商品明細或日後任何
+  // 新增的入口加入，都會自動有回饋，不必每處各接一次。
+  const badgeBump = ref(false)
+  watch(
+    () => cart.itemCount,
+    async (next, prev) => {
+      // 只在「變多」時播；移除商品也彈會讓刪除動作看起來像加入。
+      // prev 為 undefined 代表首次載入既有購物車，不是使用者剛加入的，不播。
+      if (prev === undefined || next <= prev) return
+      // 先關再開並等一次 DOM 更新，連續加入時動畫才會重新播放而不是被忽略
+      badgeBump.value = false
+      await nextTick()
+      badgeBump.value = true
+    },
+  )
 
   /**
    * 目前身分進得去的工作區；只有一個時不顯示切換器。
@@ -204,7 +221,12 @@
         :class="{ 'nav-link--active': isLinkActive('/cart') }"
       >
         購物車
-        <span v-if="cart.itemCount > 0" class="cart-badge">{{ cart.itemCount }}</span>
+        <span
+          v-if="cart.itemCount > 0"
+          class="cart-badge"
+          :class="{ 'cart-badge--bump': badgeBump }"
+          @animationend="badgeBump = false"
+        >{{ cart.itemCount }}</span>
       </RouterLink>
     </nav>
 
@@ -332,6 +354,19 @@
     color: #fff;
     font-size: 0.72rem;
     font-weight: 700;
+  }
+
+  /* 數量增加時彈跳一下。只在「變多」時播——移除商品也重播會讓刪除動作看起來像加入 */
+  .cart-badge--bump {
+    animation: cart-badge-bump 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes cart-badge-bump {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.4); }
+    100% { transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cart-badge--bump { animation: none; }
   }
 
   .nav-link--active {

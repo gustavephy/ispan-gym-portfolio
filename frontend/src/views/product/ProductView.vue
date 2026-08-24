@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useProductsStore } from '@/stores/products.js'
@@ -19,7 +19,9 @@ const selectedCategoryId = ref(null)
 const page = ref(0)
 const pageSize = 12
 
-const { feedback, showFeedback } = useFeedback(2000)
+// 按鈕的「已加入 ✓」與 toast 是同一次操作的兩個回饋，共用同一個時長才會同進同出
+const FEEDBACK_MS = 2000
+const { feedback, showFeedback } = useFeedback(FEEDBACK_MS)
 
 async function fetchProducts() {
   await productsStore.loadProducts({
@@ -48,6 +50,11 @@ function changePage(n) {
   fetchProducts()
 }
 
+// 剛加入成功的商品 id：按鈕短暫顯示「已加入 ✓」，與 toast 同時結束。
+// 用 id 而非布林值，才不會一顆按鈕按下去整排都變。
+const justAddedId = ref(null)
+let justAddedTimer = null
+
 async function addToCart(product) {
   if (!auth.isLoggedIn) {
     showFeedback('請先登入會員後再加入購物車', 'error')
@@ -55,12 +62,20 @@ async function addToCart(product) {
   }
   const res = await cart.addItem(product.productId, 1)
   showFeedback(res.success ? '已加入購物車' : res.message, res.success ? 'success' : 'error')
+  if (!res.success) return
+  justAddedId.value = product.productId
+  clearTimeout(justAddedTimer)
+  justAddedTimer = setTimeout(() => {
+    justAddedId.value = null
+  }, FEEDBACK_MS)
 }
 
 onMounted(() => {
   // 兩個請求互不相依，平行送出可省一趟來回
   return Promise.all([productsStore.loadCategories(), fetchProducts()])
 })
+
+onUnmounted(() => clearTimeout(justAddedTimer))
 </script>
 
 <template>
@@ -112,9 +127,12 @@ onMounted(() => {
         </RouterLink>
         <button
           class="btn btn-accent add-btn"
+          :class="{ 'add-btn--added': justAddedId === p.productId }"
           :disabled="p.stock === 0"
           @click="addToCart(p)"
-        >{{ p.stock === 0 ? '已售完' : '加入購物車' }}</button>
+        >
+          {{ p.stock === 0 ? '已售完' : justAddedId === p.productId ? '已加入 ✓' : '加入購物車' }}
+        </button>
       </div>
     </div>
 
@@ -221,6 +239,13 @@ onMounted(() => {
 }
 .add-btn {
   width: 100%;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+/* 加入成功後短暫轉綠，讓使用者不必移開視線就知道成功了 */
+.add-btn--added {
+  background: #2f9e44;
+  border-color: #2f9e44;
 }
 .pagination {
   display: flex;
