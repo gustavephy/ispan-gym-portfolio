@@ -156,6 +156,22 @@ public class Order extends TaipeiTimestampEntity {
         this.status = OrderStatus.REFUNDED;
     }
 
+    /** 後台標記已出貨：PAID → SHIPPED。僅適用於含實體商品的訂單，課程/訂閱訂單無需這一步 */
+    public void markShipped() {
+        if (status != OrderStatus.PAID) {
+            throw new BusinessRuleException("只有已付款的訂單可以標記為已出貨");
+        }
+        this.status = OrderStatus.SHIPPED;
+    }
+
+    /** 後台標記訂單完成：SHIPPED → COMPLETED；課程/訂閱訂單無出貨步驟，允許直接從 PAID 完成 */
+    public void markCompleted() {
+        if (status != OrderStatus.SHIPPED && status != OrderStatus.PAID) {
+            throw new BusinessRuleException("只有已出貨或已付款的訂單可以標記為已完成");
+        }
+        this.status = OrderStatus.COMPLETED;
+    }
+
     public Integer getId() {
         return id;
     }

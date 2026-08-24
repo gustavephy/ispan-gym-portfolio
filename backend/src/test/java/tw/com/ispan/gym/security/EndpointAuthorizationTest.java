@@ -45,6 +45,8 @@ import tw.com.ispan.gym.service.coupon.EmployeeCouponService;
 import tw.com.ispan.gym.service.employee.AdminEmployeeService;
 import tw.com.ispan.gym.service.employee.EmployeeProfileService;
 import tw.com.ispan.gym.service.employee.EmployeeReviewService;
+import tw.com.ispan.gym.service.idempotency.IdempotencyService;
+import tw.com.ispan.gym.service.order.AdminOrderQueryService;
 import tw.com.ispan.gym.service.order.OrderQueryService;
 import tw.com.ispan.gym.service.order.OrderService;
 import tw.com.ispan.gym.service.payment.EcpayService;
@@ -227,6 +229,12 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary OrderQueryService orderQueryService() {
             return Mockito.mock(OrderQueryService.class);
+        }
+        @Bean @Primary AdminOrderQueryService adminOrderQueryService() {
+            return Mockito.mock(AdminOrderQueryService.class);
+        }
+        @Bean @Primary IdempotencyService idempotencyService() {
+            return Mockito.mock(IdempotencyService.class);
         }
         @Bean @Primary EcpayService ecpayService() {
             return Mockito.mock(EcpayService.class);

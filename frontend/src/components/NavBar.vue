@@ -53,6 +53,7 @@
         { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
         { to: '/admin/group-courses', label: '團課主檔', requires: 'ADMIN' },
         { to: '/admin/group-classes', label: '團課場次', requires: 'ADMIN' },
+        { to: '/admin/orders', label: '訂單管理', requires: 'ADMIN' },
         { to: '/admin/refunds', label: '退款處理', requires: 'ADMIN' },
         { to: '/admin/employee-reviews', label: '員工審核' },
       ],

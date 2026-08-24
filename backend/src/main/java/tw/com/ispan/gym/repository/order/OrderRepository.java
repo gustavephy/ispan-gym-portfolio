@@ -9,6 +9,8 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -79,5 +81,26 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     @Query("SELECT o.paymentMethod, COUNT(o) FROM Order o "
             + "WHERE o.createdAt BETWEEN :from AND :to AND o.paymentMethod IS NOT NULL GROUP BY o.paymentMethod")
     List<Object[]> aggregateByPaymentMethod(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /**
+     * 後台訂單搜尋，各條件皆為選填（傳 null 代表不篩選這項）。
+     * keyword 需由呼叫端先轉小寫並包上 {@code %}（LIKE 萬用字元），比對訂單編號/綠界特店編號/
+     * 收件人姓名/會員信箱四個欄位；日期區間比對下單時間 createdAt（含頭不含尾，呼叫端自行組半開區間）。
+     */
+    @Query("""
+            SELECT o FROM Order o JOIN o.member m JOIN m.account a
+            WHERE (:status IS NULL OR o.status = :status)
+              AND (:memberId IS NULL OR m.id = :memberId)
+              AND (:from IS NULL OR o.createdAt >= :from)
+              AND (:to IS NULL OR o.createdAt < :to)
+              AND (:keyword IS NULL
+                   OR LOWER(o.orderNo) LIKE :keyword
+                   OR LOWER(o.merchantTradeNo) LIKE :keyword
+                   OR LOWER(o.receiverName) LIKE :keyword
+                   OR LOWER(a.email) LIKE :keyword)
+            """)
+    Page<Order> search(@Param("status") OrderStatus status, @Param("memberId") Integer memberId,
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+            @Param("keyword") String keyword, Pageable pageable);
 }
 

@@ -18,6 +18,10 @@ const receiverPhone = ref('')
 const receiverAddress = ref('')
 const submitting = ref(false)
 
+// 這次結帳的冪等金鑰：整個頁面存續期間固定不變，手滑連點「確認結帳」
+// 只會真正建立一次訂單；離開頁面重新進來（新的一次結帳）才會換一把新的
+const idempotencyKey = crypto.randomUUID()
+
 const { feedback, showFeedback } = useFeedback()
 
 async function handleCheckout() {
@@ -33,7 +37,7 @@ async function handleCheckout() {
       receiverName: receiverName.value.trim() || null,
       receiverPhone: receiverPhone.value.trim() || null,
       receiverAddress: receiverAddress.value.trim() || null,
-    })
+    }, idempotencyKey)
     const orderId = orderRes.data.orderId
 
     const formRes = await getEcpayCheckoutForm(orderId)
