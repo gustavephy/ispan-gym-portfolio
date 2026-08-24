@@ -31,8 +31,7 @@ import tw.com.ispan.gym.enums.course.CourseStatus;
 /**
  * 團體課主檔（2026-08-13 定案：課程域拆為私教課／團課兩實體，取代單一 Course）。
  *
- * <p>
- * 授課教練綁在主檔（2026-08-13 修訂 08-12 定案，採課程模組組員的設計；
+ * <p>授課教練綁在主檔（2026-08-13 修訂 08-12 定案，採課程模組組員的設計；
  * 場次不另記教練，代課設計已捨棄——換教練即改主檔或另開課程）。
  * 團課不走購買流程（無價格），會員憑有效訂閱報名場次：
  * status = ACTIVE 即開放報名（體驗課由 isTrial 另行判斷），不設額外開關。
@@ -48,7 +47,7 @@ public class GroupCourse {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "group_course_id")
-	private Integer groupCourseId;
+	private Integer id;
 
 	/** 授課教練（場次不另記教練，換教練即改主檔） */
 	@ManyToOne(fetch = FetchType.LAZY)
@@ -87,5 +86,4 @@ public class GroupCourse {
 	@LastModifiedDate
 	@Column(columnDefinition = "datetime2")
 	private LocalDateTime updatedAt;
-
 }

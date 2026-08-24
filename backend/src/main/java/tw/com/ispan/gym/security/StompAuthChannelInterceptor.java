@@ -152,7 +152,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private boolean isActiveEmployeeForRoom(Integer accountId, Integer employeeId) {
         return employees.findByAccountId(accountId)
-                .filter(employee -> employee.getEmployeeId().equals(employeeId)
+                .filter(employee -> employee.getId().equals(employeeId)
                         && employee.getDeletedAt() == null && employee.getStatus() == EmployeeStatus.ACTIVE)
                 .isPresent();
     }

@@ -41,7 +41,7 @@ public class Trainer {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "trainer_id")
-	private Integer trainerId;
+	private Integer id;
 
 	@OneToOne(fetch = FetchType.LAZY, optional = false)
 	@JoinColumn(name = "employee_id", nullable = false, foreignKey = @ForeignKey(name = "FK_trainer_employee"))

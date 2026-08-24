@@ -23,7 +23,7 @@ public record TrainerResponse(
     public static TrainerResponse from(Trainer trainer) {
         String displayName = trainer.getEmployee().getLastName() + trainer.getEmployee().getFirstName();
         return new TrainerResponse(
-                trainer.getTrainerId(),
+                trainer.getId(),
                 displayName,
                 trainer.getSpecialty(),
                 trainer.getExperience(),

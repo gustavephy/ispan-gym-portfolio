@@ -18,7 +18,7 @@ public record PendingEmployeeResponse(
 
     public static PendingEmployeeResponse from(Employee employee) {
         return new PendingEmployeeResponse(
-                employee.getEmployeeId(),
+                employee.getId(),
                 employee.getFirstName(),
                 employee.getLastName(),
                 employee.getAccount().getEmail(),
