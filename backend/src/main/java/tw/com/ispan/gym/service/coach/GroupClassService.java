@@ -145,8 +145,17 @@ public class GroupClassService {
          * 不需要解析「本人」身分——GroupClassSession 沒有綁定建立者，
          * 教練是誰由 groupCourseId 對應的 GroupCourse 決定，不是這裡指定的。
          *
-         * 檢查順序：課程不存在 → 404；同教室同時段已有其他（未取消）場次 → 409（教室衝突，
-         * 邏輯跟 CoachSlotService 的時段重疊檢查同一套，只是比對對象從教練換成教室）。
+         * 檢查順序（依實際程式碼執行先後）：
+         * 1. 課程不存在 → 404。
+         * 2. 課程已下架（status != ACTIVE）→ 409，不可再用它建立新場次
+         *    （既有場次不受影響，只擋新建這個動作）。
+         * 3. 教練目前無法承接新業務（軟刪除／非在職／非可服務狀態）→ 409，
+         *    見 {@link tw.com.ispan.gym.service.trainer.TrainerService#lockAndAssertAvailableForNewBusiness}
+         *    （§9 跨模組防護，內含悲觀鎖，防止與教練停用流程的競態）。
+         * 4. 同教室同時段已有其他（未取消）場次時間本身重疊 → 409（教室衝突，
+         *    邏輯跟 CoachSlotService 的時段重疊檢查同一套，只是比對對象從教練換成教室）。
+         * 5. 沒有真重疊，但與前後場次間隔不足 ROOM_CLEANUP_BUFFER_MINUTES 分鐘 → 409
+         *    （教室清場緩衝時間不足）。
          * 全部通過才真的建立場次。
          *
          * capacity 允許不填，不填時 fallback 回該團課課程的 maxCapacity，
