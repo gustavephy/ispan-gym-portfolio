@@ -297,7 +297,11 @@ onUnmounted(() => {
             {{ trainer.displayName }}（{{ trainer.specialty }}）
           </option>
         </select>
-        <p v-if="selectedTrainer" class="field-hint">此教練專長：{{ selectedTrainer.specialty }}</p>
+        <!-- 提示改為絕對定位浮在欄位下方：留在文件流裡會把這一欄的 select 往上推，
+             而 .slot-form 是 align-items:end，同一列其他欄位的輸入框就對不齊了 -->
+        <p v-if="selectedTrainer" class="field-hint field-hint--floating">
+          此教練專長：{{ selectedTrainer.specialty }}
+        </p>
       </div>
       <div class="field">
         <label for="courseMaxCapacity">人數上限</label>
@@ -473,7 +477,9 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: 1rem;
+  /* 列間距加大：教練欄的專長提示是絕對定位浮在欄位下方，
+     沿用 1rem 的話會貼到下一列（簡介）的 label */
+  gap: 2rem 1rem;
   margin-bottom: 0.75rem;
   padding: 1.5rem;
   background: var(--bg-section);
@@ -512,6 +518,18 @@ onUnmounted(() => {
   margin: 0;
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+/* 浮在欄位下方，不佔文件流高度；父層需 position: relative 當定位基準 */
+.field {
+  position: relative;
+}
+.field-hint--floating {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.3rem;
+  white-space: nowrap;
 }
 
 .field input,
