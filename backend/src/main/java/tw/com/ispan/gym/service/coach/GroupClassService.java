@@ -19,6 +19,7 @@ import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.coach.GroupClassBooking;
 import tw.com.ispan.gym.entity.coach.GroupClassSession;
 import tw.com.ispan.gym.entity.course.GroupCourse;
+import tw.com.ispan.gym.enums.course.CourseStatus;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
@@ -156,6 +157,13 @@ public class GroupClassService {
                 Integer groupCourseId = request.getGroupCourseId();
                 GroupCourse groupCourse = groupCourseRepository.findById(groupCourseId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此課程"));
+
+                // 課程已下架就不能再用它建立新場次，跟前端下架確認對話框的文案對齊
+                // （既有場次不受影響，這裡只擋「新建」這個動作）
+                if (groupCourse.getStatus() != CourseStatus.ACTIVE) {
+                        throw new BusinessRuleException("此課程已下架，無法建立新場次");
+                }
+
                 // §9 跨模組防護：教練若已 UNAVAILABLE 或軟刪除，不可再指派新的團課場次，
                 // 不能只靠前端隱藏按鈕擋（見 trainer_management_next_phase 規格基準）。
                 // GroupCourseService#createCourse／activateCourse 現在也有同一道檢查
