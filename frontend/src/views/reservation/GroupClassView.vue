@@ -156,10 +156,23 @@ function timeOnly(iso) {
 function attachEventTooltip(info) {
   if (info.view.type === 'listWeek') return
   const session = info.event.extendedProps.session
-  tippy(info.el, {
-    content: `${session.courseName}${session.isFull ? '（已額滿）' : ''}<br/>${formatDateTime(session.startAt)} - ${timeOnly(session.endAt)}<br/>教練：${session.trainerName}<br/>教室：${session.roomName}`,
-    allowHTML: true,
-  })
+  // 內容用 DOM 節點組裝而不是 HTML 字串：courseName/trainerName/roomName 都是
+  // 管理端可輸入的資料庫值，拼進 allowHTML 字串會讓惡意課程名稱（例如含
+  // onerror 的 <img>）在每個滑過的會員瀏覽器裡執行（stored XSS）。
+  // textContent 一律當純文字，換行改用一行一個 div，不再需要 allowHTML。
+  const content = document.createElement('div')
+  const lines = [
+    `${session.courseName}${session.isFull ? '（已額滿）' : ''}`,
+    `${formatDateTime(session.startAt)} - ${timeOnly(session.endAt)}`,
+    `教練：${session.trainerName}`,
+    `教室：${session.roomName}`,
+  ]
+  for (const line of lines) {
+    const lineEl = document.createElement('div')
+    lineEl.textContent = line
+    content.appendChild(lineEl)
+  }
+  tippy(info.el, { content })
 }
 
 // 事件方塊被銷毀時（例如切換週次、資料刷新導致 FullCalendar 重建事件），
