@@ -32,6 +32,7 @@ import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
+import tw.com.ispan.gym.enums.course.CourseStatus;
 import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ConfirmationRequiredException;
@@ -184,6 +185,27 @@ class GroupClassServiceTest {
         verify(sessions).save(session);
         verify(classBookings).save(any(GroupClassBooking.class));
         assertThat(response.getSessionId()).isEqualTo(SESSION_ID);
+        assertThat(response.getStatus()).isEqualTo(GroupClassBookingStatus.BOOKED);
+    }
+
+    @Test
+    void 報名成功_課程已下架不影響既有場次報名() {
+        // 課程下架只擋「建立新場次」，既有場次（不論底下課程現在是不是 ACTIVE）依然可以正常報名
+        GroupClassSession session = session(GroupClassSessionStatus.SCHEDULED, 10, 3, LocalDateTime.now().plusDays(5));
+        session.getCourse().setStatus(CourseStatus.INACTIVE);
+        when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(subscriptions.findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(eq(MEMBER_ID),
+                any(LocalDateTime.class), eq(SubscriptionStatus.ACTIVE)))
+                .thenReturn(Optional.of(new MemberSubscription()));
+        when(classBookings.findBySessionIdAndMemberIdAndStatus(SESSION_ID, MEMBER_ID, GroupClassBookingStatus.BOOKED))
+                .thenReturn(Optional.empty());
+        when(members.findById(MEMBER_ID)).thenReturn(Optional.of(member(MEMBER_ID)));
+        stubSessionSaveReturnsArgument();
+        stubBookingSaveReturnsArgument();
+
+        GroupClassBookingResponse response = service.bookSession(MEMBER_ID, SESSION_ID);
+
+        assertThat(session.getBookedCount()).isEqualTo(4);
         assertThat(response.getStatus()).isEqualTo(GroupClassBookingStatus.BOOKED);
     }
 
@@ -405,6 +427,26 @@ class GroupClassServiceTest {
 
         assertThatThrownBy(() -> service.createSession(request))
                 .isInstanceOf(ResourceNotFoundException.class);
+        verify(sessions, never()).save(any());
+    }
+
+    @Test
+    void 建立_課程已下架回409且不建立場次() {
+        GroupCourse inactiveCourse = course();
+        inactiveCourse.setStatus(CourseStatus.INACTIVE);
+        CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
+        request.setGroupCourseId(COURSE_ID);
+        request.setRoomName("B教室");
+        request.setStartAt(LocalDateTime.now().plusDays(5));
+        request.setEndAt(LocalDateTime.now().plusDays(5).plusHours(1));
+        when(courses.findById(COURSE_ID)).thenReturn(Optional.of(inactiveCourse));
+
+        assertThatThrownBy(() -> service.createSession(request))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("此課程已下架，無法建立新場次");
+        // 課程狀態要在教練閘門跟教室重疊查詢之前就先擋下，兩者都不該被呼叫到
+        verify(trainerService, never()).lockAndAssertAvailableForNewBusiness(any());
+        verify(sessions, never()).findOverlappingByRoom(any(), any(), any());
         verify(sessions, never()).save(any());
     }
 
