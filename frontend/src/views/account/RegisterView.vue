@@ -59,11 +59,11 @@ async function onResend() {
   try {
     const { data } = await resendVerificationEmail(registeredEmail.value)
     resendMessage.value = data.message
+    startResendCooldown()
   } catch (e) {
     resendMessage.value = e.message
   } finally {
     resending.value = false
-    startResendCooldown()
   }
 }
 
