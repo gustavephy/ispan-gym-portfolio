@@ -177,7 +177,7 @@ async function confirmAndRegister() {
 
         <OperationMessage :message="resendMessage" tone="info" />
         <button
-          class="btn btn-outline btn-block resend-btn"
+          class="btn btn-accent btn-block resend-btn"
           type="button"
           :disabled="resendCooldown > 0 || resending"
           @click="onResend"
@@ -387,7 +387,8 @@ async function confirmAndRegister() {
   font-weight: 600;
 }
 
-.pwd-rules__item--pass::before {
+/* 加上 li，特異度才追得上上面那條 .pwd-rules li::before，符號才會真的換成 ✓ */
+.pwd-rules li.pwd-rules__item--pass::before {
   content: '✓ ';
 }
 

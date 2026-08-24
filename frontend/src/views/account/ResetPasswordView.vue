@@ -157,7 +157,8 @@ async function onSubmit() {
   font-weight: 600;
 }
 
-.pwd-rules__item--pass::before {
+/* 加上 li，特異度才追得上上面那條 .pwd-rules li::before，符號才會真的換成 ✓ */
+.pwd-rules li.pwd-rules__item--pass::before {
   content: '✓ ';
 }
 </style>
