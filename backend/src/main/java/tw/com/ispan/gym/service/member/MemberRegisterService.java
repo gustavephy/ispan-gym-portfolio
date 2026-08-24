@@ -99,6 +99,40 @@ public class MemberRegisterService {
         throw new BusinessRuleException("此 Email 已被註冊");
     }
 
+    /**
+     * 註冊表單即時可用性檢查——刻意跟 {@link #register} 走完全相同的判斷分支，
+     * 只是唯讀、不寫入、不寄信、不拋例外，直接回傳布林值。
+     *
+     * <p>「可用」不等於「查無這個帳號」：PENDING 未驗證、軟刪除都會讓 register() 實際成功
+     * （分別觸發重寄驗證信／重新啟用信），所以這裡也回傳 true；只有帳號已被其他身分占用、
+     * 已是完整 ACTIVE 會員、或已被停權時才回傳 false，這幾種情況 register() 真的會擋下來。
+     *
+     * <p>刻意不比照 register()／resendVerification() 檢查 60 秒重寄冷卻——這裡是給使用者
+     * 打字當下的即時提示用，不是最終權威判斷，真正送出表單時 register() 仍會重新完整判斷一次；
+     * 極少數「即時檢查顯示可用，但真正送出時剛好卡在冷卻窗口內」的情況，可接受的誤差。
+     */
+    public boolean isEmailAvailableForRegistration(String rawEmail) {
+        String email = normalizeEmail(rawEmail);
+        Account account = accounts.findByEmailIgnoreCase(email).orElse(null);
+        if (account == null) {
+            return true;
+        }
+
+        Member member = members.findByAccountId(account.getId()).orElse(null);
+        if (member == null) {
+            return false;
+        }
+        if (member.getStatus() == UserStatus.SUSPENDED) {
+            return false;
+        }
+
+        boolean isDeleted = account.getDeletedAt() != null || member.getDeletedAt() != null;
+        if (isDeleted) {
+            return true;
+        }
+        return member.getStatus() == UserStatus.PENDING;
+    }
+
     /** 匿名重寄驗證信；不論該 email 是否存在、是否有東西可寄，一律回傳一樣的結果，避免被拿來枚舉帳號 */
     @Transactional
     public void resendVerification(String rawEmail) {

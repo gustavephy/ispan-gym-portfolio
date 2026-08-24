@@ -280,6 +280,26 @@ Response **`202 ACCEPTED`** `ResendVerificationResponse`：`message` 固定為�
 
 > **反帳號列舉設計**：帳號不存在、已 ACTIVE、已停權、或仍在重寄冷卻時間內，一律靜默回相同訊息，不透露帳號是否存在。只有 email 格式錯誤才會看到 400。
 
+#### 🔓 `POST /api/accounts/check-email-availability`（2026-08-24 補，先前遺漏）
+
+註冊表單即時可用性檢查，讓前端能在使用者填完 Email、還沒填完整份表單前就先提示。
+
+Request `CheckEmailAvailabilityRequest`：`email`（`@NotBlank` `@Email`）
+Response `200` `CheckEmailAvailabilityResponse`：`available` boolean
+
+`available` 的判斷跟核心帳號狀態分支與 `POST /api/members/register` 一致，但**不包含**
+註冊本身會用到的 60 秒重寄冷卻：帳號不存在、或帳號存在但屬於 PENDING 未驗證／已軟刪除
+（這兩種送出表單會成功，分別觸發重寄驗證信／重新啟用信，不會報錯）→ `true`；帳號已被
+其他身分占用、已是完整 ACTIVE 會員、或已被停權 → `false`。極少數情況即時檢查顯示可用、
+但真正送出時剛好卡在冷卻窗口內仍可能回 409，真正的權威判斷永遠是
+`POST /api/members/register` 本身。
+
+> **刻意接受的取捨**：這支端點本質上是帳號列舉管道（可用來probe任意 Email 是否已註冊），
+> 用限流降低風險而非假裝問題不存在——同 IP 每分鐘 10 次、每小時 30 次（與登入 IP 層一致）。
+> 超過限流回 `429 EMAIL_CHECK_RATE_LIMITED`「檢查次數過多，請稍後再試」。
+
+錯誤：`400 INVALID_REQUEST` email 格式錯誤；`429 EMAIL_CHECK_RATE_LIMITED` 見上。
+
 ### 2.3 MemberRegisterController
 
 #### 🔓 `POST /api/members/register` → `201 CREATED`

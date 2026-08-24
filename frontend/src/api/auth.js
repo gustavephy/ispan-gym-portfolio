@@ -41,3 +41,11 @@ export const forgotPassword = (email) => api.post('/api/auth/forgot-password', {
  * 失敗一律 400 RESET_TOKEN_INVALID（不存在／已使用／已作廢／已過期／帳號已不符資格皆同一訊息）
  */
 export const resetPassword = (payload) => api.post('/api/auth/reset-password', payload, ANONYMOUS_CONFIG)
+
+/**
+ * POST /api/accounts/check-email-availability — 註冊表單即時可用性檢查，回
+ * { available: boolean }。超過限流回 429 EMAIL_CHECK_RATE_LIMITED，呼叫端要能處理
+ * 這個情況並仍允許送出完整表單。
+ */
+export const checkEmailAvailability = (email) =>
+  api.post('/api/accounts/check-email-availability', { email }, ANONYMOUS_CONFIG)

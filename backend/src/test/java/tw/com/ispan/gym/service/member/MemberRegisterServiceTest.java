@@ -271,6 +271,78 @@ class MemberRegisterServiceTest {
         verify(mailService, never()).sendVerificationEmail(any(), any(), anyLong(), any());
     }
 
+    // === isEmailAvailableForRegistration()：即時可用性檢查 =======================
+    // 刻意跟上面 register() 的每個分支一一對應，確認「可用」與「register() 實際會不會成功」一致
+
+    @Test
+    void 可用性檢查_全新email視為可用() {
+        when(accounts.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.empty());
+
+        assertThat(service.isEmailAvailableForRegistration(EMAIL)).isTrue();
+    }
+
+    @Test
+    void 可用性檢查_已有帳號但無Member身分視為不可用() {
+        Account account = account();
+        when(accounts.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(account));
+        when(members.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
+
+        assertThat(service.isEmailAvailableForRegistration(EMAIL)).isFalse();
+    }
+
+    @Test
+    void 可用性檢查_SUSPENDED視為不可用() {
+        Account account = account();
+        Member member = member(account, UserStatus.SUSPENDED);
+        when(accounts.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(account));
+        when(members.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(member));
+
+        assertThat(service.isEmailAvailableForRegistration(EMAIL)).isFalse();
+    }
+
+    @Test
+    void 可用性檢查_ACTIVE視為不可用() {
+        Account account = account();
+        Member member = member(account, UserStatus.ACTIVE);
+        when(accounts.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(account));
+        when(members.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(member));
+
+        assertThat(service.isEmailAvailableForRegistration(EMAIL)).isFalse();
+    }
+
+    @Test
+    void 可用性檢查_PENDING視為可用因為送出後只會重寄驗證信不會報錯() {
+        Account account = account();
+        Member member = member(account, UserStatus.PENDING);
+        when(accounts.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(account));
+        when(members.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(member));
+
+        assertThat(service.isEmailAvailableForRegistration(EMAIL)).isTrue();
+    }
+
+    @Test
+    void 可用性檢查_軟刪除帳號視為可用因為送出後只會觸發重新啟用信不會報錯() {
+        Account account = account();
+        account.softDelete();
+        Member member = member(account, UserStatus.PENDING);
+        when(accounts.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(account));
+        when(members.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(member));
+
+        assertThat(service.isEmailAvailableForRegistration(EMAIL)).isTrue();
+    }
+
+    @Test
+    void 可用性檢查_只讀不觸發任何寫入或寄信() {
+        when(accounts.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.empty());
+
+        service.isEmailAvailableForRegistration(EMAIL);
+
+        verify(accounts, never()).save(any());
+        verify(accounts, never()).findByIdForUpdate(any());
+        verify(emailVerifications, never()).save(any());
+        verify(mailService, never()).sendVerificationEmail(any(), any(), anyLong(), any());
+    }
+
     // === resendVerification()：匿名重寄，一律靜默處理 ===========================
 
     @Test
