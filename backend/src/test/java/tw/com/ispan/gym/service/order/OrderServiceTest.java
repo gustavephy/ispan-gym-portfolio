@@ -138,7 +138,7 @@ class OrderServiceTest {
 
     private PrivateCourse course(String price, int sessionPerUnit) {
         PrivateCourse course = new PrivateCourse();
-        course.setPrivateCourseId(COURSE_ID);
+        course.setId(COURSE_ID);
         course.setName("一對一重訓");
         course.setPrice(new BigDecimal(price));
         course.setSessionPerUnit(sessionPerUnit);

@@ -205,7 +205,7 @@ class AuthControllerLoginTest {
     private Employee employee(Account account, EmployeeStatus status) {
         Employee employee = new Employee();
         employee.setAccount(account);
-        employee.setEmployeeId(90);
+        employee.setId(90);
         employee.setStatus(status);
         return employee;
     }

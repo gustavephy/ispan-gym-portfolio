@@ -242,7 +242,7 @@ class JwtSecuritySmokeTest {
     private Employee activeEmployee(Account account, EmployeeRole role) {
         Employee employee = new Employee();
         employee.setAccount(account);
-        employee.setEmployeeId(80); // employee_id 與 account_id 已脫鉤，刻意不同號
+        employee.setId(80); // employee_id 與 account_id 已脫鉤，刻意不同號
         employee.setRole(role);
         employee.setStatus(EmployeeStatus.ACTIVE);
         return employee;
@@ -250,7 +250,7 @@ class JwtSecuritySmokeTest {
 
     private Trainer trainer(TrainerStatus status, boolean deleted) {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(800);
+        trainer.setId(800);
         trainer.setStatus(status);
         if (deleted) {
             trainer.setDeletedAt(java.time.LocalDateTime.now());
@@ -309,7 +309,7 @@ class JwtSecuritySmokeTest {
 
         Employee employee = new Employee();
         employee.setAccount(account);
-        employee.setEmployeeId(71); // employee_id 與 account_id 已脫鉤，刻意不同號
+        employee.setId(71); // employee_id 與 account_id 已脫鉤，刻意不同號
         employee.setRole(EmployeeRole.ADMIN);
         employee.setStatus(EmployeeStatus.ACTIVE);
 
@@ -327,7 +327,7 @@ class JwtSecuritySmokeTest {
         Employee employee = activeEmployee(account, EmployeeRole.EMPLOYEE);
         Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
         Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(80)).thenReturn(Optional.empty());
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.empty());
 
         String token = jwtUtil.generateToken(account);
         mockMvc.perform(get("/api/probe/employee").header("Authorization", "Bearer " + token))
@@ -342,7 +342,7 @@ class JwtSecuritySmokeTest {
         Employee employee = activeEmployee(account, EmployeeRole.ADMIN);
         Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
         Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(80)).thenReturn(Optional.empty());
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.empty());
 
         String token = jwtUtil.generateToken(account);
         mockMvc.perform(get("/api/probe/employee").header("Authorization", "Bearer " + token))
@@ -357,7 +357,7 @@ class JwtSecuritySmokeTest {
         Employee employee = activeEmployee(account, EmployeeRole.ADMIN);
         Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
         Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(80)).thenReturn(Optional.of(trainer(TrainerStatus.ACTIVE, false)));
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.of(trainer(TrainerStatus.ACTIVE, false)));
 
         String token = jwtUtil.generateToken(account);
         mockMvc.perform(get("/api/probe/employee").header("Authorization", "Bearer " + token))
@@ -374,7 +374,7 @@ class JwtSecuritySmokeTest {
         Employee employee = activeEmployee(account, EmployeeRole.EMPLOYEE);
         Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
         Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(80)).thenReturn(Optional.empty());
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.empty());
 
         String token = jwtUtil.generateToken(account);
         mockMvc.perform(get("/api/probe/trainer").header("Authorization", "Bearer " + token))
@@ -388,7 +388,7 @@ class JwtSecuritySmokeTest {
         Employee employee = activeEmployee(account, EmployeeRole.EMPLOYEE);
         Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
         Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(80))
+        Mockito.when(trainers.findByEmployeeId(80))
                 .thenReturn(Optional.of(trainer(TrainerStatus.UNAVAILABLE, false)));
 
         String token = jwtUtil.generateToken(account);
@@ -402,7 +402,7 @@ class JwtSecuritySmokeTest {
         Employee employee = activeEmployee(account, EmployeeRole.EMPLOYEE);
         Mockito.when(accounts.findById(8)).thenReturn(Optional.of(account));
         Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(80)).thenReturn(Optional.of(trainer(TrainerStatus.ACTIVE, true)));
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.of(trainer(TrainerStatus.ACTIVE, true)));
 
         String token = jwtUtil.generateToken(account);
         mockMvc.perform(get("/api/probe/trainer").header("Authorization", "Bearer " + token))
@@ -416,7 +416,7 @@ class JwtSecuritySmokeTest {
         Employee employee = activeEmployee(employeeAccount, EmployeeRole.EMPLOYEE);
         Mockito.when(accounts.findById(8)).thenReturn(Optional.of(employeeAccount));
         Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(employee));
-        Mockito.when(trainers.findByEmployeeEmployeeId(80)).thenReturn(Optional.empty());
+        Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.empty());
         String employeeToken = jwtUtil.generateToken(employeeAccount);
         mockMvc.perform(get("/api/employees/reviews/probe").header("Authorization", "Bearer " + employeeToken))
                 .andExpect(status().isOk());

@@ -76,7 +76,7 @@ class EmployeeRegisterServiceTest {
 
     private Employee employee(Account account, EmployeeStatus status) {
         Employee employee = new Employee();
-        employee.setEmployeeId(EMPLOYEE_ID);
+        employee.setId(EMPLOYEE_ID);
         employee.setAccount(account);
         employee.setFirstName("舊名字");
         employee.setLastName("舊姓氏");
@@ -179,7 +179,7 @@ class EmployeeRegisterServiceTest {
         Account account = account();
         Employee employee = employee(account, EmployeeStatus.REJECTED);
         Employee oldReviewer = new Employee();
-        oldReviewer.setEmployeeId(99);
+        oldReviewer.setId(99);
         employee.setReviewedBy(oldReviewer);
         employee.setReviewedAt(java.time.LocalDateTime.now());
         employee.setReviewNote("資料不齊全");

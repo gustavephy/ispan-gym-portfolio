@@ -61,10 +61,10 @@ class TrainerControllerTest {
         account.setPasswordHash("$2a$10$notarealhash");
 
         Employee reviewer = new Employee();
-        reviewer.setEmployeeId(99);
+        reviewer.setId(99);
 
         Employee employee = new Employee();
-        employee.setEmployeeId(22);
+        employee.setId(22);
         employee.setAccount(account);
         employee.setFirstName("小華");
         employee.setLastName("陳");
@@ -80,7 +80,7 @@ class TrainerControllerTest {
 
     private static TrainerResponse projected(Integer trainerId, TrainerStatus status) {
         Trainer trainer = new Trainer();
-        trainer.setTrainerId(trainerId);
+        trainer.setId(trainerId);
         trainer.setEmployee(employeeWithPrivateData());
         trainer.setSpecialty("重量訓練");
         trainer.setExperience("五年健身房授課經驗");

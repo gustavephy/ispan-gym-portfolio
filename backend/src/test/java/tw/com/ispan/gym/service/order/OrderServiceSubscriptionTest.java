@@ -98,7 +98,7 @@ class OrderServiceSubscriptionTest {
 
     private PrivateCourse course() {
         PrivateCourse course = new PrivateCourse();
-        course.setPrivateCourseId(COURSE_ID);
+        course.setId(COURSE_ID);
         course.setName("一對一體驗課");
         course.setPrice(BigDecimal.valueOf(2000));
         course.setSessionPerUnit(1);
