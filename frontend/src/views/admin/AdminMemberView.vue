@@ -7,6 +7,7 @@ import {
   suspendMember,
   activateMember,
 } from '@/api/adminMember.js'
+import { getMemberQuotas } from '@/api/memberCourseQuota.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import { useFeedback } from '@/composables/useFeedback.js'
@@ -48,6 +49,8 @@ let searchDebounceTimer = null
 // 編輯抽屜：null 代表關閉；開啟時才載入完整資料（列表刻意不含地址等 PII）
 const editing = ref(null)
 const editLoading = ref(false)
+const memberQuotas = ref([])
+const quotasLoading = ref(false)
 const formError = ref(null)
 const saving = ref(false)
 
@@ -141,6 +144,18 @@ async function openEdit(memberId) {
       district: data.district ?? '',
       address: data.address ?? '',
     }
+
+    quotasLoading.value = true
+    try {
+      const quotaRes = await getMemberQuotas(memberId)
+      memberQuotas.value = quotaRes.data.items
+    } catch (quotaError) {
+      // 額度查詢失敗只記錄，不影響會員資料編輯功能本身
+      console.error('查詢會員額度失敗', quotaError)
+      memberQuotas.value = []
+    } finally {
+      quotasLoading.value = false
+    }
   } catch (e) {
     editing.value = null
     notifyApiError(e)
@@ -152,6 +167,7 @@ async function openEdit(memberId) {
 function closeEdit() {
   editing.value = null
   formError.value = null
+  memberQuotas.value = []
 }
 
 async function onSave() {
@@ -409,6 +425,38 @@ onMounted(fetchMembers)
             </button>
           </div>
         </form>
+
+        <section class="quota-section">
+          <h3>私教課額度</h3>
+          <div v-if="quotasLoading" class="spinner"></div>
+          <p v-else-if="memberQuotas.length === 0" class="quota-empty">
+            此會員目前沒有任何私教課額度紀錄
+          </p>
+          <table v-else class="quota-table">
+            <thead>
+              <tr>
+                <th>課程</th>
+                <th>教練</th>
+                <th>剩餘</th>
+                <th>預約中</th>
+                <th>已用</th>
+                <th>到期日</th>
+                <th>狀態</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="q in memberQuotas" :key="q.id">
+                <td>{{ q.courseName }}</td>
+                <td>{{ q.trainerName }}</td>
+                <td>{{ q.remainingCourse }}</td>
+                <td>{{ q.reservedCourse }}</td>
+                <td>{{ q.usedCourse }}</td>
+                <td>{{ formatDateTime(q.expiryDate) }}</td>
+                <td>{{ q.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
       </section>
     </div>
 
@@ -662,5 +710,26 @@ onMounted(fetchMembers)
   justify-content: flex-end;
   gap: 0.6rem;
   margin-top: 0.4rem;
+}
+
+.quota-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color, #ddd);
+}
+.quota-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.quota-table th,
+.quota-table td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color, #eee);
+}
+.quota-empty {
+  color: var(--text-secondary, #666);
+  padding: 1rem 0;
 }
 </style>
