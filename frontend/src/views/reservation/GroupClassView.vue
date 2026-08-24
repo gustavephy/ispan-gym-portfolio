@@ -11,8 +11,11 @@ import Pagination from '@/components/Pagination.vue'
 import FullCalendar from '@fullcalendar/vue3'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import dayGridPlugin from '@fullcalendar/daygrid'
+import listPlugin from '@fullcalendar/list'
 import zhTwLocale from '@fullcalendar/core/locales/zh-tw'
 import { getRoomColor } from '@/utils/rooms.js'
+import tippy from 'tippy.js'
+import 'tippy.js/dist/tippy.css'
 
 // 我的報名狀態對照表：後端回傳 BOOKED/CANCELLED，畫面顯示中文與顏色
 const MY_BOOKING_STATUS_MAP = {
@@ -147,6 +150,25 @@ function timeOnly(iso) {
   return (timePart || '').slice(0, 5)
 }
 
+// 滑鼠移到事件方塊上時掛上 tippy 懸浮提示，顯示完整資訊（課程/時間/教練/教室），
+// 彌補方塊本身空間有限、文字會被截斷的問題。listWeek 視圖不需要——清單模式
+// 資訊本來就完整不截斷，這裡明確跳過，不然 eventDidMount 對所有視圖都會觸發。
+function attachEventTooltip(info) {
+  if (info.view.type === 'listWeek') return
+  const session = info.event.extendedProps.session
+  tippy(info.el, {
+    content: `${session.courseName}${session.isFull ? '（已額滿）' : ''}<br/>${formatDateTime(session.startAt)} - ${timeOnly(session.endAt)}<br/>教練：${session.trainerName}<br/>教室：${session.roomName}`,
+    allowHTML: true,
+  })
+}
+
+// 事件方塊被銷毀時（例如切換週次、資料刷新導致 FullCalendar 重建事件），
+// 一併銷毀對應的 tippy 實例，避免每次刷新都留下沒人清掉的 tooltip 物件，
+// 長時間使用下累積成記憶體洩漏
+function detachEventTooltip(info) {
+  info.el._tippy?.destroy()
+}
+
 const bookButtonLabel = computed(() => {
   if (!selectedSession.value) return ''
   if (selectedSession.value.isFull) return '已額滿'
@@ -154,11 +176,20 @@ const bookButtonLabel = computed(() => {
   return '報名'
 })
 
-// 點擊行事曆上的事件色塊：開啟詳情卡，帶入這堂課的完整資料
-function handleEventClick(info) {
+// 開啟詳情卡，帶入這堂課的完整資料；timeGridWeek 點事件色塊、listWeek 點「報名」按鈕
+// 都走這裡，兩邊共用同一套開啟邏輯
+function openSessionDetail(session) {
   bookingError.value = ''
-  selectedSession.value = info.event.extendedProps.session
+  selectedSession.value = session
   isDetailModalOpen.value = true
+}
+
+// 點擊行事曆上的事件色塊：開啟詳情卡。listWeek 不要整列都能點——那個視圖改用
+// eventContent 裡另外渲染的「報名」按鈕觸發（見下方 calendarOptions.eventContent），
+// 這裡直接跳過，避免使用者點列表任何地方都彈出報名視窗
+function handleEventClick(info) {
+  if (info.view.type === 'listWeek') return
+  openSessionDetail(info.event.extendedProps.session)
 }
 
 // 關閉／點遮罩／按 Esc 都走這裡；報名送出中先不讓使用者關掉，避免請求結果跟畫面對不上
@@ -210,21 +241,36 @@ function handleKeydown(e) {
 }
 
 const calendarOptions = computed(() => ({
-  plugins: [timeGridPlugin, dayGridPlugin],
+  plugins: [timeGridPlugin, dayGridPlugin, listPlugin],
   initialView: 'timeGridWeek',
   locale: zhTwLocale,
   headerToolbar: {
     left: 'prev,next today',
     center: 'title',
-    right: '',
+    // 新增 listWeek 切換按鈕，跟 timeGridWeek 並存比較，尚未決定正式採用哪一種，
+    // 不要拿掉 timeGridWeek 或改動 initialView。
+    right: 'timeGridWeek,listWeek',
   },
   allDaySlot: false,
   slotMinTime: '10:00:00',
   slotMaxTime: '22:00:00',
   height: 'auto',
+  // 時間有交錯（非完全同時）的事件強制並排、不互相遮蓋。對完全同時開始的
+  // 場次效果可能有限，先測試看看，沒效果的話可以獨立撤掉。
+  slotEventOverlap: true,
   events: calendarEvents.value,
   eventClick: handleEventClick,
+  eventDidMount: attachEventTooltip,
+  eventWillUnmount: detachEventTooltip,
   displayEventTime: false,
+  // listWeek 是清單視圖，顯示時間才有意義（跟 timeGridWeek 的時間軸不同，
+  // 清單模式沒有位置暗示時間，藏起來反而失去清單的重點），用 FullCalendar
+  // 官方的 view-specific options 機制只針對這個視圖覆寫，不影響 timeGridWeek。
+  views: {
+    listWeek: {
+      displayEventTime: true,
+    },
+  },
   eventContent(arg) {
     const session = arg.event.extendedProps.session
     const wrapper = document.createElement('div')
@@ -242,7 +288,38 @@ const calendarOptions = computed(() => ({
 
     wrapper.appendChild(courseLine)
     wrapper.appendChild(trainerLine)
-    return { domNodes: [wrapper] }
+
+    if (arg.view.type !== 'listWeek') {
+      return { domNodes: [wrapper] }
+    }
+
+    // listWeek 空間比 timeGridWeek 的窄欄寬裕很多，多顯示已報名人數，
+    // 讓使用者不用點進詳情卡就能看到還剩多少名額
+    const capacityLine = document.createElement('div')
+    capacityLine.className = 'gcs-event-capacity'
+    capacityLine.textContent = `已報名 ${session.bookedCount}/${session.capacity} 人`
+    wrapper.appendChild(capacityLine)
+
+    // listWeek 不讓整列都能觸發報名（見 handleEventClick），改在這裡另外
+    // 渲染一顆「報名」按鈕，只有點按鈕才會開詳情卡；stopPropagation 避免
+    // 點擊事件冒泡到 FullCalendar 自己的列點擊處理，雖然 handleEventClick
+    // 對 listWeek 本來就會直接跳過，這裡還是防禦性地擋一下。
+    const row = document.createElement('div')
+    row.className = 'gcs-list-row'
+    row.appendChild(wrapper)
+
+    const bookBtn = document.createElement('button')
+    bookBtn.type = 'button'
+    bookBtn.className = 'btn btn-accent gcs-list-book-btn'
+    bookBtn.textContent = session.isFull ? '已額滿' : '報名'
+    bookBtn.disabled = session.isFull
+    bookBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      openSessionDetail(session)
+    })
+    row.appendChild(bookBtn)
+
+    return { domNodes: [row] }
   },
 }))
 
@@ -345,37 +422,19 @@ onUnmounted(() => {
          select 消失而跳動 -->
     <div class="toolbar-row">
       <div class="room-select-wrap">
-        <select
-          v-if="showRoomFilter"
-          id="roomFilter"
-          v-model="selectedRoom"
-          class="room-select"
-          aria-label="篩選教室"
-        >
+        <select v-if="showRoomFilter" id="roomFilter" v-model="selectedRoom" class="room-select" aria-label="篩選教室">
           <option value="all">所有教室</option>
           <option v-for="room in rooms" :key="room" :value="room">{{ room }}</option>
         </select>
       </div>
 
       <div v-if="auth.isMember" class="view-switch" role="tablist" aria-label="檢視切換">
-        <button
-          type="button"
-          role="tab"
-          class="view-tab"
-          :class="{ 'view-tab--active': viewMode === 'calendar' }"
-          :aria-selected="viewMode === 'calendar'"
-          @click="viewMode = 'calendar'"
-        >
+        <button type="button" role="tab" class="view-tab" :class="{ 'view-tab--active': viewMode === 'calendar' }"
+          :aria-selected="viewMode === 'calendar'" @click="viewMode = 'calendar'">
           行事曆
         </button>
-        <button
-          type="button"
-          role="tab"
-          class="view-tab"
-          :class="{ 'view-tab--active': viewMode === 'bookings' }"
-          :aria-selected="viewMode === 'bookings'"
-          @click="viewMode = 'bookings'"
-        >
+        <button type="button" role="tab" class="view-tab" :class="{ 'view-tab--active': viewMode === 'bookings' }"
+          :aria-selected="viewMode === 'bookings'" @click="viewMode = 'bookings'">
           我的預約
         </button>
       </div>
@@ -389,7 +448,9 @@ onUnmounted(() => {
       量到的高度是 0，切回來要主動 updateSize()——見上方 watch(viewMode)。
     -->
     <div v-show="viewMode === 'calendar'" class="calendar-wrap">
-      <div v-if="loading" class="calendar-notice"><div class="spinner"></div></div>
+      <div v-if="loading" class="calendar-notice">
+        <div class="spinner"></div>
+      </div>
       <p v-else-if="visibleSessions.length === 0" class="empty-state calendar-notice">
         這一週沒有開放報名的團課場次，可切換到其他週次查看。
       </p>
@@ -435,13 +496,8 @@ onUnmounted(() => {
                 </span>
               </td>
               <td>
-                <button
-                  v-if="booking.status === 'BOOKED'"
-                  class="btn btn-outline"
-                  type="button"
-                  :disabled="cancellingBookingId === booking.id"
-                  @click="handleCancelBooking(booking)"
-                >
+                <button v-if="booking.status === 'BOOKED'" class="btn btn-outline" type="button"
+                  :disabled="cancellingBookingId === booking.id" @click="handleCancelBooking(booking)">
                   {{ cancellingBookingId === booking.id ? '取消中…' : '取消' }}
                 </button>
               </td>
@@ -449,13 +505,8 @@ onUnmounted(() => {
           </tbody>
         </table>
 
-        <Pagination
-          :page="page"
-          :total-pages="totalPages"
-          :size="size"
-          @update:page="handlePageChange"
-          @update:size="handleSizeChange"
-        />
+        <Pagination :page="page" :total-pages="totalPages" :size="size" @update:page="handlePageChange"
+          @update:size="handleSizeChange" />
       </template>
     </div>
 
@@ -472,12 +523,8 @@ onUnmounted(() => {
         </div>
         <OperationMessage :message="bookingError" />
         <div class="modal-actions">
-          <button
-            class="btn btn-accent"
-            type="button"
-            :disabled="selectedSession.isFull || bookingSubmitting"
-            @click="handleBookInModal"
-          >
+          <button class="btn btn-accent" type="button" :disabled="selectedSession.isFull || bookingSubmitting"
+            @click="handleBookInModal">
             {{ bookButtonLabel }}
           </button>
           <button class="btn btn-outline" type="button" :disabled="bookingSubmitting" @click="closeDetailModal">
@@ -592,18 +639,48 @@ onUnmounted(() => {
   padding: 2px 4px;
   overflow: hidden;
 }
+
 .calendar-wrap :deep(.gcs-event-course),
 .calendar-wrap :deep(.gcs-event-trainer) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .calendar-wrap :deep(.gcs-event-course) {
   font-weight: 600;
 }
+
 .calendar-wrap :deep(.gcs-event-trainer) {
   font-size: 0.85em;
   opacity: 0.9;
+}
+
+/* listWeek 專用：課程資訊跟「報名」按鈕左右排列，文字太長時只有文字那側縮小/截斷，
+   按鈕本身寬度固定不被擠壓 */
+.calendar-wrap :deep(.gcs-list-row) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.calendar-wrap :deep(.gcs-list-row .gcs-event-content) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.calendar-wrap :deep(.gcs-list-book-btn) {
+  flex-shrink: 0;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.8rem;
+}
+
+.calendar-wrap :deep(.gcs-event-capacity) {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
 }
 
 .modal-overlay {

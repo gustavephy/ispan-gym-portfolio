@@ -12,6 +12,7 @@
   "dependencies": {
     "@fullcalendar/core": "^6.1.21",
     "@fullcalendar/daygrid": "^6.1.21",
+    "@fullcalendar/list": "^6.1.21",
     "@fullcalendar/timegrid": "^6.1.21",
     "@fullcalendar/vue3": "^6.1.21",
     "@stomp/stompjs": "^7.3.0",
@@ -19,6 +20,7 @@
     "echarts": "^6.1.0",
     "pinia": "^4.0.2",
     "sockjs-client": "^1.6.1",
+    "tippy.js": "^6.3.7",
     "vue": "^3.5.40",
     "vue-router": "^5.2.0"
   },
