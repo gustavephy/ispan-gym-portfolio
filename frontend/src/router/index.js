@@ -69,6 +69,12 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
+          path: 'admin/employee-reviews',
+          component: () => import('@/views/admin/EmployeeReviewView.vue'),
+          // 同儕審核：任何在職員工皆可審核，不限管理者（後端也是 hasRole('EMPLOYEE')）
+          meta: { requiresAuth: true, requiresRole: 'EMPLOYEE' },
+        },
+        {
           path: 'health',
           component: () => import('@/views/health/HealthHubView.vue'),
           meta: { requiresAuth: true, requiresRole: 'MEMBER' },

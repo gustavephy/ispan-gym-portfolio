@@ -43,15 +43,18 @@
       ],
     },
     {
+      // 工作區本身只要求 EMPLOYEE：員工申請審核是同儕審核（後端 hasRole('EMPLOYEE')），
+      // 一般員工也要看得到。其餘管理功能仍是管理者專屬，各自標 requires: 'ADMIN'。
       key: 'admin',
       label: '管理',
-      requires: 'ADMIN',
+      requires: 'EMPLOYEE',
       links: [
-        { to: '/admin/reports', label: '營運統計' },
-        { to: '/admin/members', label: '會員管理' },
-        { to: '/admin/group-courses', label: '團課主檔' },
-        { to: '/admin/group-classes', label: '團課場次' },
-        { to: '/admin/refunds', label: '退款處理' },
+        { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' },
+        { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
+        { to: '/admin/group-courses', label: '團課主檔', requires: 'ADMIN' },
+        { to: '/admin/group-classes', label: '團課場次', requires: 'ADMIN' },
+        { to: '/admin/refunds', label: '退款處理', requires: 'ADMIN' },
+        { to: '/admin/employee-reviews', label: '員工審核' },
       ],
     },
   ]
