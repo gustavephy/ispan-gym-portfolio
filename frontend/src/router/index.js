@@ -39,6 +39,11 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          path: 'my-quotas',
+          component: () => import('@/views/member/MyCourseQuotaView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
+        },
+        {
           path: 'trainer/schedules',
           component: () => import('@/views/trainer/TrainerScheduleView.vue'),
           meta: { requiresAuth: true, requiresRole: 'TRAINER' },

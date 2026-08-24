@@ -13,10 +13,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import tw.com.ispan.gym.dto.coach.MemberCourseQuotaResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberSummaryResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberUpdateRequest;
 import tw.com.ispan.gym.enums.member.UserStatus;
+import tw.com.ispan.gym.service.coach.MemberCourseQuotaService;
 import tw.com.ispan.gym.service.member.AdminMemberService;
 
 /**
@@ -37,9 +40,12 @@ import tw.com.ispan.gym.service.member.AdminMemberService;
 public class AdminMemberController {
 
     private final AdminMemberService adminMemberService;
+    private final MemberCourseQuotaService memberCourseQuotaService;
 
-    public AdminMemberController(AdminMemberService adminMemberService) {
+    public AdminMemberController(AdminMemberService adminMemberService,
+            MemberCourseQuotaService memberCourseQuotaService) {
         this.adminMemberService = adminMemberService;
+        this.memberCourseQuotaService = memberCourseQuotaService;
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -58,6 +64,15 @@ public class AdminMemberController {
     @GetMapping("/{memberId}")
     public AdminMemberResponse getById(@PathVariable Integer memberId) {
         return adminMemberService.getById(memberId);
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{memberId}/course-quotas")
+    public ResponseEntity<PageResponse<MemberCourseQuotaResponse>> getQuotas(
+            @PathVariable Integer memberId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(memberCourseQuotaService.getQuotasByMember(memberId, page, size));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

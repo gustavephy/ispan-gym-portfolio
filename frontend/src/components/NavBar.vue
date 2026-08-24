@@ -30,6 +30,7 @@
         { to: '/products', label: '補給商城' },
         { to: '/subscription', label: '會籍方案' },
         { to: '/orders', label: '我的訂單', requires: 'MEMBER' },
+        { to: '/my-quotas', label: '課程額度', requires: 'MEMBER' },
         { to: '/health', label: 'AI健康管理', requires: 'MEMBER' },
       ],
     },
