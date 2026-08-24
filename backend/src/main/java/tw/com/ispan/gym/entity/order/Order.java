@@ -141,17 +141,21 @@ public class Order extends TaipeiTimestampEntity {
         this.status = OrderStatus.FAILED;
     }
 
-    /** 已付款訂單申請退款前的資格檢查；通過後由 OrderService 建立 PaymentRefund（PENDING），訂單狀態維持 PAID 直到後台實際完成退款 */
+    /**
+     * 申請退款（含退貨）前的資格檢查；已出貨/已完成的訂單視同已付款，一樣可以申請——
+     * 商品出貨後客人才要求退貨是正常情境，不是只有出貨前才能反悔。
+     * 通過後由 OrderService 建立 PaymentRefund（PENDING），訂單狀態維持原樣直到後台實際完成退款。
+     */
     public void assertRefundable() {
-        if (status != OrderStatus.PAID) {
-            throw new BusinessRuleException("只有已付款的訂單可以申請退款");
+        if (status != OrderStatus.PAID && status != OrderStatus.SHIPPED && status != OrderStatus.COMPLETED) {
+            throw new BusinessRuleException("只有已付款、已出貨或已完成的訂單可以申請退款");
         }
     }
 
-    /** 後台完成退款：PAID → REFUNDED */
+    /** 後台完成退款：PAID／SHIPPED／COMPLETED → REFUNDED */
     public void markRefunded() {
-        if (status != OrderStatus.PAID) {
-            throw new BusinessRuleException("只有已付款的訂單可以標記為已退款");
+        if (status != OrderStatus.PAID && status != OrderStatus.SHIPPED && status != OrderStatus.COMPLETED) {
+            throw new BusinessRuleException("只有已付款、已出貨或已完成的訂單可以標記為已退款");
         }
         this.status = OrderStatus.REFUNDED;
     }

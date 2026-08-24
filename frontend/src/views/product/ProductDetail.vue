@@ -46,6 +46,16 @@ function increaseQty() {
 function decreaseQty() {
   if (qty.value > 1) qty.value--
 }
+// 手動輸入數量：夾在 1 與庫存量之間，非法輸入（空白、非整數）還原成夾好的上一個值
+function handleQtyInput(event) {
+  const value = Number(event.target.value)
+  const max = product.value?.stock ?? 1
+  if (!Number.isInteger(value)) {
+    event.target.value = qty.value
+    return
+  }
+  qty.value = Math.min(Math.max(value, 1), max)
+}
 
 async function addToCart() {
   if (!auth.isLoggedIn) {
@@ -101,9 +111,17 @@ watch(
 
         <div class="add-section">
           <div class="qty-ctrl">
-            <button class="qty-btn" @click="decreaseQty">−</button>
-            <span class="qty-num">{{ qty }}</span>
-            <button class="qty-btn" @click="increaseQty">＋</button>
+            <button class="qty-btn" aria-label="減少數量" @click="decreaseQty">−</button>
+            <input
+              type="number"
+              min="1"
+              :max="product.stock"
+              class="qty-input"
+              aria-label="購買數量"
+              :value="qty"
+              @change="handleQtyInput"
+            />
+            <button class="qty-btn" aria-label="增加數量" @click="increaseQty">＋</button>
           </div>
           <button
             class="btn btn-accent"
@@ -223,10 +241,23 @@ watch(
 .qty-btn:hover {
   background: var(--bg-soft);
 }
-.qty-num {
-  width: 32px;
+.qty-input {
+  width: 44px;
   text-align: center;
   font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.2rem;
+  /* 隱藏瀏覽器預設的上下微調箭頭，跟旁邊的 +/- 按鈕重複 */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 @media (max-width: 768px) {
   .detail-layout { grid-template-columns: 1fr; }

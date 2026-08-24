@@ -1,14 +1,26 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getPendingRefunds, completeRefund as apiCompleteRefund } from '@/api/adminOrder.js'
+import { ref, onMounted, nextTick } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+import {
+  getPendingRefunds,
+  completeRefund as apiCompleteRefund,
+  rejectRefund as apiRejectRefund,
+} from '@/api/adminOrder.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+
+const route = useRoute()
 
 const refunds = ref([])
 const loading = ref(true)
 const listMessage = ref('')
 const completingId = ref(null)
+const rejectingId = ref(null)
+
+// 從訂單管理頁點「前往退款處理」跳過來時，網址會帶 ?highlight=refundId，
+// 把對應那一列標出來並捲動過去，讓管理員一眼找到要處理的那筆
+const highlightId = ref(route.query.highlight ? Number(route.query.highlight) : null)
 
 function formatDate(isoString) {
   return new Date(isoString).toLocaleString('zh-TW', { hour12: false })
@@ -21,6 +33,12 @@ async function fetchRefunds() {
     refunds.value = res.data
   } finally {
     loading.value = false
+  }
+  if (highlightId.value) {
+    await nextTick()
+    document
+      .querySelector(`[data-refund-id="${highlightId.value}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 }
 
@@ -47,6 +65,31 @@ async function handleComplete(refund) {
   }
 }
 
+async function handleReject(refund) {
+  // prompt 回傳 null 代表使用者按取消；空字串代表「確定要駁回但沒填原因」，兩者要分開處理
+  const reason = window.prompt(
+    `確定要駁回訂單 ${refund.merchantTradeNo} 的退款申請嗎？可以填寫駁回原因（選填）：`,
+    '',
+  )
+  if (reason === null) return
+
+  listMessage.value = ''
+  rejectingId.value = refund.refundId
+  try {
+    await apiRejectRefund(refund.refundId, reason.trim())
+    await fetchRefunds()
+  } catch (err) {
+    const apiError = err
+    if (isInlineError(apiError)) {
+      listMessage.value = apiError.message
+    } else {
+      notifyApiError(apiError)
+    }
+  } finally {
+    rejectingId.value = null
+  }
+}
+
 onMounted(fetchRefunds)
 </script>
 
@@ -54,7 +97,10 @@ onMounted(fetchRefunds)
   <div class="page-container">
     <span class="section-tag">ADMIN</span>
     <h2 class="section-title">退款處理</h2>
-    <p class="section-desc">會員針對已付款訂單申請退款後，會出現在這裡，確認退款完成後按下「完成退款」。</p>
+    <p class="section-desc">
+      會員針對已付款/已出貨/已完成訂單申請退款（含出貨後退貨）後會出現在這裡，
+      確認退款完成後按下「完成退款」；理由不成立則按「駁回」，訂單狀態不受影響。
+    </p>
 
     <OperationMessage :message="listMessage" />
 
@@ -75,21 +121,39 @@ onMounted(fetchRefunds)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="refund in refunds" :key="refund.refundId">
+          <tr
+            v-for="refund in refunds"
+            :key="refund.refundId"
+            :data-refund-id="refund.refundId"
+            :class="{ 'highlight-row': refund.refundId === highlightId }"
+          >
             <td class="mono">{{ refund.merchantTradeNo }}</td>
             <td class="mono">{{ refund.refundNo }}</td>
             <td>NT$ {{ Number(refund.amount).toLocaleString() }}</td>
             <td>{{ refund.reason || '未填寫' }}</td>
             <td>{{ formatDate(refund.requestedAt) }}</td>
             <td>
-              <button
-                class="btn btn-accent"
-                type="button"
-                :disabled="completingId === refund.refundId"
-                @click="handleComplete(refund)"
-              >
-                {{ completingId === refund.refundId ? '處理中…' : '完成退款' }}
-              </button>
+              <div class="action-cell">
+                <RouterLink :to="`/admin/orders?keyword=${refund.merchantTradeNo}`" class="view-order-link">
+                  查看訂單 →
+                </RouterLink>
+                <button
+                  class="btn btn-outline"
+                  type="button"
+                  :disabled="completingId === refund.refundId || rejectingId === refund.refundId"
+                  @click="handleReject(refund)"
+                >
+                  {{ rejectingId === refund.refundId ? '處理中…' : '駁回' }}
+                </button>
+                <button
+                  class="btn btn-accent"
+                  type="button"
+                  :disabled="completingId === refund.refundId || rejectingId === refund.refundId"
+                  @click="handleComplete(refund)"
+                >
+                  {{ completingId === refund.refundId ? '處理中…' : '完成退款' }}
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -134,5 +198,26 @@ onMounted(fetchRefunds)
 
 .slot-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.slot-table tbody tr.highlight-row {
+  background: #fff3cd;
+}
+
+.action-cell {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.view-order-link {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent-hover);
+  white-space: nowrap;
+}
+
+.view-order-link:hover {
+  text-decoration: underline;
 }
 </style>

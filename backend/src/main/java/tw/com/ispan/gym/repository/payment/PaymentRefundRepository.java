@@ -12,6 +12,7 @@ public interface PaymentRefundRepository extends JpaRepository<PaymentRefund, In
     List<PaymentRefund> findByPaymentId(Integer paymentId);
     List<PaymentRefund> findByStatusOrderByRequestedAtAsc(String status);
     boolean existsByPaymentIdAndStatus(Integer paymentId, String status);
+    boolean existsByPaymentOrderIdAndStatus(Integer orderId, String status);
 
     /** 期間完成退款彙總（報表用）；時間軸為 completedAt（退款生效日） */
     @Query("""

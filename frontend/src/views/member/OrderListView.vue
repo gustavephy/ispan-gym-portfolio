@@ -1,9 +1,13 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { getMyOrders, getOrderById, getOrderHistory, cancelOrder as apiCancelOrder } from '@/api/order.js'
+import { useCartStore } from '@/stores/cart.js'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
+
+const router = useRouter()
+const cart = useCartStore()
 
 const orders = ref([])
 const loading = ref(false)
@@ -29,9 +33,13 @@ const historyNoteMeta = {
   CANCEL: '取消訂單',
   REFUND_REQUEST: '申請退款',
   REFUND_COMPLETE: '退款完成',
+  REFUND_REJECT: '退款申請遭駁回',
   SHIP: '出貨',
   COMPLETE: '訂單完成',
 }
+
+// 可以申請退款（含出貨後退貨）的訂單狀態，跟後端 OrderService 的 REFUND_ELIGIBLE_STATUSES 對齊
+const REFUND_ELIGIBLE_STATUSES = ['PAID', 'SHIPPED', 'COMPLETED']
 
 const orderCategories = [
   { key: 'ALL', label: '全部訂單', statuses: null },
@@ -40,6 +48,7 @@ const orderCategories = [
   { key: 'SUCCESS', label: '已完成訂單', statuses: ['PAID', 'SHIPPED', 'COMPLETED'] },
 ]
 const activeCategory = ref(orderCategories[0].key)
+const keyword = ref('')
 
 function ordersInCategory(category) {
   if (!category.statuses) return orders.value
@@ -48,7 +57,12 @@ function ordersInCategory(category) {
 
 const filteredOrders = computed(() => {
   const category = orderCategories.find((c) => c.key === activeCategory.value)
-  return ordersInCategory(category)
+  let list = ordersInCategory(category)
+  const kw = keyword.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter((order) => order.merchantTradeNo.toLowerCase().includes(kw))
+  }
+  return list
 })
 
 function categoryCount(category) {
@@ -93,10 +107,10 @@ async function toggleExpand(order) {
 }
 
 async function handleCancelOrRefund(order) {
-  const isRefund = order.status === 'PAID'
+  const isRefund = REFUND_ELIGIBLE_STATUSES.includes(order.status)
   const confirmed = window.confirm(
     isRefund
-      ? '確定要針對這筆已付款訂單申請退款嗎？後續將由客服審核處理。'
+      ? '確定要針對這筆訂單申請退款嗎？後續將由客服審核處理。'
       : '確定要取消這筆未付款訂單嗎？'
   )
   if (!confirmed) return
@@ -116,6 +130,39 @@ async function handleCancelOrRefund(order) {
   }
 }
 
+// 課程/私教明細（productId 為 null）不走購物車，只有商品明細能「再買一次」
+function hasReorderableItems(order) {
+  return orderItems[order.orderId]?.some((item) => item.productId != null) ?? false
+}
+
+const reorderingId = ref(null)
+
+async function handleReorder(order) {
+  const items = orderItems[order.orderId] ?? []
+  const productItems = items.filter((item) => item.productId != null)
+  if (productItems.length === 0) return
+
+  reorderingId.value = order.orderId
+  try {
+    for (const item of productItems) {
+      const res = await cart.addItem(item.productId, item.quantity)
+      if (!res.success) {
+        showFeedback(`「${item.productNameAtBuy}」加入購物車失敗：${res.message}`, 'error')
+        return
+      }
+    }
+    const skippedCount = items.length - productItems.length
+    showFeedback(
+      skippedCount > 0
+        ? `已將 ${productItems.length} 項商品加入購物車（課程品項需另外預約，不支援加入購物車）`
+        : '已將商品加入購物車'
+    )
+    router.push('/cart')
+  } finally {
+    reorderingId.value = null
+  }
+}
+
 onMounted(loadOrders)
 </script>
 
@@ -131,21 +178,31 @@ onMounted(loadOrders)
     </div>
 
     <template v-else>
-      <div class="order-tabs">
-        <button
-          v-for="category in orderCategories"
-          :key="category.key"
-          class="order-tab"
-          :class="{ active: activeCategory === category.key }"
-          @click="activeCategory = category.key"
-        >
-          {{ category.label }}
-          <span class="tab-count">{{ categoryCount(category) }}</span>
-        </button>
+      <div class="order-toolbar">
+        <div class="order-tabs">
+          <button
+            v-for="category in orderCategories"
+            :key="category.key"
+            class="order-tab"
+            :class="{ active: activeCategory === category.key }"
+            @click="activeCategory = category.key"
+          >
+            {{ category.label }}
+            <span class="tab-count">{{ categoryCount(category) }}</span>
+          </button>
+        </div>
+
+        <input
+          v-model="keyword"
+          class="order-search"
+          type="text"
+          placeholder="搜尋訂單編號..."
+          aria-label="搜尋訂單編號"
+        />
       </div>
 
       <div v-if="filteredOrders.length === 0" class="empty-state">
-        <p>此分類目前沒有訂單</p>
+        <p>{{ keyword.trim() ? '找不到符合的訂單' : '此分類目前沒有訂單' }}</p>
       </div>
 
       <div v-else class="order-list">
@@ -172,9 +229,22 @@ onMounted(loadOrders)
                 <span>NT$ {{ Number(item.lineAmount).toLocaleString() }}</span>
               </div>
 
-              <div class="detail-actions" v-if="order.status === 'UNPAID' || order.status === 'PAID'">
-                <button class="btn btn-outline cancel-btn" @click="handleCancelOrRefund(order)">
-                  {{ order.status === 'PAID' ? '申請退款' : '取消訂單' }}
+              <div
+                class="detail-actions"
+                v-if="hasReorderableItems(order) || order.status === 'UNPAID' || REFUND_ELIGIBLE_STATUSES.includes(order.status)"
+              >
+                <button
+                  v-if="hasReorderableItems(order)"
+                  class="btn btn-outline reorder-btn"
+                  :disabled="reorderingId === order.orderId"
+                  @click="handleReorder(order)"
+                >{{ reorderingId === order.orderId ? '加入中…' : '再買一次' }}</button>
+                <button
+                  v-if="order.status === 'UNPAID' || REFUND_ELIGIBLE_STATUSES.includes(order.status)"
+                  class="btn btn-outline cancel-btn"
+                  @click="handleCancelOrRefund(order)"
+                >
+                  {{ order.status === 'UNPAID' ? '取消訂單' : '申請退款' }}
                 </button>
               </div>
 
@@ -215,11 +285,18 @@ onMounted(loadOrders)
   gap: 1rem;
   color: var(--text-muted);
 }
+.order-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 2rem;
+  border-bottom: 1px solid var(--border);
+}
 .order-tabs {
   display: flex;
   gap: 0.5rem;
-  margin-top: 2rem;
-  border-bottom: 1px solid var(--border);
 }
 .order-tab {
   display: flex;
@@ -249,6 +326,16 @@ onMounted(loadOrders)
 .order-tab.active .tab-count {
   background: var(--accent-hover);
   color: #fff;
+}
+.order-search {
+  width: 100%;
+  max-width: 240px;
+  margin-bottom: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--text-primary);
 }
 .order-list {
   display: flex;
@@ -333,8 +420,10 @@ onMounted(loadOrders)
   border-top: 1px dashed var(--border);
   display: flex;
   justify-content: flex-end;
+  gap: 0.6rem;
 }
-.cancel-btn {
+.cancel-btn,
+.reorder-btn {
   font-size: 0.85rem;
   padding: 0.45rem 1.1rem;
 }
@@ -406,5 +495,7 @@ onMounted(loadOrders)
 @media (max-width: 640px) {
   .order-header { flex-direction: column; align-items: flex-start; }
   .order-header-side { width: 100%; justify-content: space-between; }
+  .order-toolbar { flex-direction: column; align-items: stretch; }
+  .order-search { max-width: none; margin: 0.75rem 0; }
 }
 </style>

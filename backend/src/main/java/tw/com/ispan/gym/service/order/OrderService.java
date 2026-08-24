@@ -66,6 +66,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -76,9 +77,10 @@ import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 /**
  * 購物車結帳（{@link #createOrderFromCart}）用於一般商品；課程與會員訂閱則分別透過
  * {@link #createDirectOrder}／{@link #createSubscriptionOrder} 略過購物車直接結帳。
- * {@link #cancelOrder} 依訂單狀態分流：未付款直接取消並還原庫存/優惠券；已付款則建立
- * 待處理退款（{@link PaymentRefund}），實際退款與訂單狀態轉移由後台呼叫
- * {@link #completeRefund} 完成。課程/訂閱的履約（發放堂數額度、啟用訂閱）
+ * {@link #cancelOrder} 依訂單狀態分流：未付款直接取消並還原庫存/優惠券；已付款/已出貨/已完成
+ * （{@link #REFUND_ELIGIBLE_STATUSES}，商品出貨後客人才要求退貨也算正常情境）則建立
+ * 待處理退款（{@link PaymentRefund}），後台呼叫 {@link #completeRefund} 核准、
+ * {@link #rejectRefund} 駁回。課程/訂閱的履約（發放堂數額度、啟用訂閱）
  * 由 {@link #fulfillPaidOrder} 在金流付款成功後觸發，見 EcpayService。訂閱不允許提前續約，
  * 名下有未到期的有效訂閱時 {@link #createSubscriptionOrder} 會直接擋下結帳請求；反過來，
  * 名下沒有有效訂閱時 {@link #createDirectOrder} 也會擋下私教課購買，見 {@link #requireActiveSubscription}。
@@ -88,6 +90,9 @@ import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 public class OrderService {
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
     private static final DateTimeFormatter TRADE_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    /** 可以申請退款（含出貨後退貨）的訂單狀態；已付款、已出貨、已完成都算，見 {@link Order#assertRefundable} */
+    private static final Set<OrderStatus> REFUND_ELIGIBLE_STATUSES =
+            Set.of(OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.COMPLETED);
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final CartItemRepository cartItems;
@@ -302,8 +307,9 @@ public class OrderService {
     }
 
     /**
-     * 依訂單狀態分流：未付款直接取消（還原庫存、退回優惠券）；已付款則建立一筆待處理退款，
-     * 訂單狀態維持 PAID 直到後台呼叫 {@link #completeRefund} 實際完成退款——
+     * 依訂單狀態分流：未付款直接取消（還原庫存、退回優惠券）；已付款/已出貨/已完成則建立
+     * 一筆待處理退款（{@link #REFUND_ELIGIBLE_STATUSES}，商品出貨後客人才要求退貨也算正常情境），
+     * 訂單狀態維持原樣直到後台呼叫 {@link #completeRefund} 核准或 {@link #rejectRefund} 駁回——
      * 提前釋放庫存/優惠券會造成「退款還沒真的處理、商品已經被別人買走」的競態。
      */
     @Transactional
@@ -313,7 +319,7 @@ public class OrderService {
         String fromStatus = order.getStatus().name();
         String reason = request == null ? null : request.reason();
 
-        if (order.getStatus() == OrderStatus.PAID) {
+        if (REFUND_ELIGIBLE_STATUSES.contains(order.getStatus())) {
             requestRefund(order, reason);
             orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
                     order.getMember(), "USER", "REFUND_REQUEST"));
@@ -343,7 +349,7 @@ public class OrderService {
 
     /**
      * 後台人工執行退款完成：退款狀態轉 COMPLETED、還原庫存/優惠券、訂單轉 REFUNDED。
-     * 若訂單已經不是 PAID（同一訂單的重複退款申請，另一筆已經處理過），改標記這筆為 CANCELLED，不重複履約。
+     * 若訂單已經不在可退款狀態（同一訂單的重複退款申請，另一筆已經處理過），改標記這筆為 CANCELLED，不重複履約。
      */
     @Transactional
     public void completeRefund(Integer refundId) {
@@ -358,7 +364,7 @@ public class OrderService {
         // 訂單已經因為另一筆退款完成轉為 REFUNDED，這筆是多出來的重複申請，不能再走一次
         // 還原庫存/優惠券／訂閱，否則會錯誤地把庫存/優惠券還原兩次；直接標記為多餘即可，
         // 不計入 ReportRefundSummary（只統計 COMPLETED）
-        if (order.getStatus() != OrderStatus.PAID) {
+        if (!REFUND_ELIGIBLE_STATUSES.contains(order.getStatus())) {
             refund.setStatus("CANCELLED");
             refund.setCompletedAt(LocalDateTime.now(TAIPEI));
             return;
@@ -384,12 +390,39 @@ public class OrderService {
     }
 
     /**
+     * 後台駁回一筆退款申請：不核准，訂單狀態不變（維持原本 PAID／SHIPPED／COMPLETED），
+     * 純粹把這筆申請標記結案，讓它從待處理清單消失。駁回原因附加在原本的申請理由後面，
+     * 不另外加欄位——PaymentRefund.reason 本來就是給人看的自由文字，沒有下游程式邏輯依賴它的格式。
+     */
+    @Transactional
+    public void rejectRefund(Integer refundId, String reason) {
+        PaymentRefund refund = paymentRefunds.findById(refundId)
+                .orElseThrow(() -> new ResourceNotFoundException("找不到退款紀錄：" + refundId));
+        if (!"PENDING".equals(refund.getStatus())) {
+            throw new BusinessRuleException("此退款已處理過");
+        }
+        Order order = refund.getPayment().getOrder();
+        String fromStatus = order.getStatus().name();
+
+        refund.setStatus("REJECTED");
+        refund.setCompletedAt(LocalDateTime.now(TAIPEI));
+        if (reason != null && !reason.isBlank()) {
+            String existing = refund.getReason();
+            refund.setReason((existing == null || existing.isBlank() ? "" : existing + "｜") + "駁回原因：" + reason);
+        }
+
+        orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(), order.getMember(),
+                "ADMIN", "REFUND_REJECT"));
+    }
+
+    /**
      * 後台標記已出貨：PAID → SHIPPED。僅適用於含實體商品的訂單，
      * 課程/訂閱訂單請直接用 {@link #completeOrder} 完成（無出貨步驟）。
      */
     @Transactional
     public OrderDetailResponse shipOrder(Integer orderId) {
         Order order = orders.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
+        assertNoPendingRefund(order);
         String fromStatus = order.getStatus().name();
         order.markShipped();
         orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
@@ -401,11 +434,22 @@ public class OrderService {
     @Transactional
     public OrderDetailResponse completeOrder(Integer orderId) {
         Order order = orders.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
+        assertNoPendingRefund(order);
         String fromStatus = order.getStatus().name();
         order.markCompleted();
         orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
                 order.getMember(), "ADMIN", "COMPLETE"));
         return toDetailResponse(order);
+    }
+
+    /**
+     * 出貨/完成前先確認沒有待處理退款：客人已經在申請退款的訂單不該被繼續履行，
+     * 兩者邏輯上互斥。只看 PENDING——已經完成或被判定多餘（CANCELLED）的退款不影響。
+     */
+    private void assertNoPendingRefund(Order order) {
+        if (paymentRefunds.existsByPaymentOrderIdAndStatus(order.getId(), "PENDING")) {
+            throw new BusinessRuleException("這筆訂單有退款申請正在處理中，請先處理完退款再繼續出貨/完成");
+        }
     }
 
     /** 後台待處理退款清單，供人工執行退款前查看 */
@@ -417,7 +461,13 @@ public class OrderService {
                 .toList();
     }
 
-    /** 只有商品明細需要還原庫存；私教課明細（private_course_id 非空）不涉庫存 */
+    /**
+     * 只有商品明細需要還原庫存；私教課明細（private_course_id 非空）不涉庫存。
+     * 簡化：已出貨/已完成的訂單退款時，同樣立即回補庫存，不等實體商品真的寄回——
+     * 專案本身沒有追蹤「出貨」「收到退貨」這類實體物流事件（見 markShipped，
+     * 出貨只是後台按鈕標記的狀態，不是真的出貨作業），跟未出貨就退款用同一套處理維持一致，
+     * 不是遺漏；真要嚴謹處理需要另外一段「確認收到退貨」的人工步驟，目前規模不需要。
+     */
     private void restoreStock(Order order) {
         List<OrderItem> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
                 .filter(item -> !item.isCourseItem())

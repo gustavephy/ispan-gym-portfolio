@@ -11,6 +11,8 @@ import {
   getReports,
   getReportDetail,
   downloadReportPdf,
+  generateReport,
+  deleteReport,
 } from '@/api/adminReport.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
@@ -244,9 +246,83 @@ async function fetchReports() {
     if (data.length > 0) {
       selectedReportId.value = data[0].id
       await fetchDetail(data[0].id)
+    } else {
+      // 清單被刪光時要跟著清掉，否則畫面會停留在最後一份已刪除快照的殘留資料
+      selectedReportId.value = null
+      detail.value = null
     }
   } catch (e) {
     notifyApiError(e)
+  }
+}
+
+// ── 手動生成報表快照 ────────────────────────────────────────
+// 日報靠後端排程每天自動生成；月報／自訂區間目前完全沒有生成入口，
+// 後端 generateReport 早就做好了，這裡補上前端表單讓它真的能被用到
+const showGenerateForm = ref(false)
+const generating = ref(false)
+const generateError = ref(null)
+const genReportType = ref('DAILY')
+const genDate = ref(isoDate(new Date()))
+const genMonth = ref(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`)
+const genFrom = ref(isoDate(daysAgo(29)))
+const genTo = ref(isoDate(new Date()))
+
+function toggleGenerateForm() {
+  showGenerateForm.value = !showGenerateForm.value
+  generateError.value = null
+}
+
+function lastDayOfMonth(yearMonth) {
+  const [y, m] = yearMonth.split('-').map(Number)
+  return isoDate(new Date(y, m, 0)) // 下個月第 0 天＝這個月最後一天
+}
+
+async function handleGenerate() {
+  let periodStart
+  let periodEnd
+  if (genReportType.value === 'DAILY') {
+    periodStart = periodEnd = genDate.value
+  } else if (genReportType.value === 'MONTHLY') {
+    periodStart = `${genMonth.value}-01`
+    periodEnd = lastDayOfMonth(genMonth.value)
+  } else {
+    periodStart = genFrom.value
+    periodEnd = genTo.value
+  }
+
+  generating.value = true
+  generateError.value = null
+  try {
+    await generateReport({ reportType: genReportType.value, periodStart, periodEnd })
+    await fetchReports() // 清單重抓後最新一份（就是剛生成的這份）會被自動選取
+    showGenerateForm.value = false
+  } catch (e) {
+    generateError.value = e.message
+  } finally {
+    generating.value = false
+  }
+}
+
+// ── 刪除目前選取的報表快照 ──────────────────────────────────
+const deleting = ref(false)
+
+async function handleDelete() {
+  if (!detail.value) return
+  const target = detail.value
+  const confirmed = window.confirm(
+    `確定要刪除這份報表快照嗎？（${REPORT_TYPE_LABELS[target.reportType] ?? target.reportType}｜${formatDate(target.periodStart)} – ${formatDate(target.periodEnd)}）此動作無法復原。`,
+  )
+  if (!confirmed) return
+
+  deleting.value = true
+  try {
+    await deleteReport(target.id)
+    await fetchReports()
+  } catch (e) {
+    notifyApiError(e)
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -392,8 +468,61 @@ onBeforeUnmount(() => {
           >
             {{ downloadingPdf ? '產生中…' : '下載 PDF' }}
           </button>
+          <button
+            type="button"
+            class="btn btn-danger-outline"
+            :disabled="!detail || deleting"
+            @click="handleDelete"
+          >
+            {{ deleting ? '刪除中…' : '刪除' }}
+          </button>
+          <button type="button" class="btn btn-accent" @click="toggleGenerateForm">
+            {{ showGenerateForm ? '取消' : '+ 產生報表' }}
+          </button>
         </div>
       </header>
+
+      <!-- 手動生成快照：日報靠排程自動生成，月報／自訂區間目前只能從這裡手動觸發 -->
+      <div v-if="showGenerateForm" class="generate-form">
+        <label class="filter">
+          <span class="filter__label">報表類型</span>
+          <select v-model="genReportType" class="filter__input">
+            <option value="DAILY">日報（單日）</option>
+            <option value="MONTHLY">月報（整月）</option>
+            <option value="CUSTOM">自訂區間</option>
+          </select>
+        </label>
+
+        <label v-if="genReportType === 'DAILY'" class="filter">
+          <span class="filter__label">日期</span>
+          <input v-model="genDate" type="date" class="filter__input" />
+        </label>
+
+        <label v-else-if="genReportType === 'MONTHLY'" class="filter">
+          <span class="filter__label">月份</span>
+          <input v-model="genMonth" type="month" class="filter__input" />
+        </label>
+
+        <template v-else>
+          <label class="filter">
+            <span class="filter__label">起始日</span>
+            <input v-model="genFrom" type="date" class="filter__input" :max="genTo" />
+          </label>
+          <label class="filter">
+            <span class="filter__label">結束日</span>
+            <input v-model="genTo" type="date" class="filter__input" :min="genFrom" />
+          </label>
+        </template>
+
+        <button type="button" class="btn btn-accent" :disabled="generating" @click="handleGenerate">
+          {{ generating ? '生成中…' : '確定生成' }}
+        </button>
+
+        <p class="generate-hint">
+          同類型、同區間若已有快照，會直接以這次的結果取代舊的一份。
+        </p>
+        <OperationMessage :message="generateError" />
+      </div>
 
       <p v-if="detail?.staleAt" class="stale-notice">
         此報表生成後區間內發生過退款，數字已與現況不符，建議重新生成。
@@ -401,7 +530,9 @@ onBeforeUnmount(() => {
 
       <div v-if="detailLoading" class="spinner"></div>
       <template v-else>
-        <p v-if="reports.length === 0" class="empty-hint">目前沒有任何報表快照。</p>
+        <p v-if="reports.length === 0" class="empty-hint">
+          目前沒有任何報表快照，點上方「+ 產生報表」建立第一份。
+        </p>
         <p v-else-if="dailyTotals.length === 0" class="empty-hint">
           這份報表沒有每日營收資料（較早生成的快照沒有這項統計）。
         </p>
@@ -594,6 +725,38 @@ onBeforeUnmount(() => {
   height: 300px;
 }
 
+
+.btn-danger-outline {
+  border: 1.5px solid #c92a2a;
+  color: #c92a2a;
+  background: transparent;
+}
+.btn-danger-outline:hover:not(:disabled) {
+  background: #c92a2a;
+  color: #fff;
+}
+.btn-danger-outline:disabled,
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.generate-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+}
+.generate-hint {
+  flex-basis: 100%;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
 
 .stale-notice {
   margin: 0 0 1rem;

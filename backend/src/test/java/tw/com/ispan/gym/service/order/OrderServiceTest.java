@@ -619,6 +619,38 @@ class OrderServiceTest {
     }
 
     @Test
+    void 已出貨訂單申請退款建立待處理退款且訂單維持已出貨() {
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        order.markShipped();
+        PaymentTransaction payment = payment(order);
+        when(orders.findByIdAndMemberId(ORDER_ID, MEMBER_ID)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByOrderId(ORDER_ID)).thenReturn(Optional.of(payment));
+        stubNoOrderItems();
+
+        OrderDetailResponse response = service.cancelOrder(MEMBER_ID, ORDER_ID, new CancelOrderRequest("商品有瑕疵"));
+
+        assertThat(response.status()).isEqualTo(OrderStatus.SHIPPED);
+        verify(paymentRefunds).save(any(PaymentRefund.class));
+    }
+
+    @Test
+    void 已完成訂單也可以申請退款() {
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        order.markShipped();
+        order.markCompleted();
+        PaymentTransaction payment = payment(order);
+        when(orders.findByIdAndMemberId(ORDER_ID, MEMBER_ID)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByOrderId(ORDER_ID)).thenReturn(Optional.of(payment));
+        stubNoOrderItems();
+
+        OrderDetailResponse response = service.cancelOrder(MEMBER_ID, ORDER_ID, null);
+
+        assertThat(response.status()).isEqualTo(OrderStatus.COMPLETED);
+    }
+
+    @Test
     void 已付款訂單找不到付款紀錄時回404() {
         Order order = savedOrder();
         order.markPaid("Credit", "TRADE123");
@@ -699,6 +731,191 @@ class OrderServiceTest {
         when(paymentRefunds.findById(7)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.completeRefund(7))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void 完成已出貨訂單的退款一樣還原庫存並轉為已退款() {
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        order.markShipped();
+
+        PaymentTransaction payment = payment(order);
+        PaymentRefund refund = new PaymentRefund(payment, "RF1", new BigDecimal("1000"), "商品有瑕疵");
+        refund.setStatus("PENDING");
+        ReflectionTestUtils.setField(refund, "id", 7);
+
+        Product product = product(PRODUCT_ID, 2, "1000");
+        when(paymentRefunds.findById(7)).thenReturn(Optional.of(refund));
+        when(orderItems.findAllByOrderIdOrderByIdAsc(ORDER_ID))
+                .thenReturn(List.of(productItem(order, product, 3, 1)));
+        stubProductLock(product);
+
+        service.completeRefund(7);
+
+        assertThat(refund.getStatus()).isEqualTo("COMPLETED");
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.REFUNDED);
+        assertThat(product.getStock()).isEqualTo(5);
+    }
+
+    // === rejectRefund() =========================================================
+
+    @Test
+    void 駁回退款申請後訂單狀態不變且退款轉為已駁回() {
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        PaymentTransaction payment = payment(order);
+        PaymentRefund refund = new PaymentRefund(payment, "RF1", new BigDecimal("1000"), "不想要了");
+        refund.setStatus("PENDING");
+        ReflectionTestUtils.setField(refund, "id", 7);
+        when(paymentRefunds.findById(7)).thenReturn(Optional.of(refund));
+
+        service.rejectRefund(7, "已超過鑑賞期");
+
+        assertThat(refund.getStatus()).isEqualTo("REJECTED");
+        assertThat(refund.getCompletedAt()).isNotNull();
+        assertThat(refund.getReason()).isEqualTo("不想要了｜駁回原因：已超過鑑賞期");
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID); // 訂單狀態不受駁回影響
+        verify(orderStatusHistories).save(any());
+    }
+
+    @Test
+    void 駁回退款沒有填理由時不動原本的申請理由() {
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        PaymentTransaction payment = payment(order);
+        PaymentRefund refund = new PaymentRefund(payment, "RF1", new BigDecimal("1000"), "不想要了");
+        refund.setStatus("PENDING");
+        ReflectionTestUtils.setField(refund, "id", 7);
+        when(paymentRefunds.findById(7)).thenReturn(Optional.of(refund));
+
+        service.rejectRefund(7, null);
+
+        assertThat(refund.getReason()).isEqualTo("不想要了");
+    }
+
+    @Test
+    void 重複駁回已處理過的退款擋下() {
+        PaymentTransaction payment = payment(savedOrder());
+        PaymentRefund refund = new PaymentRefund(payment, "RF1", new BigDecimal("1000"), "退款");
+        refund.setStatus("COMPLETED");
+        when(paymentRefunds.findById(7)).thenReturn(Optional.of(refund));
+
+        assertThatThrownBy(() -> service.rejectRefund(7, null))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("已處理過");
+    }
+
+    @Test
+    void 駁回不存在的退款回404() {
+        when(paymentRefunds.findById(7)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.rejectRefund(7, null))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // === shipOrder() / completeOrder() ========================================
+
+    @Test
+    void 已付款訂單標記出貨後轉為已出貨並寫入時間軸() {
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        stubNoOrderItems();
+
+        OrderDetailResponse response = service.shipOrder(ORDER_ID);
+
+        assertThat(response.status()).isEqualTo(OrderStatus.SHIPPED);
+        verify(orderStatusHistories).save(any());
+    }
+
+    @Test
+    void 未付款訂單不可標記出貨() {
+        Order order = savedOrder();
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.shipOrder(ORDER_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("已付款");
+    }
+
+    @Test
+    void 已出貨訂單標記完成後轉為已完成() {
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        order.markShipped();
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        stubNoOrderItems();
+
+        OrderDetailResponse response = service.completeOrder(ORDER_ID);
+
+        assertThat(response.status()).isEqualTo(OrderStatus.COMPLETED);
+    }
+
+    @Test
+    void 已付款訂單可以不經出貨直接標記完成() {
+        // 課程/訂閱訂單沒有出貨步驟，PAID 可以直接轉 COMPLETED
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        stubNoOrderItems();
+
+        OrderDetailResponse response = service.completeOrder(ORDER_ID);
+
+        assertThat(response.status()).isEqualTo(OrderStatus.COMPLETED);
+    }
+
+    @Test
+    void 未付款訂單不可標記完成() {
+        Order order = savedOrder();
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.completeOrder(ORDER_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("已出貨或已付款");
+    }
+
+    @Test
+    void 有待處理退款的訂單不可標記出貨() {
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(paymentRefunds.existsByPaymentOrderIdAndStatus(ORDER_ID, "PENDING")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.shipOrder(ORDER_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("退款申請正在處理中");
+
+        verify(orderStatusHistories, never()).save(any());
+    }
+
+    @Test
+    void 有待處理退款的訂單不可標記完成() {
+        Order order = savedOrder();
+        order.markPaid("Credit", "TRADE123");
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(paymentRefunds.existsByPaymentOrderIdAndStatus(ORDER_ID, "PENDING")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.completeOrder(ORDER_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("退款申請正在處理中");
+
+        verify(orderStatusHistories, never()).save(any());
+    }
+
+    @Test
+    void 出貨找不到訂單回404() {
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.shipOrder(ORDER_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void 完成找不到訂單回404() {
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.completeOrder(ORDER_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
