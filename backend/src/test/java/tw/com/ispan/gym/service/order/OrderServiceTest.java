@@ -639,7 +639,8 @@ class OrderServiceTest {
         Order order = savedOrder();
         order.markPaid("Credit", "TRADE123");
         order.markShipped();
-        order.markCompleted();
+        // 這筆是實體商品訂單（上一行已 markShipped），依「含實體商品須先出貨」規則帶 true
+        order.markCompleted(true);
         PaymentTransaction payment = payment(order);
         when(orders.findByIdAndMemberId(ORDER_ID, MEMBER_ID)).thenReturn(Optional.of(order));
         when(paymentTransactions.findByOrderId(ORDER_ID)).thenReturn(Optional.of(payment));
