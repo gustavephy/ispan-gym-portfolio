@@ -1,10 +1,11 @@
 # API Reference
 
-> 對應 commit `9b2ab38`（2026-08-17）。以原始碼為準逐一核對 controller、DTO、SecurityConfig 與 GlobalExceptionHandler。
+> 主體對應 commit `9b2ab38`（2026-08-17），以原始碼為準逐一核對 controller、DTO、SecurityConfig 與 GlobalExceptionHandler。
+> **2026-08-24 補上密碼管理章節（[2.10](#210-passwordcontrollerpasswordresetcontroller2026-08-24-補先前遺漏)）與登入限流說明**——這兩者當時已存在於程式碼但文件遺漏，僅補這兩處，未對全文重新逐支核對（OAuth 章節仍未收錄，屬另一批次）。
 >
 > 標記說明：🔓 免登入｜🔒 需登入｜👤 MEMBER｜🧑‍💼 EMPLOYEE｜🛡️ ADMIN｜🏋️ TRAINER
 >
-> 全文共 28 支 controller、約 108 個端點，另有 2 條 WebSocket 訊息目的地。
+> 全文共 28 支 controller、約 108 個端點，另有 2 條 WebSocket 訊息目的地（此計數未包含本次新補的章節與後續各批次新增的 controller，僅供歷史參考）。
 
 ---
 
@@ -20,6 +21,7 @@
 | 會員管理（後台） | `/api/admin/members` | [2.7](#27-adminmembercontrollerapiadminmembers-admin) |
 | 員工資料（自助） | `/api/employee/profile` | [2.8](#28-employeeprofilecontrollerapiemployeeprofile) |
 | 員工管理（後台） | `/api/admin/employees` | [2.9](#29-adminemployeecontrollerapiadminemployees-admin) |
+| 密碼管理 | `/api/account/me/change-password`、`/api/auth/forgot-password`、`/api/auth/reset-password` | [2.10](#210-passwordcontrollerpasswordresetcontroller2026-08-24-補先前遺漏) |
 | 商品／分類 | `/api/products`、`/api/product-categories` | [3](#3-商品) |
 | 購物車 | `/api/cart` | [4](#4-購物車) |
 | 訂單 | `/api/orders`、`/api/admin/orders` | [5](#5-訂單) |
@@ -259,6 +261,12 @@ Response `200` `LoginResponse`：
 | 其他（含信箱未驗證的會員） | 此帳號目前沒有可用的身分，請聯繫管理員。 |
 
 > 密碼正確但無任何可用身分時**不簽發 token**，改回具體狀態訊息，避免前端拿到實際上什麼都做不了的 JWT。
+
+**登入限流（2026-08-24 補）**：`429 LOGIN_RATE_LIMITED`「登入嘗試次數過多，請稍後再試」。兩層防護：
+IP 每分鐘 10 次／每小時 30 次（次要、較粗略的防線，先檢查，避免有心人用大量不存在的
+email 從同一 IP 灌爆記憶體）；正規化後的 email 15 分鐘內 5 次（主要防線，與修改密碼的
+猜測防護門檻一致）。密碼答對的當下即清空該 email 的計數，不論最後是否真的核發 token。
+一律回同一句訊息，不區分是 IP 還是 email 觸發、也不區分帳號是否存在。
 
 ### 2.2 AccountVerificationController
 
@@ -520,6 +528,41 @@ Email 或密碼錯誤／此帳號沒有可重新申請的員工紀錄／此員�
 > 端點是後續新增 ADMIN 的一般路徑。
 
 主要錯誤：`400 INVALID_REQUEST` 頁碼不可小於 0／每頁筆數必須介於 1 到 100；`404` 查無此員工（含已軟刪除）；`409` 見上表
+
+---
+
+### 2.10 PasswordController／PasswordResetController（2026-08-24 補，先前遺漏）
+
+密碼是 `Account` 層級的概念，不分會員／員工共用同一套。`account.passwordHash == null`
+（純 OAuth 帳號）視為沒有本地密碼可用，見下方各端點各自的處理方式。
+
+#### 🔒 `POST /api/account/me/change-password`
+
+已登入即可用（不需特定角色），`accountId` 一律取自 JWT，request body 不接受該欄位。
+
+Request `ChangePasswordRequest`：`currentPassword`（`@NotBlank`）、`newPassword`（`@NotBlank`，見下方密碼規則）、`confirmPassword`（`@NotBlank`，須與 `newPassword` 相同）
+
+Response `200` `ChangePasswordResponse`：`accessToken`／`accountId`／`email`／`roles`——**同一回應內附一組新 JWT**，前端原地替換掉舊 token 即維持登入；舊 token（含其他裝置）立即失效（`credentialsVersion` 遞增）。
+
+錯誤：`409 PASSWORD_NOT_CONFIGURED` 純 OAuth 帳號沒有本地密碼可改；`400 CURRENT_PASSWORD_INCORRECT` 目前密碼錯誤（計入下方限流）；`409 PASSWORD_REUSED` 新密碼與目前密碼或近 4 組歷史密碼重複；`429 PASSWORD_CHANGE_RATE_LIMITED` 同帳號 15 分鐘內目前密碼連續猜錯達 5 次。
+
+#### 🔓 `POST /api/auth/forgot-password`
+
+Request `ForgotPasswordRequest`：`email`（`@NotBlank` `@Email`）
+Response **`202`** `ForgotPasswordResponse`：`message` 固定為「若此 Email 可使用密碼登入，我們將寄送密碼重設信。」
+
+> **反帳號列舉**：不論帳號不存在、是純 OAuth 帳號、或已達限流上限，一律回相同的 `202` 與訊息。信件連結導向前端 `/reset-password?token=`，15 分鐘內有效，重寄冷卻 60 秒；新申請會讓同帳號先前未使用的舊連結失效。
+
+#### 🔓 `POST /api/auth/reset-password`
+
+Request `ResetPasswordRequest`：`token`（`@NotBlank`）、`newPassword`（`@NotBlank`，見下方密碼規則）、`confirmPassword`（`@NotBlank`，須與 `newPassword` 相同）
+Response **`204`**（無 body，不核發 JWT——視為救援可能已外流的帳號，一律導回登入頁重新輸入密碼）
+
+錯誤：`400 RESET_TOKEN_INVALID`「重設連結無效或已過期，請重新申請。」——涵蓋 token 不存在／已使用／已作廢／已過期／帳號已不符資格共 5 種情況，**刻意不區分**，避免回應形狀被拿來反推帳號狀態。
+
+#### 密碼規則（`@ValidPassword`，適用 `newPassword`，不適用 `currentPassword`／登入密碼）
+
+8～72 字元、須含大小寫英文字母與數字、不可包含任何空白字元，且 UTF-8 編碼後不得超過 72 bytes（BCrypt 以 byte 計算有效輸入長度，多位元字元湊到 72 字元時可能已超過 72 bytes 而被靜默截斷）。與會員／員工註冊的密碼規則完全相同，同一個密碼在任一個「建立密碼」端點都會有一致的驗證結果。
 
 ---
 

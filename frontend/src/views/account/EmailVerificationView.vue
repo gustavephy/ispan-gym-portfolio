@@ -6,12 +6,8 @@ import OperationMessage from '@/components/OperationMessage.vue'
 
 /**
  * Email 驗證結果頁。對應 GET /api/accounts/verify-email?token=。
- *
- * 目前後端 app.mail.verification-base-url 直接指向這支後端 API 本身（回裸 JSON），
- * 不是這個前端頁面——要讓信件連結真的點得到這頁，後端那個屬性需要改成
- * http://localhost:5173/verify-email，屬於後端設定變更，不在本次前端範圍內，
- * 已另外回報。頁面本身仍先做好：帶 token 造訪即可運作，也可從連結失效時
- * 的重寄表單，或直接輸入網址走到這裡。
+ * 後端 app.mail.verification-base-url 已指向這個路徑，信件連結點下去會直接到這頁；
+ * 也可能是連結失效後從重寄表單重新收到信，或直接輸入網址造訪（此時走無 token 分支）。
  */
 const route = useRoute()
 
