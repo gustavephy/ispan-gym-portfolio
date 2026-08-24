@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useCartStore } from '@/stores/cart.js'
@@ -15,21 +15,54 @@ const { items, totalAmount, loading } = storeToRefs(cart)
 
 const { feedback, showFeedback } = useFeedback(2000)
 
-async function changeQty(item, delta) {
-  const newQty = Number(item.quantity) + delta
-  if (newQty < 1) return
-  const res = await cart.updateItem(item.cartItemId, newQty)
-  if (!res.success) showFeedback(res.message, 'error')
+// 目前正在改數量/刪除的品項 cartItemId；期間鎖住該列按鈕與輸入框，
+// 避免連續快速點擊時同一品項送出好幾個重疊的請求互相打架
+const busyId = ref(null)
+const clearing = ref(false)
+
+async function updateQuantity(item, newQty) {
+  if (newQty < 1 || busyId.value) return
+  busyId.value = item.cartItemId
+  try {
+    const res = await cart.updateItem(item.cartItemId, newQty)
+    if (!res.success) showFeedback(res.message, 'error')
+  } finally {
+    busyId.value = null
+  }
+}
+
+function changeQty(item, delta) {
+  updateQuantity(item, Number(item.quantity) + delta)
+}
+
+// 手動輸入數量：先把顯示值重置回目前數量（輸入框不直接綁定 store，等後端確認成功
+// 後 store 重新載入才會反映新值），數字沒變或格式不合法就不送出請求
+function handleQtyInput(item, event) {
+  const newQty = Number(event.target.value)
+  event.target.value = item.quantity
+  if (!Number.isInteger(newQty) || newQty === item.quantity) return
+  updateQuantity(item, newQty)
 }
 
 async function removeItem(item) {
-  const res = await cart.removeItem(item.cartItemId)
-  if (!res.success) showFeedback(res.message, 'error')
+  if (busyId.value) return
+  busyId.value = item.cartItemId
+  try {
+    const res = await cart.removeItem(item.cartItemId)
+    if (!res.success) showFeedback(res.message, 'error')
+  } finally {
+    busyId.value = null
+  }
 }
 
 async function clearCart() {
-  const res = await cart.clearCart()
-  if (!res.success) showFeedback(res.message, 'error')
+  clearing.value = true
+  try {
+    const res = await cart.clearCart()
+    if (!res.success) showFeedback(res.message, 'error')
+  } finally {
+    clearing.value = false
+  }
 }
 
 function goCheckout() {
@@ -70,14 +103,37 @@ onMounted(() => {
           </div>
 
           <div class="item-qty">
-            <button class="qty-btn" @click="changeQty(item, -1)">−</button>
-            <span class="qty-num">{{ item.quantity }}</span>
-            <button class="qty-btn" @click="changeQty(item, 1)">＋</button>
+            <button
+              class="qty-btn"
+              :aria-label="`減少 ${item.productName} 數量`"
+              :disabled="busyId === item.cartItemId"
+              @click="changeQty(item, -1)"
+            >−</button>
+            <input
+              type="number"
+              min="1"
+              class="qty-input"
+              :aria-label="`${item.productName} 數量`"
+              :value="item.quantity"
+              :disabled="busyId === item.cartItemId"
+              @change="handleQtyInput(item, $event)"
+            />
+            <button
+              class="qty-btn"
+              :aria-label="`增加 ${item.productName} 數量`"
+              :disabled="busyId === item.cartItemId"
+              @click="changeQty(item, 1)"
+            >＋</button>
           </div>
 
           <div class="item-subtotal">NT$ {{ Number(item.subtotal).toLocaleString() }}</div>
 
-          <button class="remove-btn" @click="removeItem(item)">✕</button>
+          <button
+            class="remove-btn"
+            :aria-label="`移除 ${item.productName}`"
+            :disabled="busyId === item.cartItemId"
+            @click="removeItem(item)"
+          >✕</button>
         </div>
       </div>
 
@@ -94,7 +150,9 @@ onMounted(() => {
         </div>
 
         <button class="btn btn-accent checkout-btn" @click="goCheckout">前往結帳 →</button>
-        <button class="btn btn-outline clear-btn" @click="clearCart">清空購物車</button>
+        <button class="btn btn-outline clear-btn" :disabled="clearing" @click="clearCart">
+          {{ clearing ? '清空中…' : '清空購物車' }}
+        </button>
       </div>
     </div>
 
@@ -173,7 +231,26 @@ onMounted(() => {
   transition: var(--transition);
 }
 .qty-btn:hover { background: var(--bg-soft); }
-.qty-num { width: 28px; text-align: center; font-weight: 700; }
+.qty-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.qty-input {
+  width: 44px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.2rem;
+  /* 隱藏瀏覽器預設的上下微調箭頭，跟旁邊的 +/- 按鈕重複 */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.qty-input:disabled { opacity: 0.5; cursor: not-allowed; }
 .item-subtotal {
   width: 100px;
   text-align: right;
@@ -192,6 +269,7 @@ onMounted(() => {
   flex-shrink: 0;
 }
 .remove-btn:hover { color: #e03131; }
+.remove-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .cart-summary {
   border: 1px solid var(--border);

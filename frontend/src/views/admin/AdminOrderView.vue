@@ -1,12 +1,21 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { searchOrders, getAdminOrderDetail, shipOrder as apiShipOrder, completeOrder as apiCompleteOrder } from '@/api/adminOrder.js'
+import { RouterLink, useRoute } from 'vue-router'
+import {
+  searchOrders,
+  getAdminOrderDetail,
+  shipOrder as apiShipOrder,
+  completeOrder as apiCompleteOrder,
+  getPendingRefunds,
+} from '@/api/adminOrder.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 import OperationMessage from '@/components/OperationMessage.vue'
 import Pagination from '@/components/Pagination.vue'
+
+const route = useRoute()
 
 const statusMeta = {
   UNPAID: { label: '待付款', className: 'warning' },
@@ -23,6 +32,7 @@ const historyNoteMeta = {
   CANCEL: '取消訂單',
   REFUND_REQUEST: '申請退款',
   REFUND_COMPLETE: '退款完成',
+  REFUND_REJECT: '退款申請遭駁回',
   SHIP: '出貨',
   COMPLETE: '訂單完成',
 }
@@ -45,6 +55,10 @@ const expandedId = ref(null)
 const detail = reactive({}) // orderId -> AdminOrderDetailResponse
 const detailLoading = ref(null)
 const actingId = ref(null) // orderId 正在執行出貨/完成中
+
+// orderId -> PendingRefundResponse；用來在訂單卡片標示「這筆有退款申請在等待處理」，
+// 跟退款處理頁互通，資料沿用既有的 getPendingRefunds()，不需要新增後端 API
+const pendingRefundsByOrder = reactive({})
 
 const { feedback, showFeedback } = useFeedback()
 
@@ -97,6 +111,16 @@ function handleSizeChange(newSize) {
   fetchOrders()
 }
 
+async function fetchPendingRefunds() {
+  try {
+    const res = await getPendingRefunds()
+    for (const key of Object.keys(pendingRefundsByOrder)) delete pendingRefundsByOrder[key]
+    for (const refund of res.data) pendingRefundsByOrder[refund.orderId] = refund
+  } catch {
+    // 只是輔助提示，安靜失敗即可，不影響訂單搜尋本身
+  }
+}
+
 async function toggleExpand(order) {
   if (expandedId.value === order.orderId) {
     expandedId.value = null
@@ -146,7 +170,17 @@ async function handleComplete(order) {
   }
 }
 
-onMounted(fetchOrders)
+onMounted(async () => {
+  // 從退款處理頁點「查看訂單」跳過來時，網址會帶 ?keyword=merchantTradeNo，
+  // 直接代入搜尋框並送出查詢；查到唯一一筆時順便展開，省得使用者再點一次
+  if (route.query.keyword) {
+    filters.keyword = String(route.query.keyword)
+  }
+  await Promise.all([fetchOrders(), fetchPendingRefunds()])
+  if (route.query.keyword && orders.value.length === 1) {
+    toggleExpand(orders.value[0])
+  }
+})
 </script>
 
 <template>
@@ -197,6 +231,7 @@ onMounted(fetchOrders)
               <span class="status-badge" :class="statusMeta[order.status]?.className">
                 {{ statusMeta[order.status]?.label || order.status }}
               </span>
+              <span v-if="pendingRefundsByOrder[order.orderId]" class="status-badge warning">待退款</span>
               <span class="order-amount">NT$ {{ Number(order.totalAmount).toLocaleString() }}</span>
               <span class="expand-icon">{{ expandedId === order.orderId ? '▲' : '▼' }}</span>
             </div>
@@ -219,17 +254,32 @@ onMounted(fetchOrders)
                 </div>
               </div>
 
+              <div v-if="pendingRefundsByOrder[order.orderId]" class="refund-callout">
+                <p class="refund-callout-title">這筆訂單有一筆退款申請正在等待處理</p>
+                <p class="refund-callout-text">
+                  退款單號 {{ pendingRefundsByOrder[order.orderId].refundNo }}．
+                  金額 NT$ {{ Number(pendingRefundsByOrder[order.orderId].amount).toLocaleString() }}．
+                  {{ formatDate(pendingRefundsByOrder[order.orderId].requestedAt) }} 申請
+                </p>
+                <RouterLink
+                  :to="`/admin/refunds?highlight=${pendingRefundsByOrder[order.orderId].refundId}`"
+                  class="btn btn-outline"
+                >前往退款處理 →</RouterLink>
+              </div>
+
               <div class="detail-actions">
                 <button
                   v-if="detail[order.orderId].status === 'PAID'"
                   class="btn btn-outline"
-                  :disabled="actingId === order.orderId"
+                  :disabled="actingId === order.orderId || !!pendingRefundsByOrder[order.orderId]"
+                  :title="pendingRefundsByOrder[order.orderId] ? '這筆訂單有退款申請正在處理中，需先處理完退款' : ''"
                   @click="handleShip(order)"
                 >{{ actingId === order.orderId ? '處理中…' : '標記已出貨' }}</button>
                 <button
                   v-if="['PAID', 'SHIPPED'].includes(detail[order.orderId].status)"
                   class="btn btn-accent"
-                  :disabled="actingId === order.orderId"
+                  :disabled="actingId === order.orderId || !!pendingRefundsByOrder[order.orderId]"
+                  :title="pendingRefundsByOrder[order.orderId] ? '這筆訂單有退款申請正在處理中，需先處理完退款' : ''"
                   @click="handleComplete(order)"
                 >{{ actingId === order.orderId ? '處理中…' : '標記完成' }}</button>
               </div>
@@ -403,6 +453,24 @@ onMounted(fetchOrders)
   margin: 1rem 0;
   padding-top: 0.75rem;
   border-top: 1px dashed var(--border);
+}
+.refund-callout {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  background: #fff3cd;
+  border: 1px dashed #d8ae3f;
+}
+.refund-callout-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #a06400;
+  margin-bottom: 0.35rem;
+}
+.refund-callout-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.7rem;
 }
 .order-timeline {
   margin-top: 1rem;

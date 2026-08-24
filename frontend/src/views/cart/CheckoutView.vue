@@ -1,12 +1,14 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useCartStore } from '@/stores/cart.js'
 import { checkoutFromCart } from '@/api/order.js'
 import { getEcpayCheckoutForm } from '@/api/payment.js'
+import { getMyProfile } from '@/api/memberProfile.js'
 import { submitEcpayForm } from '@/utils/ecpay.js'
 import { useFeedback } from '@/composables/useFeedback.js'
+import { taiwanDistricts } from '@/data/taiwanDistricts.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 
 const cart = useCartStore()
@@ -15,28 +17,84 @@ const { items, totalAmount, loading } = storeToRefs(cart)
 const couponCode = ref('')
 const receiverName = ref('')
 const receiverPhone = ref('')
-const receiverAddress = ref('')
 const submitting = ref(false)
+const showConfirm = ref(false)
 
-// 這次結帳的冪等金鑰：整個頁面存續期間固定不變，手滑連點「確認結帳」
+// 收件地址拆成縣市/行政區下拉 + 詳細地址（路名、巷弄、門牌）自由輸入
+const cityOptions = Object.keys(taiwanDistricts)
+const receiverCity = ref('')
+const receiverDistrict = ref('')
+const receiverAddressDetail = ref('')
+const districtOptions = computed(() => (receiverCity.value ? taiwanDistricts[receiverCity.value] ?? [] : []))
+
+// 換縣市時，原本選的行政區不一定屬於新縣市，直接清空避免留著兜不起來的組合
+watch(receiverCity, () => {
+  receiverDistrict.value = ''
+})
+
+// 這次結帳的冪等金鑰：整個頁面存續期間固定不變，手滑連點「確認送出」
 // 只會真正建立一次訂單；離開頁面重新進來（新的一次結帳）才會換一把新的
 const idempotencyKey = crypto.randomUUID()
 
 const { feedback, showFeedback } = useFeedback()
 
-async function handleCheckout() {
+// 會員資料裡已存的地址，用「區塊式選項」讓使用者在它跟自訂收件資訊之間切換，
+// 不會直接把文字灌進欄位——要改用別的地址時點一下切換就是空白表單，不用先刪掉舊字
+const memberProfile = ref(null)
+const receiverMode = ref('custom') // 'profile' | 'custom'
+
+const hasProfileAddress = computed(() =>
+  Boolean(memberProfile.value?.city || memberProfile.value?.district || memberProfile.value?.address),
+)
+const profileName = computed(() =>
+  memberProfile.value ? `${memberProfile.value.firstName ?? ''}${memberProfile.value.lastName ?? ''}`.trim() : '',
+)
+const profilePhone = computed(() => memberProfile.value?.phone ?? '')
+const profileAddress = computed(() =>
+  memberProfile.value
+    ? [memberProfile.value.city, memberProfile.value.district, memberProfile.value.address].filter(Boolean).join('')
+    : '',
+)
+
+// 實際要送出/在確認彈窗顯示的收件資訊，依目前選的模式決定來源；
+// 自訂模式的地址由縣市＋行政區＋詳細地址組成，台灣地址慣例不加空格
+const effectiveReceiver = computed(() => {
+  if (receiverMode.value === 'profile') {
+    return { name: profileName.value, phone: profilePhone.value, address: profileAddress.value }
+  }
+  const address = `${receiverCity.value}${receiverDistrict.value}${receiverAddressDetail.value.trim()}`
+  return { name: receiverName.value.trim(), phone: receiverPhone.value.trim(), address }
+})
+
+async function loadMemberProfile() {
+  try {
+    const { data } = await getMyProfile()
+    memberProfile.value = data
+    // 城市/行政區/詳細地址任一有值就當作有地址資料，預設選它，省得每次都要手動切
+    if (data.city || data.district || data.address) receiverMode.value = 'profile'
+  } catch {
+    // 抓不到就維持自訂模式，使用者手動輸入即可
+  }
+}
+
+// 按「確認結帳並前往付款」先開確認彈窗讓使用者再檢查一次，不是直接送出
+function openConfirm() {
   if (items.value.length === 0) {
     showFeedback('購物車是空的，無法結帳', 'error')
     return
   }
+  showConfirm.value = true
+}
 
+async function handleCheckout() {
   submitting.value = true
   try {
+    const receiver = effectiveReceiver.value
     const orderRes = await checkoutFromCart({
       couponCode: couponCode.value.trim() || null,
-      receiverName: receiverName.value.trim() || null,
-      receiverPhone: receiverPhone.value.trim() || null,
-      receiverAddress: receiverAddress.value.trim() || null,
+      receiverName: receiver.name || null,
+      receiverPhone: receiver.phone || null,
+      receiverAddress: receiver.address || null,
     }, idempotencyKey)
     const orderId = orderRes.data.orderId
 
@@ -47,6 +105,7 @@ async function handleCheckout() {
     // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 submitting，避免使用者在轉導期間重複點擊
   } catch (err) {
     // 攔截器已正規化錯誤，訊息在 err.message；err.response 不存在（見 normalizeApiError）
+    showConfirm.value = false
     showFeedback(err.message || '結帳失敗，請稍後再試', 'error')
     submitting.value = false
   }
@@ -54,6 +113,7 @@ async function handleCheckout() {
 
 onMounted(() => {
   cart.loadCart()
+  loadMemberProfile()
 })
 </script>
 
@@ -80,17 +140,58 @@ onMounted(() => {
 
         <div class="form-card">
           <h3>收件資訊（選填）</h3>
-          <div class="field-group">
-            <label>收件人姓名</label>
-            <input v-model="receiverName" class="form-input" placeholder="選填" />
+
+          <div v-if="hasProfileAddress" class="receiver-mode-select" role="group" aria-label="收件資訊來源">
+            <button
+              type="button"
+              class="receiver-mode-option"
+              :class="{ active: receiverMode === 'profile' }"
+              :aria-pressed="receiverMode === 'profile'"
+              @click="receiverMode = 'profile'"
+            >
+              <span class="receiver-mode-label">使用會員資料地址</span>
+              <span class="receiver-mode-preview">{{ profileName }}　{{ profilePhone }}</span>
+              <span class="receiver-mode-preview">{{ profileAddress }}</span>
+            </button>
+            <button
+              type="button"
+              class="receiver-mode-option"
+              :class="{ active: receiverMode === 'custom' }"
+              :aria-pressed="receiverMode === 'custom'"
+              @click="receiverMode = 'custom'"
+            >
+              <span class="receiver-mode-label">填寫其他收件資訊</span>
+              <span class="receiver-mode-preview">為這筆訂單指定不同的收件人</span>
+            </button>
           </div>
-          <div class="field-group">
-            <label>收件人電話</label>
-            <input v-model="receiverPhone" class="form-input" placeholder="選填" />
-          </div>
-          <div class="field-group">
-            <label>收件地址</label>
-            <input v-model="receiverAddress" class="form-input" placeholder="選填" />
+
+          <div v-if="receiverMode === 'custom'" class="receiver-fields">
+            <div class="field-group">
+              <label>收件人姓名</label>
+              <input v-model="receiverName" class="form-input" placeholder="選填" />
+            </div>
+            <div class="field-group">
+              <label>收件人電話</label>
+              <input v-model="receiverPhone" class="form-input" placeholder="選填" />
+            </div>
+            <div class="field-group">
+              <label>收件地址</label>
+              <div class="address-region-row">
+                <select v-model="receiverCity" class="form-input region-select">
+                  <option value="">縣市</option>
+                  <option v-for="city in cityOptions" :key="city" :value="city">{{ city }}</option>
+                </select>
+                <select v-model="receiverDistrict" class="form-input region-select" :disabled="!receiverCity">
+                  <option value="">行政區</option>
+                  <option v-for="d in districtOptions" :key="d" :value="d">{{ d }}</option>
+                </select>
+              </div>
+              <input
+                v-model="receiverAddressDetail"
+                class="form-input"
+                placeholder="路名、巷弄、門牌號碼等詳細地址"
+              />
+            </div>
           </div>
         </div>
 
@@ -111,12 +212,57 @@ onMounted(() => {
           <span>應付金額</span>
           <span class="total-price">NT$ {{ Number(totalAmount).toLocaleString() }}</span>
         </div>
-        <p class="ecpay-note">將導向綠界 ECPay 測試付款頁完成付款</p>
+
+        <div class="payment-method-row">
+          <span class="payment-method-label">付款方式</span>
+          <span class="payment-method-value">信用卡（綠界 ECPay）</span>
+        </div>
+        <p class="ecpay-note">目前僅支援信用卡付款，送出後將導向綠界測試付款頁輸入卡號完成付款</p>
         <button
           class="btn btn-accent submit-btn"
           :disabled="submitting"
-          @click="handleCheckout"
-        >{{ submitting ? '處理中...' : '確認結帳並前往付款' }}</button>
+          @click="openConfirm"
+        >確認結帳並前往付款</button>
+      </div>
+    </div>
+
+    <div v-if="showConfirm" class="modal-overlay" @click.self="!submitting && (showConfirm = false)">
+      <div class="modal-content">
+        <h3 class="modal-title">確認訂單內容</h3>
+
+        <div class="confirm-section">
+          <h4 class="confirm-section-title">訂單商品</h4>
+          <div v-for="item in items" :key="item.cartItemId" class="order-item-row">
+            <span class="order-item-name">{{ item.productName }} × {{ item.quantity }}</span>
+            <span class="order-item-amount">NT$ {{ Number(item.subtotal).toLocaleString() }}</span>
+          </div>
+        </div>
+
+        <div class="confirm-section">
+          <h4 class="confirm-section-title">收件資訊</h4>
+          <p class="confirm-text">{{ effectiveReceiver.name || '未填寫' }}　{{ effectiveReceiver.phone }}</p>
+          <p class="confirm-text">{{ effectiveReceiver.address || '未填寫地址' }}</p>
+        </div>
+
+        <div v-if="couponCode.trim()" class="confirm-section">
+          <h4 class="confirm-section-title">優惠券</h4>
+          <p class="confirm-text">{{ couponCode.trim() }}（實際折扣將於送出後計算）</p>
+        </div>
+
+        <div class="confirm-total-row">
+          <span>應付金額</span>
+          <span class="total-price">NT$ {{ Number(totalAmount).toLocaleString() }}</span>
+        </div>
+        <p class="ecpay-note">確認無誤後將導向綠界測試付款頁，僅支援信用卡付款</p>
+
+        <div class="modal-actions">
+          <button class="btn btn-accent" type="button" :disabled="submitting" @click="handleCheckout">
+            {{ submitting ? '處理中...' : '確認送出，前往付款' }}
+          </button>
+          <button class="btn btn-outline" type="button" :disabled="submitting" @click="showConfirm = false">
+            返回修改
+          </button>
+        </div>
       </div>
     </div>
 
@@ -164,6 +310,45 @@ onMounted(() => {
   color: var(--text-secondary);
   padding: 0.35rem 0;
 }
+.receiver-mode-select {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.receiver-mode-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-section);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.receiver-mode-option:hover { border-color: var(--accent); }
+.receiver-mode-option.active {
+  border-color: var(--accent);
+  background: var(--bg-soft);
+}
+.receiver-mode-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.receiver-mode-option.active .receiver-mode-label { color: var(--accent-hover); }
+.receiver-mode-preview {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.receiver-fields {
+  padding-top: 0.25rem;
+}
 .field-group {
   display: flex;
   flex-direction: column;
@@ -180,6 +365,20 @@ onMounted(() => {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 0.88rem;
+}
+.address-region-row {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+.region-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-section);
+}
+.region-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .checkout-summary {
@@ -201,6 +400,19 @@ onMounted(() => {
 .summary-divider { height: 1px; background: var(--border); margin: 1rem 0; }
 .total-row { color: var(--text-primary); font-weight: 700; font-size: 1rem; }
 .total-price { color: var(--accent-hover); font-size: 1.2rem; }
+.payment-method-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  font-size: 0.85rem;
+}
+.payment-method-label { color: var(--text-secondary); }
+.payment-method-value { font-weight: 700; color: var(--text-primary); }
 .ecpay-note {
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -211,5 +423,65 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .checkout-layout { grid-template-columns: 1fr; }
+  .receiver-mode-select { grid-template-columns: 1fr; }
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 100;
+}
+.modal-content {
+  width: 100%;
+  max-width: 440px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hover);
+  padding: 1.75rem;
+}
+.modal-title {
+  margin: 0 0 1.25rem;
+  font-size: 1.15rem;
+  color: var(--text-primary);
+}
+.confirm-section {
+  margin-bottom: 1.1rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px dashed var(--border);
+}
+.confirm-section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+.confirm-text {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin: 0.15rem 0;
+}
+.confirm-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 700;
+  font-size: 1rem;
+  margin-top: 1rem;
+}
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+.modal-actions .btn {
+  flex: 1;
 }
 </style>

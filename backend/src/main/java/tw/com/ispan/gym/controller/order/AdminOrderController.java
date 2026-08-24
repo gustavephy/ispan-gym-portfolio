@@ -1,9 +1,11 @@
 package tw.com.ispan.gym.controller.order;
 
+import jakarta.validation.Valid;
 import tw.com.ispan.gym.dto.order.AdminOrderDetailResponse;
 import tw.com.ispan.gym.dto.order.AdminOrderSummaryResponse;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.PendingRefundResponse;
+import tw.com.ispan.gym.dto.order.RejectRefundRequest;
 import tw.com.ispan.gym.dto.report.OrderOverviewResponse;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.service.report.OperationReportService;
@@ -15,6 +17,7 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -49,7 +52,7 @@ public class AdminOrderController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdTo,
             @RequestParam(required = false) String keyword,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return orderQueryService.search(status, memberId, createdFrom, createdTo, keyword, pageable);
     }
 
@@ -89,5 +92,13 @@ public class AdminOrderController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void completeRefund(@PathVariable Integer refundId) {
         orderService.completeRefund(refundId);
+    }
+
+    /** 後台駁回一筆退款申請：不核准，訂單狀態不變，只是把這筆申請標記結案 */
+    @PostMapping("/refunds/{refundId}/reject")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void rejectRefund(@PathVariable Integer refundId,
+            @Valid @RequestBody(required = false) RejectRefundRequest request) {
+        orderService.rejectRefund(refundId, request == null ? null : request.reason());
     }
 }

@@ -28,3 +28,7 @@ export const getPendingRefunds = () => api.get('/api/admin/orders/refunds/pendin
 
 /** 完成一筆退款：還原庫存/優惠券、訂單轉 REFUNDED，需登入且為 ADMIN */
 export const completeRefund = (refundId) => api.post(`/api/admin/orders/refunds/${refundId}/complete`)
+
+/** 駁回一筆退款申請：不核准，訂單狀態不變，reason 選填，需登入且為 ADMIN */
+export const rejectRefund = (refundId, reason) =>
+  api.post(`/api/admin/orders/refunds/${refundId}/reject`, { reason: reason || null })
