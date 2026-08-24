@@ -402,7 +402,8 @@ public class OrderService {
     public OrderDetailResponse completeOrder(Integer orderId) {
         Order order = orders.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         String fromStatus = order.getStatus().name();
-        order.markCompleted();
+        // 含實體商品就要求先出貨；私教課／訂閱沒有實體要寄，付款後可直接完成
+        order.markCompleted(orderItems.existsByOrderIdAndProductIsNotNull(orderId));
         orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
                 order.getMember(), "ADMIN", "COMPLETE"));
         return toDetailResponse(order);

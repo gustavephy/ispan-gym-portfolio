@@ -165,9 +165,21 @@ public class Order extends TaipeiTimestampEntity {
     }
 
     /** 後台標記訂單完成：SHIPPED → COMPLETED；課程/訂閱訂單無出貨步驟，允許直接從 PAID 完成 */
-    public void markCompleted() {
+    /**
+     * 標記為已完成。
+     *
+     * <p>含實體商品的訂單必須先出貨（PAID → SHIPPED → COMPLETED）；私教課與訂閱方案
+     * 沒有實體要寄，付款後可直接完成（PAID → COMPLETED），不必經過出貨。
+     *
+     * <p>{@code hasPhysicalProduct} 由呼叫端查明細後傳入——Order 沒有持有 orderItems
+     * 關聯（明細以 order_id 反向關聯，見 OrderItem），實體本身查不到自己的品項組成。
+     */
+    public void markCompleted(boolean hasPhysicalProduct) {
         if (status != OrderStatus.SHIPPED && status != OrderStatus.PAID) {
             throw new BusinessRuleException("只有已出貨或已付款的訂單可以標記為已完成");
+        }
+        if (hasPhysicalProduct && status != OrderStatus.SHIPPED) {
+            throw new BusinessRuleException("此訂單含實體商品，請先標記為已出貨再完成");
         }
         this.status = OrderStatus.COMPLETED;
     }
