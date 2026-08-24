@@ -427,6 +427,55 @@ class GroupClassServiceTest {
     }
 
     @Test
+    void 建立_教室時間真重疊訊息為此教室已有重疊時段() {
+        GroupCourse course = course();
+        LocalDateTime start = LocalDateTime.now().plusDays(5);
+        LocalDateTime end = start.plusHours(1);
+        CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
+        request.setGroupCourseId(COURSE_ID);
+        request.setRoomName("B教室");
+        request.setStartAt(start);
+        request.setEndAt(end);
+        when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
+        // 只 stub「原始時間」查詢命中真重疊，緩衝查詢不 stub，若程式誤先查緩衝會直接 NPE 讓測試失敗
+        when(sessions.findOverlappingByRoom(eq("B教室"), eq(start), eq(end)))
+                .thenReturn(List.of(session(GroupClassSessionStatus.SCHEDULED, 10, 0, start)));
+
+        assertThatThrownBy(() -> service.createSession(request))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("此教室已有重疊時段");
+        verify(sessions, times(1)).findOverlappingByRoom(any(), any(), any());
+        verify(sessions, never()).save(any());
+    }
+
+    @Test
+    void 建立_教室間隔不足緩衝時間訊息為間隔不足() {
+        GroupCourse course = course();
+        LocalDateTime start = LocalDateTime.now().plusDays(5);
+        LocalDateTime end = start.plusHours(1);
+        CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
+        request.setGroupCourseId(COURSE_ID);
+        request.setRoomName("B教室");
+        request.setStartAt(start);
+        request.setEndAt(end);
+        when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
+        // 原始時間沒有真重疊
+        when(sessions.findOverlappingByRoom(eq("B教室"), eq(start), eq(end)))
+                .thenReturn(List.of());
+        // 緊接著間隔 5 分鐘的另一場次，只有撐大緩衝後才會查到
+        GroupClassSession tooCloseSession = session(GroupClassSessionStatus.SCHEDULED, 10, 0,
+                end.plusMinutes(5));
+        when(sessions.findOverlappingByRoom(eq("B教室"), eq(start.minusMinutes(10)), eq(end.plusMinutes(10))))
+                .thenReturn(List.of(tooCloseSession));
+
+        assertThatThrownBy(() -> service.createSession(request))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("此教室與前後場次間隔不足 10 分鐘（需保留清場時間），請調整時段");
+        verify(sessions, times(2)).findOverlappingByRoom(any(), any(), any());
+        verify(sessions, never()).save(any());
+    }
+
+    @Test
     void 建立_教練非可服務狀態擋下且不建立場次() {
         // §9 跨模組防護：教練 UNAVAILABLE／已軟刪除時，即使課程本身仍是 ACTIVE，
         // 也不可再指派新的團課場次。TrainerService 本身的判斷邏輯由 TrainerServiceTest

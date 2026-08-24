@@ -57,6 +57,14 @@ public class GroupClassService {
         private final MemberRepository memberRepository;
         private final TrainerService trainerService;
 
+        /**
+         * 同一間教室，兩堂團課場次之間至少要間隔的清場緩衝時間（分鐘）。
+         * 套用方式：檢查重疊時，把「新場次」的時間窗前後各撐大這個值再比對，
+         * 而不是修改 findOverlappingByRoom 本身的查詢邏輯 —— 緩衝時間是業務規則，
+         * 刻意留在 Service 層，之後要調整分鐘數只改這一個常數。
+         */
+        private static final int ROOM_CLEANUP_BUFFER_MINUTES = 10;
+
         @Transactional(readOnly = true)
         public List<GroupClassSessionResponse> getUpcomingSessions() {
                 // 注意：此查詢會沿用 Lazy 關聯存取 trainer/employee/課程名稱，可能引發 N+1。
@@ -159,11 +167,22 @@ public class GroupClassService {
                 // AdminTrainerService.suspend() 搶同一顆鎖，堵住競態。
                 trainerService.lockAndAssertAvailableForNewBusiness(groupCourse.getTrainer().getId());
 
-                List<GroupClassSession> existing = groupClassSessionRepository
+                // 先用「原始時間」查真重疊：兩堂課時間本身有交集
+                List<GroupClassSession> trueOverlap = groupClassSessionRepository
                                 .findOverlappingByRoom(request.getRoomName(), request.getStartAt(), request.getEndAt());
-
-                if (!existing.isEmpty()) {
+                if (!trueOverlap.isEmpty()) {
                         throw new BusinessRuleException("此教室已有重疊時段");
+                }
+
+                // 沒有真重疊，才用「加上清場緩衝」的時間再查一次：
+                // 命中代表時間沒有真的對撞，但跟前後場次的間隔不足 ROOM_CLEANUP_BUFFER_MINUTES 分鐘
+                List<GroupClassSession> tooClose = groupClassSessionRepository
+                                .findOverlappingByRoom(request.getRoomName(),
+                                                request.getStartAt().minusMinutes(ROOM_CLEANUP_BUFFER_MINUTES),
+                                                request.getEndAt().plusMinutes(ROOM_CLEANUP_BUFFER_MINUTES));
+                if (!tooClose.isEmpty()) {
+                        throw new BusinessRuleException(
+                                        "此教室與前後場次間隔不足 " + ROOM_CLEANUP_BUFFER_MINUTES + " 分鐘（需保留清場時間），請調整時段");
                 }
 
                 GroupClassSession groupClassSession = new GroupClassSession();
@@ -224,11 +243,22 @@ public class GroupClassService {
                 }
 
                 // 4) 教室重疊檢查（排除自己）：若發現其他重疊場次，直接拒絕
-                List<GroupClassSession> existing = groupClassSessionRepository
+                // 邏輯同 createSession()：先查真重疊，沒有才查緩衝範圍，exclude 自己的邏輯兩段都要做
+                List<GroupClassSession> trueOverlap = groupClassSessionRepository
                                 .findOverlappingByRoom(request.getRoomName(), request.getStartAt(), request.getEndAt());
-                existing.removeIf(s -> s.getId().equals(sessionId));
-                if (!existing.isEmpty()) {
+                trueOverlap.removeIf(s -> s.getId().equals(sessionId));
+                if (!trueOverlap.isEmpty()) {
                         throw new BusinessRuleException("此教室已有重疊時段");
+                }
+
+                List<GroupClassSession> tooClose = groupClassSessionRepository
+                                .findOverlappingByRoom(request.getRoomName(),
+                                                request.getStartAt().minusMinutes(ROOM_CLEANUP_BUFFER_MINUTES),
+                                                request.getEndAt().plusMinutes(ROOM_CLEANUP_BUFFER_MINUTES));
+                tooClose.removeIf(s -> s.getId().equals(sessionId));
+                if (!tooClose.isEmpty()) {
+                        throw new BusinessRuleException(
+                                        "此教室與前後場次間隔不足 " + ROOM_CLEANUP_BUFFER_MINUTES + " 分鐘（需保留清場時間），請調整時段");
                 }
 
                 // 5) 更新可變欄位

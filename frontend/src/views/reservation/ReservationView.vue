@@ -325,6 +325,7 @@ onMounted(() => {
               <th>開始時間</th>
               <th>結束時間</th>
               <th>狀態</th>
+              <th>核銷碼</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -337,6 +338,12 @@ onMounted(() => {
                 <span class="status-badge" :class="bookingStatusInfo(booking.status).className">
                   {{ bookingStatusInfo(booking.status).label }}
                 </span>
+              </td>
+              <td>
+                <span v-if="booking.status === 'PENDING'" class="checkin-key">
+                  {{ booking.checkInKey }}
+                </span>
+                <span v-else>—</span>
               </td>
               <td>
                 <button
@@ -483,6 +490,12 @@ onMounted(() => {
 .status-cancelled {
   background: #f1ecea;
   color: var(--text-muted);
+}
+
+.checkin-key {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  letter-spacing: 0.05em;
 }
 
 .empty-state {
