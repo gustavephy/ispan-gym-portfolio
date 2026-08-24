@@ -38,6 +38,7 @@ import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.GlobalExceptionHandler;
 import tw.com.ispan.gym.exception.InvalidRequestException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.service.coach.MemberCourseQuotaService;
 import tw.com.ispan.gym.service.member.AdminMemberService;
 
 /**
@@ -53,9 +54,12 @@ import tw.com.ispan.gym.service.member.AdminMemberService;
 class AdminMemberControllerTest {
 
     private final AdminMemberService adminMemberService = mock(AdminMemberService.class);
+    // 額度查詢端點的行為由 MemberCourseQuotaService 自己的測試負責，這裡只需一個 mock
+    // 滿足建構子，維持本測試「只驗 AdminMemberService 委派」的既有範圍
+    private final MemberCourseQuotaService memberCourseQuotaService = mock(MemberCourseQuotaService.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new AdminMemberController(adminMemberService))
+            .standaloneSetup(new AdminMemberController(adminMemberService, memberCourseQuotaService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
