@@ -1,47 +1,50 @@
 package tw.com.ispan.gym.dto.course;
 
 import java.time.LocalDateTime;
-
+import tw.com.ispan.gym.entity.course.CourseCategory;
 import tw.com.ispan.gym.entity.course.GroupCourse;
+import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.enums.course.CourseStatus;
-import tw.com.ispan.gym.enums.course.CourseType;
-import tw.com.ispan.gym.dto.trainer.TrainerDto;
 
 public record GroupCourseResponse(
-        Integer groupCourseId,
+        Integer id,
         String name,
-        Integer maxCapacity,
+        Integer trainerId,
+        String trainerName,
         String description,
         String imageUrl,
+        Integer maxCapacity,
         Boolean isTrial,
         CourseStatus status,
-        CourseType courseType,
-        CourseCategoryDto category,
-        TrainerDto trainer,
+        Integer courseCategoryId,
+        String courseCategoryName,
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {
+
     public static GroupCourseResponse from(GroupCourse groupCourse) {
         if (groupCourse == null) {
             return null;
         }
 
-        // 預防課程未設定分類時，呼叫 from() 產生空指標異常 (NPE)
-        CourseCategoryDto categoryDto = groupCourse.getCategory() != null
-                ? CourseCategoryDto.from(groupCourse.getCategory())
-                : null;
+        Trainer trainer = groupCourse.getTrainer();
+        CourseCategory category = groupCourse.getCategory();
 
         return new GroupCourseResponse(
                 groupCourse.getGroupCourseId(),
                 groupCourse.getName(),
-                groupCourse.getMaxCapacity(),
+                trainer != null ? trainer.getTrainerId() : null,
+                trainer != null && trainer.getEmployee() != null 
+                        ? trainer.getEmployee().getFirstName() + trainer.getEmployee().getLastName() 
+                        : null,
                 groupCourse.getDescription(),
                 groupCourse.getImageUrl(),
+                groupCourse.getMaxCapacity(),
                 groupCourse.getIsTrial(),
                 groupCourse.getStatus(),
-                CourseType.GROUP,
-                categoryDto,
-                TrainerDto.from(groupCourse.getTrainer()),
+                category != null ? category.getCourseCategoryId() : null,
+                category != null ? category.getName() : null,
                 groupCourse.getCreatedAt(),
-                groupCourse.getUpdatedAt());
+                groupCourse.getUpdatedAt()
+        );
     }
 }

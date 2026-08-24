@@ -22,6 +22,11 @@ const BOOKING_STATUS_MAP = {
 const trainers = ref([])
 const trainersLoading = ref(true)
 
+// 選擇教練／我的預約 頁籤切換；純前端狀態，兩邊資料都已經在 onMounted 抓過，
+// 切換不重打 API。這頁本身 requiresAuth: true（進得來就一定是登入會員），
+// 不需要像 GroupClassView 那樣額外判斷 auth.isMember 才顯示切換器。
+const viewMode = ref('trainers')
+
 const selectedTrainerId = ref(null)
 const slots = ref([])
 const slotsLoading = ref(false)
@@ -64,7 +69,7 @@ function bookingStatusInfo(status) {
 // 我的預約只有 trainerId，姓名要從已經抓到的教練清單反查，不用再多打一次 API；
 // 查不到（例如教練已離職不在在職清單裡）就顯示代號，至少不會整列空白
 function trainerName(trainerId) {
-  return trainers.value.find((t) => t.trainerId === trainerId)?.name ?? `教練 #${trainerId}`
+  return trainers.value.find((t) => t.trainerId === trainerId)?.displayName ?? `教練 #${trainerId}`
 }
 
 function formatDateTime(value) {
@@ -90,7 +95,8 @@ async function fetchTrainers() {
   trainersLoading.value = true
   try {
     const res = await getTrainers()
-    trainers.value = res.data
+    // 新 API 會回傳 UNAVAILABLE 教練，這裡過濾只留 ACTIVE，維持跟舊 API（只回傳在職教練）一致的既有行為
+    trainers.value = res.data.filter((trainer) => trainer.status === 'ACTIVE')
   } finally {
     trainersLoading.value = false
   }
@@ -137,8 +143,10 @@ async function submitCancelBooking(bookingId, acknowledgeConsumption = false) {
   try {
     await cancelBooking(bookingId, acknowledgeConsumption)
   } catch (err) {
-    const { code, message } = err.response?.data || {}
-    if (code === 'CONFIRMATION_REQUIRED' && !acknowledgeConsumption && window.confirm(message)) {
+    // 攔截器 reject 的是 normalizeApiError() 正規化後的物件（{code, message, needsConfirmation, raw…}），
+    // 不是原始的 axios error——所以這裡不能讀 err.response.data，那永遠是 undefined，
+    // 確認框就再也不會跳出來，使用者只會看到一行「請確認」的錯誤訊息卻無從確認。
+    if (err.needsConfirmation && !acknowledgeConsumption && window.confirm(err.message)) {
       await submitCancelBooking(bookingId, true)
       return
     }
@@ -177,7 +185,7 @@ function selectTrainer(trainer) {
 // 確定才送出請求；成功後把核銷碼顯示給使用者，並刷新列表讓已被約走的時段消失，
 // 失敗則顯示錯誤訊息、維持列表原狀，讓使用者可以再試一次或選別的時段
 async function handleBook(slot) {
-  const trainerLabel = selectedTrainer.value?.name ?? ''
+  const trainerLabel = selectedTrainer.value?.displayName ?? ''
   const confirmed = window.confirm(
     `確定要預約 ${trainerLabel} ${formatDateTime(slot.startAt)}~${timeOnly(slot.endAt)} 這堂課嗎？`,
   )
@@ -187,8 +195,13 @@ async function handleBook(slot) {
   bookingSlotId.value = slot.id
   try {
     const res = await createBooking(slot.id)
+    // 這裡刻意用 alert 而非 toast：核銷碼是使用者必須記下來的資訊，
+    // 自動消失的 toast 有錯過的風險，阻斷式對話框逼使用者確實看過才繼續。
+    // 其他「操作已完成」的提示仍用 toast（見 GroupClassView／TrainerScheduleView）
     alert(`預約成功！核銷碼：${res.data.checkInKey}，上課時請出示給教練核銷`)
-    await fetchTrainerSchedules(selectedTrainerId.value)
+    // 時段列表要讓已被約走的時段消失，「我的預約」要出現這筆新紀錄——兩邊都得重抓。
+    // 只抓其中一邊會讓使用者以為預約沒成功（同 handleCancelBooking 的處理）
+    await Promise.all([fetchTrainerSchedules(selectedTrainerId.value), fetchMyBookings()])
   } catch (err) {
     const apiError = err
     if (isInlineError(apiError)) {
@@ -213,64 +226,89 @@ onMounted(() => {
     <h2 class="section-title">預約課程</h2>
     <p class="section-desc">選擇教練，查看目前可預約的私教課時段。</p>
 
-    <div v-if="trainersLoading" class="spinner"></div>
+    <div class="view-switch" role="tablist" aria-label="檢視切換">
+      <button
+        type="button"
+        role="tab"
+        class="view-tab"
+        :class="{ 'view-tab--active': viewMode === 'trainers' }"
+        :aria-selected="viewMode === 'trainers'"
+        @click="viewMode = 'trainers'"
+      >
+        選擇教練
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="view-tab"
+        :class="{ 'view-tab--active': viewMode === 'bookings' }"
+        :aria-selected="viewMode === 'bookings'"
+        @click="viewMode = 'bookings'"
+      >
+        我的預約
+      </button>
+    </div>
 
-    <template v-else>
-      <p v-if="trainers.length === 0" class="empty-state">目前沒有在職教練。</p>
+    <template v-if="viewMode === 'trainers'">
+      <div v-if="trainersLoading" class="spinner"></div>
 
-      <div v-else class="trainer-grid">
-        <button
-          v-for="trainer in trainers"
-          :key="trainer.trainerId"
-          type="button"
-          class="trainer-card"
-          :class="{ 'trainer-card-selected': trainer.trainerId === selectedTrainerId }"
-          @click="selectTrainer(trainer)"
-        >
-          <h3 class="trainer-name">{{ trainer.name }}</h3>
-          <p class="trainer-specialty">{{ trainer.specialty }}</p>
-          <p class="trainer-experience">{{ trainer.experience }}</p>
-        </button>
+      <template v-else>
+        <p v-if="trainers.length === 0" class="empty-state">目前沒有在職教練。</p>
+
+        <div v-else class="trainer-grid">
+          <button
+            v-for="trainer in trainers"
+            :key="trainer.trainerId"
+            type="button"
+            class="trainer-card"
+            :class="{ 'trainer-card-selected': trainer.trainerId === selectedTrainerId }"
+            @click="selectTrainer(trainer)"
+          >
+            <h3 class="trainer-name">{{ trainer.displayName }}</h3>
+            <p class="trainer-specialty">{{ trainer.specialty }}</p>
+            <p class="trainer-experience">{{ trainer.experience }}</p>
+          </button>
+        </div>
+      </template>
+
+      <div v-if="selectedTrainerId" class="schedule-section">
+        <h3 class="schedule-title">可預約時段</h3>
+
+        <div v-if="slotsLoading" class="spinner"></div>
+
+        <template v-else>
+          <p v-if="sortedSlots.length === 0" class="empty-state">這位教練目前沒有可預約的時段</p>
+
+          <table v-else class="slot-table">
+            <thead>
+              <tr>
+                <th>開始時間</th>
+                <th>結束時間</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="slot in sortedSlots" :key="slot.id">
+                <td>{{ formatDateTime(slot.startAt) }}</td>
+                <td>{{ formatDateTime(slot.endAt) }}</td>
+                <td>
+                  <button
+                    class="btn btn-accent"
+                    type="button"
+                    :disabled="bookingSlotId === slot.id"
+                    @click="handleBook(slot)"
+                  >
+                    {{ bookingSlotId === slot.id ? '預約中…' : '預約' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
       </div>
     </template>
 
-    <div v-if="selectedTrainerId" class="schedule-section">
-      <h3 class="schedule-title">可預約時段</h3>
-
-      <div v-if="slotsLoading" class="spinner"></div>
-
-      <template v-else>
-        <p v-if="sortedSlots.length === 0" class="empty-state">這位教練目前沒有可預約的時段</p>
-
-        <table v-else class="slot-table">
-          <thead>
-            <tr>
-              <th>開始時間</th>
-              <th>結束時間</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="slot in sortedSlots" :key="slot.id">
-              <td>{{ formatDateTime(slot.startAt) }}</td>
-              <td>{{ formatDateTime(slot.endAt) }}</td>
-              <td>
-                <button
-                  class="btn btn-accent"
-                  type="button"
-                  :disabled="bookingSlotId === slot.id"
-                  @click="handleBook(slot)"
-                >
-                  {{ bookingSlotId === slot.id ? '預約中…' : '預約' }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </template>
-    </div>
-
-    <div class="my-bookings-section">
+    <div v-if="viewMode === 'bookings'" class="my-bookings-section">
       <h3 class="schedule-title">我的預約</h3>
 
       <OperationMessage :message="bookingActionMessage" />
@@ -327,6 +365,39 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.view-switch {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  background: #e6d8c6;
+  flex-shrink: 0;
+  width: fit-content;
+  margin-bottom: 1.25rem;
+}
+
+.view-tab {
+  padding: 0.5rem 1.1rem;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.view-tab:hover {
+  color: var(--primary-dark);
+}
+
+.view-tab--active {
+  background: #f2e8dc;
+  color: var(--primary-dark);
+}
+
 .trainer-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

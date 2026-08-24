@@ -60,6 +60,15 @@ public class Account {
 	@Column(name = "role", length = 20, nullable = false)
 	private Set<AccountType> roles = new HashSet<>();
 
+	/**
+	 * 密碼變更代數。修改或重設密碼成功時遞增，JWT 簽發時把當下版本放進 cv claim，
+	 * 每次請求比對 token 的 cv 與這裡是否一致，不同就視為舊 token（全裝置登出的機制）。
+	 * 用版本號而非時間戳，是為了避開 JWT iat（序列化成秒）與 LocalDateTime（次秒精度）
+	 * 比較時的時區/精度誤差問題。
+	 */
+	@Column(name = "credentials_version", nullable = false)
+	private int credentialsVersion;
+
 	@Column(name = "deleted_at")
 	private LocalDateTime deletedAt;
 

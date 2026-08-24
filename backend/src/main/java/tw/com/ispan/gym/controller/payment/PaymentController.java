@@ -30,7 +30,7 @@ public class PaymentController {
 
     /** 組出綠界 AioCheckOut 表單欄位；只有訂單所屬會員本人可以查詢 */
     @PostMapping("/ecpay/checkout/{orderId}")
-    public Map<String, String> checkout(@PathVariable Long orderId) {
+    public Map<String, String> checkout(@PathVariable Integer orderId) {
         Order order = orders.findByIdAndMemberId(orderId, currentUser.requireCurrentMemberId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         return ecpayService.buildCheckoutForm(order);

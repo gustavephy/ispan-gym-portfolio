@@ -21,6 +21,8 @@ public record PrivateCourseResponse(
         CourseStatus status,
         CourseType courseType,
         TrainerDto trainer,
+        Integer courseCategoryId,
+        String courseCategoryName,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -41,6 +43,8 @@ public record PrivateCourseResponse(
                 course.getStatus(),
                 CourseType.PRIVATE,
                 TrainerDto.from(course.getTrainer()),
+                course.getCategory() != null ? course.getCategory().getCourseCategoryId() : null,
+                course.getCategory() != null ? course.getCategory().getName() : null,
                 course.getCreatedAt(),
                 course.getUpdatedAt()
         );

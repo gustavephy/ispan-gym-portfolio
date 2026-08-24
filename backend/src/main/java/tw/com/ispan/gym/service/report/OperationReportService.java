@@ -13,26 +13,36 @@ import java.util.stream.IntStream;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tw.com.ispan.gym.dto.report.DailyRevenueRow;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
 import tw.com.ispan.gym.dto.report.OrderOverviewResponse;
 import tw.com.ispan.gym.dto.report.OrderPeriodSummary;
 import tw.com.ispan.gym.dto.report.ProductSalesRow;
+import tw.com.ispan.gym.dto.report.ReportBreakdownResponse;
+import tw.com.ispan.gym.dto.report.ReportDailyTotalResponse;
 import tw.com.ispan.gym.dto.report.ReportDetailResponse;
+import tw.com.ispan.gym.dto.report.ReportRefundSummary;
 import tw.com.ispan.gym.dto.report.ReportSalesItemResponse;
 import tw.com.ispan.gym.dto.report.ReportSummaryResponse;
 import tw.com.ispan.gym.dto.report.SalesStatsResponse;
 import tw.com.ispan.gym.dto.report.SubscriptionSalesRow;
 import tw.com.ispan.gym.entity.employee.Employee;
+import tw.com.ispan.gym.entity.report.ReportBreakdown;
+import tw.com.ispan.gym.entity.report.ReportDailyTotal;
 import tw.com.ispan.gym.entity.report.ReportSalesItem;
 import tw.com.ispan.gym.entity.report.ReportSnapshot;
 import tw.com.ispan.gym.enums.order.OrderStatus;
+import tw.com.ispan.gym.enums.report.ReportBreakdownDimension;
 import tw.com.ispan.gym.enums.report.ReportItemType;
 import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
+import tw.com.ispan.gym.repository.payment.PaymentRefundRepository;
 import tw.com.ispan.gym.repository.report.ReportSnapshotRepository;
 
 /**
@@ -67,13 +77,21 @@ public class OperationReportService {
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
     private final EmployeeRepository employees;
+    private final PaymentRefundRepository refundRepository;
+    private final MemberRepository members;
+    private final MemberSubscriptionRepository subscriptions;
 
     public OperationReportService(ReportSnapshotRepository snapshots, OrderRepository orders,
-                                  OrderItemRepository orderItems, EmployeeRepository employees) {
+                                  OrderItemRepository orderItems, EmployeeRepository employees,
+                                  PaymentRefundRepository refundRepository, MemberRepository members,
+                                  MemberSubscriptionRepository subscriptions) {
         this.snapshots = snapshots;
         this.orders = orders;
         this.orderItems = orderItems;
         this.employees = employees;
+        this.refundRepository = refundRepository;
+        this.members = members;
+        this.subscriptions = subscriptions;
     }
 
     /**
@@ -146,7 +164,36 @@ public class OperationReportService {
             snapshot.addItem(new ReportSalesItem(snapshot, i + 1, e.itemId(),
                     e.type(), e.name(), e.quantitySold(), e.grossAmount()));
         });
+        attachExtendedStats(snapshot, from, to);
         return toDetail(snapshots.save(snapshot));
+    }
+
+    /**
+     * 延伸統計一併固化進快照（2026-08-17 擴充）：每日營收（趨勢圖）、
+     * 狀態／付款方式分佈、退款彙總、新會員與新訂閱數。
+     * 全部生成時計算——呈現端不得於讀取時重算，否則退款後趨勢與總覽
+     * 會變成兩個口徑；過時一律靠 staleAt 警示、重新生成解決。
+     */
+    private void attachExtendedStats(ReportSnapshot snapshot, LocalDateTime from, LocalDateTime to) {
+        for (DailyRevenueRow row : orders.aggregateDailyRevenue(from, to, REVENUE_STATUSES)) {
+            snapshot.addDailyTotal(new ReportDailyTotal(snapshot, row.statDate(),
+                    row.orderCount(), zeroIfNull(row.revenue())));
+        }
+        // 分佈口徑同 getOrderOverview：下單日 createdAt（看訂單量，非營收歸屬）
+        for (Object[] row : orders.aggregateByStatus(from, to)) {
+            snapshot.addBreakdown(new ReportBreakdown(snapshot, ReportBreakdownDimension.STATUS,
+                    ((OrderStatus) row[0]).name(), (Long) row[1], zeroIfNull((BigDecimal) row[2])));
+        }
+        for (Object[] row : orders.aggregateByPaymentMethod(from, to)) {
+            snapshot.addBreakdown(new ReportBreakdown(snapshot, ReportBreakdownDimension.PAYMENT_METHOD,
+                    (String) row[0], (Long) row[1], null));
+        }
+        // 區間內無退款時投影本身可能回 null（COUNT 有值但 JPA 投影整列為空的邊界），一併正規化為 0
+        ReportRefundSummary refunds = refundRepository.summarizeCompleted(from, to);
+        long refundCount = refunds == null || refunds.refundCount() == null ? 0L : refunds.refundCount();
+        BigDecimal refundAmount = refunds == null ? BigDecimal.ZERO : zeroIfNull(refunds.refundAmount());
+        snapshot.attachExtendedStats(refundCount, refundAmount,
+                members.countCreatedBetween(from, to), subscriptions.countCreatedBetween(from, to));
     }
 
     /** 即時統計：依品項型別篩選時間區間，聚合 + 排行，不落快照 */
@@ -239,9 +286,23 @@ public class OperationReportService {
                 .map(i -> new ReportSalesItemResponse(i.getRankNo(), i.getProductId(),
                         i.getProductType(), i.getProductName(), i.getQuantitySold(), i.getGrossAmount()))
                 .toList();
+        List<ReportBreakdownResponse> statusBreakdown = breakdownOf(s, ReportBreakdownDimension.STATUS);
+        List<ReportBreakdownResponse> paymentBreakdown = breakdownOf(s, ReportBreakdownDimension.PAYMENT_METHOD);
+        List<ReportDailyTotalResponse> dailyTotals = s.getDailyTotals().stream()
+                .map(d -> new ReportDailyTotalResponse(d.getStatDate(), d.getOrderCount(), d.getRevenue()))
+                .toList();
         return new ReportDetailResponse(s.getId(), s.getReportType(), s.getPeriodStart(),
                 s.getPeriodEnd(), s.getOrderCount(), s.getTotalAmount(), s.getDiscountAmount(),
-                s.getGeneratedAt(), s.getStaleAt(), items);
+                s.getGeneratedAt(), s.getStaleAt(), items,
+                statusBreakdown, paymentBreakdown, dailyTotals,
+                s.getRefundCount(), s.getRefundAmount(), s.getNewMemberCount(), s.getNewSubscriptionCount());
+    }
+
+    private List<ReportBreakdownResponse> breakdownOf(ReportSnapshot s, ReportBreakdownDimension dimension) {
+        return s.getBreakdowns().stream()
+                .filter(b -> b.getDimension() == dimension)
+                .map(b -> new ReportBreakdownResponse(b.getItemKey(), b.getOrderCount(), b.getAmount()))
+                .toList();
     }
 
     private ReportSalesItemResponse toItemResponse(int rank, SalesEntry e) {

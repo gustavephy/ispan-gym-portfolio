@@ -82,7 +82,7 @@ public class EmployeeCouponController {
 	public ResponseEntity<Map<String, Object>> distributeToMembers(@PathVariable Integer id,
 			@RequestBody List<Integer> memberIds) {
 		log.info("Employee request to distribute coupon {} to member list: {}", id, memberIds);
-		int count = couponService.distributeToUsers(id, memberIds);
+		int count = couponService.distributeToMembers(id, memberIds);
 		return ResponseEntity
 				.ok(Map.of("success", true, "distributedCount", count, "message", "成功發放給 " + count + " 位會員"));
 	}

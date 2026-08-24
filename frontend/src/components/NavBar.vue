@@ -11,6 +11,11 @@
    *
    * requires 為進入該工作區所需的角色；null 代表任何人（含未登入）皆可。
    * 這只是選單的可見性，不是安全機制——把關在後端 @PreAuthorize 與路由守衛。
+   *
+   * AI健康管理（InBody／AI課表／聊天室，皆以 member_id 為主體）歸在會員工作區，
+   * 跟「我的訂單」一樣額外標記 requires: 'MEMBER'；學員訊息（教練回覆聊天室訊息）
+   * 歸在教練工作區——兩者訪客或不具對應角色都看不到，直接輸入網址仍會被
+   * router 的 requiresAuth／requiresRole 守衛擋下（見 router/index.js）。
    */
   const WORKSPACES = [
     {
@@ -25,21 +30,28 @@
         { to: '/products', label: '補給商城' },
         { to: '/subscription', label: '會籍方案' },
         { to: '/orders', label: '我的訂單', requires: 'MEMBER' },
+        { to: '/health', label: 'AI健康管理', requires: 'MEMBER' },
       ],
     },
     {
       key: 'trainer',
       label: '教練',
       requires: 'TRAINER',
-      links: [{ to: '/trainer/schedules', label: '教練排班' }],
+      links: [
+        { to: '/trainer/schedules', label: '教練排班' },
+        { to: '/employee/chat', label: '學員訊息' },
+      ],
     },
     {
       key: 'admin',
       label: '管理',
       requires: 'ADMIN',
       links: [
+        { to: '/admin/reports', label: '營運統計' },
+        { to: '/admin/members', label: '會員管理' },
         { to: '/admin/group-courses', label: '團課主檔' },
         { to: '/admin/group-classes', label: '團課場次' },
+        { to: '/admin/refunds', label: '退款處理' },
       ],
     },
   ]
@@ -52,9 +64,20 @@
   const cart = useCartStore()
   onMounted(() => cart.loadCart())
 
-  /** 目前身分進得去的工作區；只有一個時不顯示切換器 */
+  /**
+   * 目前身分進得去的工作區；只有一個時不顯示切換器。
+   *
+   * 會員工作區的 requires 是 null（前台商城要讓未登入訪客也能瀏覽），但「已登入卻沒有
+   * 會員身分」的帳號（純員工／純管理員）不該看到它——那些頁面多半需要 member_id，
+   * 點進去只會拿到錯誤。因此已登入時額外要求 MEMBER 角色，未登入則維持開放。
+   */
   const availableWorkspaces = computed(() =>
-    WORKSPACES.filter((w) => !w.requires || auth.roles.includes(w.requires)),
+    WORKSPACES.filter((w) => {
+      if (w.key === 'member') {
+        return !auth.isLoggedIn || auth.isMember
+      }
+      return !w.requires || auth.roles.includes(w.requires)
+    }),
   )
 
   /**
@@ -62,13 +85,29 @@
    * 使用者從外部連結或重新整理進來時，選單才不會停在別的工作區。
    */
   const activeKey = ref('member')
+
+  /**
+   * 連結是否該亮起：自己比對路徑前綴，不用 router-link-exact-active——
+   * exact 在巢狀路由下永遠不亮（/health 進頁即轉址 /health/inbody，路徑不再「完全等於」/health；
+   * 商品內頁 /products/5 也同理）。也不能用 router-link-active：首頁「/」是萬用前綴，會永遠亮著。
+   * 比對時補上「/」邊界，避免 /course 誤亮 /courses 這種同前綴不同路由。
+   */
+  function isLinkActive(to) {
+    if (to === '/') return route.path === '/'
+    return route.path === to || route.path.startsWith(to + '/')
+  }
   const currentWorkspace = computed(
     () => availableWorkspaces.value.find((w) => w.key === activeKey.value) ?? availableWorkspaces.value[0],
   )
 
+  // 網址對不到任何工作區時（例如首頁 '/'）退回第一個可用的，而不是寫死 'member'——
+  // 純員工／純管理員沒有會員工作區，退回去會讓 currentWorkspace 落空、選單整個空白
   function workspaceOf(path) {
     const hit = WORKSPACES.find((w) => w.links.some((l) => l.to !== '/' && path.startsWith(l.to)))
-    return hit?.key ?? 'member'
+    if (hit && availableWorkspaces.value.some((w) => w.key === hit.key)) {
+      return hit.key
+    }
+    return availableWorkspaces.value[0]?.key ?? 'member'
   }
 
   watch(
@@ -79,12 +118,13 @@
     { immediate: true },
   )
 
-  // 登出後角色歸零，若當時停在教練／管理工作區會變成空選單，拉回會員工作區
+  // 角色變動（登入／登出）後，若當時停在已不可用的工作區會變成空選單，拉回第一個可用的。
+  // 不寫死 'member'：純員工／純管理員沒有會員工作區，第一個可用的會是教練或管理
   watch(
     () => auth.roles,
     () => {
       if (!availableWorkspaces.value.some((w) => w.key === activeKey.value)) {
-        activeKey.value = 'member'
+        activeKey.value = availableWorkspaces.value[0]?.key ?? 'member'
       }
     },
     { deep: true },
@@ -152,6 +192,7 @@
         :key="link.to"
         :to="link.to"
         class="nav-link"
+        :class="{ 'nav-link--active': isLinkActive(link.to) }"
       >
         {{ link.label }}
       </RouterLink>
@@ -160,6 +201,7 @@
         v-if="currentWorkspace?.key === 'member' && auth.isMember"
         to="/cart"
         class="nav-link cart-link"
+        :class="{ 'nav-link--active': isLinkActive('/cart') }"
       >
         購物車
         <span v-if="cart.itemCount > 0" class="cart-badge">{{ cart.itemCount }}</span>
@@ -292,7 +334,7 @@
     font-weight: 700;
   }
 
-  .nav-link.router-link-exact-active {
+  .nav-link--active {
     background: var(--accent);
     color: #fff;
     font-weight: 700;

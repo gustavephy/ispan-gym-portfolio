@@ -1,15 +1,18 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { getUpcomingSessions, bookSession, getMyBookings, cancelBooking } from '@/api/groupClass.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import FeedbackToast from '@/components/FeedbackToast.vue'
+import { useFeedback } from '@/composables/useFeedback.js'
 import Pagination from '@/components/Pagination.vue'
 import FullCalendar from '@fullcalendar/vue3'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import zhTwLocale from '@fullcalendar/core/locales/zh-tw'
+import { getRoomColor } from '@/utils/rooms.js'
 
 // 我的報名狀態對照表：後端回傳 BOOKED/CANCELLED，畫面顯示中文與顏色
 const MY_BOOKING_STATUS_MAP = {
@@ -17,8 +20,29 @@ const MY_BOOKING_STATUS_MAP = {
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
 }
 
+// 成功提示用 toast 而非 window.alert——alert 會阻斷畫面、還要使用者多按一次確定，
+// 對「操作已完成」這種不需要決策的訊息太重（用法比照 ProductDetail.vue）
+const { feedback, showFeedback } = useFeedback(2500)
+
 const sessions = ref([])
 const loading = ref(true)
+
+// 行事曆／我的預約 頁籤切換；純前端狀態，兩邊資料都已經在 onMounted 抓過，
+// 切換不重打 API。只有登入會員看得到這個切換器，未登入者固定看行事曆。
+const viewMode = ref('calendar')
+
+// 行事曆用 v-show 隱藏（不是 v-if 移除）——移除掉再掛載會讓已載入的場次消失、
+// 也會失去捲動位置。但 FullCalendar 的版面是掛載當下量出來的，在 display:none
+// 的容器裡量到的高度是 0，切回來時 v-show 只是還原 display，不會通知它重算，
+// 表格會塌成一條線。因此切回行事曆時要主動呼叫 updateSize() 重新量測。
+const calendarRef = ref(null)
+
+watch(viewMode, async (mode) => {
+  if (mode !== 'calendar') return
+  // 等 v-show 還原 display 後才量得到真實尺寸
+  await nextTick()
+  calendarRef.value?.getApi()?.updateSize()
+})
 
 // 我的團課報名列表，跟行事曆的 loading 各自獨立、互不影響
 const myBookings = ref([])
@@ -58,6 +82,12 @@ const visibleSessions = computed(() =>
 // 從目前抓到的場次動態取出不重複的教室名稱，不寫死教室清單
 const rooms = computed(() => [...new Set(visibleSessions.value.map((session) => session.roomName))])
 
+// 教室篩選只在「行事曆模式、已載入完成、且有場次資料」時有意義；
+// 其他情況（我的預約模式、loading 中、空清單）顯示這個下拉選單沒有實際作用
+const showRoomFilter = computed(
+  () => viewMode.value === 'calendar' && !loading.value && visibleSessions.value.length > 0,
+)
+
 const roomFilteredSessions = computed(() =>
   selectedRoom.value === 'all'
     ? visibleSessions.value
@@ -65,8 +95,14 @@ const roomFilteredSessions = computed(() =>
 )
 
 // 我的團課報名列表依開始時間排序，跟行事曆的排序邏輯一致
+// 後端已依「狀態→開課時間」排好（BOOKED 在前），這裡沿用同一套規則，
+// 避免前端只對「當前這一頁」重排而把後端的順序打亂
 const sortedMyBookings = computed(() =>
-  [...myBookings.value].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)),
+  [...myBookings.value].sort(
+    (a, b) =>
+      Number(a.status === 'CANCELLED') - Number(b.status === 'CANCELLED') ||
+      new Date(a.startAt) - new Date(b.startAt),
+  ),
 )
 
 function myBookingStatusInfo(status) {
@@ -82,9 +118,10 @@ const calendarEvents = computed(() =>
       : `${session.courseName}｜${session.trainerName}`,
     start: session.startAt,
     end: session.endAt,
-    backgroundColor: session.isFull ? 'var(--bg-soft)' : 'var(--accent)',
-    borderColor: session.isFull ? 'var(--border)' : 'var(--accent-hover)',
-    textColor: session.isFull ? 'var(--text-muted)' : '#fff',
+    backgroundColor: getRoomColor(session.roomName),
+    borderColor: getRoomColor(session.roomName),
+    textColor: '#fff',
+    classNames: session.isFull ? ['gcs-event-full'] : [],
     // 存整筆場次資料，點擊事件時不用再回頭用 id 查一次 sessions 陣列
     extendedProps: { session },
   })),
@@ -145,8 +182,15 @@ async function handleBookInModal() {
     // 先解除 loading 狀態，closeDetailModal() 才不會被自己的送出中防呆擋住
     bookingSubmitting.value = false
     closeDetailModal()
-    alert('報名成功')
-    await fetchSessions()
+    showFeedback('報名成功')
+    // 行事曆要更新剩餘名額，「我的團課報名」要出現這筆新紀錄——兩邊都得重抓，
+    // 只抓其中一邊會讓使用者以為報名沒成功（寫法比照 handleCancelBooking）。
+    // fetchMyBookings 需要 MEMBER 身分，跟 onMounted 的判斷式一致才呼叫。
+    if (auth.isMember) {
+      await Promise.all([fetchSessions(), fetchMyBookings()])
+    } else {
+      await fetchSessions()
+    }
   } catch (err) {
     const apiError = err
     if (isInlineError(apiError)) {
@@ -175,9 +219,31 @@ const calendarOptions = computed(() => ({
     right: '',
   },
   allDaySlot: false,
+  slotMinTime: '10:00:00',
+  slotMaxTime: '22:00:00',
   height: 'auto',
   events: calendarEvents.value,
   eventClick: handleEventClick,
+  displayEventTime: false,
+  eventContent(arg) {
+    const session = arg.event.extendedProps.session
+    const wrapper = document.createElement('div')
+    wrapper.className = 'gcs-event-content'
+
+    const courseLine = document.createElement('div')
+    courseLine.className = 'gcs-event-course'
+    courseLine.textContent = session.isFull
+      ? `${session.courseName}（已額滿）`
+      : session.courseName
+
+    const trainerLine = document.createElement('div')
+    trainerLine.className = 'gcs-event-trainer'
+    trainerLine.textContent = session.trainerName
+
+    wrapper.appendChild(courseLine)
+    wrapper.appendChild(trainerLine)
+    return { domNodes: [wrapper] }
+  },
 }))
 
 async function fetchSessions() {
@@ -272,41 +338,67 @@ onUnmounted(() => {
     <h2 class="section-title">團體課程</h2>
     <p class="section-desc">依教室篩選，以週曆檢視瀏覽即將開課的團體課程場次。</p>
 
-    <div v-if="loading" class="spinner"></div>
+    <!-- 固定在這裡、不受 loading／viewMode 影響：使用者無論在哪個載入狀態、哪個
+         viewMode，都要能看到並點擊教室篩選（行事曆模式才有意義，用 showRoomFilter
+         控制）與「行事曆／我的預約」切換器（僅登入會員看得到）。
+         room-select-wrap 這層外殼固定存在，讓 view-switch 的位置不會因為
+         select 消失而跳動 -->
+    <div class="toolbar-row">
+      <div class="room-select-wrap">
+        <select
+          v-if="showRoomFilter"
+          id="roomFilter"
+          v-model="selectedRoom"
+          class="room-select"
+          aria-label="篩選教室"
+        >
+          <option value="all">所有教室</option>
+          <option v-for="room in rooms" :key="room" :value="room">{{ room }}</option>
+        </select>
+      </div>
 
-    <template v-else>
-      <p v-if="visibleSessions.length === 0" class="empty-state">目前沒有開放報名的團課場次。</p>
+      <div v-if="auth.isMember" class="view-switch" role="tablist" aria-label="檢視切換">
+        <button
+          type="button"
+          role="tab"
+          class="view-tab"
+          :class="{ 'view-tab--active': viewMode === 'calendar' }"
+          :aria-selected="viewMode === 'calendar'"
+          @click="viewMode = 'calendar'"
+        >
+          行事曆
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="view-tab"
+          :class="{ 'view-tab--active': viewMode === 'bookings' }"
+          :aria-selected="viewMode === 'bookings'"
+          @click="viewMode = 'bookings'"
+        >
+          我的預約
+        </button>
+      </div>
+    </div>
 
-      <template v-else>
-        <div class="room-tabs">
-          <button
-            type="button"
-            class="room-tab"
-            :class="{ 'room-tab-active': selectedRoom === 'all' }"
-            @click="selectedRoom = 'all'"
-          >
-            所有教室
-          </button>
-          <button
-            v-for="room in rooms"
-            :key="room"
-            type="button"
-            class="room-tab"
-            :class="{ 'room-tab-active': selectedRoom === room }"
-            @click="selectedRoom = room"
-          >
-            {{ room }}
-          </button>
-        </div>
+    <!--
+      行事曆必須「永遠掛載」，不能用 v-if/v-else 換掉：被 loading 的 v-else 擋住時
+      根本不會掛載，畫面就卡在轉圈圈（見 6f30ac1）。因此 loading 與「本週沒課」
+      都只作為疊加提示，不影響行事曆本身的存在。
+      切換到「我的預約」時同理用 v-show 隱藏，但 FullCalendar 在 display:none 下
+      量到的高度是 0，切回來要主動 updateSize()——見上方 watch(viewMode)。
+    -->
+    <div v-show="viewMode === 'calendar'" class="calendar-wrap">
+      <div v-if="loading" class="calendar-notice"><div class="spinner"></div></div>
+      <p v-else-if="visibleSessions.length === 0" class="empty-state calendar-notice">
+        這一週沒有開放報名的團課場次，可切換到其他週次查看。
+      </p>
+      <FullCalendar ref="calendarRef" :options="calendarOptions" />
+    </div>
 
-        <div class="calendar-wrap">
-          <FullCalendar :options="calendarOptions" />
-        </div>
-      </template>
-    </template>
-
-    <!-- 未登入時整塊隱藏：沒有資料來源，顯示空區塊反而困惑 -->
-    <div v-if="auth.isMember" class="my-bookings-section">
+    <!-- 未登入時整塊隱藏：沒有資料來源，顯示空區塊反而困惑。
+         已登入會員則依 viewMode 切換顯示，不是跟行事曆同時出現 -->
+    <div v-if="auth.isMember && viewMode === 'bookings'" class="my-bookings-section">
       <h3 class="schedule-title">我的團課報名</h3>
 
       <div class="search-field">
@@ -394,38 +486,72 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    <FeedbackToast :feedback="feedback" />
   </div>
 </template>
 
 <style scoped>
-.room-tabs {
+.toolbar-row {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   flex-wrap: wrap;
-  gap: 0.5rem;
   margin-bottom: 1.25rem;
 }
 
-.room-tab {
-  padding: 0.5rem 1.1rem;
-  border: 1.5px solid var(--border);
-  border-radius: 999px;
+.room-select-wrap {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.room-select {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: var(--bg-section);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font: inherit;
   font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.view-switch {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  background: #e6d8c6;
+  flex-shrink: 0;
+}
+
+.view-tab {
+  padding: 0.5rem 1.1rem;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
   transition: var(--transition);
 }
 
-.room-tab:hover {
-  border-color: var(--accent);
+.view-tab:hover {
+  color: var(--primary-dark);
 }
 
-.room-tab-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  font-weight: 700;
+.view-tab--active {
+  background: #f2e8dc;
+  color: var(--primary-dark);
+}
+
+.calendar-notice {
+  /* 提示疊在行事曆上方，行事曆本身保持掛載（被 v-else 擋住就不會掛載，畫面會卡在轉圈圈） */
+  margin-bottom: 0.75rem;
+  text-align: center;
 }
 
 .calendar-wrap {
@@ -454,6 +580,30 @@ onUnmounted(() => {
   --fc-button-active-bg-color: var(--accent-hover);
   --fc-button-active-border-color: var(--accent-hover);
   font-family: inherit;
+}
+
+/* 額滿場次：保留教室色相（方便辨認教室），整體變淡表示「不用特別注意」，
+   不用另外換一個跟教室無關的顏色，避免額滿時反而看不出是哪間教室 */
+.calendar-wrap :deep(.gcs-event-full) {
+  opacity: 0.45;
+}
+
+.calendar-wrap :deep(.gcs-event-content) {
+  padding: 2px 4px;
+  overflow: hidden;
+}
+.calendar-wrap :deep(.gcs-event-course),
+.calendar-wrap :deep(.gcs-event-trainer) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.calendar-wrap :deep(.gcs-event-course) {
+  font-weight: 600;
+}
+.calendar-wrap :deep(.gcs-event-trainer) {
+  font-size: 0.85em;
+  opacity: 0.9;
 }
 
 .modal-overlay {

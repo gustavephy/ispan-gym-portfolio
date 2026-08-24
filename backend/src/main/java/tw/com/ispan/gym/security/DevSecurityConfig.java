@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * dev profile 的全放行 filter chain，讓本機不必帶 token 就能打 API。
@@ -30,6 +31,12 @@ import org.springframework.security.web.SecurityFilterChain;
 public class DevSecurityConfig {
 
     private static final Logger log = LoggerFactory.getLogger(DevSecurityConfig.class);
+
+    private final JwtAuthFilter jwtAuthFilter;
+
+    DevSecurityConfig(JwtAuthFilter jwtAuthFilter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
 
     @PostConstruct
     void warnSecurityDisabled() {
@@ -62,7 +69,13 @@ public class DevSecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 // 沿用 CorsConfig 的共用設定；少了這行，前端本機開發的 preflight 會被瀏覽器擋下
                 .cors(Customizer.withDefaults())
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                // 全放行仍要掛 JwtAuthFilter：有帶 token 時把真實登入者寫進 SecurityContext，
+                // 讓 DevCurrentUserProvider 能解析出真實身分。少了這行，REST 一律回寫死的
+                // 假 id，但 STOMP 驗證走的是真實 JWT，兩邊對「我是誰」的認知會兜不起來，
+                // 聊天室訂閱因而被 authorizeRoomSubscription 擋下（見 DevCurrentUserProvider）。
+                // 不帶 token 時 filter 什麼都不做，「本機不登入也能打 API」的便利性不受影響。
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 }

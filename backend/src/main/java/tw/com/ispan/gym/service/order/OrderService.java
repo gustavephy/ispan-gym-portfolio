@@ -93,7 +93,7 @@ public class OrderService {
     private final CartItemRepository cartItems;
     private final ProductRepository products;
     private final PrivateCourseRepository courses;
-    private final MemberRepository users;
+    private final MemberRepository members;
     private final CouponRepository coupons;
     private final MemberCouponRepository memberCoupons;
     private final OrderRepository orders;
@@ -107,7 +107,7 @@ public class OrderService {
     private final ApplicationEventPublisher events;
 
     public OrderService(CartItemRepository cartItems, ProductRepository products, PrivateCourseRepository courses,
-            MemberRepository users, CouponRepository coupons, MemberCouponRepository memberCoupons,
+            MemberRepository members, CouponRepository coupons, MemberCouponRepository memberCoupons,
             OrderRepository orders, OrderItemRepository orderItems,
             OrderStatusHistoryRepository orderStatusHistories, SubscriptionPlanRepository subscriptionPlans,
             MemberSubscriptionRepository subscriptions, MemberCourseQuotaRepository courseQuotas,
@@ -116,7 +116,7 @@ public class OrderService {
         this.cartItems = cartItems;
         this.products = products;
         this.courses = courses;
-        this.users = users;
+        this.members = members;
         this.coupons = coupons;
         this.memberCoupons = memberCoupons;
         this.orders = orders;
@@ -131,13 +131,13 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderDetailResponse createOrderFromCart(Integer userId, CreateOrderRequest request) {
-        List<CartItem> items = cartItems.findAllByMemberIdOrderByCreatedAtAsc(userId);
+    public OrderDetailResponse createOrderFromCart(Integer memberId, CreateOrderRequest request) {
+        List<CartItem> items = cartItems.findAllByMemberIdOrderByCreatedAtAsc(memberId);
         if (items.isEmpty()) {
             throw new BusinessRuleException("購物車是空的，無法建立訂單");
         }
 
-        Member user = users.findById(userId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
+        Member member = members.findById(memberId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
         List<ProductQuantity> lines = items.stream()
                 .map(ci -> new ProductQuantity(ci.getProduct(), ci.getQuantity()))
                 .toList();
@@ -146,9 +146,9 @@ public class OrderService {
         String receiverPhone = request == null ? null : request.receiverPhone();
         String receiverAddress = request == null ? null : request.receiverAddress();
 
-        Order order = createOrder(user, lines, couponCode, receiverName, receiverPhone, receiverAddress,
+        Order order = createOrder(member, lines, couponCode, receiverName, receiverPhone, receiverAddress,
                 CouponApplicableType.PRODUCT);
-        cartItems.deleteAllByMemberId(userId);
+        cartItems.deleteAllByMemberId(memberId);
         return toDetailResponse(order);
     }
 
@@ -158,19 +158,19 @@ public class OrderService {
      * 需先持有未到期的有效訂閱才能購買，見 {@link #requireActiveSubscription}。
      */
     @Transactional
-    public OrderDetailResponse createDirectOrder(Integer userId, DirectCheckoutRequest request) {
+    public OrderDetailResponse createDirectOrder(Integer memberId, DirectCheckoutRequest request) {
         if (request.quantity() == null || request.quantity() < 1) {
             throw new InvalidQuantityException();
         }
-        Member user = users.findById(userId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
+        Member member = members.findById(memberId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
         PrivateCourse course = courses.findById(request.privateCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到私教課：" + request.privateCourseId()));
         if (!CourseStatus.ACTIVE.equals(course.getStatus())) {
             throw new DirectCheckoutNotAllowedException(course.getPrivateCourseId());
         }
-        requireActiveSubscription(userId);
+        // requireActiveSubscription(memberId);
 
-        Order order = createCourseOrder(user, course, request.quantity(), request.couponCode());
+        Order order = createCourseOrder(member, course, request.quantity(), request.couponCode());
         return toDetailResponse(order);
     }
 
@@ -179,9 +179,9 @@ public class OrderService {
      * 語意對稱——「有 → 不能再訂閱」「沒有 → 不能買私教課」。只卡購買當下，
      * 訂閱到期後先前已購買的堂數仍可正常預約使用。
      */
-    private void requireActiveSubscription(Integer userId) {
+    private void requireActiveSubscription(Integer memberId) {
         subscriptions.findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(
-                userId, LocalDateTime.now(TAIPEI), SubscriptionStatus.ACTIVE)
+                memberId, LocalDateTime.now(TAIPEI), SubscriptionStatus.ACTIVE)
                 .orElseThrow(SubscriptionRequiredException::new);
     }
 
@@ -189,7 +189,7 @@ public class OrderService {
      * 私教課訂單：不涉庫存，明細以 private_course_id 記錄。
      * 履約（發放堂數額度）待付款成功後由 {@link #fulfillPaidOrder} 執行。
      */
-    private Order createCourseOrder(Member user, PrivateCourse course, long quantity, String couponCode) {
+    private Order createCourseOrder(Member member, PrivateCourse course, int quantity, String couponCode) {
         BigDecimal subtotal = course.getPrice().multiply(BigDecimal.valueOf(quantity));
 
         MemberCoupon memberCoupon = null;
@@ -197,17 +197,17 @@ public class OrderService {
         if (couponCode != null && !couponCode.isBlank()) {
             Coupon coupon = coupons.findByCode(couponCode)
                     .orElseThrow(() -> new ResourceNotFoundException("找不到優惠券：" + couponCode));
-            memberCoupon = redeemCoupon(user, coupon, subtotal, CouponApplicableType.COURSE);
+            memberCoupon = redeemCoupon(member, coupon, subtotal, CouponApplicableType.COURSE);
             discount = computeDiscount(coupon, subtotal);
         }
 
         BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
-        Order order = orders.save(new Order(user, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount,
-                subtotal, total, memberCoupon, user.getFirstName() + user.getLastName(), user.getPhone(), null,
-                user.getAccount().getEmail()));
+        Order order = orders.save(new Order(member, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount,
+                subtotal, total, memberCoupon, member.getFirstName() + member.getLastName(), member.getPhone(), null,
+                member.getAccount().getEmail()));
 
         orderItems.save(new OrderItem(order, course, course.getName(), course.getPrice(), quantity));
-        orderStatusHistories.save(new OrderStatusHistory(order, null, order.getStatus().name(), user, "USER",
+        orderStatusHistories.save(new OrderStatusHistory(order, null, order.getStatus().name(), member, "USER",
                 "CHECKOUT"));
         return order;
     }
@@ -218,23 +218,23 @@ public class OrderService {
      * 避免付款成功後 {@link #fulfillPaidOrder} 還要處理「新舊訂閱重疊」的狀態。
      */
     @Transactional
-    public OrderDetailResponse createSubscriptionOrder(Integer userId, SubscriptionCheckoutRequest request) {
-        Member user = users.findById(userId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
+    public OrderDetailResponse createSubscriptionOrder(Integer memberId, SubscriptionCheckoutRequest request) {
+        Member member = members.findById(memberId).orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
         SubscriptionPlan plan = subscriptionPlans.findById(request.subscriptionPlanId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂閱方案：" + request.subscriptionPlanId()));
         if (!"ACTIVE".equals(plan.getStatus())) {
             throw new BusinessRuleException("此訂閱方案目前無法購買");
         }
         if (subscriptions.findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(
-                userId, LocalDateTime.now(TAIPEI), SubscriptionStatus.ACTIVE).isPresent()) {
+                memberId, LocalDateTime.now(TAIPEI), SubscriptionStatus.ACTIVE).isPresent()) {
             throw new BusinessRuleException("尚有未到期的訂閱，到期後才能購買下一期");
         }
 
-        Order order = createSubscriptionOrderInternal(user, plan, request.couponCode());
+        Order order = createSubscriptionOrderInternal(member, plan, request.couponCode());
         return toDetailResponse(order);
     }
 
-    private Order createSubscriptionOrderInternal(Member user, SubscriptionPlan plan, String couponCode) {
+    private Order createSubscriptionOrderInternal(Member member, SubscriptionPlan plan, String couponCode) {
         BigDecimal subtotal = plan.getPrice();
 
         MemberCoupon memberCoupon = null;
@@ -242,18 +242,18 @@ public class OrderService {
         if (couponCode != null && !couponCode.isBlank()) {
             Coupon coupon = coupons.findByCode(couponCode)
                     .orElseThrow(() -> new ResourceNotFoundException("找不到優惠券：" + couponCode));
-            memberCoupon = redeemCoupon(user, coupon, subtotal, CouponApplicableType.SUBSCRIPTION);
+            memberCoupon = redeemCoupon(member, coupon, subtotal, CouponApplicableType.SUBSCRIPTION);
             discount = computeDiscount(coupon, subtotal);
         }
 
         BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
-        Order order = new Order(user, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount,
-                subtotal, total, memberCoupon, user.getFirstName() + user.getLastName(), user.getPhone(), null,
-                user.getAccount().getEmail());
+        Order order = new Order(member, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount,
+                subtotal, total, memberCoupon, member.getFirstName() + member.getLastName(), member.getPhone(), null,
+                member.getAccount().getEmail());
         order.setSubscriptionPlan(plan);
         order = orders.save(order);
 
-        orderStatusHistories.save(new OrderStatusHistory(order, null, order.getStatus().name(), user, "USER",
+        orderStatusHistories.save(new OrderStatusHistory(order, null, order.getStatus().name(), member, "USER",
                 "CHECKOUT"));
         return order;
     }
@@ -307,8 +307,8 @@ public class OrderService {
      * 提前釋放庫存/優惠券會造成「退款還沒真的處理、商品已經被別人買走」的競態。
      */
     @Transactional
-    public OrderDetailResponse cancelOrder(Integer userId, Long orderId, CancelOrderRequest request) {
-        Order order = orders.findByIdAndMemberId(orderId, userId)
+    public OrderDetailResponse cancelOrder(Integer memberId, Integer orderId, CancelOrderRequest request) {
+        Order order = orders.findByIdAndMemberId(orderId, memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         String fromStatus = order.getStatus().name();
         String reason = request == null ? null : request.reason();
@@ -333,18 +333,37 @@ public class OrderService {
         order.assertRefundable();
         PaymentTransaction payment = paymentTransactions.findByOrderId(order.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到這筆訂單的付款紀錄"));
+        // assertRefundable 只看訂單狀態（PAID），沒擋「同一筆訂單已經有退款申請在跑」——
+        // 使用者重複按申請退款會疊出好幾筆 PENDING PaymentRefund，這裡補上防呆
+        if (paymentRefunds.existsByPaymentIdAndStatus(payment.getId(), "PENDING")) {
+            throw new BusinessRuleException("這筆訂單已經有退款申請正在處理中，請等候客服審核");
+        }
         paymentRefunds.save(new PaymentRefund(payment, generateRefundNo(), order.getTotalAmount(), reason));
     }
 
-    /** 後台人工執行退款完成：退款狀態轉 COMPLETED、還原庫存/優惠券、訂單轉 REFUNDED */
+    /**
+     * 後台人工執行退款完成：退款狀態轉 COMPLETED、還原庫存/優惠券、訂單轉 REFUNDED。
+     * 若訂單已經不是 PAID（同一訂單的重複退款申請，另一筆已經處理過），改標記這筆為 CANCELLED，不重複履約。
+     */
     @Transactional
-    public void completeRefund(Long refundId) {
+    public void completeRefund(Integer refundId) {
         PaymentRefund refund = paymentRefunds.findById(refundId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到退款紀錄：" + refundId));
         if (!"PENDING".equals(refund.getStatus())) {
             throw new BusinessRuleException("此退款已處理過");
         }
         Order order = refund.getPayment().getOrder();
+
+        // 同一張訂單的重複退款申請（requestRefund 補防呆之前留下的舊資料才會出現）：
+        // 訂單已經因為另一筆退款完成轉為 REFUNDED，這筆是多出來的重複申請，不能再走一次
+        // 還原庫存/優惠券／訂閱，否則會錯誤地把庫存/優惠券還原兩次；直接標記為多餘即可，
+        // 不計入 ReportRefundSummary（只統計 COMPLETED）
+        if (order.getStatus() != OrderStatus.PAID) {
+            refund.setStatus("CANCELLED");
+            refund.setCompletedAt(LocalDateTime.now(TAIPEI));
+            return;
+        }
+
         String fromStatus = order.getStatus().name();
 
         refund.setStatus("COMPLETED");
@@ -407,7 +426,7 @@ public class OrderService {
                 .ifPresent(subscription -> subscription.setStatus(SubscriptionStatus.CANCELLED));
     }
 
-    private Order createOrder(Member user, List<ProductQuantity> productLines, String couponCode,
+    private Order createOrder(Member member, List<ProductQuantity> productLines, String couponCode,
             String receiverName, String receiverPhone, String receiverAddress, CouponApplicableType lineType) {
         // 依 productId 排序後才逐一鎖定，避免不同結帳請求互相持有對方需要的鎖而死結。
         List<OrderLine> lines = productLines.stream()
@@ -427,17 +446,17 @@ public class OrderService {
         if (couponCode != null && !couponCode.isBlank()) {
             Coupon coupon = coupons.findByCode(couponCode)
                     .orElseThrow(() -> new ResourceNotFoundException("找不到優惠券：" + couponCode));
-            memberCoupon = redeemCoupon(user, coupon, subtotal, lineType);
+            memberCoupon = redeemCoupon(member, coupon, subtotal, lineType);
             discount = computeDiscount(coupon, subtotal);
         }
 
         BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
 
-        String finalReceiverName = valueOr(receiverName, user.getFirstName() + user.getLastName());
-        String finalReceiverPhone = valueOr(receiverPhone, user.getPhone());
+        String finalReceiverName = valueOr(receiverName, member.getFirstName() + member.getLastName());
+        String finalReceiverPhone = valueOr(receiverPhone, member.getPhone());
 
-        Order order = new Order(user, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount, subtotal,
-                total, memberCoupon, finalReceiverName, finalReceiverPhone, receiverAddress, user.getAccount().getEmail());
+        Order order = new Order(member, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount, subtotal,
+                total, memberCoupon, finalReceiverName, finalReceiverPhone, receiverAddress, member.getAccount().getEmail());
         order = orders.save(order);
 
         for (OrderLine line : lines) {
@@ -446,7 +465,7 @@ public class OrderService {
             product.setStock(Math.toIntExact(product.getStock() - line.quantity()));
         }
 
-        orderStatusHistories.save(new OrderStatusHistory(order, null, order.getStatus().name(), user, "USER",
+        orderStatusHistories.save(new OrderStatusHistory(order, null, order.getStatus().name(), member, "USER",
                 "CHECKOUT"));
         return order;
     }
@@ -456,7 +475,7 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("找不到商品：" + product.getProductId()));
     }
 
-    private void validateAvailableAndInStock(Product product, long quantity) {
+    private void validateAvailableAndInStock(Product product, int quantity) {
         if (!ProductStatus.ACTIVE.equals(product.getStatus())) {
             throw new ProductUnavailableException(product.getProductId());
         }
@@ -465,7 +484,7 @@ public class OrderService {
         }
     }
 
-    private MemberCoupon redeemCoupon(Member user, Coupon coupon, BigDecimal subtotal, CouponApplicableType lineType) {
+    private MemberCoupon redeemCoupon(Member member, Coupon coupon, BigDecimal subtotal, CouponApplicableType lineType) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         if (!CouponStatus.ACTIVE.equals(coupon.getStatus())
                 || now.toLocalDate().isBefore(coupon.getStartDate())
@@ -478,7 +497,7 @@ public class OrderService {
         if (subtotal.compareTo(coupon.getMinSpend()) < 0) {
             throw new BusinessRuleException("未達優惠券最低消費金額");
         }
-        MemberCoupon memberCoupon = memberCoupons.findByMemberIdAndCouponCouponIdAndStatus(user.getId(), coupon.getCouponId(),
+        MemberCoupon memberCoupon = memberCoupons.findByMemberIdAndCouponCouponIdAndStatus(member.getId(), coupon.getCouponId(),
                 MemberCouponStatus.UNUSED).orElseThrow(() -> new BusinessRuleException("尚未持有此優惠券或已使用過"));
         memberCoupon.setStatus(MemberCouponStatus.USED);
         memberCoupon.setUsedAt(now);
@@ -527,7 +546,7 @@ public class OrderService {
                 order.getStatus(), order.getCreatedAt(), items);
     }
 
-    private record OrderLine(Product product, long quantity) {}
+    private record OrderLine(Product product, int quantity) {}
 
-    private record ProductQuantity(Product product, long quantity) {}
+    private record ProductQuantity(Product product, int quantity) {}
 }

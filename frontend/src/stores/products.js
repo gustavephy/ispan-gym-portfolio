@@ -10,8 +10,6 @@ import {
 
 /**
  * 商品／課程瀏覽相關資料的 store。
- * 各 load 動作失敗時不在這裡攔截——axios 攔截器已統一發出全域錯誤事件，
- * 呼叫端如需額外處理（例如顯示區塊內的錯誤狀態）再自行 catch。
  */
 export const useProductsStore = defineStore('products', () => {
   const categories = ref([])
@@ -33,8 +31,7 @@ export const useProductsStore = defineStore('products', () => {
     } catch (e) { throw e; }
   }
 
-  //載入商品列表，params 直接透傳給後端（分類、關鍵字、分頁等）
-  //後端回傳 Spring Data Page（{ content, totalElements, totalPages, ... }），這裡拆開存
+  //載入商品列表
   async function loadProducts(params) {
     loading.value = true
     try {
@@ -64,21 +61,18 @@ export const useProductsStore = defineStore('products', () => {
   }
 
   //載入單一商品明細與留言
-  //留言 API 後端尚未實作，失敗時不影響商品明細顯示
-  async function loadProduct(productId) {
-    // 先清空舊資料：不清的話，從 A 商品切到 B 商品時模板的 v-if="product"
-    // 仍成立（留著 A 的資料），畫面會先閃一下 A 才換成 B，spinner 也永遠不會出現
+  async function loadProduct(id) {
     currentProduct.value = null
     comments.value = []
     loading.value = true
     try {
-      const res = await getProductById(productId)
+      const res = await getProductById(id)
       currentProduct.value = res.data ? {
         ...res.data,
         id: res.data.productId || res.data.id
       } : null
       try {
-        const commentRes = await getProductComments(productId)
+        const commentRes = await getProductComments(id)
         comments.value = commentRes.data
       } catch {
         comments.value = []
@@ -91,25 +85,25 @@ export const useProductsStore = defineStore('products', () => {
     }
   }
 
+  // 別名，相容於 dev
+  const loadProductDetail = loadProduct;
+
   // 載入商品評論
-  // @param {number|string} productId 商品 ID
   async function loadComments(productId) {
     try {
       const res = await getProductComments(productId)
-      comments.value = res.data || [] // 儲存該商品的所有用戶評價
+      comments.value = res.data || []
     } catch (e) {
-      throw e;
       comments.value = []
+      throw e;
     }
   }
 
   // 送出商品評論
-  // @param {number|string} productId 商品 ID
-  // @param {object} commentData 評論的資料（如評分、文字內容）
   async function submitComment(productId, commentData) {
     try {
       await submitProductComment({ productId, ...commentData })
-      await loadComments(productId) // 發表成功後，重新整理當前的評論列表
+      await loadComments(productId)
       return { success: true }
     } catch (e) {
       throw e;
@@ -127,6 +121,7 @@ export const useProductsStore = defineStore('products', () => {
     loadCategories,
     loadProducts,
     loadProduct,
+    loadProductDetail,
     submitComment,
     loadComments
   }

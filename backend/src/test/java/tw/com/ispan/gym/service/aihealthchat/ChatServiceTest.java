@@ -25,6 +25,7 @@ import tw.com.ispan.gym.entity.aihealthchat.ChatMessage;
 import tw.com.ispan.gym.entity.aihealthchat.ChatMessage.ChatCounterpartType;
 import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.member.Member;
+import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
@@ -33,6 +34,7 @@ import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.aihealthchat.ChatMessageRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * 純 Mockito 單元測試（專案無內嵌測試資料庫，不用 @SpringBootTest）。
@@ -53,10 +55,12 @@ class ChatServiceTest {
     private final ChatMessageRepository chatMessages = mock(ChatMessageRepository.class);
     private final MemberRepository members = mock(MemberRepository.class);
     private final EmployeeRepository employees = mock(EmployeeRepository.class);
+    private final TrainerRepository trainers = mock(TrainerRepository.class);
     private final ChatMessagePublisher publisher = mock(ChatMessagePublisher.class);
     private final ChatAiResponderService aiResponder = mock(ChatAiResponderService.class);
 
-    private final ChatService service = new ChatService(chatMessages, members, employees, publisher, aiResponder);
+    private final ChatService service = new ChatService(chatMessages, members, employees, trainers, publisher,
+            aiResponder);
 
     // === 共用測試資料 ========================================================
 
@@ -69,9 +73,15 @@ class ChatServiceTest {
 
     private Employee employee(EmployeeStatus status) {
         Employee employee = new Employee();
-        ReflectionTestUtils.setField(employee, "id", EMPLOYEE_ID);
+        ReflectionTestUtils.setField(employee, "employeeId", EMPLOYEE_ID);
         employee.setStatus(status);
         return employee;
+    }
+
+    private Trainer activeTrainer() {
+        Trainer trainer = new Trainer();
+        trainer.setTrainerId(99);
+        return trainer;
     }
 
     private void stubActiveMemberAccount() {
@@ -126,6 +136,7 @@ class ChatServiceTest {
     void 學員傳訊給教練不觸發AI回覆() {
         stubActiveMemberAccount();
         when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee(EmployeeStatus.ACTIVE)));
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(activeTrainer()));
         stubPublisherEchoes("member_10_employee_20");
 
         service.sendFromMember(ACCOUNT_ID,
@@ -136,6 +147,40 @@ class ChatServiceTest {
                         && m.getEmployeeId().equals(EMPLOYEE_ID)));
         // 真人對話不該叫 AI 代答
         verify(aiResponder, never()).generateChatReplyAsync(any(), any());
+    }
+
+    /**
+     * code review 發現（2026-08-19）：聊天目錄只列教練，但 request.employeeId() 是前端
+     * 自帶欄位，光靠「ACTIVE 員工」檢查擋不住會員竄改成任意在職員工（例如一般員工或
+     * ADMIN，兩者都可能是 ACTIVE 但沒有 Trainer 身分）的 id。這裡驗證修好之後，
+     * 沒有有效 Trainer 資料列的 ACTIVE 員工一樣會被擋下。
+     */
+    @Test
+    void 指定的員工是ACTIVE但不是教練時擋下() {
+        stubActiveMemberAccount();
+        when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee(EmployeeStatus.ACTIVE)));
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.sendFromMember(ACCOUNT_ID,
+                new ChatSendRequest("hi", ChatCounterpartType.EMPLOYEE, EMPLOYEE_ID)))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(publisher, never()).saveAndPush(any());
+    }
+
+    @Test
+    void 指定的員工是教練但Trainer已軟刪除時擋下() {
+        stubActiveMemberAccount();
+        when(employees.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee(EmployeeStatus.ACTIVE)));
+        Trainer deletedTrainer = activeTrainer();
+        deletedTrainer.setDeletedAt(java.time.LocalDateTime.now());
+        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(deletedTrainer));
+
+        assertThatThrownBy(() -> service.sendFromMember(ACCOUNT_ID,
+                new ChatSendRequest("hi", ChatCounterpartType.EMPLOYEE, EMPLOYEE_ID)))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(publisher, never()).saveAndPush(any());
     }
 
     @Test

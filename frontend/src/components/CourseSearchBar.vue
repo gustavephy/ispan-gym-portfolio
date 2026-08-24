@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
 import { storeToRefs } from 'pinia';
-import api from '@/api/api'
+import api from '@/api/axios.instance.js'
 import { useCoursesStore } from '@/stores/courses';
 
 const props = defineProps({
@@ -80,7 +80,7 @@ async function loadCategories(){
 }
 
 async function loadTrainers(){
-    const res = await api.get('/api/member/trainers')
+    const res = await api.get('/api/trainers')
     trainerOptions.value = res.data
 }
 
@@ -98,7 +98,6 @@ onMounted(()=>{
     <div class="csb-wrap">
         <!-- 關鍵字搜尋 -->
         <div v-if="showKeyword" class="csb-field csb-field--grow">
-            <!-- 輸入框標籤：關鍵字搜尋 -->
             <label class="csb-label">關鍵字搜尋</label>
             <input 
                 v-model="local.keyword" 
@@ -107,6 +106,56 @@ onMounted(()=>{
                 placeholder="輸入課程名稱..."
                 @input="emitSearch"
             />
+        </div>
+
+        <!-- 課程型態 -->
+        <div v-if="showType" class="csb-field csb-field--tabs">
+            <label class="csb-label">課程型態</label>
+            <div class="csb-tabs">
+                <button 
+                    v-for="opt in typeOptions" 
+                    :key="opt.value" 
+                    class="csb-tab" 
+                    :class="{ active: local.type === opt.value }"
+                    type="button"
+                    @click="setType(opt.value)"
+                >
+                    {{ opt.label }}
+                </button>
+            </div>
+        </div>
+
+        <!-- 課程種類 / 分類 -->
+        <div v-if="showCategory" class="csb-field">
+            <label class="csb-label">課程種類</label>
+            <select v-model="local.categoryId" class="csb-select" @change="emitSearch">
+                <option value="">全部種類</option>
+                <option v-for="c in categoryOptions" :key="c.id" :value="c.id">
+                    {{ c.name }}
+                </option>
+            </select>
+        </div>
+
+        <!-- 指導教練 -->
+        <div v-if="showTrainer" class="csb-field">
+            <label class="csb-label">指導教練</label>
+            <select v-model="local.trainerId" class="csb-select" @change="emitSearch">
+                <option value="">全部教練</option>
+                <option v-for="t in trainerOptions" :key="t.trainerId" :value="t.trainerId">
+                    {{ t.displayName }}
+                </option>
+            </select>
+        </div>
+
+        <!-- 教室選擇 -->
+        <div v-if="showRoom" class="csb-field">
+            <label class="csb-label">教室選擇</label>
+            <select v-model="local.roomId" class="csb-select" @change="emitSearch">
+                <option value="">全部教室</option>
+                <option v-for="r in rooms" :key="r.id || r.roomId" :value="r.id || r.roomId">
+                    {{ r.name }}
+                </option>
+            </select>
         </div>
 
         <!-- 日期選擇 -->

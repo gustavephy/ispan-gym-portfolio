@@ -41,7 +41,7 @@ class EmployeeReviewServiceTest {
         account.setEmail("applicant@example.com");
 
         Employee employee = new Employee();
-        employee.setId(EMPLOYEE_ID);
+        employee.setEmployeeId(EMPLOYEE_ID);
         employee.setAccount(account);
         employee.setFirstName("小華");
         employee.setLastName("陳");
@@ -54,7 +54,7 @@ class EmployeeReviewServiceTest {
 
     private Employee reviewer() {
         Employee reviewer = new Employee();
-        reviewer.setId(REVIEWER_ID);
+        reviewer.setEmployeeId(REVIEWER_ID);
         reviewer.setRole(EmployeeRole.EMPLOYEE);
         reviewer.setStatus(EmployeeStatus.ACTIVE);
         return reviewer;

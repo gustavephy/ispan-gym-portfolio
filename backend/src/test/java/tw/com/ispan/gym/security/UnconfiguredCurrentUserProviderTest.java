@@ -87,7 +87,7 @@ class UnconfiguredCurrentUserProviderTest {
 
     private Employee employee(EmployeeStatus status) {
         Employee employee = new Employee();
-        employee.setId(EMPLOYEE_ID);
+        employee.setEmployeeId(EMPLOYEE_ID);
         employee.setStatus(status);
         return employee;
     }

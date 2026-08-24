@@ -4,7 +4,10 @@ import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +24,7 @@ import tw.com.ispan.gym.dto.report.SalesStatsResponse;
 import tw.com.ispan.gym.enums.report.ReportItemType;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.report.OperationReportService;
+import tw.com.ispan.gym.service.report.ReportPdfService;
 
 /** 營運報表。掛在 /api/admin 下，由 SecurityConfig 的 hasRole("ADMIN") 統一把關。 */
 @RestController
@@ -28,11 +32,14 @@ import tw.com.ispan.gym.service.report.OperationReportService;
 public class OperationReportController {
 
     private final OperationReportService reportService;
+    private final ReportPdfService reportPdfService;
     private final CurrentUserProvider currentUser;
 
     public OperationReportController(OperationReportService reportService,
+                                     ReportPdfService reportPdfService,
                                      CurrentUserProvider currentUser) {
         this.reportService = reportService;
+        this.reportPdfService = reportPdfService;
         this.currentUser = currentUser;
     }
 
@@ -60,6 +67,17 @@ public class OperationReportController {
     @GetMapping("/{reportId}")
     public ReportDetailResponse getReport(@PathVariable Integer reportId) {
         return reportService.getReport(reportId);
+    }
+
+    /** 單份報表匯出 PDF（僅限已生成的快照；即時統計請先生成快照再匯出） */
+    @GetMapping("/{reportId}/pdf")
+    public ResponseEntity<byte[]> downloadPdf(@PathVariable Integer reportId) {
+        byte[] pdf = reportPdfService.generateReportPdf(reportId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"operation-report-" + reportId + ".pdf\"")
+                .body(pdf);
     }
 
     /** 手動生成（或重算）快照；操作者以帳號 id 記錄（service 反查 Employee） */

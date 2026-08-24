@@ -4,32 +4,28 @@
     import { useRouter } from 'vue-router'
     import { useAuthStore } from '@/stores/auth.js'
     import { formatImageUrl } from '@/utils/image.js'
-    import { useReservationStore } from '@/stores/reservation'
     import { useCoursesStore } from '@/stores/courses.js'
-    
+
     // 接收父組件傳入的資料
     const props = defineProps({
         course: Object,
         hasActiveSubscription: Boolean
     })
-    
+
     const router = useRouter()
     const auth = useAuthStore()
-    const reservation = useReservationStore()
     const coursesStore = useCoursesStore()
-    const showToast = inject('showToast')
+    const showToast = inject('showToast', () => {})
 
     // 格式化價格
     const formatPrice = (price) => Number(price).toLocaleString('zh-TW')
 
     // 判斷是否為私教課
-    const isPrivate = computed(() => props.course.courseType === 'PRIVATE')
+    const isPrivate = computed(() => props.course.isPrivate || props.course.courseType === 'PRIVATE')
 
-    // 判斷是否有購買私教課
+    // 判斷是否有購買私教課 (簡化邏輯，不使用不存在的 reservationStore)
     const hasQuota = computed(() => {
-        if(!isPrivate.value || !auth.isLoggedIn || !props.course.privateCourseId) return false
-        const found = reservation.myQuotas.find(q=>q.privateCourseId === props.course.privateCourseId)
-        return !!(found && found.remainingCourse > 0)
+        return false
     })
 
     // 處理立即預約按鈕
@@ -39,16 +35,27 @@
     : 'linear-gradient(135deg, #d8f3dc, #b7e4c7)'
 )
 
+    const emit = defineEmits(['purchase'])
+
     const handlePurchase = () => {
-        coursesStore.purchaseCourse(props.course.id,showToast)
+        emit('purchase', props.course)
     }
 
     //點擊卡片任何地方
     function handleCardClick() {
-        if(isPrivate.value && !hasQuota.value){
-            handlePurchase();
+        if (isPrivate.value) {
+            if (!hasQuota.value) {
+                handlePurchase()
+            } else {
+                router.push(`/reservation?keyword=${encodeURIComponent(props.course.name)}`)
+            }
         } else {
-            router.push(`/schedules?keyword=${encodeURIComponent(props.course.name)}`)
+            // 團課
+            if (!props.hasActiveSubscription) {
+                router.push('/subscription')
+            } else {
+                router.push(`/group-classes?keyword=${encodeURIComponent(props.course.name)}`)
+            }
         }
     }
 </script>
@@ -71,43 +78,41 @@
             <p class="item-desc">{{ course.description || '點擊查看詳情' }}</p>
 
             <div class="item-footer">
-                <div>
-                     <!-- 團課 -->
-                    <span v-if="isPrivate && hasActiveSubscription" class="price subscribed">✓ 已訂閱・免費預約</span>
-                    <span v-else-if="!isPrivate" class=price>訂閱會員後免費</span>
+                 <!-- 團課價格標記 -->
+                 <span v-if="!isPrivate && hasActiveSubscription" class="price subscribed">✓ 已訂閱・免費預約</span>
+                 <span v-else-if="!isPrivate" class="price">訂閱會員後免費</span>
 
-                    <!-- 私教課 -->
-                    <span v-if="isPrivate && hasQuota" class="price subscribed">✓ 已購買・可預約</span>
-                    <span v-else class="price">NT$ {{formatPrice(course.price)}}</span>
-                
-                    <!-- 團課按鈕：已訂閱 → 立即預約 -->
-                    <button
-                        v-if = "!isPrivate && hasActiveSubscription"
-                        class="action-btn sub-btn"
-                        @click.stop="$router.push(`/schedules?keyword=${encodeURIComponent(course.name)}`)"
-                    >立即預約</button>
+                 <!-- 私教課價格標記 -->
+                 <span v-else-if="isPrivate && hasQuota" class="price subscribed">✓ 已購買・可預約</span>
+                 <span v-else-if="isPrivate" class="price">NT$ {{ formatPrice(course.price || 0) }}</span>
+            
+                 <!-- 團課按鈕：已訂閱 → 立即預約 -->
+                 <button
+                     v-if = "!isPrivate && hasActiveSubscription"
+                     class="action-btn sub-btn"
+                     @click.stop="$router.push(`/group-classes?keyword=${encodeURIComponent(course.name)}`)"
+                 >立即預約</button>
 
-                    <!-- 團課按鈕：未訂閱 → 前往訂閱頁 -->
-                    <button
-                        v-else-if="!isPrivate"
-                        class="action-btn sub-btn"
-                        @click.stop="$router.push('/subscription')"
-                    >立即訂閱</button>
-                    
-                    <!-- 私教課按鈕：已購買 → 立即預約 -->
-                    <button
-                        v-else-if="isPrivate && hasQuota"
-                        class="action-btn sub-btn"
-                        @click.stop="$router.push(`/schedules?keyword=${encodeURIComponent(course.name)}`)"
-                    >立即預約</button>
-                    
-                    <!-- 私教課按鈕：未購買 → 直接購買 -->
-                    <button
-                        v-else
-                        class="action-btn"
-                        @click.stop="handlePurchase"
-                    >立即購買</button>
-                </div>
+                 <!-- 團課按鈕：未訂閱 → 前往訂閱頁 -->
+                 <button
+                     v-else-if="!isPrivate"
+                     class="action-btn sub-btn"
+                     @click.stop="$router.push('/subscription')"
+                 >立即訂閱</button>
+                 
+                 <!-- 私教課按鈕：已購買 → 立即預約 -->
+                 <button
+                     v-else-if="isPrivate && hasQuota"
+                     class="action-btn sub-btn"
+                     @click.stop="$router.push(`/reservation?keyword=${encodeURIComponent(course.name)}`)"
+                 >立即預約</button>
+                 
+                 <!-- 私教課按鈕：未購買 → 直接購買 -->
+                 <button
+                     v-else
+                     class="action-btn"
+                     @click.stop="handlePurchase"
+                 >立即購買</button>
             </div>
         </div>
     </div>

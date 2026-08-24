@@ -26,7 +26,7 @@ class ApiExceptionMappingTest {
 
     @Test
     void 購物車項目找不到為404() {
-        ApiException ex = new CartItemNotFoundException(2L);
+        ApiException ex = new CartItemNotFoundException(2);
         assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(ex.getCode()).isEqualTo("CART_ITEM_NOT_FOUND");
     }
@@ -55,7 +55,7 @@ class ApiExceptionMappingTest {
 
     @Test
     void 無權存取購物車為403() {
-        ApiException ex = new ForbiddenCartAccessException(5L);
+        ApiException ex = new ForbiddenCartAccessException(5);
         assertThat(ex.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(ex.getCode()).isEqualTo("FORBIDDEN_CART_ACCESS");
     }
@@ -80,11 +80,11 @@ class ApiExceptionMappingTest {
     @Test
     void 所有自訂例外皆為ApiException子類() {
         assertThat(new ProductNotFoundException(1)).isInstanceOf(ApiException.class);
-        assertThat(new CartItemNotFoundException(1L)).isInstanceOf(ApiException.class);
+        assertThat(new CartItemNotFoundException(1)).isInstanceOf(ApiException.class);
         assertThat(new InvalidQuantityException()).isInstanceOf(ApiException.class);
         assertThat(new ProductUnavailableException(1)).isInstanceOf(ApiException.class);
         assertThat(new InsufficientStockException(1, 1, 0)).isInstanceOf(ApiException.class);
-        assertThat(new ForbiddenCartAccessException(1L)).isInstanceOf(ApiException.class);
+        assertThat(new ForbiddenCartAccessException(1)).isInstanceOf(ApiException.class);
         assertThat(new ResourceNotFoundException("x")).isInstanceOf(ApiException.class);
         assertThat(new BusinessRuleException("x")).isInstanceOf(ApiException.class);
     }

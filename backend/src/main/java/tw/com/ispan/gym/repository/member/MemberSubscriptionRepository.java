@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
@@ -26,5 +28,9 @@ public interface MemberSubscriptionRepository extends JpaRepository<MemberSubscr
 			LocalDateTime now, SubscriptionStatus status);
 
 	/** 退款時反查該筆訂閱訂單建立的那期訂閱，見 OrderService#completeRefund */
-	Optional<MemberSubscription> findByOrderId(Long orderId);
+	Optional<MemberSubscription> findByOrderId(Integer orderId);
+
+	/** 期間新生效訂閱數（報表用）；半開區間 [from, to)。訂閱於付款履約時建立，createdAt＝生效日 */
+	@Query("SELECT COUNT(ms) FROM MemberSubscription ms WHERE ms.createdAt >= :from AND ms.createdAt < :to")
+	long countCreatedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 }

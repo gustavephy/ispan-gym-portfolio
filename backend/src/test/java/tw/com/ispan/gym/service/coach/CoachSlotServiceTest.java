@@ -3,6 +3,7 @@ package tw.com.ispan.gym.service.coach;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -13,10 +14,15 @@ import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
 import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
 import tw.com.ispan.gym.dto.coach.UpdateCoachSlotRequest;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.coach.CoachSlot;
 import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.trainer.Trainer;
@@ -25,9 +31,11 @@ import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ConfirmationRequiredException;
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.repository.coach.CoachBookingRepository;
 import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 /**
  * 純 Mockito 單元測試（沿用 InbodyServiceTest 的做法：專案無內嵌測試資料庫，
@@ -52,7 +60,9 @@ class CoachSlotServiceTest {
     private final CoachSlotRepository slots = mock(CoachSlotRepository.class);
     private final TrainerRepository trainers = mock(TrainerRepository.class);
     private final EmployeeRepository employees = mock(EmployeeRepository.class);
-    private final CoachSlotService service = new CoachSlotService(slots, trainers, employees);
+    private final CoachBookingRepository bookings = mock(CoachBookingRepository.class);
+    private final TrainerService trainerService = mock(TrainerService.class);
+    private final CoachSlotService service = new CoachSlotService(slots, trainers, employees, bookings, trainerService);
 
     // === 共用測試資料 ========================================================
 
@@ -62,13 +72,20 @@ class CoachSlotServiceTest {
         return trainer;
     }
 
-    /** 讓 ACCOUNT_ID 這個帳號解析成 TRAINER_ID 教練（account→employee→trainer 兩段查詢都放行） */
+    /**
+     * 讓 ACCOUNT_ID 這個帳號解析成 TRAINER_ID 教練（account→employee→trainer 兩段查詢都放行）。
+     * createSlot() 走的是另一條「先解出 id、再鎖定讀取」的路徑（見 CoachSlotService 的說明），
+     * 這裡一併把 findIdByEmployeeId 與 mock 的 trainerService.lockAndAssertAvailableForNewBusiness
+     * 都準備好，讓成功路徑的測試不用各自重複 stub。
+     */
     private Trainer loginAsTrainer() {
         Employee employee = new Employee();
         employee.setEmployeeId(EMPLOYEE_ID);
         Trainer trainer = trainer(TRAINER_ID);
         when(employees.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(employee));
         when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(trainer));
+        when(trainers.findIdByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.of(TRAINER_ID));
+        when(trainerService.lockAndAssertAvailableForNewBusiness(TRAINER_ID)).thenReturn(trainer);
         return trainer;
     }
 
@@ -139,10 +156,26 @@ class CoachSlotServiceTest {
         Employee employee = new Employee();
         employee.setEmployeeId(EMPLOYEE_ID);
         when(employees.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(employee));
-        when(trainers.findByEmployeeEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+        when(trainers.findIdByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createSlot(ACCOUNT_ID, createRequest()))
                 .isInstanceOf(ForbiddenAccessException.class);
+        verify(slots, never()).save(any());
+    }
+
+    @Test
+    void 建立時段_教練非可服務狀態擋下且不儲存() {
+        // §9 跨模組防護：UNAVAILABLE／已軟刪除教練不可新增排班。TrainerService 本身的
+        // 四條件判斷邏輯與悲觀鎖定由 TrainerServiceTest／真實 DB E2E 驗證，這裡只驗證
+        // CoachSlotService 有沒有在儲存前確實呼叫這道防護（trainerService 是 mock，
+        // 不執行真正的判斷邏輯）。
+        loginAsTrainer();
+        when(trainerService.lockAndAssertAvailableForNewBusiness(TRAINER_ID))
+                .thenThrow(new BusinessRuleException("教練目前無法承接新業務（非在職或非可服務狀態）"));
+
+        assertThatThrownBy(() -> service.createSlot(ACCOUNT_ID, createRequest()))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("無法承接新業務");
         verify(slots, never()).save(any());
     }
 
@@ -355,12 +388,13 @@ class CoachSlotServiceTest {
     void getMySlots_回傳自己的所有時段含CANCELLED() {
         Trainer trainer = loginAsTrainer();
         CoachSlot cancelled = slot(trainer, SlotStatus.CANCELLED);
-        when(slots.findByTrainerIdOrderByStartAtAsc(TRAINER_ID)).thenReturn(List.of(cancelled));
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
+        when(slots.findByTrainerId(TRAINER_ID, pageable)).thenReturn(new PageImpl<>(List.of(cancelled), pageable, 1));
 
-        List<CoachSlotResponse> response = service.getMySlots(ACCOUNT_ID);
+        PageResponse<CoachSlotResponse> response = service.getMySlots(ACCOUNT_ID, 0, 10);
 
-        assertThat(response).hasSize(1);
-        assertThat(response.get(0).getStatus()).isEqualTo(SlotStatus.CANCELLED);
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).getStatus()).isEqualTo(SlotStatus.CANCELLED);
     }
 
     @Test

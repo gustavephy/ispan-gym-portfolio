@@ -17,6 +17,7 @@ import org.openpdf.text.pdf.PdfPTable;
 import org.openpdf.text.pdf.PdfTemplate;
 import org.openpdf.text.pdf.PdfWriter;
 
+import tw.com.ispan.gym.common.pdf.PdfLineChart;
 import tw.com.ispan.gym.entity.aihealthchat.AiHealthPlan;
 import tw.com.ispan.gym.entity.aihealthchat.InbodyRecord;
 import tw.com.ispan.gym.exception.aihealthchat.AiHealthPlanNotFoundException;
@@ -265,9 +266,9 @@ public class PdfReportService {
     // 畫，避免只有一個點時線段退化成一個點看起來像畫錯。每張圖是獨立的 Image
     // 各自帶 x 軸日期，頁面剩餘空間放得下幾張就排幾張，放不下的才換頁，
     // 不會因為合併成一張大圖整塊被推到下一頁而留下大段空白。
+    // 座標軸與缺值斷線的繪製規則已抽至 common.pdf.PdfLineChart（與營運報表共用）。
 
-    private static final float CHART_WIDTH = 480f;
-    private static final float CHART_ROW_HEIGHT = 130f;
+    private static final float CHART_ROW_HEIGHT = PdfLineChart.CHART_ROW_HEIGHT;
 
     private List<Image> buildTrendCharts(PdfWriter writer, BaseFont baseFont, List<InbodyRecord> history)
             throws Exception {
@@ -278,160 +279,8 @@ public class PdfReportService {
             if (values.stream().filter(v -> v != null).count() < 2) {
                 continue;
             }
-            PdfTemplate template = writer.getDirectContent().createTemplate(CHART_WIDTH, CHART_ROW_HEIGHT);
-            drawSeriesChart(template, baseFont, 0f, 0f, CHART_WIDTH, CHART_ROW_HEIGHT,
-                    dates, values, series.label(), series.color(), true);
-
-            Image image = Image.getInstance(template);
-            image.setAlignment(Element.ALIGN_CENTER);
-            image.setSpacingBefore(6);
-            image.setSpacingAfter(12);
-            charts.add(image);
+            charts.add(PdfLineChart.buildChart(writer, baseFont, dates, values, series.label(), series.color()));
         }
         return charts;
-    }
-
-    private void drawSeriesChart(PdfTemplate cb, BaseFont baseFont, float x, float y, float w, float h,
-            List<LocalDate> dates, List<BigDecimal> values, String label, Color color, boolean showXAxis) {
-        List<Integer> presentIdx = new ArrayList<>();
-        for (int i = 0; i < values.size(); i++) {
-            if (values.get(i) != null) {
-                presentIdx.add(i);
-            }
-        }
-
-        BigDecimal min = null;
-        BigDecimal max = null;
-        for (int idx : presentIdx) {
-            BigDecimal v = values.get(idx);
-            if (min == null || v.compareTo(min) < 0) {
-                min = v;
-            }
-            if (max == null || v.compareTo(max) > 0) {
-                max = v;
-            }
-        }
-        if (min.compareTo(max) == 0) {
-            // 全部量測值相同時人為拉開範圍，避免折線畫成貼底的一條水平線
-            min = min.subtract(BigDecimal.ONE);
-            max = max.add(BigDecimal.ONE);
-        }
-
-        float labelAreaLeft = 46f; // 給 y 軸數值標籤留的寬度
-        float labelAreaBottom = showXAxis ? 26f : 14f; // 給 x 軸日期標籤留的高度
-        float plotX = x + labelAreaLeft;
-        float plotY = y + labelAreaBottom;
-        float plotW = w - labelAreaLeft - 10f;
-        float plotH = h - labelAreaBottom - 20f; // 上方留給圖例文字
-
-        // 圖表外框與 y 軸格線（最小值／中間值／最大值）
-        cb.setLineWidth(0.5f);
-        cb.setColorStroke(new Color(0xD0, 0xD0, 0xD0));
-        cb.rectangle(plotX, plotY, plotW, plotH);
-        cb.stroke();
-
-        BigDecimal mid = min.add(max).divide(BigDecimal.valueOf(2));
-        drawYTick(cb, baseFont, plotX, plotY, plotW, plotH, min, min, max, "min");
-        drawYTick(cb, baseFont, plotX, plotY, plotW, plotH, mid, min, max, "mid");
-        drawYTick(cb, baseFont, plotX, plotY, plotW, plotH, max, min, max, "max");
-
-        // 圖例（色塊 + 文字）
-        cb.setColorFill(color);
-        cb.rectangle(plotX, y + h - 12f, 10f, 10f);
-        cb.fill();
-        cb.beginText();
-        cb.setFontAndSize(baseFont, 9);
-        cb.setColorFill(Color.DARK_GRAY);
-        cb.showTextAligned(Element.ALIGN_LEFT, label, plotX + 14f, y + h - 10.5f, 0);
-        cb.endText();
-
-        // 折線與資料點：只在「有值」的索引之間連線，x 座標仍依整體時間序均分，
-        // 缺值月份會自然斷開一段而不是被拉直插值，避免暗示不存在的量測。
-        float dx = values.size() > 1 ? plotW / (values.size() - 1) : 0f;
-        cb.setLineWidth(1.5f);
-        cb.setColorStroke(color);
-        boolean penDown = false;
-        for (int idx : presentIdx) {
-            BigDecimal v = values.get(idx);
-            float px = plotX + dx * idx;
-            float py = plotY + toRatio(v, min, max) * plotH;
-            if (!penDown || !isContiguous(presentIdx, idx)) {
-                cb.moveTo(px, py);
-                penDown = true;
-            } else {
-                cb.lineTo(px, py);
-            }
-            cb.circle(px, py, 1.8f);
-        }
-        cb.stroke();
-        cb.setColorFill(color);
-        for (int idx : presentIdx) {
-            BigDecimal v = values.get(idx);
-            float px = plotX + dx * idx;
-            float py = plotY + toRatio(v, min, max) * plotH;
-            cb.circle(px, py, 1.8f);
-            cb.fill();
-        }
-
-        if (showXAxis) {
-            drawXLabels(cb, baseFont, plotX, plotY, plotW, dates);
-        }
-    }
-
-    private boolean isContiguous(List<Integer> presentIdx, int idx) {
-        int pos = presentIdx.indexOf(idx);
-        return pos > 0 && presentIdx.get(pos - 1) == idx - 1;
-    }
-
-    private float toRatio(BigDecimal v, BigDecimal min, BigDecimal max) {
-        return v.subtract(min).divide(max.subtract(min), 6, java.math.RoundingMode.HALF_UP).floatValue();
-    }
-
-    private void drawYTick(PdfTemplate cb, BaseFont baseFont, float plotX, float plotY, float plotW, float plotH,
-            BigDecimal value, BigDecimal min, BigDecimal max, String position) {
-        float ratio = toRatio(value, min, max);
-        float ty = plotY + ratio * plotH;
-        cb.setLineWidth(0.4f);
-        cb.setColorStroke(new Color(0xE8, 0xE8, 0xE8));
-        cb.moveTo(plotX, ty);
-        cb.lineTo(plotX + plotW, ty);
-        cb.stroke();
-
-        cb.beginText();
-        cb.setFontAndSize(baseFont, 8);
-        cb.setColorFill(Color.GRAY);
-        cb.showTextAligned(Element.ALIGN_RIGHT, value.setScale(1, java.math.RoundingMode.HALF_UP).toPlainString(),
-                plotX - 4f, ty - 3f, 0);
-        cb.endText();
-    }
-
-    private void drawXLabels(PdfTemplate cb, BaseFont baseFont, float plotX, float plotY, float plotW,
-            List<LocalDate> dates) {
-        int n = dates.size();
-        float dx = n > 1 ? plotW / (n - 1) : 0f;
-        // 資料點太多時全部印會互相重疊，只挑頭、尾與中間幾個等距索引來顯示
-        int maxLabels = 6;
-        int step = Math.max(1, (int) Math.ceil(n / (double) maxLabels));
-
-        cb.setColorFill(Color.GRAY);
-        for (int i = 0; i < n; i += step) {
-            drawOneXLabel(cb, baseFont, plotX, plotY, dx, dates, i);
-        }
-        if ((n - 1) % step != 0) {
-            drawOneXLabel(cb, baseFont, plotX, plotY, dx, dates, n - 1);
-        }
-    }
-
-    private void drawOneXLabel(PdfTemplate cb, BaseFont baseFont, float plotX, float plotY, float dx,
-            List<LocalDate> dates, int i) {
-        String text = dates.get(i).format(DATE_FMT);
-        // 標籤以資料點為中心置中，但頭尾資料點貼著繪圖區邊緣，置中會超出
-        // template 畫布（超出部分直接被裁掉），所以把中心點夾回可完整顯示的範圍
-        float half = baseFont.getWidthPoint(text, 7.5f) / 2;
-        float px = Math.min(Math.max(plotX + dx * i, half), CHART_WIDTH - half);
-        cb.beginText();
-        cb.setFontAndSize(baseFont, 7.5f);
-        cb.showTextAligned(Element.ALIGN_CENTER, text, px, plotY - 12f, 0);
-        cb.endText();
     }
 }

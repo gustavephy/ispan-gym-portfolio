@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useProductsStore } from '@/stores/products.js'
@@ -37,16 +37,25 @@ function selectCategory(categoryId) {
   fetchProducts()
 }
 
-function doSearch() {
-  page.value = 0
-  fetchProducts()
-}
+let searchDebounceTimer = null
+
+watch(keyword, () => {
+  clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    page.value = 0
+    fetchProducts()
+  }, 400)
+})
 
 function changePage(n) {
   if (n < 0 || n >= totalPages.value) return
   page.value = n
   fetchProducts()
 }
+
+onUnmounted(() => {
+  clearTimeout(searchDebounceTimer)
+})
 
 async function addToCart(product) {
   if (!auth.isLoggedIn) {
@@ -70,12 +79,11 @@ onMounted(() => {
 
     <div class="toolbar">
       <input
+        id="productSearch"
         v-model="keyword"
         class="keyword-input"
         placeholder="搜尋商品名稱..."
-        @keyup.enter="doSearch"
       />
-      <button class="btn btn-accent" @click="doSearch">搜尋</button>
     </div>
 
     <div class="category-filter">

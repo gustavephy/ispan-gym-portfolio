@@ -12,4 +12,9 @@ public class PdfGenerationException extends ApiException {
     public PdfGenerationException() {
         super(HttpStatus.INTERNAL_SERVER_ERROR, "PDF_GENERATION_FAILED", "課表 PDF 產生失敗，請稍後再試");
     }
+
+    /** 供課表以外的 PDF 產生情境（如營運報表）帶入對應的使用者訊息，錯誤碼共用 */
+    public PdfGenerationException(String message) {
+        super(HttpStatus.INTERNAL_SERVER_ERROR, "PDF_GENERATION_FAILED", message);
+    }
 }

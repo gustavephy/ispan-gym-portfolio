@@ -42,7 +42,8 @@ async function handleCheckout() {
     submitEcpayForm(formRes.data)
     // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 submitting，避免使用者在轉導期間重複點擊
   } catch (err) {
-    showFeedback(err.response?.data?.message || '結帳失敗，請稍後再試', 'error')
+    // 攔截器已正規化錯誤，訊息在 err.message；err.response 不存在（見 normalizeApiError）
+    showFeedback(err.message || '結帳失敗，請稍後再試', 'error')
     submitting.value = false
   }
 }

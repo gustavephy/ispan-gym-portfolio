@@ -4,6 +4,8 @@ package tw.com.ispan.gym.repository.coach;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,15 +26,6 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
                         @Param("endAt") LocalDateTime endAt);
 
         /**
-         * 查詢某位教練的所有時段，依開始時間排序。
-         * 注意：不會過濾任何 status，CANCELLED／BOOKED／AVAILABLE 都會一起回傳，
-         * 前端若只想顯示「還能用」的時段，要自己依 status 篩選。
-         */
-        @Query("SELECT s FROM CoachSlot s WHERE s.trainer.id = :trainerId ORDER BY s.startAt ASC")
-        List<CoachSlot> findByTrainerIdOrderByStartAtAsc(
-                        @Param("trainerId") Integer trainerId);
-
-        /**
          * 修改時段時的重疊檢查，邏輯跟 {@link #findOverlapping} 相同，
          * 但多了 excludeId：修改時要把「這筆時段自己原本的時間」排除在比對之外，
          * 不然新時間一定會跟自己的舊資料被判定成重疊，導致永遠改不了。
@@ -48,9 +41,20 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
         /**
          * 查詢某教練指定狀態的時段，依開始時間排序。
          * 用在會員瀏覽可預約時段（searchSlots），只需要 AVAILABLE，
-         * 不像 {@link #findByTrainerIdOrderByStartAtAsc} 是給教練本人管理用、需要看到所有狀態。
+         * 不像 {@link #findByTrainerId} 是給教練本人管理用、需要看到所有狀態。
          * 直接在查詢條件過濾，避免撈出不需要的資料再用 Java 篩選。
          */
         @Query("SELECT s FROM CoachSlot s WHERE s.trainer.id = :trainerId AND s.status = :status ORDER BY s.startAt ASC")
         List<CoachSlot> findByTrainerIdAndStatusOrderByStartAtAsc(@Param("trainerId") Integer trainerId, @Param("status") SlotStatus status);
+
+        @Query("SELECT s FROM CoachSlot s WHERE s.trainer.trainerId = :trainerId")
+        Page<CoachSlot> findByTrainerId(@Param("trainerId") Integer trainerId, Pageable pageable);
+
+        /**
+         * 教練停用前檢查用：名下還有多少「未完成」時段——排除 CANCELLED，且結束時間仍在未來。
+         * 只看 status 不夠：AVAILABLE/BOOKED 都沒有到期自動轉態，早已過去卻沒人清理的舊時段
+         * 不該繼續擋著停用，故額外疊加 endAt > now（見 trainer_management_next_phase 規格基準）。
+         */
+        @Query("SELECT COUNT(s) FROM CoachSlot s WHERE s.trainer.id = :trainerId AND s.status <> 'CANCELLED' AND s.endAt > :now")
+        long countOpenByTrainerId(@Param("trainerId") Integer trainerId, @Param("now") LocalDateTime now);
 }

@@ -77,7 +77,7 @@ class StompAuthChannelInterceptorTest {
 
     private Employee employee(Integer id, EmployeeStatus status) {
         Employee employee = new Employee();
-        ReflectionTestUtils.setField(employee, "id", id);
+        ReflectionTestUtils.setField(employee, "employeeId", id);
         employee.setStatus(status);
         return employee;
     }
@@ -174,6 +174,50 @@ class StompAuthChannelInterceptorTest {
 
         assertThatThrownBy(() -> interceptor.preSend(toMessage(connectFrame("Bearer " + TOKEN)), channel))
                 .isInstanceOf(BadCredentialsException.class);
+    }
+
+    // === CONNECT：credentialsVersion（密碼變更後舊 token 全裝置失效）================
+    // 密碼管理功能新增（2026-08-21），比照 JwtAuthFilter 的同一套比對邏輯，
+    // 只是套用在 CONNECT frame 而非每次 HTTP 請求。
+
+    @Test
+    void credentialsVersion不符時擋下連線_沿用同一句訊息不揭露密碼被改過() {
+        when(jwtUtil.extractAccountId(TOKEN)).thenReturn(ACCOUNT_ID);
+        when(jwtUtil.extractCredentialsVersion(TOKEN)).thenReturn(5);
+        Account account = account();
+        account.setCredentialsVersion(6); // 帳號已經改過密碼，token 裡的版本是變更前的舊版
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> interceptor.preSend(toMessage(connectFrame("Bearer " + TOKEN)), channel))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("無效或已過期");
+    }
+
+    @Test
+    void credentialsVersion相符時正常放行並掛上Principal() {
+        when(jwtUtil.extractAccountId(TOKEN)).thenReturn(ACCOUNT_ID);
+        when(jwtUtil.extractCredentialsVersion(TOKEN)).thenReturn(4);
+        Account account = account();
+        account.setCredentialsVersion(4);
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        StompHeaderAccessor accessor = connectFrame("Bearer " + TOKEN);
+        interceptor.preSend(toMessage(accessor), channel);
+
+        assertThat(accessor.getUser()).isInstanceOf(StompPrincipal.class);
+    }
+
+    /** jwtUtil 是純 mock，未特別 stub 時 extractCredentialsVersion 回傳 int 預設值 0；
+     *  帳號的 credentialsVersion 同樣預設 0，兩者相符——確認既有測試（都用 stubValidToken()）
+     *  在加了 cv 比對之後不會意外全部變成連不上。 */
+    @Test
+    void 未特別stub版本時兩邊都是預設值0仍能通過() {
+        stubValidToken();
+
+        StompHeaderAccessor accessor = connectFrame("Bearer " + TOKEN);
+        interceptor.preSend(toMessage(accessor), channel);
+
+        assertThat(accessor.getUser()).isInstanceOf(StompPrincipal.class);
     }
 
     // === SUBSCRIBE：房間授權（跨帳號防護）======================================

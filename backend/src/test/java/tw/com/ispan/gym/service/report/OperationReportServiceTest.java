@@ -17,10 +17,13 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import tw.com.ispan.gym.dto.report.DailyRevenueRow;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
 import tw.com.ispan.gym.dto.report.OrderOverviewResponse;
 import tw.com.ispan.gym.dto.report.OrderPeriodSummary;
 import tw.com.ispan.gym.dto.report.ProductSalesRow;
+import tw.com.ispan.gym.dto.report.ReportBreakdownResponse;
+import tw.com.ispan.gym.dto.report.ReportDailyTotalResponse;
 import tw.com.ispan.gym.dto.report.ReportDetailResponse;
 import tw.com.ispan.gym.dto.report.ReportSalesItemResponse;
 import tw.com.ispan.gym.dto.report.SalesStatsResponse;
@@ -33,7 +36,11 @@ import tw.com.ispan.gym.enums.report.ReportType;
 import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.dto.report.ReportRefundSummary;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
+import tw.com.ispan.gym.repository.payment.PaymentRefundRepository;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
 import tw.com.ispan.gym.repository.report.ReportSnapshotRepository;
@@ -57,7 +64,11 @@ class OperationReportServiceTest {
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderItemRepository orderItems = mock(OrderItemRepository.class);
     private final EmployeeRepository employees = mock(EmployeeRepository.class);
-    private final OperationReportService service = new OperationReportService(snapshots, orders, orderItems, employees);
+    private final PaymentRefundRepository refunds = mock(PaymentRefundRepository.class);
+    private final MemberRepository members = mock(MemberRepository.class);
+    private final MemberSubscriptionRepository subscriptions = mock(MemberSubscriptionRepository.class);
+    private final OperationReportService service = new OperationReportService(
+            snapshots, orders, orderItems, employees, refunds, members, subscriptions);
 
     // === 共用測試資料 ========================================================
 
@@ -70,6 +81,7 @@ class OperationReportServiceTest {
                 .thenReturn(new OrderPeriodSummary(0L, null, null));
         when(orderItems.aggregateItemSales(any(), any(), any())).thenReturn(List.of());
         when(orders.aggregateSubscriptionSales(any(), any(), any())).thenReturn(List.of());
+        when(refunds.summarizeCompleted(any(), any())).thenReturn(new ReportRefundSummary(0L, null));
     }
 
     private void stubSnapshotSaveReturnsArgument() {
@@ -154,6 +166,66 @@ class OperationReportServiceTest {
         verify(snapshots).save(any(ReportSnapshot.class));
     }
 
+    // === generate()：延伸統計（2026-08-17 擴充）================================
+
+    @Test
+    void 延伸統計與總覽同口徑一併固化進快照() {
+        stubEmptyAggregates();
+        stubSnapshotSaveReturnsArgument();
+        when(orders.aggregateDailyRevenue(any(), any(), any())).thenReturn(List.of(
+                new DailyRevenueRow(LocalDate.of(2026, 8, 1), 2L, new BigDecimal("3000")),
+                new DailyRevenueRow(LocalDate.of(2026, 8, 2), 1L, new BigDecimal("1200"))));
+        when(orders.aggregateByStatus(any(), any())).thenReturn(List.<Object[]>of(
+                new Object[] { OrderStatus.PAID, 3L, new BigDecimal("4200") },
+                new Object[] { OrderStatus.CANCELLED, 1L, new BigDecimal("500") }));
+        when(orders.aggregateByPaymentMethod(any(), any())).thenReturn(List.<Object[]>of(
+                new Object[] { "Credit", 3L }));
+        when(refunds.summarizeCompleted(any(), any()))
+                .thenReturn(new ReportRefundSummary(2L, new BigDecimal("800")));
+        when(members.countCreatedBetween(any(), any())).thenReturn(5L);
+        when(subscriptions.countCreatedBetween(any(), any())).thenReturn(3L);
+
+        ReportDetailResponse response = service.generate(request(), null);
+
+        // 每日營收：趨勢資料隨快照凍結，讀取時不重算
+        assertThat(response.dailyTotals()).extracting(ReportDailyTotalResponse::statDate)
+                .containsExactly(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 2));
+        // 兩種分佈依維度分流，不混在同一份清單
+        assertThat(response.statusBreakdown()).extracting(ReportBreakdownResponse::itemKey)
+                .containsExactly("PAID", "CANCELLED");
+        assertThat(response.paymentBreakdown()).extracting(ReportBreakdownResponse::itemKey)
+                .containsExactly("Credit");
+        assertThat(response.refundCount()).isEqualTo(2L);
+        assertThat(response.refundAmount()).isEqualByComparingTo("800");
+        assertThat(response.newMemberCount()).isEqualTo(5L);
+        assertThat(response.newSubscriptionCount()).isEqualTo(3L);
+    }
+
+    @Test
+    void 每日營收與總覽查詢用同一組區間與狀態() {
+        stubEmptyAggregates();
+        stubSnapshotSaveReturnsArgument();
+
+        service.generate(request(), null);
+
+        verify(orders).aggregateDailyRevenue(
+                eq(LocalDate.of(2026, 8, 1).atStartOfDay()),
+                eq(LocalDate.of(2026, 9, 1).atStartOfDay()),
+                eq(List.of(OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.COMPLETED)));
+    }
+
+    @Test
+    void 區間內無退款時退款統計正規化為零() {
+        stubEmptyAggregates();
+        stubSnapshotSaveReturnsArgument();
+        when(refunds.summarizeCompleted(any(), any())).thenReturn(new ReportRefundSummary(0L, null));
+
+        ReportDetailResponse response = service.generate(request(), null);
+
+        assertThat(response.refundCount()).isZero();
+        assertThat(response.refundAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
     // === generate()：操作者 ===================================================
 
     @Test
@@ -208,6 +280,7 @@ class OperationReportServiceTest {
         when(orderItems.aggregateItemSales(any(), any(), any())).thenReturn(List.of(
                 new ProductSalesRow(null, 200, "一對一重訓", 2L, new BigDecimal("12000"))));
         when(orders.aggregateSubscriptionSales(any(), any(), any())).thenReturn(List.of());
+        when(refunds.summarizeCompleted(any(), any())).thenReturn(new ReportRefundSummary(0L, null));
         when(orders.summarizePeriod(any(), any(), any()))
                 .thenReturn(new OrderPeriodSummary(2L, new BigDecimal("12000"), BigDecimal.ZERO));
         stubSnapshotSaveReturnsArgument();
@@ -230,6 +303,7 @@ class OperationReportServiceTest {
                 new ProductSalesRow(101, null, "搖搖杯", 4L, new BigDecimal("1000")),
                 new ProductSalesRow(null, 200, "一對一重訓", 2L, new BigDecimal("12000"))));
         when(orders.aggregateSubscriptionSales(any(), any(), any())).thenReturn(List.of());
+        when(refunds.summarizeCompleted(any(), any())).thenReturn(new ReportRefundSummary(0L, null));
 
         SalesStatsResponse stats = service.liveStats(ReportItemType.PRODUCT, START, END, 10);
 
@@ -260,6 +334,7 @@ class OperationReportServiceTest {
                 new ProductSalesRow(101, null, "B", 4L, new BigDecimal("3000")),
                 new ProductSalesRow(102, null, "C", 2L, new BigDecimal("1000"))));
         when(orders.aggregateSubscriptionSales(any(), any(), any())).thenReturn(List.of());
+        when(refunds.summarizeCompleted(any(), any())).thenReturn(new ReportRefundSummary(0L, null));
 
         SalesStatsResponse stats = service.liveStats(ReportItemType.PRODUCT, START, END, 2);
 
@@ -284,6 +359,7 @@ class OperationReportServiceTest {
     void 即時統計無資料時回零與空排行() {
         when(orderItems.aggregateItemSales(any(), any(), any())).thenReturn(List.of());
         when(orders.aggregateSubscriptionSales(any(), any(), any())).thenReturn(List.of());
+        when(refunds.summarizeCompleted(any(), any())).thenReturn(new ReportRefundSummary(0L, null));
 
         SalesStatsResponse stats = service.liveStats(null, START, END, 10);
 
@@ -370,7 +446,7 @@ class OperationReportServiceTest {
     void 退款完成標記涵蓋原付款日的快照為過時() {
         LocalDate paidDate = LocalDate.of(2026, 8, 15);
 
-        service.onRefundCompleted(new RefundCompletedEvent(900L, paidDate));
+        service.onRefundCompleted(new RefundCompletedEvent(900, paidDate));
 
         // 報表口徑以付款日歸屬營收，退款會讓涵蓋該日的既有快照失真
         verify(snapshots).markStaleCovering(eq(paidDate), any(LocalDateTime.class));

@@ -5,6 +5,7 @@ import {
   getGroupCoursesPublic,
   getCourseCategories
 } from '@/api/course/course.js'
+import api from '@/api/axios.instance.js'
 
 // [全域狀態庫] useCoursesStore (courses)
 // 定義課程相關的 Pinia 狀態庫，提供課程方案與教練課程的資料管理功能。
@@ -18,9 +19,6 @@ export const useCoursesStore = defineStore('courses', () => {
   const currentPageNum = ref(0)
   const totalSize = ref(8)
   const searchQuery = ref('')
-
-  // 記錄上一次發送請求的篩選參數以判斷是否需要重新請求 API
-  const lastParams = ref({ keyword: null, trainerId: null, categoryId: null })
 
   //載入課程分類
   async function loadCategories() {
@@ -46,15 +44,44 @@ export const useCoursesStore = defineStore('courses', () => {
     return [...privates, ...groups]
   })
 
+  // 搜尋與篩選的狀態欄位 (響應式)
+  const selectedCategoryId = ref(null)
+  const selectedTrainerId = ref(null)
+
   // 計算屬性：搜尋篩選（私教課 + 團課）
   const filteredCourses = computed(() => {
+    let result = allCourses.value
+
+    // 1. 關鍵字過濾
     const keyword = searchQuery.value.trim().toLowerCase()
-    if (!keyword) return allCourses.value
-    return allCourses.value.filter(course => {
-      const nameMatch = course.name?.toLowerCase().includes(keyword)
-      const trainerMatch = course.trainer?.name?.toLowerCase().includes(keyword)
-      return nameMatch || trainerMatch
-    })
+    if (keyword) {
+      result = result.filter(course => {
+        const nameMatch = course.name?.toLowerCase().includes(keyword)
+        const trainerName = course.trainerName || course.trainer?.name || course.trainer?.displayName || ""
+        const trainerMatch = trainerName.toLowerCase().includes(keyword)
+        return nameMatch || trainerMatch
+      })
+    }
+
+    // 2. 分類過濾
+    if (selectedCategoryId.value) {
+      const catId = Number(selectedCategoryId.value)
+      result = result.filter(course => {
+        const cId = course.courseCategoryId || course.category?.courseCategoryId || course.category?.id || course.categoryId
+        return Number(cId) === catId
+      })
+    }
+
+    // 3. 教練過濾
+    if (selectedTrainerId.value) {
+      const tId = Number(selectedTrainerId.value)
+      result = result.filter(course => {
+        const trId = course.trainerId || course.trainer?.trainerId
+        return Number(trId) === tId
+      })
+    }
+
+    return result
   })
 
   // 計算屬性：總筆數與總頁數 (自動隨 filteredCourses 計算)
@@ -73,13 +100,12 @@ export const useCoursesStore = defineStore('courses', () => {
     currentPageNum.value = params.page || 0
     totalSize.value = params.size || 8
 
-    //判斷篩選欄位是否有值
-    const hasFilterChanged =
-      params.keyword !== lastParams.value.keyword ||
-      params.trainerId !== lastParams.value.trainerId ||
-      params.categoryId !== lastParams.value.categoryId
+    // 同步外部傳入的篩選條件到 Pinia 響應式屬性
+    selectedCategoryId.value = params.categoryId || null
+    selectedTrainerId.value = params.trainerId || null
+    searchQuery.value = params.keyword || ''
 
-    if (hasFilterChanged || privateCourses.value.length === 0 && groupCourses.value.length === 0) {
+    if (privateCourses.value.length === 0 && groupCourses.value.length === 0) {
       loading.value = true
       try {
         const [privateRes, groupRes] = await Promise.all([
@@ -89,13 +115,6 @@ export const useCoursesStore = defineStore('courses', () => {
 
         privateCourses.value = privateRes.data || []
         groupCourses.value = groupRes.data || []
-
-        //儲存本次的篩選參數
-        lastParams.value = {
-          keyword: params.keyword || null,
-          trainerId: params.trainerId || null,
-          categoryId: params.categoryId || null
-        }
       } finally {
         loading.value = false
       }
@@ -111,14 +130,6 @@ export const useCoursesStore = defineStore('courses', () => {
       return false
     }
 
-    // 2. 檢查個人資料是否完整
-    await authStore.checkProfile(true)
-    if (!authStore.profileComplete) {
-      showToast('購買前請先至個人中心填寫完整個人資訊（包含生日與手機號碼）！', 'warning')
-      window.location.href = '/member'
-      return false
-    }
-
     return true
   }
 
@@ -131,31 +142,50 @@ export const useCoursesStore = defineStore('courses', () => {
     if (!(await validateMemberRequirements(authStore, showToast))) return
 
     try {
-      const api = (await import('@/api/course/course.js')).default
-      const checkoutRes = await api.post('/api/courses/checkout', null, {
-        params: {
-          courseId: courseId,
-          quantity: 1,
-          paymentMethod: 'ecpay'
-        }
+      // 1. 建立課程直接購買訂單
+      const orderRes = await api.post('/api/orders/direct', {
+        privateCourseId: courseId,
+        quantity: 1
       })
 
-      showToast('課程訂單已建立！')
+      const orderData = orderRes.data
+      if (!orderData || !orderData.orderId) {
+        showToast('建立訂單失敗，回傳資料無效', 'error')
+        return
+      }
 
-      if (checkoutRes.data && checkoutRes.data.paymentHtml) {
-        const div = document.createElement('div')
-        div.innerHTML = checkoutRes.data.paymentHtml
-        document.body.appendChild(div)
-        const form = div.querySelector('form')
-        if (form) {
-          form.target = '_blank'
-          form.submit()
-          showToast('已開啟綠界安全支付新分頁，請在新分頁完成付款。', 'success')
-          return
-        }
+      showToast('課程訂單已建立，引導至付款頁面...', 'success')
+
+      // 2. 獲取綠界金流 HTML 表單
+      const ecpayRes = await api.post(`/api/payments/ecpay/checkout/${orderData.orderId}`)
+      
+      if (ecpayRes.data) {
+        // 金流 API 通常返回一個包含 key-value 的 Form 參數物件，需要動態生成 form 送出
+        const formObj = ecpayRes.data
+        const actionUrl = formObj.ActionUrl || 'https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5'
+        
+        const form = document.createElement('form')
+        form.method = 'POST'
+        form.action = actionUrl
+        form.target = '_blank'
+
+        Object.keys(formObj).forEach(key => {
+          if (key !== 'ActionUrl') {
+            const input = document.createElement('input')
+            input.type = 'hidden'
+            input.name = key
+            input.value = formObj[key]
+            form.appendChild(input)
+          }
+        })
+
+        document.body.appendChild(form)
+        form.submit()
+        document.body.removeChild(form)
+        showToast('已在新分頁開啟支付頁面！', 'success')
       }
     } catch (err) {
-      showToast(err.response?.data?.message || '購買失敗，請重試', 'error')
+      showToast(err.message || err.response?.data?.message || '購買失敗，請重試', 'error')
     }
   }
 

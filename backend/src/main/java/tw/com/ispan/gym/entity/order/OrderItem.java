@@ -24,7 +24,7 @@ public class OrderItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
-    private Long id;
+    private Integer id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "order_id", nullable = false, foreignKey = @ForeignKey(name = "FK_oi_order"))
     private Order order;
@@ -43,7 +43,7 @@ public class OrderItem {
     @Column(name = "price_at_buy", nullable = false, precision = 10, scale = 2)
     private BigDecimal priceAtBuy;
     @Column(name = "quantity", nullable = false)
-    private Long quantity;
+    private Integer quantity;
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -51,7 +51,7 @@ public class OrderItem {
     protected OrderItem() {}
 
     /** 商品明細 */
-    public OrderItem(Order order, Product product, String productNameAtBuy, BigDecimal priceAtBuy, Long quantity) {
+    public OrderItem(Order order, Product product, String productNameAtBuy, BigDecimal priceAtBuy, Integer quantity) {
         this.order = order;
         this.product = product;
         this.productNameAtBuy = productNameAtBuy;
@@ -60,7 +60,7 @@ public class OrderItem {
     }
 
     /** 私教課明細 */
-    public OrderItem(Order order, PrivateCourse course, String courseNameAtBuy, BigDecimal priceAtBuy, Long quantity) {
+    public OrderItem(Order order, PrivateCourse course, String courseNameAtBuy, BigDecimal priceAtBuy, Integer quantity) {
         this.order = order;
         this.course = course;
         this.productNameAtBuy = courseNameAtBuy;
@@ -68,13 +68,13 @@ public class OrderItem {
         this.quantity = quantity;
     }
 
-    public Long getId() { return id; }
+    public Integer getId() { return id; }
     public Order getOrder() { return order; }
     public Product getProduct() { return product; }
     public PrivateCourse getCourse() { return course; }
     public String getProductNameAtBuy() { return productNameAtBuy; }
     public BigDecimal getPriceAtBuy() { return priceAtBuy; }
-    public Long getQuantity() { return quantity; }
+    public Integer getQuantity() { return quantity; }
 
     /** 本筆明細是否為課程（決定履約走發放額度而非扣庫存） */
     public boolean isCourseItem() { return course != null; }

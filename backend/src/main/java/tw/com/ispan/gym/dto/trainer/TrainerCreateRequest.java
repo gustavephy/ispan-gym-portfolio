@@ -19,5 +19,9 @@ public class TrainerCreateRequest {
     private String experience;
 
     @NotBlank(message = "自我介紹為必填")
+    @Size(max = 5000, message = "自我介紹不可超過5000個字元")
     private String bio;
+
+    @Size(max = 255, message = "個人圖片網址不可超過255個字元")
+    private String profileImageUrl;
 }

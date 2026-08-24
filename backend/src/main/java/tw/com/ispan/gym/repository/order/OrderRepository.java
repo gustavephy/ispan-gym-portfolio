@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.repository.order;
 
+import tw.com.ispan.gym.dto.report.DailyRevenueRow;
 import tw.com.ispan.gym.dto.report.OrderPeriodSummary;
 import tw.com.ispan.gym.dto.report.SubscriptionSalesRow;
 import tw.com.ispan.gym.entity.order.Order;
@@ -12,9 +13,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface OrderRepository extends JpaRepository<Order, Long> {
-    List<Order> findAllByMemberIdOrderByCreatedAtDesc(Integer userId);
-    Optional<Order> findByIdAndMemberId(Long id, Integer userId);
+public interface OrderRepository extends JpaRepository<Order, Integer> {
+    List<Order> findAllByMemberIdOrderByCreatedAtDesc(Integer memberId);
+    Optional<Order> findByIdAndMemberId(Integer id, Integer memberId);
     Optional<Order> findByMerchantTradeNo(String merchantTradeNo);
     Optional<Order> findByTradeNo(String tradeNo);
 
@@ -49,6 +50,24 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             GROUP BY sp.subscriptionPlanId, sp.name
             """)
     List<SubscriptionSalesRow> aggregateSubscriptionSales(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("statuses") Collection<OrderStatus> statuses);
+
+    /**
+     * 每日營收聚合（報表趨勢用）。口徑同 summarizePeriod：paidAt 時間軸、
+     * 僅計入指定狀態；CAST 至 LocalDate 由方言轉為資料庫層的日期截斷。
+     */
+    @Query("""
+            SELECT new tw.com.ispan.gym.dto.report.DailyRevenueRow(
+                CAST(o.paidAt AS LocalDate), COUNT(o), SUM(o.totalAmount))
+            FROM Order o
+            WHERE o.paidAt >= :from AND o.paidAt < :to
+              AND o.status IN :statuses
+            GROUP BY CAST(o.paidAt AS LocalDate)
+            ORDER BY CAST(o.paidAt AS LocalDate)
+            """)
+    List<DailyRevenueRow> aggregateDailyRevenue(
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,
             @Param("statuses") Collection<OrderStatus> statuses);

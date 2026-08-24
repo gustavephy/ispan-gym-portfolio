@@ -7,6 +7,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.coach.CoachBooking;
 import tw.com.ispan.gym.entity.coach.CoachSlot;
 // 【合併時的修改說明】原分支寫的是 tw.com.ispan.gym.entity.Member / entity.Trainer：
@@ -33,6 +38,7 @@ import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
 import tw.com.ispan.gym.repository.coach.SessionDeductionLogRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 /**
  * 私教預約（CoachBooking）商業邏輯：包含建立預約、取消、教練核銷與相關稽核紀錄。
@@ -53,6 +59,7 @@ public class CoachBookingService {
         private final CoachBookingRepository coachBookingRepository;
         private final MemberRepository memberRepository;
         private final CoachSlotService coachSlotService;
+        private final TrainerService trainerService;
 
         private static final String CHECK_IN_KEY_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 排除 I/O/0/1
         private static final int CHECK_IN_KEY_LENGTH = 8;
@@ -138,7 +145,13 @@ public class CoachBookingService {
         public CoachBookingResponse createBooking(Integer memberId, Integer slotId) {
                 CoachSlot coachSlot = coachSlotRepository.findById(slotId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此時段"));
+                // §9 跨模組防護：教練若已 UNAVAILABLE 或軟刪除，即使時段本身還顯示 AVAILABLE
+                // 也不可接受新預約，不能只靠前端隱藏按鈕擋（見 trainer_management_next_phase 規格基準）。
+                // 只取 .getTrainerId()（lazy proxy，不觸發初始化，見 TrainerService 的方法註解），
+                // 真正的鎖定讀取交給 lockAndAssertAvailableForNewBusiness()，
+                // 這樣才能跟 AdminTrainerService.suspend() 搶同一顆鎖，堵住競態。
                 Integer trainerId = coachSlot.getTrainer().getTrainerId();
+                trainerService.lockAndAssertAvailableForNewBusiness(trainerId);
                 List<MemberCourseQuota> eligibleQuota = memberCourseQuotaRepository.findEligibleQuota(memberId,
                                 trainerId);
                 if (eligibleQuota.isEmpty()) {
@@ -333,6 +346,19 @@ public class CoachBookingService {
                 return response;
         }
 
+        /**
+         * 教練取消時段，並連鎖處理該時段底下尚未核銷的預約。
+         *
+         * <p>
+         * 實際取消時段的邏輯委派給 {@link CoachSlotService#cancelSlot}（含既有預約的
+         * acknowledge 檢查）；這裡接著找出該時段狀態為 PENDING 的預約（若有），
+         * 一併退還額度（quota.refund()）、把預約標記為 CANCELLED，並寫入
+         * SessionDeductionLog 稽核紀錄。
+         *
+         * <p>
+         * operatorTrainer 直接從 booking 的 CoachSlot 關聯取得，因為觸發者是教練本人，
+         * 不需要另外查證身分。
+         */
         @Transactional
         public CoachSlotResponse cancelSlotWithCascade(Integer accountId, Integer slotId,
                         boolean acknowledgeExistingBooking) {
@@ -370,7 +396,9 @@ public class CoachBookingService {
         }
 
         /**
-         * 查詢會員自己的所有私教課預約紀錄，依建立時間新到舊排序。
+         * 分頁查詢會員自己的所有私教課預約紀錄，依上課時間（coachSlot.startAt）由近到遠排序
+         * （Pageable 的 Sort，不寫 JPQL，理由同 {@code GroupCourseRepository#searchCourses}）。
+         * size 做安全上限（1~100）、page 不可小於 0，理由同 {@code GroupCourseService#getAllCourses}。
          *
          * <p>
          * remainingCourseSnapshot 的來源是 SessionDeductionLog.afterRemaining，取「這筆預約
@@ -383,12 +411,18 @@ public class CoachBookingService {
          * 前端請處理成「無歷史資料」，不要當成 0 堂看待。
          *
          * <p>
-         * 這裡用批次查詢（一次撈出這批 booking 全部的 log，再用 Map 分組）取代
-         * 「每筆 booking 各查一次」，避免 N 筆預約打 N 次資料庫的 N+1 問題。
+         * 這裡用批次查詢（一次撈出這一頁 booking 全部的 log，再用 Map 分組）取代
+         * 「每筆 booking 各查一次」，避免 N 筆預約打 N 次資料庫的 N+1 問題；
+         * 分頁後批次查詢的範圍縮小到單頁筆數，比原本一次撈全部預約再批次查更省。
          */
         @Transactional(readOnly = true)
-        public List<CoachBookingHistoryResponse> getMyBookings(Integer memberId) {
-                List<CoachBooking> myBooking = coachBookingRepository.findByMemberIdOrderByCreatedAtDesc(memberId);
+        public PageResponse<CoachBookingHistoryResponse> getMyBookings(Integer memberId, int page, int size) {
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+                Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "coachSlot.startAt"));
+
+                Page<CoachBooking> result = coachBookingRepository.findByMemberId(memberId, pageable);
+                List<CoachBooking> myBooking = result.getContent();
 
                 List<Integer> bookingIds = myBooking.stream().map(booking -> booking.getId()).toList();
                 List<SessionDeductionLog> logs = sessionDeductionLogRepository
@@ -402,7 +436,7 @@ public class CoachBookingService {
                                                 log -> log,
                                                 (first, second) -> first));
 
-                List<CoachBookingHistoryResponse> response = myBooking.stream()
+                List<CoachBookingHistoryResponse> items = myBooking.stream()
                                 .map(booking -> {
                                         SessionDeductionLog log = logMap.getOrDefault(booking.getId(), null);
                                         Integer snapshot = (log == null) ? null : log.getAfterRemaining();
@@ -416,6 +450,7 @@ public class CoachBookingService {
                                                         snapshot);
                                 })
                                 .toList();
-                return response;
+
+                return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
         }
 }

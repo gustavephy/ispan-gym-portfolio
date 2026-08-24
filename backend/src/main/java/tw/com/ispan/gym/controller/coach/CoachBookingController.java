@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
@@ -83,9 +84,11 @@ public class CoachBookingController {
      */
     @GetMapping("/bookings")
     @PreAuthorize("hasRole('MEMBER')")
-    public ResponseEntity<List<CoachBookingHistoryResponse>> getMyBookings() {
+    public ResponseEntity<PageResponse<CoachBookingHistoryResponse>> getMyBookings(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
         Integer memberId = currentUserProvider.requireCurrentMemberId();
-        List<CoachBookingHistoryResponse> bookings = coachBookingService.getMyBookings(memberId);
+        PageResponse<CoachBookingHistoryResponse> bookings = coachBookingService.getMyBookings(memberId, page, size);
         return ResponseEntity.status(HttpStatus.OK).body(bookings);
     }
 }

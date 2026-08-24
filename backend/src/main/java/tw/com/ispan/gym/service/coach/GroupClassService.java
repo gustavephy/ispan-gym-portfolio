@@ -4,6 +4,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import tw.com.ispan.gym.dto.coach.CreateGroupClassSessionRequest;
 import tw.com.ispan.gym.dto.coach.GroupClassBookingResponse;
 import tw.com.ispan.gym.dto.coach.GroupClassSessionResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.coach.GroupClassBooking;
 import tw.com.ispan.gym.entity.coach.GroupClassSession;
 import tw.com.ispan.gym.entity.course.GroupCourse;
@@ -28,6 +33,7 @@ import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
 import tw.com.ispan.gym.repository.course.GroupCourseRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +55,7 @@ public class GroupClassService {
         private final GroupClassBookingRepository groupClassBookingRepository;
 
         private final MemberRepository memberRepository;
+        private final TrainerService trainerService;
 
         @Transactional(readOnly = true)
         public List<GroupClassSessionResponse> getUpcomingSessions() {
@@ -84,6 +91,47 @@ public class GroupClassService {
         }
 
         /**
+         * 後台團課場次列表，分頁＋依課程名稱／教練姓名／教室搜尋。篩選邏輯沿用
+         * {@link #getUpcomingSessions()}（status=SCHEDULED 且尚未開始），只是多了分頁與搜尋，
+         * 這是全新的方法，{@link #getUpcomingSessions()} 本身不受影響——那支是會員瀏覽團課行事曆的
+         * 資料來源，前端依賴它一次回傳全部資料，不能改動。
+         */
+        @Transactional(readOnly = true)
+        public PageResponse<GroupClassSessionResponse> getUpcomingSessionsForAdmin(int page, int size,
+                        String search) {
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+                Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "startAt"));
+
+                Page<GroupClassSession> result = groupClassSessionRepository.searchUpcomingSessions(
+                                GroupClassSessionStatus.SCHEDULED, LocalDateTime.now(), search, pageable);
+
+                List<GroupClassSessionResponse> items = result.getContent().stream()
+                                .map(session -> new GroupClassSessionResponse(
+                                                session.getId(),
+                                                session.getCourse().getGroupCourseId(),
+                                                session.getCourse().getTrainer().getTrainerId(),
+                                                session.getCourse().getTrainer().getEmployee().getFirstName() + " "
+                                                                + session.getCourse().getTrainer().getEmployee()
+                                                                                .getLastName(),
+                                                session.getCourse().getName(),
+                                                session.getRoomName(),
+                                                session.getStartAt(),
+                                                session.getEndAt(),
+                                                session.getCapacity(),
+                                                session.getBookedCount(),
+                                                session.getRemainingSeats(),
+                                                session.getBookedCount() >= session.getCapacity(),
+                                                session.getStatus(),
+                                                session.getVersion(),
+                                                session.getCreatedAt(),
+                                                session.getUpdatedAt()))
+                                .toList();
+
+                return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
+        }
+
+        /**
          * 管理層建立團課場次。操作者角色限定 ADMIN（由 Controller 的 @PreAuthorize 把關），
          * 不需要解析「本人」身分——GroupClassSession 沒有綁定建立者，
          * 教練是誰由 groupCourseId 對應的 GroupCourse 決定，不是這裡指定的。
@@ -100,6 +148,16 @@ public class GroupClassService {
                 Integer groupCourseId = request.getGroupCourseId();
                 GroupCourse groupCourse = groupCourseRepository.findById(groupCourseId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此課程"));
+                // §9 跨模組防護：教練若已 UNAVAILABLE 或軟刪除，不可再指派新的團課場次，
+                // 不能只靠前端隱藏按鈕擋（見 trainer_management_next_phase 規格基準）。
+                // GroupCourseService#createCourse／activateCourse 現在也有同一道檢查
+                // （2026-08-19 code review 後補上，原規格§9 本來就把「建立或指派 GroupClass」
+                // 跟這裡的「建立或指派 GroupClassSession」列成兩個獨立防護點）——這裡仍然要查，
+                // 因為課程主檔 ACTIVE 不代表底下每一場次建立時教練仍可服務，兩層互相獨立。
+                // 只取 .getId()（lazy proxy，不觸發初始化，見 TrainerService 的方法註解），
+                // 真正的鎖定讀取交給 lockAndAssertAvailableForNewBusiness()，這樣才能跟
+                // AdminTrainerService.suspend() 搶同一顆鎖，堵住競態。
+                trainerService.lockAndAssertAvailableForNewBusiness(groupCourse.getTrainer().getTrainerId());
 
                 List<GroupClassSession> existing = groupClassSessionRepository
                                 .findOverlappingByRoom(request.getRoomName(), request.getStartAt(), request.getEndAt());
@@ -305,6 +363,40 @@ public class GroupClassService {
                                 saved.getStatus());
 
                 return resp;
+        }
+
+        /**
+         * 分頁查詢會員自己的所有團課報名紀錄，可依課程名稱或教室搜尋，依場次開始時間由近到遠排序
+         * （Pageable 的 Sort，不寫在 JPQL 裡，理由同 {@code GroupCourseRepository#searchCourses}）。
+         * size 做安全上限（1~100）、page 不可小於 0，理由同 {@code GroupCourseService#getAllCourses}。
+         */
+        @Transactional(readOnly = true)
+        public PageResponse<GroupClassBookingResponse> getMyBookings(Integer memberId, int page, int size,
+                        String search) {
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+                // 先依狀態再依開課時間：BOOKED 排在 CANCELLED 之前（EnumType.STRING 存的是字面值，
+                // 字母序剛好是 BOOKED < CANCELLED），讓「還有效的報名」永遠在最前面。
+                // 少了狀態這一層，同一場次的已取消紀錄會跟剛報名的混在一起，
+                // 使用者報名完往下看，第一眼看到的可能是舊的「已取消」，會以為報名失敗。
+                Pageable pageable = PageRequest.of(safePage, safeSize,
+                                Sort.by(Sort.Order.asc("status"), Sort.Order.asc("session.startAt")));
+
+                Page<GroupClassBooking> result = groupClassBookingRepository.searchMyBookings(memberId, search,
+                                pageable);
+
+                List<GroupClassBookingResponse> items = result.getContent().stream()
+                                .map(booking -> new GroupClassBookingResponse(
+                                                booking.getId(),
+                                                booking.getSession().getId(),
+                                                booking.getSession().getCourse().getName(),
+                                                booking.getSession().getRoomName(),
+                                                booking.getSession().getStartAt(),
+                                                booking.getSession().getEndAt(),
+                                                booking.getStatus()))
+                                .toList();
+
+                return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
         }
 
         /**

@@ -48,7 +48,7 @@ class CartServiceTest {
     private static final Integer MEMBER_ID = 1;
     private static final Integer OTHER_MEMBER_ID = 2;
     private static final Integer PRODUCT_ID = 100;
-    private static final Long CART_ITEM_ID = 500L;
+    private static final Integer CART_ITEM_ID = 500;
 
     private final CartItemRepository cartItems = mock(CartItemRepository.class);
     private final ProductRepository products = mock(ProductRepository.class);
@@ -78,7 +78,7 @@ class CartServiceTest {
         return product(10, ProductStatus.ACTIVE, "1000.00");
     }
 
-    private CartItem cartItem(Member owner, Product product, long quantity) {
+    private CartItem cartItem(Member owner, Product product, int quantity) {
         return new CartItem(owner, product, quantity);
     }
 
@@ -98,8 +98,8 @@ class CartServiceTest {
         Product shaker = product(5, ProductStatus.ACTIVE, "250.50");
         shaker.setProductId(101);
         when(cartItems.findAllByMemberIdOrderByCreatedAtAsc(MEMBER_ID)).thenReturn(List.of(
-                cartItem(member(MEMBER_ID), whey, 2L),
-                cartItem(member(MEMBER_ID), shaker, 3L)));
+                cartItem(member(MEMBER_ID), whey, 2),
+                cartItem(member(MEMBER_ID), shaker, 3)));
 
         CartResponse response = service.getCart(MEMBER_ID);
 
@@ -129,9 +129,9 @@ class CartServiceTest {
         when(cartItems.findByMemberIdAndProductProductId(MEMBER_ID, PRODUCT_ID)).thenReturn(Optional.empty());
         stubSaveReturnsArgument();
 
-        CartItemResponse response = service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 2L));
+        CartItemResponse response = service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 2));
 
-        assertThat(response.quantity()).isEqualTo(2L);
+        assertThat(response.quantity()).isEqualTo(2);
         assertThat(response.subtotal()).isEqualByComparingTo("2000.00");
         // 併發防護：確實有對會員取鎖，序列化同一購物車的並行加入
         verify(members).findByIdForUpdate(MEMBER_ID);
@@ -142,13 +142,13 @@ class CartServiceTest {
         stubMemberLock();
         Product product = availableProduct();
         when(products.findById(PRODUCT_ID)).thenReturn(Optional.of(product));
-        CartItem existing = cartItem(member(MEMBER_ID), product, 3L);
+        CartItem existing = cartItem(member(MEMBER_ID), product, 3);
         when(cartItems.findByMemberIdAndProductProductId(MEMBER_ID, PRODUCT_ID)).thenReturn(Optional.of(existing));
         stubSaveReturnsArgument();
 
-        CartItemResponse response = service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 4L));
+        CartItemResponse response = service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 4));
 
-        assertThat(response.quantity()).isEqualTo(7L);
+        assertThat(response.quantity()).isEqualTo(7);
         // 存回的是同一筆既有項目，不是新物件
         verify(cartItems).save(existing);
     }
@@ -160,9 +160,9 @@ class CartServiceTest {
         when(products.findById(PRODUCT_ID)).thenReturn(Optional.of(product));
         // 已有 8 件，再加 5 件＝13 件 > 庫存 10；單看新加的 5 件則不會超標
         when(cartItems.findByMemberIdAndProductProductId(MEMBER_ID, PRODUCT_ID))
-                .thenReturn(Optional.of(cartItem(member(MEMBER_ID), product, 8L)));
+                .thenReturn(Optional.of(cartItem(member(MEMBER_ID), product, 8)));
 
-        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 5L)))
+        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 5)))
                 .isInstanceOf(InsufficientStockException.class);
 
         verify(cartItems, never()).save(any());
@@ -175,9 +175,9 @@ class CartServiceTest {
         when(cartItems.findByMemberIdAndProductProductId(MEMBER_ID, PRODUCT_ID)).thenReturn(Optional.empty());
         stubSaveReturnsArgument();
 
-        CartItemResponse response = service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 10L));
+        CartItemResponse response = service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 10));
 
-        assertThat(response.quantity()).isEqualTo(10L);
+        assertThat(response.quantity()).isEqualTo(10);
     }
 
     @Test
@@ -186,9 +186,9 @@ class CartServiceTest {
         Product product = availableProduct();
         when(products.findById(PRODUCT_ID)).thenReturn(Optional.of(product));
         when(cartItems.findByMemberIdAndProductProductId(MEMBER_ID, PRODUCT_ID))
-                .thenReturn(Optional.of(cartItem(member(MEMBER_ID), product, Long.MAX_VALUE)));
+                .thenReturn(Optional.of(cartItem(member(MEMBER_ID), product, Integer.MAX_VALUE)));
 
-        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 1L)))
+        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 1)))
                 .isInstanceOf(InvalidQuantityException.class);
     }
 
@@ -196,9 +196,9 @@ class CartServiceTest {
 
     @Test
     void 數量為零或負數在任何查詢之前就擋下() {
-        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 0L)))
+        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 0)))
                 .isInstanceOf(InvalidQuantityException.class);
-        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, -1L)))
+        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, -1)))
                 .isInstanceOf(InvalidQuantityException.class);
 
         // 連鎖都沒取，代表是最前面的關卡
@@ -216,7 +216,7 @@ class CartServiceTest {
     void 會員不存在回404() {
         when(members.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 1L)))
+        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 1)))
                 .isInstanceOf(ResourceNotFoundException.class);
 
         verify(products, never()).findById(any());
@@ -227,7 +227,7 @@ class CartServiceTest {
         stubMemberLock();
         when(products.findById(PRODUCT_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 1L)))
+        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 1)))
                 .isInstanceOf(ProductNotFoundException.class);
     }
 
@@ -237,7 +237,7 @@ class CartServiceTest {
         // 庫存充足但已下架：確認擋下的原因是狀態而不是庫存
         when(products.findById(PRODUCT_ID)).thenReturn(Optional.of(product(999, ProductStatus.INACTIVE, "1000.00")));
 
-        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 1L)))
+        assertThatThrownBy(() -> service.addItem(MEMBER_ID, new AddCartItemRequest(PRODUCT_ID, 1)))
                 .isInstanceOf(ProductUnavailableException.class);
 
         verify(cartItems, never()).findByMemberIdAndProductProductId(any(), any());
@@ -249,43 +249,43 @@ class CartServiceTest {
     @Test
     void 修改數量成功並重算小計() {
         Product product = availableProduct();
-        CartItem item = cartItem(member(MEMBER_ID), product, 2L);
+        CartItem item = cartItem(member(MEMBER_ID), product, 2);
         when(cartItems.findById(CART_ITEM_ID)).thenReturn(Optional.of(item));
 
-        CartItemResponse response = service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(5L));
+        CartItemResponse response = service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(5));
 
-        assertThat(response.quantity()).isEqualTo(5L);
+        assertThat(response.quantity()).isEqualTo(5);
         assertThat(response.subtotal()).isEqualByComparingTo("5000.00");
     }
 
     @Test
     void 修改數量超過庫存回庫存不足且不改動原本數量() {
         Product product = product(10, ProductStatus.ACTIVE, "1000.00");
-        CartItem item = cartItem(member(MEMBER_ID), product, 2L);
+        CartItem item = cartItem(member(MEMBER_ID), product, 2);
         when(cartItems.findById(CART_ITEM_ID)).thenReturn(Optional.of(item));
 
         assertThatThrownBy(
-                () -> service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(11L)))
+                () -> service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(11)))
                 .isInstanceOf(InsufficientStockException.class);
 
-        assertThat(item.getQuantity()).isEqualTo(2L);
+        assertThat(item.getQuantity()).isEqualTo(2);
     }
 
     @Test
     void 修改數量時商品已下架也擋下() {
         Product product = product(99, ProductStatus.INACTIVE, "1000.00");
-        CartItem item = cartItem(member(MEMBER_ID), product, 2L);
+        CartItem item = cartItem(member(MEMBER_ID), product, 2);
         when(cartItems.findById(CART_ITEM_ID)).thenReturn(Optional.of(item));
 
         assertThatThrownBy(
-                () -> service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(3L)))
+                () -> service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(3)))
                 .isInstanceOf(ProductUnavailableException.class);
     }
 
     @Test
     void 修改數量為零擋下() {
         assertThatThrownBy(
-                () -> service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(0L)))
+                () -> service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(0)))
                 .isInstanceOf(InvalidQuantityException.class);
 
         verify(cartItems, never()).findById(any());
@@ -295,19 +295,19 @@ class CartServiceTest {
 
     @Test
     void 修改他人購物車項目回403() {
-        CartItem othersItem = cartItem(member(OTHER_MEMBER_ID), availableProduct(), 1L);
+        CartItem othersItem = cartItem(member(OTHER_MEMBER_ID), availableProduct(), 1);
         when(cartItems.findById(CART_ITEM_ID)).thenReturn(Optional.of(othersItem));
 
         assertThatThrownBy(
-                () -> service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(3L)))
+                () -> service.updateQuantity(MEMBER_ID, CART_ITEM_ID, new UpdateCartItemRequest(3)))
                 .isInstanceOf(ForbiddenCartAccessException.class);
 
-        assertThat(othersItem.getQuantity()).isEqualTo(1L);
+        assertThat(othersItem.getQuantity()).isEqualTo(1);
     }
 
     @Test
     void 刪除他人購物車項目回403且不刪除() {
-        CartItem othersItem = cartItem(member(OTHER_MEMBER_ID), availableProduct(), 1L);
+        CartItem othersItem = cartItem(member(OTHER_MEMBER_ID), availableProduct(), 1);
         when(cartItems.findById(CART_ITEM_ID)).thenReturn(Optional.of(othersItem));
 
         assertThatThrownBy(() -> service.removeItem(MEMBER_ID, CART_ITEM_ID))
@@ -328,7 +328,7 @@ class CartServiceTest {
 
     @Test
     void 刪除自己的項目成功() {
-        CartItem item = cartItem(member(MEMBER_ID), availableProduct(), 1L);
+        CartItem item = cartItem(member(MEMBER_ID), availableProduct(), 1);
         when(cartItems.findById(CART_ITEM_ID)).thenReturn(Optional.of(item));
 
         service.removeItem(MEMBER_ID, CART_ITEM_ID);

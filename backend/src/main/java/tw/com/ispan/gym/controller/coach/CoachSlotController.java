@@ -1,8 +1,6 @@
 package tw.com.ispan.gym.controller.coach;
 
 
-import java.util.List;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,6 +20,7 @@ import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
 import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
 import tw.com.ispan.gym.dto.coach.UpdateCoachSlotRequest;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
@@ -66,12 +65,14 @@ public class CoachSlotController {
         return ResponseEntity.status(HttpStatus.OK).body(resp);
     }
 
-    /** 查詢自己的所有時段（含已取消的舊紀錄）。 */
+    /** 分頁查詢自己的所有時段（含已取消的舊紀錄）。 */
     @GetMapping("/schedules")
     @PreAuthorize("hasRole('TRAINER')")
-    public ResponseEntity<List<CoachSlotResponse>> getMySlots() {
+    public ResponseEntity<PageResponse<CoachSlotResponse>> getMySlots(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
         Integer accountId = currentUserProvider.requireCurrentUserId();
-        List<CoachSlotResponse> slots = coachSlotService.getMySlots(accountId);
+        PageResponse<CoachSlotResponse> slots = coachSlotService.getMySlots(accountId, page, size);
 
         return ResponseEntity.status(HttpStatus.OK).body(slots);
     }
@@ -93,7 +94,7 @@ public class CoachSlotController {
     @PutMapping("/schedules/{bookingId}/checkin")
     @PreAuthorize("hasRole('TRAINER')")
     public ResponseEntity<CoachBookingResponse> checkIn(@PathVariable("bookingId") Integer bookingId,
-            @RequestBody CheckInRequest request) {
+            @Valid @RequestBody CheckInRequest request) {
         Integer accountId = currentUserProvider.requireCurrentUserId();
         CoachBookingResponse resp = coachBookingService.checkIn(accountId, bookingId, request.getCheckInKey());
         return ResponseEntity.status(HttpStatus.OK).body(resp);

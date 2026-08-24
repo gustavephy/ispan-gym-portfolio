@@ -39,9 +39,11 @@ public class SchemaFixupRunner implements CommandLineRunner {
     @Override
     public void run(String... args) {
         renameLegacyTables();
+        dropEmptyLegacyTables();
         renameLegacyColumns();
         clearLegacyOperatorIds();
         dropLegacyIdentityArtifacts();
+        renameOrderForeignKeys();
         migrateLoginColumnsToAccount();
         migrateCourseDomainSplit();
         splitCourseEntity();
@@ -57,6 +59,13 @@ public class SchemaFixupRunner implements CommandLineRunner {
         widenOrderStatusCheck();
         dropDuplicateUniqueIndexes();
         migrateEmployeeReviewModel();
+        addTrainerProfileColumns();
+        fixReversedTestAccountNames();
+        addAccountCredentialsVersionColumn();
+        migratePasswordResetTokenToHashedFormat();
+        extendOauthAccountForGoogleLogin();
+        addOauthExchangeCodeVersionColumn();
+        createOAuthSecurityConstraints();
     }
 
     // === 員工審核模型修正（2026-08-14 定案：EmployeeRole/EmployeeStatus 改版）========
@@ -159,11 +168,57 @@ public class SchemaFixupRunner implements CommandLineRunner {
         }
     }
 
+    // === 命名統一單數後沒人接著清的空舊表 ======================================
+    // 同樣是 2026-08-13 附屬表改單數定案的一部分，但這幾個當初沒有補
+    // renameLegacyTable，導致 entity 已經指向單數新表名、Hibernate 也照新名建了
+    // 表，複數的舊表名就一直留在資料庫裡沒人管。
+    //
+    // 跟 renameLegacyTable 不同：這裡沒有資料要搬（新表才是 entity 實際在用的），
+    // 單純確認舊表本身是空的才砍；只要還有資料一律不動，留給人工判斷是不是有隊友
+    // 本機還沒遷移過的歷史資料。
+    private void dropEmptyLegacyTables() {
+        for (String table : new String[] {
+                "chat_messages", "coach_bookings", "coach_slots",
+                "group_class_bookings", "group_class_sessions", "idempotency_requests",
+                "inbody_records", "session_deduction_logs", "ai_health_plans" }) {
+            dropEmptyLegacyTable(table);
+        }
+    }
+
+    private void dropEmptyLegacyTable(String table) {
+        if (!tableExists(table)) {
+            return;
+        }
+        Integer rows = jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class);
+        if (rows == null || rows > 0) {
+            log.warn("{} 還有資料，不自動砍，請人工確認是否為改名前的舊資料", table);
+            return;
+        }
+        dropForeignKeysReferencing(table);
+        jdbc.execute("DROP TABLE " + table);
+        log.info("已移除命名統一單數後沒人清的空舊表 {}", table);
+    }
+
     /** 以 sp_rename OBJECT 改名 FK 等具名約束；來源不存在就跳過 */
     private void renameConstraint(String from, String to) {
-        Integer found = jdbc.queryForObject(
+        Integer foundFrom = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM sys.objects WHERE name = ?", Integer.class, from);
-        if (found == null || found == 0) {
+        if (foundFrom == null || foundFrom == 0) {
+            return;
+        }
+        Integer foundTo = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.objects WHERE name = ?", Integer.class, to);
+        if (foundTo != null && foundTo > 0) {
+            try {
+                String parentTable = jdbc.queryForObject(
+                        "SELECT OBJECT_NAME(parent_object_id) FROM sys.foreign_keys WHERE name = ?", String.class, from);
+                if (parentTable != null) {
+                    jdbc.execute("ALTER TABLE [" + parentTable + "] DROP CONSTRAINT [" + from + "]");
+                    log.info("目標約束 {} 已存在，已直接刪除舊約束 {}", to, from);
+                }
+            } catch (Exception e) {
+                log.warn("嘗試刪除重疊的舊約束 {} 時失敗: {}", from, e.getMessage());
+            }
             return;
         }
         jdbc.execute("EXEC sp_rename '" + from + "', '" + to + "', 'OBJECT'");
@@ -360,6 +415,21 @@ public class SchemaFixupRunner implements CommandLineRunner {
                 log.info("已移除空的過渡表 staff（由 employee 取代）");
             }
         }
+    }
+
+    // === 購物車主鍵改型別：已移至 PreSchemaFixupRunner =====================
+    // 那支遷移必須在 Hibernate 建表之前執行（舊表還在的話 ddl-auto 會想
+    // 在同一張表再加一個 identity 欄位而失敗），而本類別是 CommandLineRunner、
+    // 執行時 ddl-auto 早已跑完，放這裡第一次啟動必定報錯、要重啟第二次才正常。
+
+
+    // === orders 外鍵改名（2026-08-17：FK_orders_user(_coupon) 補齊 member 命名）========
+    // 底層欄位（member_id／member_coupon_id）早就改名完成，只有這兩個約束名稱的
+    // 字面字串一直沒跟上，這裡補上，不涉及型別變更，直接沿用既有的 renameConstraint。
+
+    private void renameOrderForeignKeys() {
+        renameConstraint("FK_orders_user", "FK_orders_member");
+        renameConstraint("FK_orders_user_coupon", "FK_orders_member_coupon");
     }
 
     // === 欄位長度收斂 =========================================================
@@ -1069,5 +1139,291 @@ public class SchemaFixupRunner implements CommandLineRunner {
                     WHERE object_id = OBJECT_ID(?) AND name = ?
                 """, Integer.class, table, column);
         return found != null && found > 0;
+    }
+
+    // === trainer 個人資料欄位補建（2026-08-18 Trainer entity 擴充）================
+    // entity 新增了 first_name／last_name／email 三個 nullable=false 欄位，但
+    // SQL Server 不允許對「已有資料」的表新增無預設值的 NOT NULL 欄位——ddl-auto 的
+    // ALTER 會失敗且只默默記 log，欄位根本不存在，之後任何查詢 trainer 的請求都會因
+    //「無效的資料行名稱 'email'」而炸，且應用啟動時就會失敗（TestDataSeedRunner 會查 trainer）。
+    // 只要資料庫跑過測試資料播種就必然中招，因此在這裡以「可空」補上欄位並回填。
+    //
+    // 刻意補成可空而非 NOT NULL：既有列補完值後雖然可以收緊，但這三欄的值本來就
+    // 重複自 employee（姓名）與 account（email），屬於待清理的設計；收成 NOT NULL 等於
+    // 把重複固化得更死。新資料一律由程式填值，可空不影響運作。
+    // 全新資料庫由 ddl-auto 直接建出 NOT NULL 版本，本方法會因欄位已存在而整段略過。
+    private void addTrainerProfileColumns() {
+        if (!tableExists("trainer") || !tableExists("employee") || !tableExists("account")) {
+            return;
+        }
+        addNullableNvarcharIfAbsent("trainer", "first_name", 255);
+        addNullableNvarcharIfAbsent("trainer", "last_name", 255);
+        addNullableNvarcharIfAbsent("trainer", "email", 255);
+
+        // 回填既有教練：姓名取自 employee、email 取自 account（單一來源仍是那兩張表）
+        if (columnExists("trainer", "first_name")) {
+            backfill("trainer 個人資料欄位（自 employee／account 回填）", """
+                    UPDATE t SET t.first_name = e.first_name,
+                                 t.last_name = e.last_name,
+                                 t.email = a.email
+                        FROM trainer t
+                        JOIN employee e ON e.employee_id = t.employee_id
+                        JOIN account a ON a.account_id = e.account_id
+                        WHERE t.first_name IS NULL OR t.last_name IS NULL OR t.email IS NULL
+                    """);
+        }
+    }
+
+    /** 補上可空的 nvarchar 欄位；已存在就跳過（冪等） */
+    private void addNullableNvarcharIfAbsent(String table, String column, int length) {
+        if (columnExists(table, column)) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE " + table + " ADD " + column + " nvarchar(" + length + ") NULL");
+        log.info("已為 {} 補上可空欄位 {}（ddl-auto 對非空表加不了 NOT NULL 欄位）", table, column);
+    }
+
+    /**
+     * 導正早期測試帳號被存反的姓名。欄位語意是 first_name 存名、last_name 存姓，
+     * 早期版本卻把「管理員」「教練」硬拆成兩欄（管理／員、教／練），member 也留下
+     * Wen／Dy 這類機械式拆字。
+     *
+     * <p>
+     * TestDataSeedRunner 是 auto-repair 語意、只補不改，不會覆寫既有列，所以這批舊值
+     * 會一直留著，讓 TrainerResponse 以 last_name + first_name 組出的顯示名變成「練教」。
+     *
+     * <p>
+     * 只鎖定三個測試帳號，且只在欄位仍等於當初那組錯值時才更新，改過一次後條件就不再
+     * 成立（冪等），也不會覆寫任何人自行改過的姓名。
+     */
+    private void fixReversedTestAccountNames() {
+        if (!tableExists("account")) {
+            return;
+        }
+        if (tableExists("member")) {
+            fixReversedName("member", "wendy-test@local.test", "Wen", "Dy", "斐凝", "測試");
+            fixReversedName("member", "emp-admin@local.test", "Ad", "Min", "管理", "測試");
+            fixReversedName("member", "emp-trainer@local.test", "Trai", "Ner", "教練", "測試");
+        }
+        if (tableExists("employee")) {
+            fixReversedName("employee", "emp-admin@local.test", "管理", "員", "管理", "測試");
+            fixReversedName("employee", "emp-trainer@local.test", "教", "練", "教練", "測試");
+        }
+        // trainer 的姓名是建立當下自 employee 複製的快照，employee 改了要跟著對齊，
+        // 否則兩邊不同步（單一來源仍是 employee，見 addTrainerProfileColumns）
+        if (tableExists("employee") && tableExists("trainer")
+                && columnExists("trainer", "first_name") && columnExists("trainer", "last_name")) {
+            backfill("trainer 姓名（與 employee 對齊）", """
+                    UPDATE t SET t.first_name = e.first_name, t.last_name = e.last_name
+                        FROM trainer t
+                        JOIN employee e ON e.employee_id = t.employee_id
+                        WHERE t.first_name <> e.first_name OR t.last_name <> e.last_name
+                    """);
+        }
+    }
+
+    /** 只在該帳號姓名仍等於當初那組錯值時才改寫，改過就不再符合條件（冪等） */
+    private void fixReversedName(String table, String email, String wrongFirst, String wrongLast,
+            String rightFirst, String rightLast) {
+        int rows = jdbc.update("""
+                UPDATE x SET x.first_name = ?, x.last_name = ?
+                    FROM %s x
+                    JOIN account a ON a.account_id = x.account_id
+                    WHERE a.email = ? AND x.first_name = ? AND x.last_name = ?
+                """.formatted(table), rightFirst, rightLast, email, wrongFirst, wrongLast);
+        if (rows > 0) {
+            log.info("已導正 {} 的測試帳號姓名（{}）：{} 列", table, email, rows);
+        }
+    }
+
+    // === 密碼管理（2026-08-21 定案：credentialsVersion 全裝置登出機制）===========
+
+    /**
+     * account 新增 credentials_version（int, NOT NULL, 預設 0）。
+     *
+     * <p>修正（code review 抓到的原始版本 bug）：原本的守衛寫成「欄位已存在就直接
+     * return」，只在欄位完全不存在時才補值收緊。但欄位存在與否不能拿來判斷「是否已經
+     * 處理過」——account 表非空時，Hibernate ddl-auto 對 nullable=false 的欄位會直接嘗試
+     * ADD ... NOT NULL 而整段失敗（欄位不會被建立，只默默記 log，見 addTrainerProfileColumns
+     * 的說明）；但如果 account 剛好是空表，Hibernate 反而會一次成功建出 NOT NULL 版本。
+     * 舊寫法只覆蓋了「欄位不存在」這一種情況，沒有覆蓋「欄位存在但仍是 nullable、還沒回填」
+     * 的情況，等於在某些環境下會漏掉回填與收緊。現在改成：欄位不存在才新增（一定是 nullable，
+     * 避免重蹈 Hibernate 那個 NOT NULL-on-非空表 的錯），接著不論欄位是新建的還是本來就在，
+     * 一律回填＋收緊，兩步都是冪等操作，多跑一次沒有副作用。
+     */
+    private void addAccountCredentialsVersionColumn() {
+        if (!tableExists("account")) {
+            return;
+        }
+        if (!columnExists("account", "credentials_version")) {
+            jdbc.execute("ALTER TABLE account ADD credentials_version int NULL");
+        }
+        backfill("account.credentials_version",
+                "UPDATE account SET credentials_version = 0 WHERE credentials_version IS NULL");
+        tightenColumnNotNull("account", "credentials_version", "int");
+    }
+
+    /**
+     * password_reset_token 從明文 UUID 改成雜湊儲存。
+     *
+     * <p>修正（code review 抓到的原始版本 bug）：原本把「清掉舊資料、砍掉 token 欄位」
+     * 跟「確保 token_hash 是 NOT NULL、有唯一索引」全部包在同一個「舊 token 欄位是否還在」
+     * 的守衛裡。這在全新資料庫（從來沒有過舊 token 欄位）會整段被跳過，連唯一索引都不會建
+     * ——這張表沒有在 entity 上宣告 @UniqueConstraint（唯一索引刻意改由這裡手動建立，
+     * 理由見下方 createFilteredUniqueIndex 呼叫），所以少了這段就真的完全沒有唯一約束。
+     * 現在拆成兩段：舊格式遷移只在舊欄位還在時執行一次；NOT NULL 與唯一索引的存在性
+     * 檢查每次開機都跑，不管有沒有走過舊格式遷移都要補齊。
+     */
+    private void migratePasswordResetTokenToHashedFormat() {
+        if (!tableExists("password_reset_token")) {
+            return;
+        }
+
+        // 舊格式遷移：只在還有舊明文 token 欄位時執行一次，用它的存在與否當一次性旗標
+        // ——不能寫成無條件執行，這個 runner 每次開機都跑，若 DELETE 沒有守衛條件，
+        // 上線後每次重啟都會把當時已核發、合法有效的重設信 token 全部清空。這張表目前
+        // 完全沒有實際流程在寫入，清空既有資料沒有相容性成本；即使真的有測試資料，
+        // 舊的明文格式在新方案下本來就不該繼續視為有效。
+        if (columnExists("password_reset_token", "token")) {
+            jdbc.update("DELETE FROM password_reset_token");
+            dropColumnIfExists("password_reset_token", "token");
+            log.info("password_reset_token 已升級為雜湊儲存格式（舊明文 token 資料已清空）");
+        }
+
+        // token_hash 是 NOT NULL＋唯一索引：不論剛剛是否走過上面的舊格式遷移都要跑。
+        // 全新資料庫從沒有過舊 token 欄位，一樣要靠這裡補齊唯一索引；account 非空時
+        // Hibernate 新增 NOT NULL 欄位會失敗（同 credentials_version 的情況），這裡也要
+        // 補上欄位本身，不能只假設它已經被 Hibernate 建好。
+        if (!columnExists("password_reset_token", "token_hash")) {
+            jdbc.execute("ALTER TABLE password_reset_token ADD token_hash varchar(255) NULL");
+        }
+        tightenColumnNotNull("password_reset_token", "token_hash", "varchar(255)");
+        createFilteredUniqueIndex("UX_password_reset_token_token_hash", """
+                CREATE UNIQUE INDEX UX_password_reset_token_token_hash
+                    ON password_reset_token(token_hash)
+                """);
+    }
+
+    // === Google OAuth（2026-08-22 定案：見 docs/google-oauth-design-notes.md）=======
+
+    /**
+     * oauth_account 補上三個 Google 端最近一次登入的顯示資訊欄位——既有綁定沒有這些
+     * 資料，一律以可空補上，不回填假值，下次成功登入時由程式自然補齊（見
+     * OAuthAccount entity 的欄位註解）。全新資料庫由 ddl-auto 直接建出這三欄，
+     * 本方法會因欄位已存在而整段略過。
+     */
+    private void extendOauthAccountForGoogleLogin() {
+        if (!tableExists("oauth_account")) {
+            return;
+        }
+        addNullableColumnIfAbsent("oauth_account", "provider_email", "varchar(100)");
+        addNullableColumnIfAbsent("oauth_account", "provider_email_verified", "bit");
+        addNullableColumnIfAbsent("oauth_account", "last_login_at", "datetime2");
+    }
+
+    /**
+     * oauth_exchange_code 新增 issued_credentials_version（int, NOT NULL, 預設 0）——
+     * 核發當下 Account.credentialsVersion 的快照，兌換時比對目前版本是否仍相同，堵住
+     * 核發後、兌換前發生 UNLINK／改密碼／全裝置登出的 TOCTOU 空隙（2026-08-22 code
+     * review 補上）。既有資料（已經核發、可能已使用或已過期的舊 Code）一律回填 0——
+     * 這些列不是被同一次修正影響的對象，回填值只是滿足 NOT NULL，不影響它們原本
+     * 是否已過期／已使用的判定；新舊資料混跑本來就無害，因為每一列的比對基準
+     * 只跟它自己核發當下的版本有關。跟 addAccountCredentialsVersionColumn 同一套
+     * 「不存在才新增（一定是 nullable）→ 無條件回填＋收緊」寫法，理由同上。
+     */
+    private void addOauthExchangeCodeVersionColumn() {
+        if (!tableExists("oauth_exchange_code")) {
+            return;
+        }
+        if (!columnExists("oauth_exchange_code", "issued_credentials_version")) {
+            jdbc.execute("ALTER TABLE oauth_exchange_code ADD issued_credentials_version int NULL");
+        }
+        backfill("oauth_exchange_code.issued_credentials_version",
+                "UPDATE oauth_exchange_code SET issued_credentials_version = 0 "
+                        + "WHERE issued_credentials_version IS NULL");
+        tightenColumnNotNull("oauth_exchange_code", "issued_credentials_version", "int");
+    }
+
+    private void addNullableColumnIfAbsent(String table, String column, String type) {
+        if (columnExists(table, column)) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE " + table + " ADD " + column + " " + type + " NULL");
+        log.info("已為 {} 補上可空欄位 {}", table, column);
+    }
+
+    /**
+     * Google OAuth 的安全 invariant：
+     * <ul>
+     * <li>oauth_account：一個 Google 帳號只能綁一個 Account（既有 UX_oauth_account_provider
+     * 已保證），一個 Account 也只能綁一個 Google 帳號（這裡新增 UNIQUE(account_id,
+     * oauth_provider)）。既有資料可能已違反後者，建約束前必須 preflight 檢查——
+     * 發現重複時 <b>拒絕建立約束並讓啟動失敗</b>，log 列出需要人工處理的 account_id
+     * （不記 provider subject），不自動刪除任一筆，因為 runner 無法判斷哪筆才是正確綁定。
+     * <li>oauth_transaction：purpose/account_id 與 status/finalized_at 的一致性由 CHECK
+     * 約束在 DB 層再把關一次（Service 已經保證，這裡是 belt-and-suspenders）；
+     * 同一個 (account, provider, LINK) 同時間只能有一筆 PENDING，由篩選唯一索引擋住
+     * 併發下的重複寫入（Service 也會在建立新 LINK 前主動 supersede 舊的，見
+     * OAuthTransactionRepository#supersedePendingLinkTransactions；索引本身無法表達
+     * expires_at 這種動態條件，只能擋「兩筆同時是 PENDING」，不能擋「一筆過期還沒被
+     * 標記」，所以 Service 端的主動 supersede 不可省略）。
+     * </ul>
+     */
+    private void createOAuthSecurityConstraints() {
+        if (tableExists("oauth_account") && columnExists("oauth_account", "account_id")) {
+            var duplicates = jdbc.queryForList("""
+                    SELECT account_id, oauth_provider, COUNT(*) AS cnt
+                        FROM oauth_account
+                        GROUP BY account_id, oauth_provider
+                        HAVING COUNT(*) > 1
+                    """);
+            if (!duplicates.isEmpty()) {
+                log.error("oauth_account 有 {} 組 (account_id, oauth_provider) 重複綁定，"
+                        + "無法自動判斷哪筆才正確，請人工處理後再重啟：{}",
+                        duplicates.size(), duplicates);
+                // 只 log 不夠——約束沒建成，代表這個安全 invariant 目前並未真的被強制，
+                // 讓啟動繼續等於允許系統帶著已知的重複綁定跑下去。必須直接讓啟動失敗，
+                // 逼人工先處理重複資料，而不是留給下一個發現問題的人。
+                throw new IllegalStateException(
+                        "oauth_account 有 " + duplicates.size() + " 組 (account_id, oauth_provider) 重複綁定，"
+                                + "無法自動判斷哪筆才正確，請人工處理後再重啟；詳見上方 log。");
+            } else {
+                createFilteredUniqueIndex("UX_oauth_account_account_id_provider", """
+                        CREATE UNIQUE INDEX UX_oauth_account_account_id_provider
+                            ON oauth_account(account_id, oauth_provider)
+                        """);
+            }
+        }
+
+        if (tableExists("oauth_transaction")) {
+            createCheckIfAbsent("oauth_transaction", "CK_oauth_transaction_purpose_account", """
+                    ALTER TABLE oauth_transaction ADD CONSTRAINT CK_oauth_transaction_purpose_account CHECK (
+                        (purpose = 'LOGIN' AND account_id IS NULL)
+                     OR (purpose = 'LINK' AND account_id IS NOT NULL))
+                    """);
+            createCheckIfAbsent("oauth_transaction", "CK_oauth_transaction_status_finalized", """
+                    ALTER TABLE oauth_transaction ADD CONSTRAINT CK_oauth_transaction_status_finalized CHECK (
+                        (status = 'PENDING' AND finalized_at IS NULL)
+                     OR (status <> 'PENDING' AND finalized_at IS NOT NULL))
+                    """);
+            createFilteredUniqueIndex("UX_oauth_transaction_pending_link", """
+                    CREATE UNIQUE INDEX UX_oauth_transaction_pending_link
+                        ON oauth_transaction(account_id, oauth_provider, purpose)
+                        WHERE status = 'PENDING' AND account_id IS NOT NULL
+                    """);
+        }
+    }
+
+    /** 跟既有的 alterColumnNullable 相反方向：只在目前是 nullable 時才收緊為 NOT NULL */
+    private void tightenColumnNotNull(String table, String column, String type) {
+        Boolean nullable = jdbc.queryForObject("""
+                SELECT is_nullable FROM sys.columns
+                    WHERE object_id = OBJECT_ID(?) AND name = ?
+                """, Boolean.class, table, column);
+        if (!Boolean.TRUE.equals(nullable)) {
+            return;
+        }
+        jdbc.execute("ALTER TABLE " + table + " ALTER COLUMN " + column + " " + type + " NOT NULL");
+        log.info("已將 {}.{} 收緊為 NOT NULL", table, column);
     }
 }

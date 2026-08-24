@@ -6,7 +6,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import tw.com.ispan.gym.enums.report.ReportType;
 
-/** 單份報表：主檔總計＋排行明細。staleAt 非 null＝生成後發生過退款，建議重新生成 */
+/**
+ * 單份報表：主檔總計＋排行明細＋延伸統計。staleAt 非 null＝生成後發生過退款，建議重新生成。
+ * 延伸統計（statusBreakdown 之後的欄位）為 2026-08-17 擴充；舊快照無此資料，
+ * 純量為 null、清單為空，呈現端須容忍。
+ */
 public record ReportDetailResponse(
         Integer id,
         ReportType reportType,
@@ -17,5 +21,12 @@ public record ReportDetailResponse(
         BigDecimal discountAmount,
         LocalDateTime generatedAt,
         LocalDateTime staleAt,
-        List<ReportSalesItemResponse> items) {
+        List<ReportSalesItemResponse> items,
+        List<ReportBreakdownResponse> statusBreakdown,
+        List<ReportBreakdownResponse> paymentBreakdown,
+        List<ReportDailyTotalResponse> dailyTotals,
+        Long refundCount,
+        BigDecimal refundAmount,
+        Long newMemberCount,
+        Long newSubscriptionCount) {
 }

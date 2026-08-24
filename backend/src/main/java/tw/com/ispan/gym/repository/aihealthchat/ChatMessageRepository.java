@@ -36,4 +36,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Intege
 
     /** 員工的總未讀數：只能統計學員傳的、還沒讀的訊息，不可把自己傳的算進去 */
     long countByEmployeeIdAndSenderIsMemberTrueAndReadFalse(Integer employeeId);
+
+    /** 教練「學員訊息」列表用：曾與這位員工對話過的學員 id，依最後一則訊息時間新到舊排序 */
+    @Query("select m.memberId from ChatMessage m where m.employeeId = :employeeId "
+            + "group by m.memberId order by max(m.createdAt) desc")
+    List<Integer> findMemberIdsByEmployeeIdOrderByLastMessageDesc(@Param("employeeId") Integer employeeId);
+
+    /** 特定學員底下還沒讀的訊息數（只算學員傳的），教練「學員訊息」列表逐一顯示未讀用 */
+    long countByMemberIdAndEmployeeIdAndSenderIsMemberTrueAndReadFalse(Integer memberId, Integer employeeId);
 }

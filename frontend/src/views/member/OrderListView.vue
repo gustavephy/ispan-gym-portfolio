@@ -70,7 +70,8 @@ async function handleCancelOrRefund(order) {
     if (orderItems[order.orderId]) orderItems[order.orderId] = res.data.items
     showFeedback(isRefund ? '退款申請已送出' : '訂單已取消')
   } catch (err) {
-    showFeedback(err.response?.data?.message || '操作失敗，請稍後再試', 'error')
+    // 攔截器已正規化錯誤，訊息在 err.message；err.response 不存在（見 normalizeApiError）
+    showFeedback(err.message || '操作失敗，請稍後再試', 'error')
   }
 }
 

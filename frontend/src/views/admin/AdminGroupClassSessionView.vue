@@ -1,11 +1,13 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { getAllCourses } from '@/api/adminGroupCourse.js'
+import { getActiveCourses } from '@/api/groupClass.js'
 import { getSessions, createSession, updateSession, cancelSession } from '@/api/adminGroupClass.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import Pagination from '@/components/Pagination.vue'
+import { TIME_OPTIONS } from '@/utils/businessHours.js'
+import { ROOM_OPTIONS } from '@/utils/rooms.js'
 
 // 場次狀態對照表：後端回傳 SCHEDULED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
@@ -71,14 +73,6 @@ watch(
   },
 )
 
-// 24 小時、每 10 分鐘一個選項，寫法比照 TrainerScheduleView.vue
-const TIME_OPTIONS = Array.from({ length: 24 * 6 }, (_, i) => {
-  const totalMinutes = i * 10
-  const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0')
-  const mm = String(totalMinutes % 60).padStart(2, '0')
-  return `${hh}:${mm}`
-})
-
 // 依開始時間排序；status 為 CANCELLED 的場次理論上後端不會回傳，這裡仍加一層防呆篩選
 const visibleSessions = computed(() =>
   [...sessions.value]
@@ -127,8 +121,11 @@ function splitIsoDateTime(iso) {
 async function fetchCourses() {
   coursesLoading.value = true
   try {
-    const res = await getAllCourses()
-    courses.value = res.data
+    // size 給大一點：這是下拉選單用途，不是分頁列表，一次抓齊所有上架中課程即可。
+    // 目前後端這支查詢單頁上限是 100（GroupCourseService 的 safeSize 防呆），
+    // 正常情況下健身房的上架課程數不會超過這個量級；真的超過再考慮做成可搜尋的下拉選單。
+    const res = await getActiveCourses({ size: 100 })
+    courses.value = res.data.items
   } finally {
     coursesLoading.value = false
   }
@@ -185,6 +182,12 @@ async function handleCreate() {
     return
   }
 
+  const durationMinutes = (new Date(endAt) - new Date(startAt)) / 60000
+  if (durationMinutes < 60 || durationMinutes > 90) {
+    formError.value = '場次長度需介於 60 分鐘至 90 分鐘之間'
+    return
+  }
+
   submitting.value = true
   try {
     await createSession({
@@ -223,8 +226,10 @@ async function submitCancelSession(sessionId, acknowledgeExistingBooking = false
   try {
     await cancelSession(sessionId, acknowledgeExistingBooking)
   } catch (err) {
-    const { code, message } = err.response?.data || {}
-    if (code === 'CONFIRMATION_REQUIRED' && !acknowledgeExistingBooking && window.confirm(message)) {
+    // 攔截器 reject 的是 normalizeApiError() 正規化後的物件（{code, message, needsConfirmation, raw…}），
+    // 不是原始的 axios error——所以這裡不能讀 err.response.data，那永遠是 undefined，
+    // 確認框就再也不會跳出來，使用者只會看到一行「請確認」的錯誤訊息卻無從確認。
+    if (err.needsConfirmation && !acknowledgeExistingBooking && window.confirm(err.message)) {
       await submitCancelSession(sessionId, true)
       return
     }
@@ -293,6 +298,12 @@ async function handleEditSubmit() {
     return
   }
 
+  const durationMinutes = (new Date(endAt) - new Date(startAt)) / 60000
+  if (durationMinutes < 60 || durationMinutes > 90) {
+    editFormError.value = '場次長度需介於 60 分鐘至 90 分鐘之間'
+    return
+  }
+
   editSubmitting.value = true
   try {
     await updateSession(editingSessionId.value, {
@@ -349,7 +360,10 @@ onUnmounted(() => {
       </div>
       <div class="field">
         <label for="sessionRoom">教室</label>
-        <input id="sessionRoom" v-model="form.roomName" type="text" required />
+        <select id="sessionRoom" v-model="form.roomName" required>
+          <option value="" disabled>請選擇</option>
+          <option v-for="room in ROOM_OPTIONS" :key="room" :value="room">{{ room }}</option>
+        </select>
       </div>
       <div class="field">
         <label for="sessionStartDate">開始日期</label>
@@ -452,7 +466,10 @@ onUnmounted(() => {
           <div class="modal-fields">
             <div class="field field-wide">
               <label for="editSessionRoom">教室</label>
-              <input id="editSessionRoom" v-model="editForm.roomName" type="text" required />
+              <select id="editSessionRoom" v-model="editForm.roomName" required>
+                <option value="" disabled>請選擇</option>
+                <option v-for="room in ROOM_OPTIONS" :key="room" :value="room">{{ room }}</option>
+              </select>
             </div>
             <div class="field-row">
               <div class="field">
