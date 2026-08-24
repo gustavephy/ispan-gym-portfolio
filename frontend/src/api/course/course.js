@@ -4,7 +4,7 @@ import api from '../axios.instance.js'
 export const getCourseCategories = () => api.get('/api/course-categories')
 
 // 取得公開的團課課程列表 (前台預約用)
-export const getGroupCoursesPublic = (params) => api.get('/api/group-courses/public', { params })
+export const getGroupCoursesPublic = (params) => api.get('/api/group-courses', { params })
 
 // 取得公開的私人教練課程列表 (方案購買展示用)
-export const getPrivateCoursesPublic = (params) => api.get('/api/private-courses/public', { params })
+export const getPrivateCoursesPublic = (params) => api.get('/api/private-courses', { params })

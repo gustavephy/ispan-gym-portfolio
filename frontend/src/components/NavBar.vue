@@ -14,7 +14,7 @@
    *
    * AI健康管理（InBody／AI課表／聊天室，皆以 member_id 為主體）歸在會員工作區，
    * 跟「我的訂單」一樣額外標記 requires: 'MEMBER'；學員訊息（教練回覆聊天室訊息）
-   * 歸在教練工作區——兩者訪客 or 不具對應角色都看不到，直接輸入網址仍會被
+   * 歸在教練工作區——兩者訪客或不具對應角色都看不到，直接輸入網址仍會被
    * router 的 requiresAuth／requiresRole 守衛擋下（見 router/index.js）。
    */
   const WORKSPACES = [
@@ -84,6 +84,104 @@
       badgeBump.value = true
     },
   )
+
+  /**
+   * 目前身分進得去的工作區；只有一個時不顯示切換器。
+   *
+   * 會員工作區的 requires 是 null（前台商城要讓未登入訪客也能瀏覽），但「已登入卻沒有
+   * 會員身分」的帳號（純員工／純管理員）不該看到它——那些頁面多半需要 member_id，
+   * 點進去只會拿到錯誤。因此已登入時額外要求 MEMBER 角色，未登入則維持開放。
+   */
+  const availableWorkspaces = computed(() =>
+    WORKSPACES.filter((w) => {
+      if (w.key === 'member') {
+        return !auth.isLoggedIn || auth.isMember
+      }
+      return !w.requires || auth.roles.includes(w.requires)
+    }),
+  )
+
+  /**
+   * 目前工作區：以「網址落在哪個工作區」為準，而不是另外存一份選中狀態——
+   * 使用者從外部連結或重新整理進來時，選單才不會停在別的工作區。
+   */
+  const activeKey = ref('member')
+
+  /**
+   * 連結是否該亮起：自己比對路徑前綴，不用 router-link-exact-active——
+   * exact 在巢狀路由下永遠不亮（/health 進頁即轉址 /health/inbody，路徑不再「完全等於」/health；
+   * 商品內頁 /products/5 也同理）。也不能用 router-link-active：首頁「/」是萬用前綴，會永遠亮著。
+   * 比對時補上「/」邊界，避免 /course 誤亮 /courses 這種同前綴不同路由。
+   */
+  function isLinkActive(to) {
+    if (to === '/') return route.path === '/'
+    return route.path === to || route.path.startsWith(to + '/')
+  }
+  const currentWorkspace = computed(
+    () => availableWorkspaces.value.find((w) => w.key === activeKey.value) ?? availableWorkspaces.value[0],
+  )
+
+  // 網址對不到任何工作區時（例如首頁 '/'）退回第一個可用的，而不是寫死 'member'——
+  // 純員工／純管理員沒有會員工作區，退回去會讓 currentWorkspace 落空、選單整個空白
+  function workspaceOf(path) {
+    const hit = WORKSPACES.find((w) => w.links.some((l) => l.to !== '/' && path.startsWith(l.to)))
+    if (hit && availableWorkspaces.value.some((w) => w.key === hit.key)) {
+      return hit.key
+    }
+    return availableWorkspaces.value[0]?.key ?? 'member'
+  }
+
+  watch(
+    () => route.path,
+    (path) => {
+      activeKey.value = workspaceOf(path)
+    },
+    { immediate: true },
+  )
+
+  // 角色變動（登入／登出）後，若當時停在已不可用的工作區會變成空選單，拉回第一個可用的。
+  // 不寫死 'member'：純員工／純管理員沒有會員工作區，第一個可用的會是教練或管理
+  watch(
+    () => auth.roles,
+    () => {
+      if (!availableWorkspaces.value.some((w) => w.key === activeKey.value)) {
+        activeKey.value = availableWorkspaces.value[0]?.key ?? 'member'
+      }
+    },
+    { deep: true },
+  )
+
+  const visibleLinks = computed(() =>
+    (currentWorkspace.value?.links ?? []).filter(
+      (link) => !link.requires || auth.roles.includes(link.requires),
+    ),
+  )
+
+  // roles 是疊加式清單（如 ["MEMBER","EMPLOYEE","ADMIN"]），全列出來很吵——
+  // 徽章只顯示化簡後的「對外身分」：ADMIN/TRAINER 蘊含 EMPLOYEE（基底角色）故不重複列；
+  // 有員工側身分時不再列「會員」。完整清單保留在 title 提示，授權判斷不受影響（store 未動）。
+  const ROLE_LABELS = { MEMBER: '會員', EMPLOYEE: '員工', ADMIN: '管理員', TRAINER: '教練' }
+  const KNOWN_ROLES = Object.keys(ROLE_LABELS)
+  const roleLabels = computed(() => {
+    const roles = new Set(auth.roles)
+    const labels = []
+    if (roles.has('ADMIN')) labels.push('管理員')
+    if (roles.has('TRAINER')) labels.push('教練')
+    if (labels.length === 0 && roles.has('EMPLOYEE')) labels.push('員工')
+    if (labels.length === 0 && roles.has('MEMBER')) labels.push('會員')
+    // 未知角色照樣顯示，之後後端新增角色不會無聲消失
+    for (const role of roles) {
+      if (!KNOWN_ROLES.includes(role)) labels.push(role)
+    }
+    return labels
+  })
+  const fullRoleList = computed(() => auth.roles.map((role) => ROLE_LABELS[role] ?? role).join('、'))
+
+  function onLogout() {
+    auth.logout()
+    // 目前所有頁面皆可匿名瀏覽，登出後留在原頁即可；回首頁讓狀態變化更明顯
+    router.push('/')
+  }
 </script>
 
 <template>
@@ -135,7 +233,6 @@
         >{{ cart.itemCount }}</span>
       </RouterLink>
     </nav>
-
 
     <div class="nav-auth">
       <!-- mode="out-in"：登入／登出兩種狀態高度不同，同時存在會互相推擠，
@@ -261,6 +358,8 @@
     color: #fff;
     font-size: 0.72rem;
     font-weight: 700;
+  }
+
   /* 數量增加時彈跳一下。只在「變多」時播——移除商品也重播會讓刪除動作看起來像加入 */
   .cart-badge--bump {
     animation: cart-badge-bump 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
