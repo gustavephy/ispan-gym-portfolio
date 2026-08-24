@@ -46,4 +46,28 @@ public class OrderStatusHistory {
         this.changeSource = changeSource;
         this.note = note;
     }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public String getFromStatus() {
+        return fromStatus;
+    }
+
+    public String getToStatus() {
+        return toStatus;
+    }
+
+    public String getChangeSource() {
+        return changeSource;
+    }
+
+    public String getNote() {
+        return note;
+    }
+
+    public LocalDateTime getChangedAt() {
+        return changedAt;
+    }
 }

@@ -27,6 +27,7 @@ import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
+import tw.com.ispan.gym.repository.order.OrderStatusHistoryRepository;
 import tw.com.ispan.gym.repository.payment.PaymentTransactionRepository;
 import tw.com.ispan.gym.repository.payment.PaymentWebhookRepository;
 import tw.com.ispan.gym.service.order.OrderService;
@@ -50,6 +51,7 @@ class EcpayServiceTest {
 
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderItemRepository orderItems = mock(OrderItemRepository.class);
+    private final OrderStatusHistoryRepository orderStatusHistories = mock(OrderStatusHistoryRepository.class);
     private final PaymentTransactionRepository paymentTransactions = mock(PaymentTransactionRepository.class);
     private final PaymentWebhookRepository paymentWebhooks = mock(PaymentWebhookRepository.class);
     private final OrderService orderService = mock(OrderService.class);
@@ -58,7 +60,7 @@ class EcpayServiceTest {
             "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5",
             "https://example.com/api/payments/ecpay/notify",
             "https://example.com/order-done",
-            orders, orderItems, paymentTransactions, paymentWebhooks, orderService);
+            orders, orderItems, orderStatusHistories, paymentTransactions, paymentWebhooks, orderService);
 
     // === 共用測試資料 ========================================================
 

@@ -2,10 +2,12 @@ package tw.com.ispan.gym.service.payment;
 
 import tw.com.ispan.gym.entity.order.Order;
 import tw.com.ispan.gym.entity.order.OrderItem;
+import tw.com.ispan.gym.entity.order.OrderStatusHistory;
 import tw.com.ispan.gym.entity.payment.PaymentTransaction;
 import tw.com.ispan.gym.entity.payment.PaymentWebhook;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
+import tw.com.ispan.gym.repository.order.OrderStatusHistoryRepository;
 import tw.com.ispan.gym.repository.payment.PaymentTransactionRepository;
 import tw.com.ispan.gym.repository.payment.PaymentWebhookRepository;
 import tw.com.ispan.gym.service.order.OrderService;
@@ -56,6 +58,7 @@ public class EcpayService {
 
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
+    private final OrderStatusHistoryRepository orderStatusHistories;
     private final PaymentTransactionRepository paymentTransactions;
     private final PaymentWebhookRepository paymentWebhooks;
     private final OrderService orderService;
@@ -68,6 +71,7 @@ public class EcpayService {
             @Value("${app.ecpay.return-url}") String returnUrl,
             @Value("${app.ecpay.client-back-url}") String clientBackUrl,
             OrderRepository orders, OrderItemRepository orderItems,
+            OrderStatusHistoryRepository orderStatusHistories,
             PaymentTransactionRepository paymentTransactions, PaymentWebhookRepository paymentWebhooks,
             OrderService orderService) {
         this.merchantId = merchantId;
@@ -78,6 +82,7 @@ public class EcpayService {
         this.clientBackUrl = clientBackUrl;
         this.orders = orders;
         this.orderItems = orderItems;
+        this.orderStatusHistories = orderStatusHistories;
         this.paymentTransactions = paymentTransactions;
         this.paymentWebhooks = paymentWebhooks;
         this.orderService = orderService;
@@ -167,6 +172,7 @@ public class EcpayService {
         payment.setRtnMsg(params.get("RtnMsg"));
         payment.setResponsePayload(params.toString());
 
+        String fromStatus = order.getStatus().name();
         if ("1".equals(rtnCode)) {
             order.markPaid(params.get("PaymentType"), tradeNo);
             payment.setStatus("SUCCESS");
@@ -176,6 +182,8 @@ public class EcpayService {
             order.markFailed();
             payment.setStatus("FAILED");
         }
+        orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
+                order.getMember(), "SYSTEM", "ECPAY_NOTIFY"));
 
         webhook.setProcessingStatus("PROCESSED");
         webhook.setProcessedAt(LocalDateTime.now(TAIPEI));

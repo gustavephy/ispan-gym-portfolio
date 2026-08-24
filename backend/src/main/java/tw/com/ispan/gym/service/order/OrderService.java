@@ -383,6 +383,31 @@ public class OrderService {
         }
     }
 
+    /**
+     * 後台標記已出貨：PAID → SHIPPED。僅適用於含實體商品的訂單，
+     * 課程/訂閱訂單請直接用 {@link #completeOrder} 完成（無出貨步驟）。
+     */
+    @Transactional
+    public OrderDetailResponse shipOrder(Integer orderId) {
+        Order order = orders.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
+        String fromStatus = order.getStatus().name();
+        order.markShipped();
+        orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
+                order.getMember(), "ADMIN", "SHIP"));
+        return toDetailResponse(order);
+    }
+
+    /** 後台標記訂單完成：SHIPPED → COMPLETED，或無出貨步驟的訂單直接 PAID → COMPLETED */
+    @Transactional
+    public OrderDetailResponse completeOrder(Integer orderId) {
+        Order order = orders.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
+        String fromStatus = order.getStatus().name();
+        order.markCompleted();
+        orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
+                order.getMember(), "ADMIN", "COMPLETE"));
+        return toDetailResponse(order);
+    }
+
     /** 後台待處理退款清單，供人工執行退款前查看 */
     public List<PendingRefundResponse> listPendingRefunds() {
         return paymentRefunds.findByStatusOrderByRequestedAtAsc("PENDING").stream()
