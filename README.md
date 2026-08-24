@@ -16,7 +16,7 @@
 ```
 ispan-proj-gym/
 ├── backend/                 # Spring Boot 後端（Maven）
-├── frontend/ispan-proj-gym/ # Vue 3 前端（Vite）
+├── frontend/                # Vue 3 前端（Vite）
 └── docs/                    # 詳細文件
 ```
 
@@ -41,7 +41,7 @@ cd backend
 ### 前端（port 5173）
 
 ```bash
-cd frontend/ispan-proj-gym
+cd frontend
 npm install
 npm run dev
 ```

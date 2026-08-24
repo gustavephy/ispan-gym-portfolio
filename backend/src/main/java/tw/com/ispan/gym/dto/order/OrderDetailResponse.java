@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public record OrderDetailResponse(
-        Long orderId,
+        Integer orderId,
         String merchantTradeNo,
         BigDecimal totalAmount,
         OrderStatus status,

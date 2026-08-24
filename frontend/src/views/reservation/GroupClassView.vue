@@ -1,10 +1,12 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { getUpcomingSessions, bookSession, getMyBookings, cancelBooking } from '@/api/groupClass.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import FeedbackToast from '@/components/FeedbackToast.vue'
+import { useFeedback } from '@/composables/useFeedback.js'
 import Pagination from '@/components/Pagination.vue'
 import FullCalendar from '@fullcalendar/vue3'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -18,12 +20,29 @@ const MY_BOOKING_STATUS_MAP = {
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
 }
 
+// 成功提示用 toast 而非 window.alert——alert 會阻斷畫面、還要使用者多按一次確定，
+// 對「操作已完成」這種不需要決策的訊息太重（用法比照 ProductDetail.vue）
+const { feedback, showFeedback } = useFeedback(2500)
+
 const sessions = ref([])
 const loading = ref(true)
 
 // 行事曆／我的預約 頁籤切換；純前端狀態，兩邊資料都已經在 onMounted 抓過，
 // 切換不重打 API。只有登入會員看得到這個切換器，未登入者固定看行事曆。
 const viewMode = ref('calendar')
+
+// 行事曆用 v-show 隱藏（不是 v-if 移除）——移除掉再掛載會讓已載入的場次消失、
+// 也會失去捲動位置。但 FullCalendar 的版面是掛載當下量出來的，在 display:none
+// 的容器裡量到的高度是 0，切回來時 v-show 只是還原 display，不會通知它重算，
+// 表格會塌成一條線。因此切回行事曆時要主動呼叫 updateSize() 重新量測。
+const calendarRef = ref(null)
+
+watch(viewMode, async (mode) => {
+  if (mode !== 'calendar') return
+  // 等 v-show 還原 display 後才量得到真實尺寸
+  await nextTick()
+  calendarRef.value?.getApi()?.updateSize()
+})
 
 // 我的團課報名列表，跟行事曆的 loading 各自獨立、互不影響
 const myBookings = ref([])
@@ -76,8 +95,14 @@ const roomFilteredSessions = computed(() =>
 )
 
 // 我的團課報名列表依開始時間排序，跟行事曆的排序邏輯一致
+// 後端已依「狀態→開課時間」排好（BOOKED 在前），這裡沿用同一套規則，
+// 避免前端只對「當前這一頁」重排而把後端的順序打亂
 const sortedMyBookings = computed(() =>
-  [...myBookings.value].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)),
+  [...myBookings.value].sort(
+    (a, b) =>
+      Number(a.status === 'CANCELLED') - Number(b.status === 'CANCELLED') ||
+      new Date(a.startAt) - new Date(b.startAt),
+  ),
 )
 
 function myBookingStatusInfo(status) {
@@ -157,10 +182,9 @@ async function handleBookInModal() {
     // 先解除 loading 狀態，closeDetailModal() 才不會被自己的送出中防呆擋住
     bookingSubmitting.value = false
     closeDetailModal()
-    alert('報名成功')
-    // 修正既有問題：報名成功後「我的團課報名」列表原本不會跟著刷新，
-    // 使用者要手動重新整理才看得到剛報名的那筆。比照 handleCancelBooking()
-    // 的寫法，用 Promise.all 同時刷新行事曆與我的預約列表。
+    showFeedback('報名成功')
+    // 行事曆要更新剩餘名額，「我的團課報名」要出現這筆新紀錄——兩邊都得重抓，
+    // 只抓其中一邊會讓使用者以為報名沒成功（寫法比照 handleCancelBooking）。
     // fetchMyBookings 需要 MEMBER 身分，跟 onMounted 的判斷式一致才呼叫。
     if (auth.isMember) {
       await Promise.all([fetchSessions(), fetchMyBookings()])
@@ -357,17 +381,20 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="loading" class="spinner"></div>
-
-    <template v-else>
-      <p v-if="visibleSessions.length === 0" class="empty-state">目前沒有開放報名的團課場次。</p>
-
-      <template v-else-if="viewMode === 'calendar'">
-        <div class="calendar-wrap">
-          <FullCalendar :options="calendarOptions" />
-        </div>
-      </template>
-    </template>
+    <!--
+      行事曆必須「永遠掛載」，不能用 v-if/v-else 換掉：被 loading 的 v-else 擋住時
+      根本不會掛載，畫面就卡在轉圈圈（見 6f30ac1）。因此 loading 與「本週沒課」
+      都只作為疊加提示，不影響行事曆本身的存在。
+      切換到「我的預約」時同理用 v-show 隱藏，但 FullCalendar 在 display:none 下
+      量到的高度是 0，切回來要主動 updateSize()——見上方 watch(viewMode)。
+    -->
+    <div v-show="viewMode === 'calendar'" class="calendar-wrap">
+      <div v-if="loading" class="calendar-notice"><div class="spinner"></div></div>
+      <p v-else-if="visibleSessions.length === 0" class="empty-state calendar-notice">
+        這一週沒有開放報名的團課場次，可切換到其他週次查看。
+      </p>
+      <FullCalendar ref="calendarRef" :options="calendarOptions" />
+    </div>
 
     <!-- 未登入時整塊隱藏：沒有資料來源，顯示空區塊反而困惑。
          已登入會員則依 viewMode 切換顯示，不是跟行事曆同時出現 -->
@@ -459,6 +486,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    <FeedbackToast :feedback="feedback" />
   </div>
 </template>
 
@@ -518,6 +546,12 @@ onUnmounted(() => {
 .view-tab--active {
   background: #f2e8dc;
   color: var(--primary-dark);
+}
+
+.calendar-notice {
+  /* 提示疊在行事曆上方，行事曆本身保持掛載（被 v-else 擋住就不會掛載，畫面會卡在轉圈圈） */
+  margin-bottom: 0.75rem;
+  text-align: center;
 }
 
 .calendar-wrap {

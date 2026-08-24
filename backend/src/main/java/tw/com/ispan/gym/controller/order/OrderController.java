@@ -45,7 +45,7 @@ public class OrderController {
     }
 
     @GetMapping("/{orderId}")
-    public OrderDetailResponse findMineById(@PathVariable Long orderId) {
+    public OrderDetailResponse findMineById(@PathVariable Integer orderId) {
         return orderQueryService.findMineById(currentUser.requireCurrentMemberId(), orderId);
     }
 
@@ -95,7 +95,7 @@ public class OrderController {
      * 訂單狀態維持 PAID，實際退款由後台完成（見 AdminOrderController）。
      */
     @PostMapping("/{orderId}/cancel")
-    public OrderDetailResponse cancelOrder(@PathVariable Long orderId,
+    public OrderDetailResponse cancelOrder(@PathVariable Integer orderId,
             @Valid @RequestBody(required = false) CancelOrderRequest request) {
         return orderService.cancelOrder(currentUser.requireCurrentMemberId(), orderId, request);
     }

@@ -38,6 +38,7 @@ import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
 import tw.com.ispan.gym.repository.coach.SessionDeductionLogRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 /**
  * 私教預約（CoachBooking）商業邏輯：包含建立預約、取消、教練核銷與相關稽核紀錄。
@@ -58,6 +59,7 @@ public class CoachBookingService {
         private final CoachBookingRepository coachBookingRepository;
         private final MemberRepository memberRepository;
         private final CoachSlotService coachSlotService;
+        private final TrainerService trainerService;
 
         private static final String CHECK_IN_KEY_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 排除 I/O/0/1
         private static final int CHECK_IN_KEY_LENGTH = 8;
@@ -143,7 +145,13 @@ public class CoachBookingService {
         public CoachBookingResponse createBooking(Integer memberId, Integer slotId) {
                 CoachSlot coachSlot = coachSlotRepository.findById(slotId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此時段"));
+                // §9 跨模組防護：教練若已 UNAVAILABLE 或軟刪除，即使時段本身還顯示 AVAILABLE
+                // 也不可接受新預約，不能只靠前端隱藏按鈕擋（見 trainer_management_next_phase 規格基準）。
+                // 只取 .getId()（lazy proxy，不觸發初始化，見 TrainerService 的方法註解），
+                // 真正的鎖定讀取交給 lockAndAssertAvailableForNewBusiness()，
+                // 這樣才能跟 AdminTrainerService.suspend() 搶同一顆鎖，堵住競態。
                 Integer trainerId = coachSlot.getTrainer().getId();
+                trainerService.lockAndAssertAvailableForNewBusiness(trainerId);
                 List<MemberCourseQuota> eligibleQuota = memberCourseQuotaRepository.findEligibleQuota(memberId,
                                 trainerId);
                 if (eligibleQuota.isEmpty()) {

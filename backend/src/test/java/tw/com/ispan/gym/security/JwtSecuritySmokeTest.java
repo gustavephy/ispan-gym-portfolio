@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +50,15 @@ import tw.com.ispan.gym.repository.trainer.TrainerRepository;
         "spring.profiles.active=test",
         "app.jwt.secret=dGVzdC1zZWNyZXQtdGhhdC1pcy1sb25nLWVub3VnaC1mb3ItaHMyNTYtc2lnbmluZyEh",
         "app.jwt.issuer=ispan-gym",
-        "app.jwt.access-token-ttl=PT2H"
+        "app.jwt.access-token-ttl=PT2H",
+        "app.oauth.google.enabled=false",
+        "app.oauth.frontend-success-url=http://localhost:5173/oauth/callback",
+        "app.oauth.frontend-registration-url=http://localhost:5173/oauth/register",
+        "app.oauth.frontend-link-result-url=http://localhost:5173/account/oauth/callback",
+        "app.oauth.frontend-error-url=http://localhost:5173/login",
+        "app.oauth.transaction-ttl-minutes=10",
+        "app.oauth.registration-ticket-ttl-minutes=15",
+        "app.oauth.exchange-code-ttl-seconds=90"
 })
 class JwtSecuritySmokeTest {
 
@@ -69,7 +78,20 @@ class JwtSecuritySmokeTest {
         ApiErrorWriter.class,
         JsonAuthenticationEntryPoint.class,
         JsonAccessDeniedHandler.class,
-        tw.com.ispan.gym.config.SecurityConfig.class
+        tw.com.ispan.gym.config.SecurityConfig.class,
+        // Google OAuth 協定鏈的必要 bean——SecurityConfig 現在同時建立 oauth 鏈，
+        // 少了任何一個都會讓 context 組不起來（見 SecurityConfig 建構子）
+        tw.com.ispan.gym.config.GoogleOAuthProperties.class,
+        tw.com.ispan.gym.config.ClockConfig.class,
+        tw.com.ispan.gym.security.InMemoryRateLimiter.class,
+        tw.com.ispan.gym.security.OpaqueTokenGenerator.class,
+        tw.com.ispan.gym.security.oauth.GoogleIdentityMapper.class,
+        tw.com.ispan.gym.service.account.oauth.GoogleOAuthLoginService.class,
+        tw.com.ispan.gym.service.account.oauth.GoogleOAuthLinkService.class,
+        tw.com.ispan.gym.security.oauth.GoogleOAuthAuthorizationRequestResolver.class,
+        tw.com.ispan.gym.security.oauth.GoogleOAuthSuccessHandler.class,
+        tw.com.ispan.gym.security.oauth.GoogleOAuthFailureHandler.class,
+        tw.com.ispan.gym.security.AccountLoginPolicy.class
     })
     static class TestApp {}
 
@@ -97,6 +119,24 @@ class JwtSecuritySmokeTest {
         @Primary
         tw.com.ispan.gym.repository.account.OauthAccountRepository oauthAccountRepository() {
             return Mockito.mock(tw.com.ispan.gym.repository.account.OauthAccountRepository.class);
+        }
+
+        @Bean
+        @Primary
+        tw.com.ispan.gym.repository.account.OAuthTransactionRepository oauthTransactionRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.account.OAuthTransactionRepository.class);
+        }
+
+        @Bean
+        @Primary
+        tw.com.ispan.gym.repository.account.OAuthRegistrationTicketRepository oauthRegistrationTicketRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.account.OAuthRegistrationTicketRepository.class);
+        }
+
+        @Bean
+        @Primary
+        tw.com.ispan.gym.repository.account.OAuthExchangeCodeRepository oauthExchangeCodeRepository() {
+            return Mockito.mock(tw.com.ispan.gym.repository.account.OAuthExchangeCodeRepository.class);
         }
 
         @Bean
@@ -426,6 +466,83 @@ class JwtSecuritySmokeTest {
         Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(suspended));
 
         mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // === credentialsVersion：密碼變更後舊 token 全裝置失效 =========================
+    // 密碼管理功能新增（2026-08-21），JwtAuthFilter 在既有的帳號重查邏輯後
+    // 多比對一次 token 的 cv claim 與 account.credentialsVersion。
+
+    @Test
+    void credentialsVersion不符時回401_密碼變更後舊token失效() throws Exception {
+        Account account = memberAccount();
+        account.setCredentialsVersion(0);
+        Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
+
+        String token = jwtUtil.generateToken(account); // cv=0 烙進這個 token
+
+        // 模擬密碼變更：帳號的 credentialsVersion 遞增，但這個 token 裡的 cv 還是簽發當下的 0
+        account.setCredentialsVersion(1);
+
+        mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void credentialsVersion相符時正常放行_非零版本也一樣() throws Exception {
+        Account account = memberAccount();
+        account.setCredentialsVersion(3);
+        Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
+
+        String token = jwtUtil.generateToken(account);
+
+        mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    /**
+     * 這個功能上線前簽發的 token 身上根本沒有 cv claim（不是「版本不符」，是欄位缺失）。
+     * 缺失視為 0，對應新／既有帳號回填後也是 0，上線當下不該造成無關的全站登出。
+     */
+    @Test
+    void token缺少cvClaim且帳號版本仍是預設0時視為相符可放行() throws Exception {
+        Account account = memberAccount(); // credentialsVersion 預設 0
+        Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
+
+        // 不呼叫 generateToken(Account)——那個總是會帶 cv，這裡改用底層多載直接模擬舊格式 token
+        String legacyToken = jwtUtil.generateToken(account.getId(), Map.of(JwtUtil.CLAIM_EMAIL, account.getEmail()));
+
+        mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + legacyToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void token缺少cvClaim但帳號版本已大於0時回401() throws Exception {
+        Account account = memberAccount();
+        account.setCredentialsVersion(1); // 已經改過密碼
+        Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
+
+        String legacyToken = jwtUtil.generateToken(account.getId(), Map.of(JwtUtil.CLAIM_EMAIL, account.getEmail()));
+
+        mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + legacyToken))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /** 畸形 cv（負數、非數字型別等）一律視為無效 token，不能悄悄降級成版本 0 放行 */
+    @Test
+    void token的cvClaim是負數時回401() throws Exception {
+        Account account = memberAccount();
+        Mockito.when(accounts.findById(7)).thenReturn(Optional.of(account));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
+
+        String malformedToken = jwtUtil.generateToken(account.getId(),
+                Map.of(JwtUtil.CLAIM_EMAIL, account.getEmail(), JwtUtil.CLAIM_CREDENTIALS_VERSION, -1));
+
+        mockMvc.perform(get("/api/orders").header("Authorization", "Bearer " + malformedToken))
                 .andExpect(status().isUnauthorized());
     }
 }

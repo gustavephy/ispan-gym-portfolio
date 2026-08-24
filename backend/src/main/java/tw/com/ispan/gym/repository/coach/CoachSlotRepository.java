@@ -52,4 +52,12 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
          * 不需要搜尋參數，衍生查詢方法名稱就能處理，不用寫 JPQL。
          */
         Page<CoachSlot> findByTrainerId(Integer trainerId, Pageable pageable);
+
+        /**
+         * 教練停用前檢查用：名下還有多少「未完成」時段——排除 CANCELLED，且結束時間仍在未來。
+         * 只看 status 不夠：AVAILABLE/BOOKED 都沒有到期自動轉態，早已過去卻沒人清理的舊時段
+         * 不該繼續擋著停用，故額外疊加 endAt > now（見 trainer_management_next_phase 規格基準）。
+         */
+        @Query("SELECT COUNT(s) FROM CoachSlot s WHERE s.trainer.id = :trainerId AND s.status <> 'CANCELLED' AND s.endAt > :now")
+        long countOpenByTrainerId(@Param("trainerId") Integer trainerId, @Param("now") LocalDateTime now);
 }

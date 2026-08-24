@@ -4,8 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record PendingRefundResponse(
-        Long refundId,
-        Long orderId,
+        Integer refundId,
+        Integer orderId,
         String merchantTradeNo,
         String refundNo,
         BigDecimal amount,

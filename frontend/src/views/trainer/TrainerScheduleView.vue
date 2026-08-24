@@ -4,8 +4,13 @@ import { getMySlots, createSlot, updateSlot, cancelSlot, checkInBooking } from '
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import FeedbackToast from '@/components/FeedbackToast.vue'
+import { useFeedback } from '@/composables/useFeedback.js'
 import Pagination from '@/components/Pagination.vue'
 import { TIME_OPTIONS } from '@/utils/businessHours.js'
+
+// 成功提示用 toast，不用 window.alert（會阻斷畫面且要多按一次確定）
+const { feedback, showFeedback } = useFeedback(2500)
 
 // 狀態對照表：後端回傳 AVAILABLE/BOOKED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
@@ -203,8 +208,10 @@ async function submitUpdate(slotId, startAt, endAt, acknowledgeExistingBooking =
   try {
     await updateSlot(slotId, { startAt, endAt, acknowledgeExistingBooking })
   } catch (err) {
-    const apiError = err
-    if (apiError.needsConfirmation && !acknowledgeExistingBooking && window.confirm(apiError.message)) {
+    // 攔截器 reject 的是 normalizeApiError() 正規化後的物件（{code, message, needsConfirmation, raw…}），
+    // 不是原始 axios error——讀 err.response.data 永遠是 undefined，確認框就再也不會跳，
+    // 使用者只會看到一行「請確認」卻無從確認
+    if (err.needsConfirmation && !acknowledgeExistingBooking && window.confirm(err.message)) {
       await submitUpdate(slotId, startAt, endAt, true)
       return
     }
@@ -245,8 +252,8 @@ async function submitCancel(slotId, acknowledgeExistingBooking = false) {
   try {
     await cancelSlot(slotId, acknowledgeExistingBooking)
   } catch (err) {
-    const apiError = err
-    if (apiError.needsConfirmation && !acknowledgeExistingBooking && window.confirm(apiError.message)) {
+    // 同上：讀正規化後的 needsConfirmation，不是 err.response.data
+    if (err.needsConfirmation && !acknowledgeExistingBooking && window.confirm(err.message)) {
       await submitCancel(slotId, true)
       return
     }
@@ -280,7 +287,7 @@ async function handleCheckIn(slot) {
   slotActionMessage.value = ''
   try {
     await checkInBooking(slot.bookingId, checkInKey)
-    alert('核銷成功')
+    showFeedback('核銷成功')
     await fetchSlots()
   } catch (err) {
     const apiError = err
@@ -431,6 +438,8 @@ onUnmounted(() => {
         </form>
       </div>
     </div>
+
+    <FeedbackToast :feedback="feedback" />
   </div>
 </template>
 

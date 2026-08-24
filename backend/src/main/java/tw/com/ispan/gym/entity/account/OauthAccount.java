@@ -49,6 +49,21 @@ public class OauthAccount {
 	@Column(name = "provider_user_id", length = 255, nullable = false)
 	private String providerUserId;
 
+	/**
+	 * 以下三欄是 Google 端最近一次提供的顯示資訊，跟 {@link #providerUserId} 這個
+	 * 真正的身分主鍵不同——它們可以隨時間改變，不影響登入判定，只在成功登入時更新。
+	 * 既有綁定沒有這些資料，故一律可空，不回填假值，於下次成功登入時自然補齊
+	 * （見 SchemaFixupRunner）。
+	 */
+	@Column(name = "provider_email", length = 100)
+	private String providerEmail;
+
+	@Column(name = "provider_email_verified")
+	private Boolean providerEmailVerified;
+
+	@Column(name = "last_login_at")
+	private LocalDateTime lastLoginAt;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 

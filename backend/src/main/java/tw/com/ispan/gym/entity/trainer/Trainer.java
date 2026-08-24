@@ -59,9 +59,10 @@ public class Trainer {
 	@Column(name = "email", length = 255, nullable = false)
 	private String email;
 
+	/** DB 欄位沿用既有的 avatar_url，Java／DTO 對外統一叫 profileImageUrl（規格用語） */
 	@Nationalized
 	@Column(name = "avatar_url", length = 255)
-	private String avatarUrl;
+	private String profileImageUrl;
 
 	@Nationalized
 	@Column(name = "specialty", length = 255, nullable = false)

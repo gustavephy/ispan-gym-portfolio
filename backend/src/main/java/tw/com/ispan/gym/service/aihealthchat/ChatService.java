@@ -1,9 +1,13 @@
 package tw.com.ispan.gym.service.aihealthchat;
 
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import tw.com.ispan.gym.dto.aihealthchat.ChatConversationSummary;
 import tw.com.ispan.gym.dto.aihealthchat.ChatMessageDTO;
 import tw.com.ispan.gym.dto.aihealthchat.ChatReplyRequest;
 import tw.com.ispan.gym.dto.aihealthchat.ChatSendRequest;
@@ -19,6 +23,7 @@ import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.aihealthchat.ChatMessageRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
+import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * 聊天室（2.4）核心邏輯。對外分兩種入口：
@@ -37,14 +42,17 @@ public class ChatService {
     private final ChatMessageRepository chatMessages;
     private final MemberRepository members;
     private final EmployeeRepository employees;
+    private final TrainerRepository trainers;
     private final ChatMessagePublisher publisher;
     private final ChatAiResponderService aiResponder;
 
     public ChatService(ChatMessageRepository chatMessages, MemberRepository members,
-            EmployeeRepository employees, ChatMessagePublisher publisher, ChatAiResponderService aiResponder) {
+            EmployeeRepository employees, TrainerRepository trainers, ChatMessagePublisher publisher,
+            ChatAiResponderService aiResponder) {
         this.chatMessages = chatMessages;
         this.members = members;
         this.employees = employees;
+        this.trainers = trainers;
         this.publisher = publisher;
         this.aiResponder = aiResponder;
     }
@@ -84,6 +92,12 @@ public class ChatService {
                 .map(m -> publisher.toDto(m, true));
     }
 
+    /**
+     * markRoomAsRead 是自訂的 @Modifying JPQL bulk update，Spring Data 不會像
+     * save()／delete() 那樣自動幫這類自訂查詢包交易，呼叫端沒有 @Transactional
+     * 會直接拋 TransactionRequiredException（500）。
+     */
+    @Transactional
     public void markReadForMember(Integer memberId, ChatCounterpartType type, Integer employeeId) {
         String roomId = roomIdForMember(memberId, type, employeeId);
         // bySenderIsMember=false：把「對方（AI／教練）傳的」訊息標成已讀，不是自己傳的那些
@@ -113,6 +127,7 @@ public class ChatService {
                 .map(m -> publisher.toDto(m, false));
     }
 
+    @Transactional
     public void markReadForEmployeeAccount(Integer accountId, Integer memberId) {
         Integer employeeId = resolveActiveEmployeeId(accountId);
         String roomId = roomIdForEmployee(employeeId, memberId);
@@ -123,6 +138,32 @@ public class ChatService {
     public long unreadCountForEmployeeAccount(Integer accountId) {
         Integer employeeId = resolveActiveEmployeeId(accountId);
         return chatMessages.countByEmployeeIdAndSenderIsMemberTrueAndReadFalse(employeeId);
+    }
+
+    /**
+     * 教練「學員訊息」列表：列出所有曾與這位員工對話過的學員，依最後訊息時間排序，
+     * 附最後一則訊息預覽與未讀數，取代教練得先知道 memberId 才能查歷史的窘境
+     * （getHistoryForEmployeeAccount 需要呼叫端已經知道要查哪位學員）。
+     */
+    public List<ChatConversationSummary> listConversationsForEmployeeAccount(Integer accountId) {
+        Integer employeeId = resolveActiveEmployeeId(accountId);
+        return chatMessages.findMemberIdsByEmployeeIdOrderByLastMessageDesc(employeeId).stream()
+                .map(memberId -> buildConversationSummary(employeeId, memberId))
+                .toList();
+    }
+
+    private ChatConversationSummary buildConversationSummary(Integer employeeId, Integer memberId) {
+        String roomId = roomIdForEmployee(employeeId, memberId);
+        ChatMessage last = chatMessages.findByRoomIdOrderByCreatedAtDesc(roomId, PageRequest.of(0, 1))
+                .getContent().stream().findFirst().orElse(null);
+        String memberName = members.findById(memberId)
+                .map(m -> m.getLastName() + m.getFirstName())
+                .orElse("會員 #" + memberId);
+        long unread = chatMessages.countByMemberIdAndEmployeeIdAndSenderIsMemberTrueAndReadFalse(memberId, employeeId);
+        return new ChatConversationSummary(memberId, memberName,
+                last != null ? last.getMessageContent() : null,
+                last != null ? last.getCreatedAt() : null,
+                unread);
     }
 
     // ───────────────────────── 私有輔助 ─────────────────────────
@@ -182,10 +223,24 @@ public class ChatService {
         return employee.getId();
     }
 
+    /**
+     * 會員發起聊天室的對象限定教練，不是任意在職員工——聊天目錄（chat-directory）
+     * 只列教練，但 request.employeeId() 是前端自帶的欄位，光靠 ACTIVE 員工檢查
+     * 擋不住會員竄改成任意在職員工（含 ADMIN）的 id 也能建立聊天室。這裡額外要求
+     * 有對應未軟刪除的 Trainer 資料列，跟 ROLE_TRAINER（AccountAuthorityResolver）
+     * 用同一個判斷標準（只看 deletedAt，不看 status——UNAVAILABLE 教練仍可被聊天，
+     * 只是不能被預約，見 code review 發現，2026-08-19）。
+     */
     private void requireActiveEmployee(Integer employeeId) {
         Employee employee = employees.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到教練／員工：" + employeeId));
         if (employee.getDeletedAt() != null || employee.getStatus() != EmployeeStatus.ACTIVE) {
+            throw new ResourceNotFoundException("找不到教練／員工：" + employeeId);
+        }
+        boolean hasActiveTrainer = trainers.findByEmployeeId(employeeId)
+                .filter(t -> t.getDeletedAt() == null)
+                .isPresent();
+        if (!hasActiveTrainer) {
             throw new ResourceNotFoundException("找不到教練／員工：" + employeeId);
         }
     }

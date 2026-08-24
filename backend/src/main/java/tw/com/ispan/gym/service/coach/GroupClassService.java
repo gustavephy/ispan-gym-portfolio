@@ -33,6 +33,7 @@ import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
 import tw.com.ispan.gym.repository.course.GroupCourseRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
+import tw.com.ispan.gym.service.trainer.TrainerService;
 
 @Service
 @RequiredArgsConstructor
@@ -54,6 +55,7 @@ public class GroupClassService {
         private final GroupClassBookingRepository groupClassBookingRepository;
 
         private final MemberRepository memberRepository;
+        private final TrainerService trainerService;
 
         /**
          * 同一間教室，兩堂團課場次之間至少要間隔的清場緩衝時間（分鐘）。
@@ -154,6 +156,16 @@ public class GroupClassService {
                 Integer groupCourseId = request.getGroupCourseId();
                 GroupCourse groupCourse = groupCourseRepository.findById(groupCourseId)
                                 .orElseThrow(() -> new ResourceNotFoundException("查無此課程"));
+                // §9 跨模組防護：教練若已 UNAVAILABLE 或軟刪除，不可再指派新的團課場次，
+                // 不能只靠前端隱藏按鈕擋（見 trainer_management_next_phase 規格基準）。
+                // GroupCourseService#createCourse／activateCourse 現在也有同一道檢查
+                // （2026-08-19 code review 後補上，原規格§9 本來就把「建立或指派 GroupClass」
+                // 跟這裡的「建立或指派 GroupClassSession」列成兩個獨立防護點）——這裡仍然要查，
+                // 因為課程主檔 ACTIVE 不代表底下每一場次建立時教練仍可服務，兩層互相獨立。
+                // 只取 .getId()（lazy proxy，不觸發初始化，見 TrainerService 的方法註解），
+                // 真正的鎖定讀取交給 lockAndAssertAvailableForNewBusiness()，這樣才能跟
+                // AdminTrainerService.suspend() 搶同一顆鎖，堵住競態。
+                trainerService.lockAndAssertAvailableForNewBusiness(groupCourse.getTrainer().getId());
 
                 // 先用「原始時間」查真重疊：兩堂課時間本身有交集
                 List<GroupClassSession> trueOverlap = groupClassSessionRepository
@@ -393,7 +405,12 @@ public class GroupClassService {
                         String search) {
                 int safePage = Math.max(page, 0);
                 int safeSize = Math.min(Math.max(size, 1), 100);
-                Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "session.startAt"));
+                // 先依狀態再依開課時間：BOOKED 排在 CANCELLED 之前（EnumType.STRING 存的是字面值，
+                // 字母序剛好是 BOOKED < CANCELLED），讓「還有效的報名」永遠在最前面。
+                // 少了狀態這一層，同一場次的已取消紀錄會跟剛報名的混在一起，
+                // 使用者報名完往下看，第一眼看到的可能是舊的「已取消」，會以為報名失敗。
+                Pageable pageable = PageRequest.of(safePage, safeSize,
+                                Sort.by(Sort.Order.asc("status"), Sort.Order.asc("session.startAt")));
 
                 Page<GroupClassBooking> result = groupClassBookingRepository.searchMyBookings(memberId, search,
                                 pageable);

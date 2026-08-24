@@ -62,4 +62,18 @@ public interface GroupClassSessionRepository extends JpaRepository<GroupClassSes
                         """)
         Page<GroupClassSession> searchUpcomingSessions(@Param("status") GroupClassSessionStatus status,
                         @Param("after") LocalDateTime after, @Param("search") String search, Pageable pageable);
+
+        /**
+         * 教練停用前檢查用：名下還有多少「未完成」團課場次。教練綁在 GroupCourse 主檔，
+         * 場次本身沒有 trainer 欄位（代課設計已捨棄），故先 JOIN course 取得 trainer.id。
+         * GroupClassSessionStatus 沒有 COMPLETED，只有 SCHEDULED／CANCELLED，故用
+         * status=SCHEDULED AND endAt > now 判斷「還沒結束」——不能用 startAt（見公開列表既有的
+         * upcoming 查詢），那是「還沒開始」，會漏掉「已經開始、還沒結束」的場次（例如
+         * 14:00-15:00 的場次，14:30 停用教練時仍應視為未完成業務，見 code review 發現，
+         * 2026-08-19，trainer_management_next_phase 規格基準）。
+         */
+        @Query("SELECT COUNT(s) FROM GroupClassSession s JOIN s.course c "
+                        + "WHERE c.trainer.id = :trainerId AND s.status = :status AND s.endAt > :after")
+        long countByTrainerIdAndStatusAndEndAtAfter(@Param("trainerId") Integer trainerId,
+                        @Param("status") GroupClassSessionStatus status, @Param("after") LocalDateTime after);
 }

@@ -446,7 +446,7 @@ class OperationReportServiceTest {
     void 退款完成標記涵蓋原付款日的快照為過時() {
         LocalDate paidDate = LocalDate.of(2026, 8, 15);
 
-        service.onRefundCompleted(new RefundCompletedEvent(900L, paidDate));
+        service.onRefundCompleted(new RefundCompletedEvent(900, paidDate));
 
         // 報表口徑以付款日歸屬營收，退款會讓涵蓋該日的既有快照失真
         verify(snapshots).markStaleCovering(eq(paidDate), any(LocalDateTime.class));

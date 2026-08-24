@@ -143,8 +143,10 @@ async function submitCancelBooking(bookingId, acknowledgeConsumption = false) {
   try {
     await cancelBooking(bookingId, acknowledgeConsumption)
   } catch (err) {
-    const apiError = err
-    if (apiError.needsConfirmation && !acknowledgeConsumption && window.confirm(apiError.message)) {
+    // 攔截器 reject 的是 normalizeApiError() 正規化後的物件（{code, message, needsConfirmation, raw…}），
+    // 不是原始的 axios error——所以這裡不能讀 err.response.data，那永遠是 undefined，
+    // 確認框就再也不會跳出來，使用者只會看到一行「請確認」的錯誤訊息卻無從確認。
+    if (err.needsConfirmation && !acknowledgeConsumption && window.confirm(err.message)) {
       await submitCancelBooking(bookingId, true)
       return
     }
@@ -193,11 +195,12 @@ async function handleBook(slot) {
   bookingSlotId.value = slot.id
   try {
     const res = await createBooking(slot.id)
+    // 這裡刻意用 alert 而非 toast：核銷碼是使用者必須記下來的資訊，
+    // 自動消失的 toast 有錯過的風險，阻斷式對話框逼使用者確實看過才繼續。
+    // 其他「操作已完成」的提示仍用 toast（見 GroupClassView／TrainerScheduleView）
     alert(`預約成功！核銷碼：${res.data.checkInKey}，上課時請出示給教練核銷`)
-    // 修正既有問題：預約成功後「我的預約」列表原本不會跟著刷新，使用者要手動
-    // 重新整理才看得到剛預約的那筆。比照 GroupClassView 的 handleBookInModal 寫法，
-    // 用 Promise.all 同時刷新時段列表與我的預約列表。這頁本身 requiresAuth: true，
-    // 進得來就一定是登入會員，不用像 GroupClassView 那樣額外判斷 auth.isMember。
+    // 時段列表要讓已被約走的時段消失，「我的預約」要出現這筆新紀錄——兩邊都得重抓。
+    // 只抓其中一邊會讓使用者以為預約沒成功（同 handleCancelBooking 的處理）
     await Promise.all([fetchTrainerSchedules(selectedTrainerId.value), fetchMyBookings()])
   } catch (err) {
     const apiError = err

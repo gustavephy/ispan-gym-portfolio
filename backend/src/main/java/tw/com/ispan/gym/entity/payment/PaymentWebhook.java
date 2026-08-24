@@ -15,7 +15,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 @Getter
 @Setter
 public class PaymentWebhook {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Integer id;
     @Column(nullable = false, length = 20) private String provider;
     @Column(name = "event_key", nullable = false, length = 64) private String eventKey;
     @Column(name = "merchant_trade_no", length = 20) private String merchantTradeNo;
