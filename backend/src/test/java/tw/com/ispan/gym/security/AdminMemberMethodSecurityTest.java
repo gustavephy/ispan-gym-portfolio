@@ -37,10 +37,11 @@ import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
+import tw.com.ispan.gym.service.coach.MemberCourseQuotaService;
 import tw.com.ispan.gym.service.member.AdminMemberService;
 
 /**
- * 隔離驗證 AdminMemberController 五個方法上的 @PreAuthorize("hasRole('ADMIN')")。
+ * 隔離驗證 AdminMemberController 六個方法上的 @PreAuthorize("hasRole('ADMIN')")。
  *
  * <p>為什麼需要獨立一支：正式 SecurityConfig 對 /api/admin/** 有 hasRole("ADMIN") 的 URL
  * 規則，filter 階段就會擋下非管理者，@PreAuthorize 永遠執行不到——所以
@@ -140,6 +141,9 @@ class AdminMemberMethodSecurityTest {
         @Bean @Primary AdminMemberService adminMemberService() {
             return Mockito.mock(AdminMemberService.class);
         }
+        @Bean @Primary MemberCourseQuotaService memberCourseQuotaService() {
+            return Mockito.mock(MemberCourseQuotaService.class);
+        }
     }
 
     @Autowired MockMvc mockMvc;
@@ -148,6 +152,7 @@ class AdminMemberMethodSecurityTest {
     @Autowired EmployeeRepository employees;
     @Autowired TrainerRepository trainers;
     @Autowired AdminMemberService adminMemberService;
+    @Autowired MemberCourseQuotaService memberCourseQuotaService;
 
     private static final String VALID_UPDATE_BODY = """
             {
@@ -164,7 +169,7 @@ class AdminMemberMethodSecurityTest {
      */
     @BeforeEach
     void resetMocks() {
-        Mockito.reset(adminMemberService, accounts, employees, trainers);
+        Mockito.reset(adminMemberService, memberCourseQuotaService, accounts, employees, trainers);
     }
 
     private String tokenFor(int accountId, int employeeId, String email, EmployeeRole role) {
@@ -303,5 +308,27 @@ class AdminMemberMethodSecurityTest {
                 .andExpect(status().isOk());
 
         Mockito.verify(adminMemberService).activate(1);
+    }
+
+    // === GET /api/admin/members/{memberId}/course-quotas ===========================
+
+    @Test
+    void 會員額度查詢_一般員工被方法層級擋下且Service未被呼叫() throws Exception {
+        mockMvc.perform(get("/api/admin/members/1/course-quotas")
+                        .header("Authorization", "Bearer " + employeeToken()))
+                .andExpect(status().isForbidden());
+
+        Mockito.verify(memberCourseQuotaService, Mockito.never())
+                .getQuotasByMember(Mockito.any(), Mockito.anyInt(), Mockito.anyInt());
+    }
+
+    @Test
+    void 會員額度查詢_管理者通過方法層級且Service被呼叫() throws Exception {
+        mockMvc.perform(get("/api/admin/members/1/course-quotas")
+                        .header("Authorization", "Bearer " + adminToken()))
+                .andExpect(status().isOk());
+
+        Mockito.verify(memberCourseQuotaService)
+                .getQuotasByMember(Mockito.eq(1), Mockito.anyInt(), Mockito.anyInt());
     }
 }

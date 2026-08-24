@@ -41,6 +41,7 @@ import tw.com.ispan.gym.service.cart.CartService;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
 import tw.com.ispan.gym.service.coach.GroupClassService;
+import tw.com.ispan.gym.service.coach.MemberCourseQuotaService;
 import tw.com.ispan.gym.service.coupon.EmployeeCouponService;
 import tw.com.ispan.gym.service.employee.AdminEmployeeService;
 import tw.com.ispan.gym.service.employee.EmployeeProfileService;
@@ -108,6 +109,7 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.coach.AdminGroupClassController.class,
         tw.com.ispan.gym.controller.coach.CoachSlotController.class,
         tw.com.ispan.gym.controller.coach.GroupClassController.class,
+        tw.com.ispan.gym.controller.coach.MemberCourseQuotaController.class,
         tw.com.ispan.gym.controller.employee.EmployeeReviewController.class,
         tw.com.ispan.gym.controller.employee.AdminEmployeeController.class,
         tw.com.ispan.gym.controller.employee.EmployeeProfileController.class,
@@ -187,6 +189,9 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary CoachBookingService coachBookingService() {
             return Mockito.mock(CoachBookingService.class);
+        }
+        @Bean @Primary MemberCourseQuotaService memberCourseQuotaService() {
+            return Mockito.mock(MemberCourseQuotaService.class);
         }
         @Bean @Primary EmployeeReviewService employeeReviewService() {
             return Mockito.mock(EmployeeReviewService.class);
@@ -694,6 +699,27 @@ class EndpointAuthorizationTest {
         expectForbidden(post("/api/admin/members/1/activate"), memberToken());
         expectAuthorized(post("/api/admin/members/1/suspend"), adminToken());
         expectAuthorized(post("/api/admin/members/1/activate"), adminToken());
+    }
+
+    @Test
+    void 查詢指定會員課程額度僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/members/1/course-quotas"));
+        expectForbidden(get("/api/admin/members/1/course-quotas"), memberToken());
+        expectForbidden(get("/api/admin/members/1/course-quotas"), employeeToken());
+        expectAuthorized(get("/api/admin/members/1/course-quotas"), adminToken());
+    }
+
+    // === MEMBER：私教課額度查詢 ================================================
+    //
+    // memberId 一律由 CurrentUserProvider 從 token 反查（controller 不收參數），
+    // 所以這裡只需驗角色關卡：非 MEMBER 一律 403，未登入 401。
+
+    @Test
+    void 查詢自己課程額度僅限會員() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/member/course-quotas"));
+        expectForbidden(get("/api/member/course-quotas"), employeeToken());
+        expectForbidden(get("/api/member/course-quotas"), adminToken());
+        expectAuthorized(get("/api/member/course-quotas"), memberToken());
     }
 
     // === ADMIN：員工管理（僅驗 URL 層，方法層 @PreAuthorize 由 AdminEmployeeMethodSecurityTest 負責）====
