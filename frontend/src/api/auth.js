@@ -25,7 +25,7 @@ export const registerEmployee = (payload) =>
 /** POST /api/employees/reapply — 僅 REJECTED 的申請可用，以 email+密碼證明身分 */
 export const reapplyEmployee = (payload) => api.post('/api/employees/reapply', payload, ANONYMOUS_CONFIG)
 
-/** GET /api/accounts/verify-email?token= — 回 { purpose: 'REGISTRATION' | 'REACTIVATION' } */
+/** GET /api/accounts/verify-email?token= — 回 { purpose: 'REGISTRATION' | 'REACTIVATION', email } */
 export const verifyEmail = (token) =>
   api.get('/api/accounts/verify-email', { params: { token }, ...ANONYMOUS_CONFIG })
 

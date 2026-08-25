@@ -19,7 +19,6 @@ import tw.com.ispan.gym.dto.account.CheckEmailAvailabilityResponse;
 import tw.com.ispan.gym.dto.account.ResendVerificationRequest;
 import tw.com.ispan.gym.dto.account.ResendVerificationResponse;
 import tw.com.ispan.gym.dto.account.VerifyEmailResponse;
-import tw.com.ispan.gym.enums.account.VerificationPurpose;
 import tw.com.ispan.gym.exception.EmailCheckRateLimitedException;
 import tw.com.ispan.gym.security.InMemoryRateLimiter;
 import tw.com.ispan.gym.service.member.MemberRegisterService;
@@ -42,8 +41,7 @@ public class AccountVerificationController {
 
     @GetMapping("/verify-email")
     public VerifyEmailResponse verifyEmail(@RequestParam UUID token) {
-        VerificationPurpose purpose = registerService.verifyEmail(token);
-        return new VerifyEmailResponse(purpose.name());
+        return registerService.verifyEmail(token);
     }
 
     /** 一律回 202 + 同一句話，不論該 email 是否存在或是否真的寄出——避免被用來枚舉已註冊帳號 */

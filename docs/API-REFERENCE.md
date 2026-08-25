@@ -273,7 +273,7 @@ email 從同一 IP 灌爆記憶體）；正規化後的 email 15 分鐘內 5 次
 #### 🔓 `GET /api/accounts/verify-email?token={UUID}`
 
 Query：`token` UUID，必填。
-Response `200` `VerifyEmailResponse`：`purpose` String（`REGISTRATION` | `REACTIVATION`）
+Response `200` `VerifyEmailResponse`：`purpose` String（`REGISTRATION` | `REACTIVATION`）、`email` String（2026-08-25 補，供前端跨分頁通知比對用；能持有寄到該信箱的一次性 token 即已證明是本人，回傳信箱本身不構成新的帳號列舉風險）
 
 - 已驗證過的 token 再打 → **200 冪等成功**，回原本的 purpose
 - `REGISTRATION` 成功：會員 `PENDING` → `ACTIVE`

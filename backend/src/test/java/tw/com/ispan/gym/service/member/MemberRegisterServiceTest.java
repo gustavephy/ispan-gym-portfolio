@@ -19,6 +19,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import tw.com.ispan.gym.dto.account.VerifyEmailResponse;
 import tw.com.ispan.gym.dto.member.MemberRegisterRequest;
 import tw.com.ispan.gym.dto.member.MemberRegisterResponse;
 import tw.com.ispan.gym.entity.account.Account;
@@ -449,9 +450,10 @@ class MemberRegisterServiceTest {
         when(emailVerifications.findByToken(verification.getToken())).thenReturn(Optional.of(verification));
         when(members.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(member));
 
-        VerificationPurpose result = service.verifyEmail(verification.getToken());
+        VerifyEmailResponse result = service.verifyEmail(verification.getToken());
 
-        assertThat(result).isEqualTo(VerificationPurpose.REGISTRATION);
+        assertThat(result.purpose()).isEqualTo(VerificationPurpose.REGISTRATION.name());
+        assertThat(result.email()).isEqualTo(EMAIL);
         assertThat(member.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(verification.getVerifiedAt()).isNotNull();
     }
@@ -468,9 +470,10 @@ class MemberRegisterServiceTest {
         when(emailVerifications.findByToken(verification.getToken())).thenReturn(Optional.of(verification));
         when(members.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(member));
 
-        VerificationPurpose result = service.verifyEmail(verification.getToken());
+        VerifyEmailResponse result = service.verifyEmail(verification.getToken());
 
-        assertThat(result).isEqualTo(VerificationPurpose.REACTIVATION);
+        assertThat(result.purpose()).isEqualTo(VerificationPurpose.REACTIVATION.name());
+        assertThat(result.email()).isEqualTo(EMAIL);
         assertThat(account.getDeletedAt()).isNull();
         assertThat(member.getDeletedAt()).isNull();
         assertThat(member.getStatus()).isEqualTo(UserStatus.ACTIVE);
@@ -545,9 +548,10 @@ class MemberRegisterServiceTest {
         verification.setVerifiedAt(LocalDateTime.now().minusMinutes(1));
         when(emailVerifications.findByToken(verification.getToken())).thenReturn(Optional.of(verification));
 
-        VerificationPurpose result = service.verifyEmail(verification.getToken());
+        VerifyEmailResponse result = service.verifyEmail(verification.getToken());
 
-        assertThat(result).isEqualTo(VerificationPurpose.REGISTRATION);
+        assertThat(result.purpose()).isEqualTo(VerificationPurpose.REGISTRATION.name());
+        assertThat(result.email()).isEqualTo(EMAIL);
         verify(members, never()).findByAccountId(any());
     }
 

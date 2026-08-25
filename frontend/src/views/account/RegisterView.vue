@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { checkEmailAvailability, registerMember, resendVerificationEmail } from '@/api/auth.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 
@@ -46,6 +46,30 @@ function startResendCooldown() {
 }
 
 onUnmounted(() => clearInterval(resendTimer))
+
+// 使用者可能在這頁開著（顯示重寄倒數）的同時，另開一個分頁點驗證信連結完成驗證——
+// 監聽同一個 BroadcastChannel，Email 正規化後跟這頁「剛註冊的信箱」相符才更新畫面，
+// 避免誤把別的帳號的驗證結果套用到這裡
+const verifiedElsewhere = ref(false)
+let verificationChannel = null
+
+function normalizeEmail(value) {
+  return (value || '').trim().toLowerCase()
+}
+
+onMounted(() => {
+  if (typeof BroadcastChannel === 'undefined') return
+  verificationChannel = new BroadcastChannel('email-verification')
+  verificationChannel.onmessage = (event) => {
+    const verifiedEmail = event.data?.email
+    if (!verifiedEmail || !registeredEmail.value) return
+    if (normalizeEmail(verifiedEmail) !== normalizeEmail(registeredEmail.value)) return
+    verifiedElsewhere.value = true
+    clearInterval(resendTimer)
+  }
+})
+
+onUnmounted(() => verificationChannel?.close())
 
 const resendCooldownLabel = computed(() => {
   const m = Math.floor(resendCooldown.value / 60)
@@ -169,27 +193,33 @@ async function confirmAndRegister() {
   <main class="auth-page">
     <section class="auth-card">
       <template v-if="registeredEmail">
-        <h1 class="auth-card__title">註冊成功</h1>
-        <OperationMessage
-          :message="`我們已寄出驗證信到 ${registeredEmail}，請查收並完成驗證後即可登入。`"
-          tone="success"
-        />
+        <h1 class="auth-card__title">{{ verifiedElsewhere ? 'Email 驗證完成' : '註冊成功' }}</h1>
 
-        <OperationMessage :message="resendMessage" tone="info" />
-        <button
-          class="btn btn-accent btn-block resend-btn"
-          type="button"
-          :disabled="resendCooldown > 0 || resending"
-          @click="onResend"
-        >
-          {{
-            resending
-              ? '寄送中…'
-              : resendCooldown > 0
-                ? `重新寄送驗證信（${resendCooldownLabel}）`
-                : '重新寄送驗證信'
-          }}
-        </button>
+        <template v-if="verifiedElsewhere">
+          <OperationMessage message="Email 驗證完成，請前往登入。" tone="success" />
+        </template>
+        <template v-else>
+          <OperationMessage
+            :message="`我們已寄出驗證信到 ${registeredEmail}，請查收並完成驗證後即可登入。`"
+            tone="success"
+          />
+
+          <OperationMessage :message="resendMessage" tone="info" />
+          <button
+            class="btn btn-accent btn-block resend-btn"
+            type="button"
+            :disabled="resendCooldown > 0 || resending"
+            @click="onResend"
+          >
+            {{
+              resending
+                ? '寄送中…'
+                : resendCooldown > 0
+                  ? `重新寄送驗證信（${resendCooldownLabel}）`
+                  : '重新寄送驗證信'
+            }}
+          </button>
+        </template>
 
         <div class="auth-card__links">
           <RouterLink to="/login">前往登入</RouterLink>

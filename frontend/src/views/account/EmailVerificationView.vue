@@ -20,6 +20,15 @@ const PURPOSE_TEXT = {
   REACTIVATION: '您的帳號已重新啟用，現在可以登入了。',
 }
 
+// 驗證這個動作常常發生在另一個分頁（使用者從信箱點連結開啟），廣播出去讓還開著的
+// 註冊成功分頁（RegisterView 的重寄倒數畫面）能即時知道已經驗證完成，不必使用者手動切換分頁確認
+function broadcastVerified(email, purpose) {
+  if (typeof BroadcastChannel === 'undefined' || !email) return
+  const channel = new BroadcastChannel('email-verification')
+  channel.postMessage({ email, purpose })
+  channel.close()
+}
+
 onMounted(async () => {
   const token = route.query.token
   if (!token || typeof token !== 'string') {
@@ -30,6 +39,7 @@ onMounted(async () => {
     const { data } = await verifyEmail(token)
     purpose.value = data.purpose
     status.value = 'success'
+    broadcastVerified(data.email, data.purpose)
   } catch (e) {
     errorMessage.value = e.message
     status.value = 'error'
