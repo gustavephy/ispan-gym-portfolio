@@ -148,7 +148,8 @@ async function openEdit(memberId) {
     quotasLoading.value = true
     try {
       const quotaRes = await getMemberQuotas(memberId)
-      memberQuotas.value = quotaRes.data.items
+      // 後端回傳 List（不分頁），trainer 是巢狀物件（可能為 null）
+      memberQuotas.value = quotaRes.data
     } catch (quotaError) {
       // 額度查詢失敗只記錄，不影響會員資料編輯功能本身
       console.error('查詢會員額度失敗', quotaError)
@@ -441,18 +442,16 @@ onMounted(fetchMembers)
                 <th>預約中</th>
                 <th>已用</th>
                 <th>到期日</th>
-                <th>狀態</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="q in memberQuotas" :key="q.id">
                 <td>{{ q.courseName }}</td>
-                <td>{{ q.trainerName }}</td>
+                <td>{{ q.trainer ? `${q.trainer.lastName ?? ''}${q.trainer.firstName ?? ''}` : '—' }}</td>
                 <td>{{ q.remainingCourse }}</td>
                 <td>{{ q.reservedCourse }}</td>
                 <td>{{ q.usedCourse }}</td>
-                <td>{{ formatDateTime(q.expiryDate) }}</td>
-                <td>{{ q.status }}</td>
+                <td>{{ q.expiryDate ? formatDateTime(q.expiryDate) : '無期限' }}</td>
               </tr>
             </tbody>
           </table>

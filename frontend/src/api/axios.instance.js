@@ -72,7 +72,10 @@ api.interceptors.response.use(
     const skipAuthRedirect = error.config?.skipAuthRedirect === true
 
     // 401：token 過期或未登入。匿名端點的 401 屬於「帳密錯誤」「token 無效」之類的
-    // 正常結果，交給呼叫端自己顯示，不可清 token 也不該導向登入頁。
+    // 正常結果，交給呼叫端自己顯示，不可清 token 也不該導向登入頁，用 skipAuthRedirect 聲明。
+    // skipGlobal 只代表「不要跳全域錯誤提示」，跟登入狀態無關——即使呼叫端自己處理錯誤顯示
+    // （例如首頁選填 API），token 真的過期時仍要清掉，不然使用者會帶著死掉的 token 卡住，
+    // 直到剛好打到一支沒設 skipGlobal 的 API 才會被登出。
     if (apiError.status === 401 && !skipAuthRedirect) {
       try {
         useAuthStore().logout()

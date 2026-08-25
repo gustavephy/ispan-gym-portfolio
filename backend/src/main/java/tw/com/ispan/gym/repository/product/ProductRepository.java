@@ -34,7 +34,9 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
            "AND (:flavor IS NULL OR p.flavor = :flavor) " +
            "AND (:size IS NULL OR p.size = :size) " +
            "AND (:minPrice IS NULL OR p.price >= :minPrice) " +
-           "AND (:maxPrice IS NULL OR p.price <= :maxPrice)")
+           "AND (:maxPrice IS NULL OR p.price <= :maxPrice) " +
+           "AND (:minWeight IS NULL OR p.weight >= :minWeight) " +
+           "AND (:maxWeight IS NULL OR p.weight <= :maxWeight)")
     Page<Product> findProductsWithFilters(
     	@Param("status") ProductStatus status,
     	@Param("categoryId") Integer categoryId,
@@ -44,6 +46,8 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
     	@Param("size") String size,
     	@Param("minPrice") BigDecimal minPrice,
     	@Param("maxPrice") BigDecimal maxPrice,
+    	@Param("minWeight") Double minWeight,
+    	@Param("maxWeight") Double maxWeight,
     	Pageable pageable);
 
     /** 原子扣庫存；stock 不足時不更新（回傳 0），由呼叫端轉為業務例外 */

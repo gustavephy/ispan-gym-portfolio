@@ -2,60 +2,65 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
   getProductCategories,
-  getCourseCategories,
   getProducts,
-  getTrainerCoursesPublic,
   getProductById,
   getProductComments,
   submitProductComment,
-} from '@/api/product.js'
+} from '@/api/product/product.js'
 
 /**
  * 商品／課程瀏覽相關資料的 store。
- * 各 load 動作失敗時不在這裡攔截——axios 攔截器已統一發出全域錯誤事件，
- * 呼叫端如需額外處理（例如顯示區塊內的錯誤狀態）再自行 catch。
  */
 export const useProductsStore = defineStore('products', () => {
   const categories = ref([])
-  const courseCategories = ref([])
   const products = ref([])
   const totalElements = ref(0)
   const totalPages = ref(0)
   const currentProduct = ref(null)
   const comments = ref([])
-  const trainerCourses = ref([])
   const loading = ref(false)
 
   //載入商品分類
   async function loadCategories() {
-    const res = await getProductCategories()
-    categories.value = res.data
+    try {
+      const res = await getProductCategories()
+      categories.value = (res.data || []).map(cat => ({
+        ...cat,
+        id: cat.productCategoryId || cat.id
+      }))
+    } catch (e) { throw e; }
   }
 
-  //載入課程分類
-  async function loadCourseCategories() {
-    const res = await getCourseCategories()
-    courseCategories.value = res.data
-  }
-
-  //載入商品列表，params 直接透傳給後端（分類、關鍵字、分頁等）
-  //後端回傳 Spring Data Page（{ content, totalElements, totalPages, ... }），這裡拆開存
+  //載入商品列表
   async function loadProducts(params) {
     loading.value = true
     try {
-      const res = await getProducts(params)
-      products.value = res.data.content
-      totalElements.value = res.data.totalElements
-      totalPages.value = res.data.totalPages
+      const queryParams = {
+        page: params.page ?? 0,
+        size: params.size ?? 12,
+        productCategoryId: params.productCategoryId || undefined,
+        keyword: params.keyword || undefined,
+        brand: params.brand || undefined,
+        flavor: params.flavor || undefined,
+        productSize: params.productSize || undefined,
+        minPrice: params.minPrice ?? undefined,
+        maxPrice: params.maxPrice ?? undefined,
+        minWeight: params.minWeight ?? undefined,
+        maxWeight: params.maxWeight ?? undefined,
+        sort: params.sort || undefined,
+      }
+      const res = await getProducts(queryParams)
+      products.value = res.data.content || []
+      totalPages.value = res.data.totalPages || 1
+      totalElements.value = res.data.totalElements || 0
+    } catch (e) {
+      products.value = []
+      totalPages.value = 1
+      totalElements.value = 0
+      throw e;
     } finally {
       loading.value = false
     }
-  }
-
-  //載入公開的教練課程列表
-  async function loadTrainerCourses() {
-    const res = await getTrainerCoursesPublic()
-    trainerCourses.value = res.data
   }
 
   //載入單一商品明細與留言
@@ -68,42 +73,60 @@ export const useProductsStore = defineStore('products', () => {
     loading.value = true
     try {
       const res = await getProductById(id)
-      currentProduct.value = res.data
-      try {
-        const commentRes = await getProductComments(id)
-        comments.value = commentRes.data
-      } catch {
-        comments.value = []
-      }
+      currentProduct.value = res.data ? {
+        ...res.data,
+        id: res.data.productId || res.data.id
+      } : null
+      // 暫時關閉留言功能以避免後端未開發留言 API 導致 404 報錯
+      // try {
+      //   const commentRes = await getProductComments(id)
+      //   comments.value = commentRes.data || []
+      // } catch (err) {
+      //   comments.value = []
+      // }
+      comments.value = []
+    } catch (e) {
+      currentProduct.value = null
+      throw e;
     } finally {
       loading.value = false
     }
   }
 
-  //送出商品留言後重新載入該商品的留言列表
-  async function submitComment(commentData) {
-    await submitProductComment(commentData)
-    if (commentData.productId != null) {
-      const res = await getProductComments(commentData.productId)
-      comments.value = res.data
+  // 載入商品評論
+  async function loadComments(productId) {
+    try {
+      const res = await getProductComments(productId)
+      comments.value = res.data || []
+    } catch (e) {
+      comments.value = []
+      throw e;
+    }
+  }
+
+  // 送出商品評論
+  async function submitComment(productId, commentData) {
+    try {
+      await submitProductComment({ productId, ...commentData })
+      await loadComments(productId)
+      return { success: true }
+    } catch (e) {
+      throw e;
     }
   }
 
   return {
     categories,
-    courseCategories,
     products,
     totalElements,
     totalPages,
     currentProduct,
     comments,
-    trainerCourses,
     loading,
     loadCategories,
-    loadCourseCategories,
     loadProducts,
-    loadTrainerCourses,
     loadProductDetail,
     submitComment,
+    loadComments
   }
 })

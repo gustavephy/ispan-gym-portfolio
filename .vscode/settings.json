@@ -2,5 +2,6 @@
   // 專案原始碼一律以 UTF-8 存檔。若編輯器沿用系統預設編碼（繁中 Windows 為 Big5），
   // 含中文的字串會被存成無效位元組，之後只能重打。
   "files.encoding": "utf8",
-  "files.autoGuessEncoding": false
+  "files.autoGuessEncoding": false,
+  "java.debug.settings.onBuildFailureProceed": true
 }

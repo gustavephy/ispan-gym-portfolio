@@ -1,0 +1,129 @@
+/**
+ * card.css — 卡片元件共用樣式
+ * 供 ProductCard.vue、CourseCard.vue 使用
+ */
+
+.item-card {
+  width: 260px;
+  min-width: 260px;
+  max-width: 260px;
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.78rem;
+}
+.item-card:hover {
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-4px);
+  border-color: var(--border-green);
+}
+
+/* 封面區 */
+.item-cover {
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.item-cover .cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.item-cover .item-icon {
+  font-size: 3.5rem;
+}
+
+/* 類型標籤 */
+.item-cover .type-badge {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.7rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.2rem 0.55rem;
+  border-radius: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+.type-badge.badge-private  { background: #fef3c7; color: #92400e; }
+.type-badge.badge-group    { background: #dbeafe; color: #1e40af; }
+.type-badge.badge-product  { background: rgba(255, 255, 255, 0.85); color: var(--primary-dark); }
+
+/* 資訊區 */
+.item-info {
+  padding: 0.85rem 1rem 1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.item-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.item-desc {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  height: calc(0.72rem * 1.55 * 2);
+  min-height: calc(0.72rem * 1.55 * 2);
+  max-height: calc(0.72rem * 1.55 * 2);
+  line-height: 1.55;
+}
+
+/* 底部：價格 + 按鈕 */
+.item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.4rem;
+}
+.item-footer .price {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+.item-footer .price.subscribed {
+  color: var(--primary-dark);
+}
+.item-footer .stock-warn  { font-size: 0.65rem; color: #d97706; margin-left: 0.3rem; }
+.item-footer .stock-empty { font-size: 0.65rem; color: var(--text-muted); margin-left: 0.3rem; }
+
+/* 行動按鈕 */
+.action-btn {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-main);
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.action-btn:hover    { background: var(--primary-dark); }
+.action-btn:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+.action-btn.sub-btn  { background: var(--accent); }
+.action-btn.sub-btn:hover { background: var(--primary-dark) !important; }
+
+/* 課程專用輔助樣式 */
+.title-trainer  { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; margin-left: 0.25rem; }
+.sessions-badge { font-size: 0.72rem; color: var(--accent); margin-left: 0.25rem; font-weight: 700; }

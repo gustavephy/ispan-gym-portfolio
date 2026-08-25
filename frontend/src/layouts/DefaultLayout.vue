@@ -1,6 +1,19 @@
 <script setup>
-    import { RouterView } from 'vue-router'
-    import NavBar from '@/components/NavBar.vue'
+import { ref, provide } from 'vue'
+import { RouterView } from 'vue-router'
+import NavBar from '@/components/NavBar.vue'
+import FeedbackToast from '@/components/FeedbackToast.vue'
+
+const toast = ref(null)
+let toastTimer = null
+
+function showToast(text, type = 'success') {
+  if (toastTimer) clearTimeout(toastTimer)
+  toast.value = { text, type }
+  toastTimer = setTimeout(() => { toast.value = null }, 3000)
+}
+
+provide('showToast', showToast)
 </script>
 
 <template>
@@ -13,6 +26,7 @@
         </Transition>
       </RouterView>
     </main>
+    <FeedbackToast :feedback="toast" />
   </div>
 </template>
 <style scoped>

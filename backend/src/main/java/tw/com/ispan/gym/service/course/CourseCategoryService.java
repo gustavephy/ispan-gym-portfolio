@@ -4,17 +4,19 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
-
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.course.CourseCategoryDto;
 import tw.com.ispan.gym.entity.course.CourseCategory;
 import tw.com.ispan.gym.enums.common.CategoryStatus;
+import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.course.CourseCategoryRepository;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional(readOnly = true)
 public class CourseCategoryService {
 	private final CourseCategoryRepository courseCategoryRepository;
 
@@ -30,6 +32,7 @@ public class CourseCategoryService {
 	}
 
 	// 新增課程分類
+	@Transactional
 	public CourseCategoryDto createCourseCategory(CourseCategoryDto dto) {
 		log.info("Creating new course category: name={}", dto);
 		CategoryStatus status = dto.status() != null ? dto.status() : CategoryStatus.ACTIVE;
@@ -43,10 +46,11 @@ public class CourseCategoryService {
 	}
 
 	// 更新課程分類
+	@Transactional
 	public CourseCategoryDto updateCourseCategory(Integer id, CourseCategoryDto dto) {
 		log.info("Updating course category with id={},name={}", id, dto.name());
 		CourseCategory cat = courseCategoryRepository.findById(id)
-				.orElseThrow(() -> new RuntimeException("找不到課程分類" + id));
+				.orElseThrow(() -> new ResourceNotFoundException("課程分類不存在"));
 
 		if (dto.name() != null) {
 			cat.setName(dto.name());
@@ -62,6 +66,7 @@ public class CourseCategoryService {
 	}
 
 	// 刪除課程分類
+	@Transactional
 	public void deleteCourseCategory(Integer id) {
 		log.info("Deleting course category with id={}", id);
 		courseCategoryRepository.deleteById(id);

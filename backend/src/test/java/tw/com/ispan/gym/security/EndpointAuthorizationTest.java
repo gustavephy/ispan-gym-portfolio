@@ -41,7 +41,6 @@ import tw.com.ispan.gym.service.cart.CartService;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
 import tw.com.ispan.gym.service.coach.GroupClassService;
-import tw.com.ispan.gym.service.coach.MemberCourseQuotaService;
 import tw.com.ispan.gym.service.coupon.EmployeeCouponService;
 import tw.com.ispan.gym.service.employee.AdminEmployeeService;
 import tw.com.ispan.gym.service.employee.EmployeeProfileService;
@@ -109,11 +108,11 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.coach.AdminGroupClassController.class,
         tw.com.ispan.gym.controller.coach.CoachSlotController.class,
         tw.com.ispan.gym.controller.coach.GroupClassController.class,
-        tw.com.ispan.gym.controller.coach.MemberCourseQuotaController.class,
+        tw.com.ispan.gym.controller.coach.CoachBookingController.class,
         tw.com.ispan.gym.controller.employee.EmployeeReviewController.class,
         tw.com.ispan.gym.controller.employee.AdminEmployeeController.class,
         tw.com.ispan.gym.controller.employee.EmployeeProfileController.class,
-        tw.com.ispan.gym.controller.coupon.EmployeeCouponController.class,
+        tw.com.ispan.gym.controller.coupon.AdminCouponController.class,
         tw.com.ispan.gym.controller.member.AdminMemberController.class,
         tw.com.ispan.gym.controller.member.MemberProfileController.class,
         tw.com.ispan.gym.controller.product.ProductController.class,
@@ -189,9 +188,6 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary CoachBookingService coachBookingService() {
             return Mockito.mock(CoachBookingService.class);
-        }
-        @Bean @Primary MemberCourseQuotaService memberCourseQuotaService() {
-            return Mockito.mock(MemberCourseQuotaService.class);
         }
         @Bean @Primary EmployeeReviewService employeeReviewService() {
             return Mockito.mock(EmployeeReviewService.class);
@@ -537,16 +533,18 @@ class EndpointAuthorizationTest {
     }
 
     @Test
-    void 優惠券管理需員工身分() throws Exception {
-        expectUnauthorizedWhenAnonymous(get("/api/employee/coupons"));
-        expectForbidden(get("/api/employee/coupons"), memberToken());
-        expectAuthorized(get("/api/employee/coupons"), employeeToken());
+    void 優惠券管理需管理員身分() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/coupons"));
+        expectForbidden(get("/api/admin/coupons"), memberToken());
+        expectForbidden(get("/api/admin/coupons"), employeeToken());
+        expectAuthorized(get("/api/admin/coupons"), adminToken());
     }
 
     @Test
-    void 群發優惠券需員工身分() throws Exception {
-        expectForbidden(post("/api/employee/coupons/1/distribute-all"), memberToken());
-        expectAuthorized(post("/api/employee/coupons/1/distribute-all"), employeeToken());
+    void 群發優惠券需管理員身分() throws Exception {
+        expectForbidden(post("/api/admin/coupons/1/distribute-all"), memberToken());
+        expectForbidden(post("/api/admin/coupons/1/distribute-all"), employeeToken());
+        expectAuthorized(post("/api/admin/coupons/1/distribute-all"), adminToken());
     }
 
     // === TRAINER：教練排班 =====================================================
@@ -716,10 +714,10 @@ class EndpointAuthorizationTest {
 
     @Test
     void 查詢自己課程額度僅限會員() throws Exception {
-        expectUnauthorizedWhenAnonymous(get("/api/member/course-quotas"));
-        expectForbidden(get("/api/member/course-quotas"), employeeToken());
-        expectForbidden(get("/api/member/course-quotas"), adminToken());
-        expectAuthorized(get("/api/member/course-quotas"), memberToken());
+        expectUnauthorizedWhenAnonymous(get("/api/member/quotas"));
+        expectForbidden(get("/api/member/quotas"), employeeToken());
+        expectForbidden(get("/api/member/quotas"), adminToken());
+        expectAuthorized(get("/api/member/quotas"), memberToken());
     }
 
     // === ADMIN：員工管理（僅驗 URL 層，方法層 @PreAuthorize 由 AdminEmployeeMethodSecurityTest 負責）====

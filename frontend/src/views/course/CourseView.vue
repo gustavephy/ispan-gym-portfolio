@@ -1,63 +1,119 @@
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { RouterLink } from 'vue-router'
-import { getActiveCourses } from '@/api/groupClass.js'
-import { notifyApiError } from '@/api/error-bus.js'
-import Pagination from '@/components/Pagination.vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useCoursesStore } from '@/stores/courses.js'
+import { useCartStore } from '@/stores/cart.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { useRoute } from 'vue-router'
+import { useFeedback } from '@/composables/useFeedback.js'
+import FeedbackToast from '@/components/FeedbackToast.vue'
+import CourseCard from '@/components/CourseCard.vue'
+import CourseSearchBar from '@/components/CourseSearchBar.vue'
 
-const courses = ref([])
-const loading = ref(true)
-// 純瀏覽頁，載入失敗沒有「就地顯示在按鈕旁」的情境，改用全域錯誤條 + 頁面內簡短狀態雙軌呈現，
-// 讓使用者知道「不是沒有資料，是讀取失敗」，並提供重新整理的入口
-const loadError = ref(false)
+const coursesStore = useCoursesStore()
+const cartStore = useCartStore()
+const authStore = useAuthStore()
+const route = useRoute()
 
-// 分頁與搜尋狀態
-const page = ref(0)
-const size = ref(10)
-const search = ref('')
-const totalItems = ref(0)
-const totalPages = ref(0)
+const { 
+  loading,
+  displayedCourses: coursesList,
+  courseTotalPages: totalPages,
+  courseTotalElements: totalPrivateCoursesCount,
+  currentPageNum
+} = storeToRefs(coursesStore)
+
+// 為了相容 HTML 範本原本讀取的 courses 變數名稱
+const courses = computed(() => coursesList.value || [])
+const displayedCoursesList = computed(() => coursesList.value || [])
+
+const { feedback, showFeedback } = useFeedback()
+
+// 分頁大小控制，串接至 Pinia 的 totalSize
+const coursesListPageSize = ref(8)
+watch(coursesListPageSize, (newVal) => {
+  coursesStore.loadCourses({ page: 0, size: newVal })
+})
+
+// 計算當前分頁值，對應至 currentPageNum (由 0 開始)
+const currentPage = computed({
+  get: () => currentPageNum.value + 1,
+  set: (val) => {
+    currentPageNum.value = val - 1
+  }
+})
+
+// 搜尋與篩選狀態
+const searchParams = ref({ keyword: '', trainerId: '', categoryId: '' })
 let searchDebounceTimer = null
 
 async function fetchCourses() {
-  loading.value = true
-  loadError.value = false
+  coursesStore.searchQuery = searchParams.value.keyword || ''
+  await coursesStore.loadCourses({
+    keyword: searchParams.value.keyword,
+    trainerId: searchParams.value.trainerId || null,
+    categoryId: searchParams.value.categoryId || null,
+    page: currentPageNum.value,
+    size: coursesListPageSize.value
+  })
+}
+
+// 搜尋條件變動時自動觸發
+watch(searchParams, () => {
+  clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    currentPageNum.value = 0
+    fetchCourses()
+  }, 400)
+}, { deep: true })
+
+// 監聽頁碼切換
+watch(currentPageNum, () => {
+  fetchCourses()
+})
+
+function onSearch(params) {
+  searchParams.value = params
+}
+
+async function handleAddToCart(course) {
+  if (!authStore.isLoggedIn) {
+    showFeedback('請先登入會員以進行課程購買', 'error')
+    return
+  }
+  const idVal = course.privateCourseId || course.id
+  // 呼叫 coursesStore 的金流直接購買流程
+  await coursesStore.purchaseCourse(idVal, (msg, type) => {
+    showFeedback(msg, type === 'error' ? 'error' : 'success')
+  })
+}
+
+// 體驗會籍狀態
+const hasActiveSubscription = ref(false)
+
+// 載入會籍狀態
+async function checkMemberSubscription() {
+  if (!authStore.isLoggedIn) {
+    hasActiveSubscription.value = false
+    return
+  }
   try {
-    const res = await getActiveCourses({ page: page.value, size: size.value, search: search.value })
-    courses.value = res.data.items
-    totalItems.value = res.data.totalItems
-    totalPages.value = res.data.totalPages
+    const api = (await import('@/api/axios.instance.js')).default
+    const res = await api.get('/api/me/subscription')
+    if (res.data) {
+      // 判斷是否為 ACTIVE 且未過期
+      hasActiveSubscription.value = res.data.isActive === true || res.data.status === 'ACTIVE'
+    }
   } catch (err) {
-    loadError.value = true
-    notifyApiError(err)
-  } finally {
-    loading.value = false
+    // 404 或其他錯誤代表沒有訂閱紀錄
+    hasActiveSubscription.value = false
   }
 }
 
-// 搜尋字串變動時 debounce 400ms 才觸發查詢；換了搜尋條件代表結果集變了，
-// page 一律重設為 0，避免卡在一個搜尋後根本不存在的頁碼（寫法比照 AdminGroupCourseView.vue）
-watch(search, () => {
-  clearTimeout(searchDebounceTimer)
-  searchDebounceTimer = setTimeout(() => {
-    page.value = 0
-    fetchCourses()
-  }, 400)
-})
-
-function handlePageChange(newPage) {
-  page.value = newPage
-  fetchCourses()
-}
-
-function handleSizeChange(newSize) {
-  size.value = newSize
-  page.value = 0
-  fetchCourses()
-}
-
-onMounted(() => {
-  fetchCourses()
+onMounted(async () => {
+  await checkMemberSubscription()
+  await coursesStore.loadCategories()
+  await fetchCourses()
 })
 
 onUnmounted(() => {
@@ -67,132 +123,226 @@ onUnmounted(() => {
 
 <template>
   <div class="page-container">
-    <span class="section-tag">COURSES</span>
-    <h2 class="section-title">團體課程介紹</h2>
-    <p class="section-desc">瀏覽目前開放中的團體課程，選定喜歡的課程後即可前往查看場次並報名。</p>
-
-    <div class="search-field">
-      <input id="courseSearch" v-model="search" type="text" placeholder="搜尋課程名稱或教練姓名" />
+    <!-- 頁面標題 -->
+    <div class="section-header">
+      <span class="section-tag">COURSES</span>
+      <h2 class="section-title">專業健身與教練課程</h2>
+      <p class="section-desc">我們提供一對一私人教練客製化課程以及各類精緻小班課程，陪伴您安全、有效地達成健康與體態目標。</p>
     </div>
 
-    <div v-if="loading" class="spinner"></div>
+    <CourseSearchBar
+      v-model="searchParams"
+      :show-keyword="true"
+      :show-trainer="true"
+      :show-category="true"
+      :show-type="false"
+      @search="onSearch"
+    />
 
-    <template v-else-if="loadError">
-      <p class="empty-state">課程資料載入失敗，請稍後再試。</p>
-      <button class="btn btn-outline" type="button" @click="fetchCourses">重新整理</button>
-    </template>
-
-    <template v-else>
-      <p v-if="courses.length === 0" class="empty-state">目前沒有開放中的團課</p>
-
-      <div v-else class="course-grid">
-        <div v-for="course in courses" :key="course.id" class="course-card">
-          <div class="course-card-header">
-            <h3 class="course-name">{{ course.name }}</h3>
-            <span v-if="course.isTrial" class="status-badge status-trial">體驗課</span>
+    <!-- 上架的付費課程包 -->
+    <div class="purchasable-section">
+      <div class="purchasable-header-row">
+        <div>
+          <h3 class="sub-title">線上購買課程方案</h3>
+          <p class="sub-desc">
+            購買後，您將獲得可用課堂數額度，即可直接預約專屬教練。
+          </p>
+        </div>
+        <!-- 控制列：方案顯示數量 -->
+        <div class="list-control-header bg-none">
+          <span class="total-count-text">共 {{ totalPrivateCoursesCount }} 個方案</span>
+          <div class="page-size-selector">
+            <label for="coursesListPageSize">顯示數量：</label>
+            <select id="coursesListPageSize" v-model.number="coursesListPageSize" class="select-sm">
+              <option :value="4">4 個</option>
+              <option :value="8">8 個</option>
+              <option :value="12">12 個</option>
+              <option :value="16">16 個</option>
+              <option :value="32">32 個</option>
+            </select>
           </div>
-          <p class="course-trainer">教練：{{ course.trainerName }}</p>
-          <p class="course-description">{{ course.description || '暫無課程簡介' }}</p>
-          <p class="course-capacity">最多 {{ course.maxCapacity }} 人</p>
-          <RouterLink class="btn btn-accent course-link" to="/group-classes">查看時段並報名</RouterLink>
         </div>
       </div>
 
-      <Pagination
-        :page="page"
-        :total-pages="totalPages"
-        :size="size"
-        @update:page="handlePageChange"
-        @update:size="handleSizeChange"
-      />
-    </template>
+      <div v-if="loading" class="spinner"></div>
+      <div v-else-if="coursesList.length === 0" class="empty-state">
+        <p>目前尚無上架的課程方案，請聯絡管理員。</p>
+      </div>
+
+      <div v-else>
+        <div class="product-grid">
+          <div
+            v-for="p in displayedCoursesList"
+            :key="p.id"
+            :id="'product-card-' + p.id"
+            :class="{ 'highlight-flash-card': Number(route.query.productId) === p.id }"
+            class="product-card-wrap"
+          >
+            <CourseCard
+              :course="p"
+              :has-active-subscription="hasActiveSubscription"
+              @purchase="handleAddToCart"
+            />
+          </div>
+        </div>
+
+        <!-- 分頁頁碼 -->
+        <div class="pagination" v-if="totalPages > 1" style="margin-bottom: 4rem;">
+          <button class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
+          <button
+            v-for="n in totalPages"
+            :key="n"
+            :class="['page-btn', { active: currentPage === n }]"
+            @click="currentPage = n"
+          >
+            {{ n }}
+          </button>
+          <button class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
+        </div>
+      </div>
+    </div>
+    <FeedbackToast :feedback="feedback" />
   </div>
 </template>
 
 <style scoped>
-.course-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1.25rem;
-}
-
-.course-card {
-  display: flex;
-  flex-direction: column;
-  padding: 1.5rem;
-  background: var(--bg-section);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.course-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.course-name {
-  margin: 0;
-  font-size: 1.05rem;
-  color: var(--text-primary);
-}
-
-.course-trainer {
-  margin: 0 0 0.5rem;
-  font-size: 0.9rem;
+.sub-title {
+  font-size: 1.4rem;
   font-weight: 700;
-  color: var(--accent-hover);
+  color: var(--primary-dark);
 }
-
-.course-description {
-  margin: 0 0 0.75rem;
-  font-size: 0.9rem;
+.sub-desc {
+  margin-bottom: 1.5rem;
   color: var(--text-secondary);
-  flex: 1;
+  font-size: 0.9rem;
 }
-
-.course-capacity {
-  margin: 0 0 1.25rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.course-link {
-  align-self: flex-start;
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.status-trial {
-  background: #e3ecf5;
-  color: #38618c;
-}
-
-.empty-state {
-  color: var(--text-muted);
-  padding: 2rem 0;
-}
-
-.search-field {
-  margin-bottom: 1rem;
-}
-
-.search-field input {
+.product-card-wrap {
   width: 100%;
-  max-width: 320px;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font: inherit;
+  transition: var(--transition);
+}
+.empty-state { text-align: center; padding: 4rem 0; color: var(--text-secondary); }
+
+@keyframes border-flash {
+  0%, 100% { box-shadow: 0 0 0 2px var(--primary); transform: scale(1.01); }
+  50% { box-shadow: 0 0 0 8px rgba(188, 163, 143, 0.45); transform: scale(1.03); }
+}
+.highlight-flash-card {
+  animation: border-flash 1.5s ease-in-out 3;
+  border-radius: var(--radius-lg);
+  display: inline-block;
+  width: 100%;
+}
+
+.list-control-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-section, #f8fafc);
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border, #e2e8f0);
+}
+
+.list-control-header.bg-none {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 0;
+}
+
+.total-count-text {
+  font-size: 0.88rem;
+  color: var(--text-secondary, #64748b);
+  font-weight: 600;
+}
+
+.page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--text-secondary, #64748b);
+}
+
+.select-sm {
+  padding: 0.3rem 1.5rem 0.3rem 0.6rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--border, #e2e8f0);
+  background-color: var(--bg-card, #ffffff);
   color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  background-size: 0.8rem;
+}
+
+.select-sm:focus {
+  border-color: var(--primary);
+}
+
+.purchasable-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  padding-bottom: 0.75rem;
+}
+
+.purchasable-header-row .sub-desc {
+  margin-bottom: 0;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 260px));
+  gap: 1.5rem;
+  justify-content: start;
+}
+
+/* 分頁按鈕樣式 */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 2rem;
+}
+.page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--border, #e2e8f0);
+  background-color: var(--bg-card, #ffffff);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.page-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background-color: var(--bg-section);
+}
+.page-btn.active {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>

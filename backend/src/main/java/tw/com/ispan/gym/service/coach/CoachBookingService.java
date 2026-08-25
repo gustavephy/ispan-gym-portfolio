@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
+import tw.com.ispan.gym.dto.coach.MemberCourseQuotaResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.coach.CoachBooking;
 import tw.com.ispan.gym.entity.coach.CoachSlot;
@@ -452,5 +453,30 @@ public class CoachBookingService {
                                 .toList();
 
                 return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
+        }
+
+        @Transactional(readOnly = true)
+        public List<MemberCourseQuotaResponse> getMyQuotas(Integer memberId) {
+                List<MemberCourseQuota> quotas = memberCourseQuotaRepository.findByMemberId(memberId);
+                return quotas.stream().map(q -> {
+                        MemberCourseQuotaResponse.TrainerInfo trainerInfo = null;
+                        if (q.getTrainer() != null) {
+                                trainerInfo = new MemberCourseQuotaResponse.TrainerInfo(
+                                        q.getTrainer().getId(),
+                                        q.getTrainer().getFirstName(),
+                                        q.getTrainer().getLastName()
+                                );
+                        }
+                        return new MemberCourseQuotaResponse(
+                                q.getId(),
+                                q.getCourseName(),
+                                q.getRemainingCourse(),
+                                q.getReservedCourse(),
+                                q.getUsedCourse(),
+                                q.getExpiryDate(),
+                                q.getCourseId(),
+                                trainerInfo
+                        );
+                }).collect(Collectors.toList());
         }
 }
