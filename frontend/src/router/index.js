@@ -39,13 +39,38 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          path: 'coupons',
+          component: () => import('@/views/member/MemberCouponView.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
+          path: 'member/courses',
+          component: () => import('@/views/member/MemberCourseView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
+        },
+        {
           path: 'trainer/schedules',
           component: () => import('@/views/trainer/TrainerScheduleView.vue'),
           meta: { requiresAuth: true, requiresRole: 'TRAINER' },
         },
         {
-          path: 'admin/group-courses',
+          path: 'admin/courses',
           component: () => import('@/views/admin/AdminCourses.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
+          path: 'admin/coupons',
+          component: () => import('@/views/admin/AdminCoupons.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
+          path: 'admin/products',
+          component: () => import('@/views/admin/AdminProducts.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
+          path: 'admin/inventory',
+          component: () => import('@/views/admin/AdminInventory.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
@@ -99,9 +124,9 @@ const router = createRouter({
     },
     // 具名路由：401 攔截器會導向這裡，並以 query.redirect 記住原本要去的頁面
     {
-      path:'/login',
-      name:'login',
-      component:()=>import('@/views/account/LoginView.vue'),
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/account/LoginView.vue'),
       // 已登入者不需要看到登入頁：導向原目標（redirect query）或首頁。
       // token 過期的情況不在這裡驗證——之後任何 API 回 401 時，
       // 攔截器會清除登入狀態並導回登入頁，屆時本守衛自然放行。

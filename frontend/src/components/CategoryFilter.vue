@@ -22,7 +22,8 @@
         <span class="filter-bar-label">{{ label }}</span>
         <div class="filter-buttons">
             <button v-for="opt in options" :key="opt.value"
-            :class="['filter-tab-sm', { active: modelValue === opt.value}]">
+            :class="['filter-tab-sm', { active: modelValue === opt.value}]"
+            @click="$emit('update:modelValue', opt.value)">
                 {{ opt.label }}
             </button>
         </div>

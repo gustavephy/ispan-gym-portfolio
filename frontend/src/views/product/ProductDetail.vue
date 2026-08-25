@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useProductsStore } from '@/stores/products.js'
 import { useCartStore } from '@/stores/cart.js'
@@ -9,6 +9,7 @@ import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 
 const route = useRoute()
+const router = useRouter()
 const productsStore = useProductsStore()
 const cart = useCartStore()
 const auth = useAuthStore()
@@ -49,13 +50,13 @@ function decreaseQty() {
   if (qty.value > 1) qty.value--
 }
 
-// 加入成功後按鈕短暫顯示「已加入 ✓」，與 toast 同時結束（寫法比照 ProductView）
+// 加入成功後按鈕短暫顯示「已加入 ✓」，與 toast 同時結束
 const justAdded = ref(false)
 let justAddedTimer = null
 
 async function addToCart() {
   if (!auth.isLoggedIn) {
-    showFeedback('請先登入會員後再加入購物車', 'error')
+    router.push({ name: 'login', query: { redirect: `/products/${route.params.id}` } })
     return
   }
   const res = await cart.addItem(product.value.productId, qty.value)

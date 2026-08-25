@@ -44,7 +44,10 @@ export const useProductsStore = defineStore('products', () => {
         flavor: params.flavor || undefined,
         productSize: params.productSize || undefined,
         minPrice: params.minPrice ?? undefined,
-        maxPrice: params.maxPrice ?? undefined
+        maxPrice: params.maxPrice ?? undefined,
+        minWeight: params.minWeight ?? undefined,
+        maxWeight: params.maxWeight ?? undefined,
+        sort: params.sort || undefined,
       }
       const res = await getProducts(queryParams)
       products.value = res.data.content || []

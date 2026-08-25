@@ -1,44 +1,48 @@
 <template>
   <div class="page-container admin-dashboard">
-    <div class="page-header-row" style="display: flex; gap: 1rem;">
-      <button class="btn btn-primary" @click="showAddProduct = !showAddProduct">
+    <span class="section-tag">ADMIN</span>
+    <h1 class="section-title">商品管理</h1>
+    <p class="section-desc">管理補給商城的商品項目，包含新增、編輯商品資料與上下架操作。</p>
+
+    <div class="page-header-row" style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+      <button class="btn btn-primary btn-sm" @click="showAddProduct = !showAddProduct">
         <span>{{ showAddProduct ? '✕ 取消新增' : '＋ 新增商品' }}</span>
       </button>
-      <button class="btn btn-outline" @click="showCategoryManager = true">
+      <button class="btn btn-outline btn-sm" @click="showCategoryManager = true">
         <span>⚙ 管理商品分類</span>
       </button>
     </div>
 
     <!-- 新增商品表單 -->
     <Transition name="slide">
-      <div v-if="showAddProduct" class="card add-form-card">
-        <div class="form-header">
-          <h4>新增商品資料</h4>
-          <span class="form-helper">*所有欄位均為必填</span>
+      <AdminFormCard
+        v-if="showAddProduct"
+        title="新增商品資料"
+        helper="*所有欄位均為必填"
+        @submit="createProduct"
+      >
+        <div class="form-group">
+          <label class="form-label">商品名稱</label>
+          <input v-model="productForm.name" class="form-input" placeholder="例如: 智慧降噪水壺" required />
         </div>
-        <form @submit.prevent="createProduct">
-          <div class="form-grid-responsive">
-            <div class="form-group">
-              <label class="form-label">商品名稱</label>
-              <input v-model="productForm.name" class="form-input" placeholder="例如: 智慧降噪水壺" required />
-            </div>
-            <div class="form-group">
-              <label class="form-label">所屬分類</label>
-              <select v-model="productForm.productCategoryId" class="form-input" required>
-                <option :value="null" disabled selected>請選擇商品分類</option>
-                <option v-for="cat in goodsCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">定價售價 (NT$)</label>
-              <input v-model.number="productForm.price" type="number" class="form-input" min="1" placeholder="請輸入金額" required />
-            </div>
-            <div class="form-group">
-              <label class="form-label">目前庫存數量</label>
-              <input v-model.number="productForm.stock" type="number" class="form-input" min="0" placeholder="庫存數量" required />
-            </div>
-          </div>
-          <div class="form-group file-upload-group">
+        <div class="form-group">
+          <label class="form-label">所屬分類</label>
+          <select v-model="productForm.productCategoryId" class="form-input" required>
+            <option :value="null" disabled selected>請選擇商品分類</option>
+            <option v-for="cat in goodsCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">定價售價 (NT$)</label>
+          <input v-model.number="productForm.price" type="number" class="form-input" min="1" placeholder="請輸入金額" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">目前庫存數量</label>
+          <input v-model.number="productForm.stock" type="number" class="form-input" min="0" placeholder="庫存數量" required />
+        </div>
+
+        <template #extra>
+          <div class="form-group file-upload-group" style="width: 100%;">
             <label class="form-label">商品照片 <span style="color:#94a3b8;font-size:0.8em">（限 5MB 以內）</span></label>
             <div class="file-upload-wrapper">
               <label class="custom-file-btn">
@@ -51,15 +55,16 @@
             </div>
             <input v-model="productForm.imageUrl" class="form-input url-input" placeholder="或直接貼上外部圖片的 URL 網址..." />
           </div>
-          <div class="form-group" style="margin-top: 1rem;">
+          <div class="form-group" style="margin-top: 1rem; width: 100%;">
             <label class="form-label">詳細說明介紹</label>
             <textarea v-model="productForm.description" class="form-input" rows="3" placeholder="請填寫此項目的特色、規格或內容介紹..."></textarea>
           </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">確認發佈上架</button>
-          </div>
-        </form>
-      </div>
+        </template>
+
+        <template #actions>
+          <button type="submit" class="btn btn-primary">確認發佈上架</button>
+        </template>
+      </AdminFormCard>
     </Transition>
 
     <!-- 搜尋與篩選條件區 -->
@@ -95,35 +100,28 @@
         </div>
 
         <!-- 分頁頁碼 (Top) -->
-        <div class="pagination" v-if="totalPages > 1" style="margin: 0; display: flex; gap: 0.5rem;">
+        <div class="pagination" v-if="totalPages > 1" style="margin: 0;">
           <button type="button" class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
           <template v-for="n in visiblePages" :key="n">
-            <span v-if="n === '...'" class="page-ellipsis" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--text-secondary); font-size: 0.8rem;">...</span>
-            <button
-              v-else
-              type="button"
-              :class="['page-btn', { active: currentPage === n }]"
-              @click="currentPage = n"
-            >
-              {{ n }}
-            </button>
+            <span v-if="n === '...'" class="page-ellipsis">...</span>
+            <button v-else type="button" :class="['page-btn', { active: currentPage === n }]" @click="currentPage = n">{{ n }}</button>
           </template>
           <button type="button" class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
         </div>
       </div>
 
       <div class="product-table-wrap">
-      <table>
+      <table style="table-layout: fixed; width: 100%;">
         <thead>
           <tr>
-            <th class="hide-md">ID</th>
-            <th>商品圖片</th>
-            <th>商品名稱 & 說明</th>
-            <th class="hide-sm">所屬分類</th>
-            <th>定價金額</th>
-            <th>目前庫存</th>
-            <th class="hide-md">狀態</th>
-            <th>功能操作</th>
+            <th style="width: 60px;">ID</th>
+            <th style="width: 90px;">商品圖片</th>
+            <th style="width: 240px;">商品名稱 &amp; 說明</th>
+            <th style="width: 100px;">所屬分類</th>
+            <th style="width: 100px;">定價金額</th>
+            <th style="width: 80px;">目前庫存</th>
+            <th style="width: 90px;">狀態</th>
+            <th style="width: 120px;">功能操作</th>
           </tr>
         </thead>
         <tbody>
@@ -156,8 +154,8 @@
             </td>
             <td>
               <div class="action-buttons-wrap">
-                <button class="btn btn-edit edit-btn-style" @click="openEditModal(p)">編輯</button>
-                <button v-if="p.status === 1 || p.status === 'ACTIVE'" class="btn btn-danger deactive-btn-style" @click="deleteProduct(p.productId)">下架</button>
+                <button class="btn btn-edit edit-btn-style btn-sm" @click="openEditModal(p)">編輯</button>
+                <button v-if="p.status === 1 || p.status === 'ACTIVE'" class="btn btn-danger deactive-btn-style btn-sm" @click="deleteProduct(p.productId)">下架</button>
               </div>
             </td>
           </tr>
@@ -171,18 +169,11 @@
       </div><!-- /.product-table-wrap -->
 
       <!-- 分頁頁碼 (Bottom) -->
-      <div class="pagination" v-if="totalPages > 1" style="margin: 1rem 0; justify-content: center; display: flex; gap: 0.5rem;">
+      <div class="pagination" v-if="totalPages > 1" style="margin: 1rem 0;">
         <button type="button" class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
         <template v-for="n in visiblePages" :key="n">
-          <span v-if="n === '...'" class="page-ellipsis" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--text-secondary); font-size: 0.8rem;">...</span>
-          <button
-            v-else
-            type="button"
-            :class="['page-btn', { active: currentPage === n }]"
-            @click="currentPage = n"
-          >
-            {{ n }}
-          </button>
+          <span v-if="n === '...'" class="page-ellipsis">...</span>
+          <button v-else type="button" :class="['page-btn', { active: currentPage === n }]" @click="currentPage = n">{{ n }}</button>
         </template>
         <button type="button" class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
       </div>
@@ -282,35 +273,34 @@
 
 <script setup>
 import { ref, computed, onMounted, inject, watch } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useEmployeeStore } from '@/stores/employee.js'
 import AppModal from '@/components/AppModal.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'
+import AdminFormCard from '@/components/AdminFormCard.vue'
 import { formatImageUrl } from '@/utils/image.js'
+import api from '@/api/axios.instance.js'
 
-const employeeStore = useEmployeeStore()
-const showToast = inject('showToast')
+const showToastInject = inject('showToast', null)
+const showToast = (msg, type = 'success') => {
+  if (showToastInject) showToastInject(msg, type)
+}
+
+// 產品與分類列表狀態
+const products = ref([])
+const productCategories = ref([])
 
 // [響應式狀態] showAddProduct (顯示新增product)
-// 為什麼要這麼做：開啟或切換特定版面、提示或按鈕的顯示狀態，實現動態的 UI 響應式交互。
 const showAddProduct = ref(false)
 // [響應式狀態] showEditProduct (顯示編輯product)
-// 為什麼要這麼做：開啟或切換特定版面、提示或按鈕的顯示狀態，實現動態的 UI 響應式交互。
 const showEditProduct = ref(false)
 // [響應式狀態] showCategoryManager (顯示categorymanager)
-// 為什麼要這麼做：開啟或切換特定版面、提示或按鈕的顯示狀態，實現動態的 UI 響應式交互。
 const showCategoryManager = ref(false)
 // [響應式狀態] uploadingFile (uploadingfile)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const uploadingFile = ref(false)
 // [響應式狀態] activeTableFilter (activetable篩選)
-// 為什麼要這麼做：依據指定屬性將不符合條件的陣列元素濾除，確保畫面只呈現使用者感興趣的資料。
 const activeTableFilter = ref('ALL')
 
 // 搜尋與篩選狀態
-// [響應式狀態] filterParams (篩選params)
-// 為什麼要這麼做：依據指定屬性將不符合條件的陣列元素濾除，確保畫面只呈現使用者感興趣的資料。
 const filterParams = ref({
   keyword: '',
   startDate: '',
@@ -318,7 +308,6 @@ const filterParams = ref({
 })
 
 // [功能方法] resetFilters (重置filters)
-// 為什麼要這麼做：將所有篩選條件、分頁或表單狀態還原至預設初值，解決狀態殘留引起的查詢問題。
 function resetFilters() {
   filterParams.value.keyword = ''
   filterParams.value.startDate = ''
@@ -326,48 +315,30 @@ function resetFilters() {
 }
 
 // 當篩選條件改變時，重置頁碼到第一頁
-// [監聽器] 監聽特定狀態變化
-// 為什麼要這麼做：當監聽的數據或屬性發生異動時，即時觸發與其關聯的連動業務邏輯、重新計算數值或重新載入資料。
 watch([activeTableFilter, () => filterParams.value.keyword, () => filterParams.value.startDate, () => filterParams.value.endDate], () => {
   currentPage.value = 1
 })
 
-// [自 Store 解構響應式屬性] products, productCategories
-// - products 為什麼要這麼做：在架商品清單，提供頁面渲染商品列表的資料來源。
-// - productCategories 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const { products, productCategories } = storeToRefs(employeeStore)
-
-// [響應式狀態] productForm (productform)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const productForm = ref({ name: '', price: null, stock: null, description: '', imageUrl: '', productCategoryId: null })
-// [響應式狀態] editForm (編輯form)
-// 為什麼要這麼做：開啟編輯模式或彈窗，並預先載入欲修改項目的現有資料，提供良好的使用者修改體驗。
 const editForm = ref({ id: null, name: '', price: null, stock: null, description: '', imageUrl: '', productCategoryId: null })
-// [響應式狀態] newCategoryForm (newcategoryform)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const newCategoryForm = ref({ name: '', categoryType: 'PHYSICAL', iconUrl: '', sortOrder: 0 })
 
-// [計算屬性] goodsCategories (goodscategories)
-// 為什麼要這麼做：執行頁面跳轉導航，帶領使用者前往指定的路徑，並可選擇攜帶特定的 query 查詢參數。
+// 篩選出實體商品的分類
 const goodsCategories = computed(() => {
   return productCategories.value.filter(c => c.name !== '月卡訂閱')
 })
 
-// [計算屬性] tableFilters (tablefilters)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const tableFilters = computed(() => {
   const list = [
     { value: 'ALL', label: '全部實體商品' }
   ]
   goodsCategories.value.forEach(cat => {
-    list.push({ value: String(cat.productCategoryId), label: cat.name })
+    list.push({ value: String(cat.id || cat.productCategoryId), label: cat.name })
   })
   list.push({ value: 'INACTIVE', label: '已下架商品' })
   return list
 })
 
-// [計算屬性] filteredTableProducts (filteredtableproducts)
-// 為什麼要這麼做：依據指定屬性將不符合條件的陣列元素濾除，確保畫面只呈現使用者感興趣的資料。
 const filteredTableProducts = computed(() => {
   const f = activeTableFilter.value
   let list = products.value
@@ -384,7 +355,7 @@ const filteredTableProducts = computed(() => {
     })
   }
 
-  // 關鍵字搜尋（名稱、說明）
+  // 關鍵字搜尋
   if (filterParams.value.keyword.trim()) {
     const query = filterParams.value.keyword.trim().toLowerCase()
     list = list.filter(p => {
@@ -394,7 +365,7 @@ const filteredTableProducts = computed(() => {
     })
   }
 
-  // 日期篩選 (startDate)
+  // 日期篩選
   if (filterParams.value.startDate) {
     const sDate = new Date(filterParams.value.startDate + 'T00:00:00')
     list = list.filter(p => {
@@ -403,7 +374,6 @@ const filteredTableProducts = computed(() => {
     })
   }
 
-  // 日期篩選 (endDate)
   if (filterParams.value.endDate) {
     const eDate = new Date(filterParams.value.endDate + 'T23:59:59')
     list = list.filter(p => {
@@ -416,30 +386,18 @@ const filteredTableProducts = computed(() => {
 })
 
 // 分頁狀態
-// [響應式狀態] currentPage (currentpage)
-// 為什麼要這麼做：目前選取的資料，以便進行單一資料展示、編輯或預約操作。
 const currentPage = ref(1)
-// [響應式狀態] itemsPerPage (itemsperpage)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const itemsPerPage = ref(10)
 
-// [計算屬性] totalItems (totalitems)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const totalItems = computed(() => filteredTableProducts.value.length)
-// [計算屬性] totalPages (totalpages)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const totalPages = computed(() => Math.ceil(totalItems.value / itemsPerPage.value) || 1)
 
-// [計算屬性] paginatedProducts (paginatedproducts)
-// 為什麼要這麼做：在架商品清單，提供頁面渲染商品列表的資料來源。
 const paginatedProducts = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   const end = start + itemsPerPage.value
   return filteredTableProducts.value.slice(start, end)
 })
 
-// [計算屬性] visiblePages (visiblepages)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const visiblePages = computed(() => {
   const current = currentPage.value
   const total = totalPages.value
@@ -468,15 +426,12 @@ const visiblePages = computed(() => {
   return pages
 })
 
-// [功能方法] getProductImage (取得productimage)
-// 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
 function getProductImage(p) {
   if (p.imageUrl) return formatImageUrl(p.imageUrl)
   return 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=400&auto=format&fit=crop&q=60'
 }
 
-// [功能方法] uploadFile (uploadfile)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
+// 圖片上傳
 async function uploadFile(event, mode) {
   const file = event.target.files[0]
   if (!file) return
@@ -485,22 +440,28 @@ async function uploadFile(event, mode) {
     return
   }
   uploadingFile.value = true
-  const res = await employeeStore.uploadImage(file)
-  uploadingFile.value = false
-  if (res.success) {
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await api.post('/api/admin/products/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    uploadingFile.value = false
     if (mode === 'add') {
       productForm.value.imageUrl = res.url
     } else {
       editForm.value.imageUrl = res.url
     }
     showToast('圖片上傳成功')
-  } else {
-    showToast(res.message || '上傳失敗', 'error')
+  } catch (e) {
+    uploadingFile.value = false
+    showToast('上傳圖片失敗', 'error')
   }
 }
 
-// [功能方法] createProduct (建立product)
-// 為什麼要這麼做：初始化一個全新資源或訂單物件，為使用者接下來的編輯與提交做好準備。
+// 新增商品
 async function createProduct() {
   const categoryIdVal = productForm.value.productCategoryId === "" || productForm.value.productCategoryId === undefined ? null : productForm.value.productCategoryId
   const priceVal = productForm.value.price === "" || productForm.value.price === null ? 0 : Number(productForm.value.price)
@@ -518,22 +479,20 @@ async function createProduct() {
     sessionsPerUnit: 1
   }
 
-  const res = await employeeStore.createProduct(payload)
-  if (res.success) {
+  try {
+    await api.post('/api/admin/products', payload)
     showToast('新商品上架成功！')
     showAddProduct.value = false
     productForm.value = { name: '', price: null, stock: null, description: '', imageUrl: '', productCategoryId: null }
-    await employeeStore.loadAllProducts()
-  } else {
-    showToast(res.message || '新增商品失敗', 'error')
+    await loadProducts()
+  } catch (e) {
+    showToast('新增商品失敗', 'error')
   }
 }
 
-// [功能方法] openEditModal (開啟編輯modal)
-// 為什麼要這麼做：控制特定彈窗 (Modal) 或抽屜的顯示狀態，引導使用者進行下一步的核心操作。
 function openEditModal(p) {
   editForm.value = {
-    id: p.productId,
+    id: p.productId || p.id,
     name: p.name,
     price: p.price,
     stock: p.stock,
@@ -544,71 +503,82 @@ function openEditModal(p) {
   showEditProduct.value = true
 }
 
-// [功能方法] updateProduct (更新product)
-// 為什麼要這麼做：將使用者修改後的資料同步至伺服器或本地 State，完成狀態更新並提供正確的介面呈現。
+// 更新商品
 async function updateProduct() {
-  const res = await employeeStore.updateProduct(editForm.value.id, editForm.value)
-  if (res.success) {
+  try {
+    await api.put(`/api/admin/products/${editForm.value.id}`, editForm.value)
     showToast('商品資料更新成功')
     showEditProduct.value = false
-    await employeeStore.loadAllProducts()
-  } else {
-    showToast(res.message || '更新失敗', 'error')
+    await loadProducts()
+  } catch (e) {
+    showToast('更新失敗', 'error')
   }
 }
 
-// [功能方法] deleteProduct (刪除product)
-// 為什麼要這麼做：呼叫後端刪除 API 移除指定資料，並在完成後重新整理列表以確保畫面步調一致。
+// 刪除商品 (下架)
 async function deleteProduct(id) {
   if (!confirm('確認將此商品下架？會員將無法再線上購買此商品。')) return
-  const res = await employeeStore.deleteProduct(id)
-  if (res.success) {
+  try {
+    await api.delete(`/api/admin/products/${id}`)
     showToast('商品已成功下架')
-    await employeeStore.loadAllProducts()
-  } else {
-    showToast(res.message || '下架失敗', 'error')
+    await loadProducts()
+  } catch (e) {
+    showToast('下架失敗', 'error')
   }
 }
 
-// [功能方法] createCategory (建立category)
-// 為什麼要這麼做：初始化一個全新資源或訂單物件，為使用者接下來的編輯與提交做好準備。
+// 新增分類
 async function createCategory() {
   if (!newCategoryForm.value.name.trim()) return
-  const res = await employeeStore.createProductCategory({ name: newCategoryForm.value.name })
-  if (res.success) {
+  try {
+    await api.post('/api/admin/product-categories', { name: newCategoryForm.value.name })
     showToast('商品分類新增成功')
     newCategoryForm.value.name = ''
-  } else {
-    showToast(res.message || '新增分類失敗', 'error')
+    await loadCategories()
+  } catch (e) {
+    showToast('新增分類失敗', 'error')
   }
 }
 
-// [功能方法] deleteCategory (刪除category)
-// 為什麼要這麼做：呼叫後端刪除 API 移除指定資料，並在完成後重新整理列表以確保畫面步調一致。
+// 刪除分類
 async function deleteCategory(cat) {
+  const catId = cat.id || cat.productCategoryId
   if (!confirm(`確認刪除商品分類「${cat.name}」？`)) return
-  const res = await employeeStore.deleteProductCategory(cat.productCategoryId)
-  if (res.success) {
+  try {
+    await api.delete(`/api/admin/product-categories/${catId}`)
     showToast('分類已刪除')
-  } else {
-    showToast(res.message || '刪除分類失敗', 'error')
+    await loadCategories()
+  } catch (e) {
+    showToast('刪除分類失敗', 'error')
   }
 }
 
-// [功能方法] loadProducts (載入products)
-// 為什麼要這麼做：向後端 API 請求最新數據，確保頁面載入或重新整理時，使用者能看到最即時且正確的資料。
+// 載入商品列表
 async function loadProducts() {
-  await employeeStore.loadAllProducts()
+  try {
+    const res = await api.get('/api/products', {
+      params: { page: 0, size: 1000 }
+    })
+    const data = res.data
+    products.value = data?.content || data?.items || (Array.isArray(data) ? data : [])
+  } catch (e) {
+    showToast('載入商品列表失敗', 'error')
+    console.error('loadProducts error:', e)
+  }
 }
 
-// [功能方法] loadCategories (載入categories)
-// 為什麼要這麼做：向後端 API 請求最新數據，確保頁面載入或重新整理時，使用者能看到最即時且正確的資料。
+// 載入商品分類列表
 async function loadCategories() {
-  await employeeStore.loadProductCategories()
+  try {
+    const res = await api.get('/api/product-categories')
+    const data = res.data
+    productCategories.value = Array.isArray(data) ? data : (data?.content || data?.items || [])
+  } catch (e) {
+    showToast('載入商品分類失敗', 'error')
+    console.error('loadCategories error:', e)
+  }
 }
 
-// [生命週期掛載] 組件初始化載入
-// 為什麼要這麼做：在 Vue 元件完全掛載至網頁 DOM 後，立即向後端發送請求載入初始頁面資料，提供即時的視覺展現。
 onMounted(() => {
   loadProducts()
   loadCategories()
@@ -616,8 +586,52 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.admin-table table td {
+/* ===== 後台通用資料表格樣式===== */
+.admin-table {
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+.admin-table table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed !important;
+}
+.admin-table table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.78rem;
+  letter-spacing: 0.3px;
   vertical-align: middle;
+}
+.admin-table table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  font-size: 0.78rem;
+  vertical-align: middle;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-table table tbody tr {
+  height: 72px;
+}
+.admin-table table tr:hover td {
+  background: #f8fafc;
+}
+
+/* 允許折行與顯示完整文字的欄位 */
+.product-name-cell {
+  text-align: center;
 }
 .product-name-cell .name-text {
   font-weight: 700;
@@ -627,11 +641,65 @@ onMounted(() => {
 .product-name-cell .desc-text {
   font-size: 0.72rem;
   color: #64748b;
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal !important;
+  word-break: break-word !important;
+  overflow: visible !important;
+  text-align: center;
+  line-height: 1.5;
+  margin-top: 0.2rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
+
+.product-table-wrap {
+  overflow-x: auto;
+  min-height: 560px;
+}
+
+/* ===== 狀態標籤與徽章樣式 ===== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 4px;
+}
+.badge-primary {
+  background-color: var(--primary-light, #5a4a42);
+  color: #ffffff;
+}
+
+/* ===== 狀態圓點樣式 ===== */
+.status-cell-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.active {
+  background-color: #2ec4b6;
+}
+.status-dot.inactive {
+  background-color: #e63946;
+}
+.status-text-label {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.status-text-label.text-active {
+  color: #2ec4b6;
+}
+.status-text-label.text-inactive {
+  color: #e63946;
+}
+
 .dashboard-footer-blank {
   height: 8rem;
 }
@@ -684,11 +752,258 @@ onMounted(() => {
   cursor: pointer;
 }
 
-/* 縮小分頁按鈕 */
-.pagination .page-btn {
+/* ===== 分頁按鈕樣式 (復刻自 AdminCourses) ===== */
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.page-btn {
   width: 28px !important;
   height: 28px !important;
-  font-size: 0.8rem !important;
+  border: 1.5px solid var(--border, #e8e0d9);
   border-radius: 4px !important;
+  background: var(--bg-section, #ffffff);
+  color: var(--text-secondary, #6b5f58);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem !important;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.page-btn.active,
+.page-btn:hover {
+  background: var(--primary, #5a4a42) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+
+.page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--bg-section, #ffffff) !important;
+  color: var(--text-secondary, #6b5f58) !important;
+  border-color: var(--border, #e8e0d9) !important;
+}
+
+.page-ellipsis {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-secondary, #6b5f58);
+  font-size: 0.8rem;
+}
+
+/* ===== 後台共用按鈕與表單樣式 (復刻自 style.css & AdminCourses) ===== */
+:deep(.btn), .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 38px !important;
+  padding: 0 1.25rem !important;
+  border-radius: 9999px; /* radius-xl */
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  letter-spacing: 0.03em;
+  background-clip: padding-box;
+  box-sizing: border-box !important;
+}
+
+:deep(.btn-primary), .btn-primary {
+  background: var(--primary-dark, #3c302b) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none;
+}
+
+:deep(.btn-primary:hover), .btn-primary:hover {
+  background: var(--primary, #5a4a42) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(60, 48, 43, 0.03);
+}
+
+:deep(.btn-outline), .btn-outline {
+  background: transparent !important;
+  border: 2px solid var(--primary-dark, #3c302b) !important;
+  color: var(--primary-dark, #3c302b) !important;
+}
+
+:deep(.btn-outline:hover), .btn-outline:hover {
+  background: var(--primary-dark, #3c302b) !important;
+  color: #ffffff !important;
+}
+
+:deep(.btn-edit), .btn-edit, :deep(.edit-btn-style), .edit-btn-style {
+  border: 1px solid var(--border, #e8e0d9) !important;
+  background: var(--bg-section, #ffffff) !important;
+  color: var(--text-secondary, #6b5f58) !important;
+  font-weight: 600 !important;
+}
+
+:deep(.btn-edit:hover), .btn-edit:hover, :deep(.edit-btn-style:hover), .edit-btn-style:hover {
+  background: var(--bg-soft, #f5efe9) !important;
+  color: var(--primary-dark, #3c302b) !important;
+}
+
+:deep(.btn-danger), .btn-danger, :deep(.deactive-btn-style), .deactive-btn-style {
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  background: rgba(239, 68, 68, 0.02) !important;
+  color: #c0392b !important;
+  font-weight: 600 !important;
+}
+
+:deep(.btn-danger:hover), .btn-danger:hover, :deep(.deactive-btn-style:hover), .deactive-btn-style:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
+  color: #962d22 !important;
+}
+
+/* 額外輔助小尺寸按鈕樣式 */
+:deep(.btn-sm), .btn-sm {
+  height: 30px !important;
+  padding: 0 0.8rem !important;
+  font-size: 0.78rem !important;
+}
+
+/* 表單與輸入框 */
+:deep(.form-group), .form-group {
+  margin-bottom: 0.75rem;
+}
+
+:deep(.form-label), .form-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--text-secondary, #6b5f58);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+:deep(.form-input), .form-input {
+  width: 100%;
+  height: 38px !important;
+  padding: 0 0.75rem;
+  background: var(--bg-section, #ffffff);
+  border: 1.5px solid var(--border, #e8e0d9);
+  border-radius: 8px; /* radius-sm */
+  color: var(--text-primary, #2b2320);
+  font-size: 0.88rem;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-sizing: border-box !important;
+}
+
+:deep(.form-input:focus), .form-input:focus {
+  border-color: var(--primary-light, #5a4a42);
+  box-shadow: 0 0 0 3px rgba(188, 163, 143, 0.15);
+}
+
+/* ===== 新增表單區塊與上傳樣式 ===== */
+.add-form-card {
+  margin-bottom: 2rem;
+  border: 1px solid var(--border, #e8e0d9) !important;
+  background: #ffffff;
+  padding: 1.75rem;
+  border-radius: 16px;
+  animation: slideDown 0.3s ease-out;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border, #e8e0d9);
+  padding-bottom: 0.75rem;
+}
+.form-header h4 {
+  font-size: 1.05rem;
+  color: var(--primary-dark, #3c302b);
+  font-weight: 700;
+  margin: 0;
+}
+.form-helper {
+  font-size: 0.75rem;
+  color: #ef4444;
+}
+.form-grid-responsive {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+.file-upload-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.custom-file-btn {
+  background: var(--bg-soft, #f5efe9);
+  border: 1px solid var(--border, #e8e0d9);
+  color: var(--text-secondary, #6b5f58);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.custom-file-btn:hover {
+  background: var(--primary-light, #5a4a42);
+  color: #ffffff;
+}
+.hidden-file-input {
+  display: none;
+}
+.url-input {
+  margin-top: 0.5rem;
+}
+.form-preview-thumb {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border, #e8e0d9);
+}
+
+/* ===== 分類管理表格樣式 ===== */
+.category-manager-content table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.category-manager-content table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1.5px solid var(--border, #e8e0d9);
+  font-size: 0.82rem;
+}
+.category-manager-content table td {
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--text-primary, #2b2320);
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+.category-manager-content table tr:hover td {
+  background: #f8fafc;
 }
 </style>

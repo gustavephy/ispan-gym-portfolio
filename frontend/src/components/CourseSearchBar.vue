@@ -33,6 +33,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    showExpiryBefore: {
+        type: Boolean,
+        default: false,
+    },
     modelValue: {
         type: Object,
         default: () => ({}),
@@ -58,6 +62,7 @@ const local = ref({
     categoryId: '',
     roomId: '',
     type: '',
+    expiryBefore: '',
     ...props.modelValue,
 })
 
@@ -163,6 +168,17 @@ onMounted(()=>{
             <label class="csb-label">日期</label>
             <input 
                 v-model="local.date" 
+                class="csb-input" 
+                type="date" 
+                @change="emitSearch"
+            />
+        </div>
+
+        <!-- 效期截止前選擇 -->
+        <div v-if="showExpiryBefore" class="csb-field">
+            <label class="csb-label">效期截止前</label>
+            <input 
+                v-model="local.expiryBefore" 
                 class="csb-input" 
                 type="date" 
                 @change="emitSearch"

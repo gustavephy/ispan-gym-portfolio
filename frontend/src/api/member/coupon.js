@@ -1,4 +1,4 @@
-import api from './axios-instance.js'
+import api from '../axios.instance.js'
 
 // 取得可使用的折價券清單
 export const getAvailableCounpons = () => api.get('/api/coupons/available')

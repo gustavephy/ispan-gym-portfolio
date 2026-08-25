@@ -20,4 +20,6 @@ public interface MemberCourseQuotaRepository extends JpaRepository<MemberCourseQ
             + "AND q.remainingCourse > 0 AND (q.expiryDate IS NULL OR q.expiryDate > CURRENT_TIMESTAMP) "
             + "ORDER BY q.expiryDate ASC")
     List<MemberCourseQuota> findEligibleQuota(@Param("memberId") Integer memberId, @Param("trainerId") Integer trainerId);
+
+    List<MemberCourseQuota> findByMemberId(Integer memberId);
 }

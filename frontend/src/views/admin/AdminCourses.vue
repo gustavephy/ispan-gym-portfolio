@@ -1,286 +1,74 @@
 <template>
   <div class="page-container admin-dashboard">
+    <span class="section-tag">ADMIN</span>
+    <h1 class="section-title">課程方案管理</h1>
+    <p class="section-desc">管理團體課程主檔與私教課程方案，包含新增、編輯、上下架操作。</p>
+
     <!-- ERP 頂部標籤頁 -->
     <div class="erp-tabs" style="display: flex; gap: 1.5rem; border-bottom: 1.5px solid var(--border); margin-bottom: 2rem;">
-      <button class="tab-btn" :class="{ active: currentTab === 'products' }" @click="currentTab = 'products'">
-        課程方案管理
-      </button>
       <button class="tab-btn" :class="{ active: currentTab === 'groupCourses' }" @click="currentTab = 'groupCourses'">
         團體課程管理
       </button>
+      <button class="tab-btn" :class="{ active: currentTab === 'privateCourses' }" @click="currentTab = 'privateCourses'">
+        私教課程管理
+      </button>
     </div>
 
-    <!-- TAB 1: 課程方案管理 (商品方案) -->
-    <div v-if="currentTab === 'products'">
+    <!-- TAB 1: 團體課程管理 (CRUD) -->
+    <div v-if="currentTab === 'groupCourses'">
       <div class="page-header-row" style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-        <button class="btn btn-primary" @click="showAddProduct = !showAddProduct">
-          <span>{{ showAddProduct ? '✕ 取消新增' : '＋ 新增課程方案' }}</span>
-        </button>
-        <button class="btn btn-outline" @click="showCategoryManager = true">
-          <span>⚙ 管理課程分類</span>
-        </button>
-      </div>
-
-      <!-- 新增課程方案表單 -->
-      <Transition name="slide">
-        <div v-if="showAddProduct" class="card add-form-card">
-          <div class="form-header">
-            <h4>新增課程方案資料</h4>
-            <span class="form-helper">*所有欄位均為必填</span>
-          </div>
-          <form @submit.prevent="createProduct">
-            <div class="form-grid-responsive">
-              <div class="form-group">
-                <label class="form-label">方案名稱</label>
-                <input v-model="productForm.name" class="form-input" placeholder="例如: 燃脂 HIIT 體能課" required />
-              </div>
-              <div class="form-group">
-                <label class="form-label">項目類型</label>
-                <select v-model="productForm.type" class="form-input">
-                  <option value="PRIVATE_COURSE">私教課方案</option>
-                  <option value="GROUP_COURSE">團課方案</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">定價售價 (NT$)</label>
-                <input v-model.number="productForm.price" type="number" class="form-input" min="1" placeholder="請輸入金額" required />
-              </div>
-              <div class="form-group" v-if="productForm.type === 'COURSE'">
-                <label class="form-label">每班容納人數 / 上限</label>
-                <input v-model="productForm.classSize" class="form-input" placeholder="例如: 1 對 1, 最多 8 人" required />
-              </div>
-              <div class="form-group" v-if="productForm.type === 'COURSE'">
-                <label class="form-label">每份方案包含堂數 <span style="color:#94a3b8;font-size:0.8em">（購課後發放給學員的堂數）</span></label>
-                <input v-model.number="productForm.sessionsPerUnit" type="number" class="form-input" min="1" max="999" placeholder="例如: 10" required />
-              </div>
-              <div class="form-group" v-if="productForm.type === 'SUBSCRIPTION'">
-                <label class="form-label">天數設定 / 庫存</label>
-                <input v-model.number="productForm.stock" type="number" class="form-input" min="1" placeholder="例如：9999" required />
-              </div>
-              <div v-if="productForm.type === 'COURSE'" class="form-group checkbox-group" style="display:flex; align-items:center; min-height: 38px;">
-                <label class="checkbox-container">
-                  <input v-model="productForm.isTrial" type="checkbox" class="custom-checkbox" />
-                  <span class="checkmark"></span>
-                  <span class="checkbox-label-text">開放免費體驗（每位會員限一次）</span>
-                </label>
-              </div>
-            </div>
-            <div class="form-group file-upload-group">
-              <label class="form-label">課程照片 <span style="color:#94a3b8;font-size:0.8em">（限 5MB 以內）</span></label>
-              <div class="file-upload-wrapper">
-                <label class="custom-file-btn">
-                  選擇照片
-                  <input type="file" @change="e => uploadFile(e, 'add')" accept="image/*" class="hidden-file-input" />
-                </label>
-                <span v-if="uploadingFile" class="loading-spinner-inline"></span>
-                <span class="file-status-text" v-if="productForm.imageUrl">已上傳圖片</span>
-                <img v-if="productForm.imageUrl" :src="formatImageUrl(productForm.imageUrl)" class="form-preview-thumb" alt="Preview" />
-              </div>
-              <input v-model="productForm.imageUrl" class="form-input url-input" placeholder="或直接貼上外部圖片的 URL 網址..." />
-            </div>
-            <div class="form-group" style="margin-top: 1rem;">
-              <label class="form-label">詳細說明介紹</label>
-              <textarea v-model="productForm.description" class="form-input" rows="3" placeholder="請填寫此項目的特色、規格或課程內容介紹..."></textarea>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">確認發佈上架</button>
-            </div>
-          </form>
-        </div>
-      </Transition>
-
-      <!-- 搜尋與篩選條件區 -->
-      <SearchFilter 
-        v-model="filterParams"
-        keyword-label="課程方案搜尋"
-        keyword-placeholder="搜尋名稱、說明或教練..."
-        date-label="上架日期範圍"
-        @reset="resetFilters"
-      />
-
-      <!-- 快速分類篩選列 -->
-      <CategoryFilter 
-        v-model="activeTableFilter"
-        :options="tableFilters"
-      />
-
-      <!-- 課程列表表格 -->
-      <div class="admin-table card">
-        <!-- Top Pagination Controls -->
-        <div class="list-control-header bg-none" style="margin: 1rem 1rem 1.5rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-          <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
-            <span class="total-count-text">共 {{ totalItems }} 筆項目</span>
-            <div class="page-size-selector">
-              <label>顯示數量：</label>
-              <select v-model.number="itemsPerPage" class="select-sm">
-                <option :value="5">5 筆</option>
-                <option :value="10">10 筆</option>
-                <option :value="20">20 筆</option>
-                <option :value="50">50 筆</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- 分頁 (Top) -->
-          <div class="pagination" v-if="totalPages > 1" style="margin: 0; display: flex; gap: 0.5rem;">
-            <button type="button" class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
-            <template v-for="n in visiblePages" :key="n">
-              <span v-if="n === '...'" class="page-ellipsis" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--text-secondary); font-size: 0.8rem;">...</span>
-              <button v-else type="button" :class="['page-btn', { active: currentPage === n }]" @click="currentPage = n">{{ n }}</button>
-            </template>
-            <button type="button" class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
-          </div>
-        </div>
-
-        <div class="product-table-wrap">
-          <table style="table-layout: fixed; width: 100%;">
-            <colgroup>
-              <col class="hide-md" style="width: 50px;" />
-              <col style="width: 80px;" />
-              <col style="width: 240px;" />
-              <col class="hide-md" style="width: 100px;" />
-              <col class="hide-sm" style="width: 120px;" />
-              <col style="width: 90px;" />
-              <col class="hide-md" style="width: 80px;" />
-              <col style="width: 120px;" />
-            </colgroup>
-
-            <thead>
-              <tr>
-                <th class="hide-md">ID</th>
-                <th>課程圖片</th>
-                <th>方案名稱 &amp; 說明</th>
-                <th class="hide-md">類型</th>
-                <th class="hide-sm">每班上限 / 堂數</th>
-                <th>定價金額</th>
-                <th class="hide-md">狀態</th>
-                <th>功能操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="p in paginatedProducts" :key="p.id">
-                <td class="hide-md" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">#{{ p.id }}</td>
-                <td>
-                  <img :src="getProductImage(p)" class="product-thumb" alt="Course Image" />
-                </td>
-                <td class="product-name-cell" style="white-space: normal; word-break: break-word;">
-                  <div class="name-text">{{ p.name }}</div>
-                  <div class="desc-text hide-sm" :title="p.description">{{ p.description || '無詳細說明' }}</div>
-                  <div v-if="p.type === 'COURSE'" class="trainer-name-label" style="font-size: 0.72rem; color: var(--primary); font-weight: 700; margin-top: 0.2rem;">
-                    指導教練: {{ p.trainerName || '多位教練/未分配' }}
-                  </div>
-                </td>
-                <td class="hide-md" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                  <span :class="['badge', (p.type === 'PRIVATE_COURSE' || (p.type === 'COURSE' && (p.name.includes('一對一') || p.name.includes('私教')))) ? 'badge-course' : (p.type === 'GROUP_COURSE' || p.type === 'COURSE') ? 'badge-warning' : 'badge-subscription']">
-                    {{ (p.type === 'PRIVATE_COURSE' || (p.type === 'COURSE' && (p.name.includes('一對一') || p.name.includes('私教')))) ? '私教課方案' : (p.type === 'GROUP_COURSE' || p.type === 'COURSE') ? '團課方案' : '月卡訂閱' }}
-                  </span>
-                </td>
-                <td class="hide-sm" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                  <span v-if="p.type === 'COURSE'">
-                    {{ p.classSize || '未指定' }} / {{ p.sessionsPerUnit || 1 }} 堂
-                  </span>
-                  <span v-else class="badge badge-success">無限暢練</span>
-                </td>
-                <td class="price-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">NT$ {{ Number(p.price).toLocaleString() }}</td>
-                <td class="hide-md">
-                  <div class="status-cell-wrap">
-                    <span :class="['status-dot', p.status === 1 || p.status === 'ACTIVE' ? 'active' : 'inactive']"></span>
-                    <span :class="['status-text-label', p.status === 1 || p.status === 'ACTIVE' ? 'text-active' : 'text-inactive']">
-                      {{ p.status === 1 || p.status === 'ACTIVE' ? '上架中' : '已下架' }}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <div class="action-buttons-wrap">
-                    <button class="btn btn-edit edit-btn-style" @click="openEditModal(p)">編輯</button>
-                    <button v-if="p.status === 1 || p.status === 'ACTIVE'" class="btn btn-danger deactive-btn-style" @click="deleteProduct(p.id)">下架</button>
-                  </div>
-                </td>
-              </tr>
-              <tr v-if="filteredTableProducts.length === 0">
-                <td colspan="8" style="text-align: center; padding: 3rem; color: #94a3b8;">
-                  沒有符合當前篩選條件的課程方案項目
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div><!-- /.product-table-wrap -->
-
-        <!-- 分頁 -->
-        <div class="pagination" v-if="totalPages > 1" style="margin: 1rem 0; justify-content: center; display: flex; gap: 0.5rem;">
-          <button type="button" class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
-          <template v-for="n in visiblePages" :key="n">
-            <span v-if="n === '...'" class="page-ellipsis" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--text-secondary); font-size: 0.8rem;">...</span>
-            <button
-              v-else
-              type="button"
-              :class="['page-btn', { active: currentPage === n }]"
-              @click="currentPage = n"
-            >
-              {{ n }}
-            </button>
-          </template>
-          <button type="button" class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- TAB 2: 團體課程管理 -->
-    <div v-else-if="currentTab === 'groupCourses'">
-      <div class="page-header-row" style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-        <button class="btn btn-primary" @click="showAddGroupCourse = !showAddGroupCourse">
+        <button class="btn btn-primary btn-sm" @click="showAddGroupCourse = !showAddGroupCourse">
           <span>{{ showAddGroupCourse ? '✕ 取消新增' : '＋ 新增團體課程' }}</span>
         </button>
-        <button class="btn btn-outline" @click="showCategoryManager = true">
+        <button class="btn btn-outline btn-sm" @click="showCategoryManager = true">
           <span>⚙ 管理課程分類</span>
         </button>
       </div>
 
       <!-- 新增團體課程表單 -->
       <Transition name="slide">
-        <div v-if="showAddGroupCourse" class="card add-form-card">
-          <div class="form-header">
-            <h4>新增團體課程資料</h4>
-            <span class="form-helper">*請確實填寫指導教練與課程資訊</span>
+        <AdminFormCard
+          v-if="showAddGroupCourse"
+          title="新增團體課程資料"
+          helper="*請確實填寫指導教練與課程資訊"
+          @submit="createGroupCourse"
+        >
+          <div class="form-group">
+            <label class="form-label">課程名稱</label>
+            <input v-model="groupCourseForm.name" class="form-input" placeholder="例如: 燃脂有氧、基礎空中瑜珈" required />
           </div>
-          <form @submit.prevent="createGroupCourse">
-            <div class="form-grid-responsive">
-              <div class="form-group">
-                <label class="form-label">課程名稱</label>
-                <input v-model="groupCourseForm.name" class="form-input" placeholder="例如: 燃脂有氧、基礎空中瑜珈" required />
-              </div>
-              <div class="form-group">
-                <label class="form-label">指導教練</label>
-                <select v-model="groupCourseForm.trainerId" class="form-input" required>
-                  <option :value="null" disabled>請選擇指導教練</option>
-                  <option v-for="t in trainersList" :key="t.id" :value="t.id">
-                    {{ t.name }} ({{ t.specialty }})
-                  </option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">每班上限人數</label>
-                <input v-model.number="groupCourseForm.maxCapacity" type="number" class="form-input" min="1" max="100" required />
-              </div>
-              <div class="form-group">
-                <label class="form-label">課程分類</label>
-                <select v-model="groupCourseForm.categoryId" class="form-input" required>
-                  <option :value="null" disabled>請選擇分類</option>
-                  <option v-for="cat in courseCategories" :key="cat.id" :value="cat.id">
-                    {{ cat.name }}
-                  </option>
-                </select>
-              </div>
-              <div class="form-group checkbox-group" style="display:flex; align-items:center; min-height: 38px;">
-                <label class="checkbox-container">
-                  <input v-model="groupCourseForm.isTrial" type="checkbox" class="custom-checkbox" />
-                  <span class="checkmark"></span>
-                  <span class="checkbox-label-text">開放免費體驗</span>
-                </label>
-              </div>
-            </div>
-            <div class="form-group file-upload-group" style="margin-top: 1rem;">
+          <div class="form-group">
+            <label class="form-label">指導教練</label>
+            <select v-model="groupCourseForm.trainerId" class="form-input" required>
+              <option :value="null" disabled>請選擇指導教練</option>
+              <option v-for="t in trainersList" :key="t.trainerId" :value="t.trainerId">
+                {{ t.displayName }} ({{ t.specialty }})
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">每班上限人數</label>
+            <input v-model.number="groupCourseForm.maxCapacity" type="number" class="form-input" min="1" max="100" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">課程分類</label>
+            <select v-model="groupCourseForm.categoryId" class="form-input" required>
+              <option :value="null" disabled>請選擇分類</option>
+              <option v-for="cat in courseCategories" :key="cat.id" :value="cat.id">
+                {{ cat.name }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group checkbox-group" style="display:flex; align-items:center; min-height: 38px;">
+            <label class="checkbox-container">
+              <input v-model="groupCourseForm.isTrial" type="checkbox" class="custom-checkbox" />
+              <span class="checkmark"></span>
+              <span class="checkbox-label-text">開放免費體驗</span>
+            </label>
+          </div>
+
+          <template #extra>
+            <div class="form-group file-upload-group" style="margin-top: 1rem; width: 100%;">
               <label class="form-label">課程照片</label>
               <div class="file-upload-wrapper">
                 <label class="custom-file-btn">
@@ -293,17 +81,17 @@
               </div>
               <input v-model="groupCourseForm.imageUrl" class="form-input url-input" placeholder="圖片位址 URL" />
             </div>
-            <div class="form-group" style="margin-top: 1rem;">
+            <div class="form-group" style="margin-top: 1rem; width: 100%;">
               <label class="form-label">詳細說明介紹</label>
               <textarea v-model="groupCourseForm.description" class="form-input" rows="3" placeholder="請填寫課程特色、難易度、注意事項..."></textarea>
             </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary" :disabled="saving">確認新增上傳</button>
-            </div>
-          </form>
-        </div>
-      </Transition>
+          </template>
 
+          <template #actions>
+            <button type="submit" class="btn btn-primary" :disabled="saving">確認新增上傳</button>
+          </template>
+        </AdminFormCard>
+      </Transition>
 
       <!-- 統一搜尋與篩選列 -->
       <SearchFilter
@@ -315,8 +103,6 @@
         @reset="resetGcFilters"
       />
 
-
-
       <!-- 快速狀態篩選 -->
       <CategoryFilter
         v-model="gcActiveFilter"
@@ -326,7 +112,7 @@
 
       <!-- 團體課程列表 -->
       <div class="admin-table card">
-        <!-- 分頁與筆數控制列 -->
+        <!-- 筆數與顯示數量控制列 (包含上方分頁) -->
         <div class="list-control-header bg-none" style="margin: 1rem 1rem 1.5rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
           <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
             <span class="total-count-text">共 {{ gcTotalItems }} 筆課程</span>
@@ -339,11 +125,12 @@
               </select>
             </div>
           </div>
-          <!-- 分頁頁碼 -->
-          <div class="pagination" v-if="gcTotalPages > 1" style="margin: 0; display: flex; gap: 0.5rem;">
+
+          <!-- 上方分頁按鈕 -->
+          <div class="pagination" v-if="gcTotalPages > 1" style="margin: 0;">
             <button type="button" class="page-btn" :disabled="gcCurrentPage === 1" @click="gcCurrentPage--">‹</button>
             <template v-for="n in gcVisiblePages" :key="n">
-              <span v-if="n === '...'" class="page-ellipsis" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;color:var(--text-secondary);font-size:0.8rem;">...</span>
+              <span v-if="n === '...'" class="page-ellipsis">...</span>
               <button v-else type="button" :class="['page-btn', { active: gcCurrentPage === n }]" @click="gcCurrentPage = n">{{ n }}</button>
             </template>
             <button type="button" class="page-btn" :disabled="gcCurrentPage === gcTotalPages" @click="gcCurrentPage++">›</button>
@@ -352,20 +139,9 @@
 
         <div class="product-table-wrap">
           <table style="table-layout: fixed; width: 100%;">
-            <colgroup>
-              <col style="width: 7%;" />
-              <col style="width: 10%;" />
-              <col style="width: 25%;" />
-              <col style="width: 15%;" />
-              <col style="width: 10%;" />
-              <col style="width: 11%;" />
-              <col style="width: 10%;" />
-              <col style="width: 10%;" />
-              <col style="width: 12%;" />
-            </colgroup>
             <thead>
               <tr>
-                <th style="width: 60px;">ID</th>
+                <th style="width: 80px;">ID</th>
                 <th style="width: 100px;">圖片</th>
                 <th style="width: 300px;">課程名稱 &amp; 說明</th>
                 <th style="width: 150px;">指導教練</th>
@@ -376,11 +152,9 @@
                 <th style="width: 150px;">操作</th>
               </tr>
             </thead>
-
-
             <tbody>
-              <tr v-for="c in groupCoursesList" :key="c.groupCourseId">
-                <td>#{{ c.groupCourseId }}</td>
+              <tr v-for="c in groupCoursesList" :key="c.id">
+                <td>#{{ c.id }}</td>
                 <td>
                   <img :src="c.imageUrl ? formatImageUrl(c.imageUrl) : 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=400&auto=format&fit=crop&q=60'" class="product-thumb" alt="Course Image" />
                 </td>
@@ -389,16 +163,14 @@
                   <div class="desc-text" :title="c.description">{{ c.description || '無詳細說明' }}</div>
                 </td>
                 <td class="trainer-cell">
-                  <div style="font-weight: 600; color: var(--primary-dark);">{{ c.trainer?.name || '未分配' }}</div>
-                  <div style="font-size: 0.7rem; color: #64748b;">{{ c.trainer?.email }}</div>
+                  <div style="font-weight: 600; color: var(--primary-dark);">{{ c.trainerName || '未分配' }}</div>
                 </td>
-
                 <td style="font-weight: 600;">{{ c.maxCapacity }} 人</td>
                 <td>
-                  <span class="badge badge-scope">{{ c.category?.name || '未分類' }}</span>
+                  <span class="badge badge-primary">{{ c.courseCategoryName || '未分類' }}</span>
                 </td>
                 <td>
-                  <span :class="['badge', c.isTrial ? 'badge-success' : 'badge-goods']">
+                  <span :class="['badge', c.isTrial ? 'badge-success' : 'badge-danger']">
                     {{ c.isTrial ? '開放' : '不開放' }}
                   </span>
                 </td>
@@ -412,86 +184,145 @@
                 </td>
                 <td>
                   <div class="action-buttons-wrap">
-                    <button class="btn btn-edit edit-btn-style" @click="openEditGroupCourseModal(c)">編輯</button>
-                    <button v-if="c.status === 'ACTIVE'" class="btn btn-danger deactive-btn-style" @click="deleteGroupCourse(c.groupCourseId)">下架</button>
+                    <button class="btn btn-edit edit-btn-style btn-sm" @click="openEditGroupCourseModal(c)">編輯</button>
+                    <button v-if="c.status === 'ACTIVE'" class="btn btn-danger deactive-btn-style btn-sm" @click="deleteGroupCourse(c.id)">下架</button>
+                    <button v-if="c.status === 'INACTIVE'" class="btn btn-edit edit-btn-style btn-sm" @click="activateGroupCourse(c.id)">上架</button>
                   </div>
                 </td>
               </tr>
               <tr v-if="groupCoursesList.length === 0">
                 <td colspan="9" style="text-align: center; padding: 3rem; color: #94a3b8;">
-                  查無任何團體課程項目，請點擊上方按鈕新增上傳。
+                  查無任何團體課程項目。
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+
+        <!-- 下方分頁按鈕 -->
+        <div v-if="gcTotalPages > 1" style="padding: 1rem; display: flex; justify-content: center; border-top: 1px solid #f1f5f9;">
+          <div class="pagination" style="margin: 0;">
+            <button type="button" class="page-btn" :disabled="gcCurrentPage === 1" @click="gcCurrentPage--">‹</button>
+            <template v-for="n in gcVisiblePages" :key="n">
+              <span v-if="n === '...'" class="page-ellipsis">...</span>
+              <button v-else type="button" :class="['page-btn', { active: gcCurrentPage === n }]" @click="gcCurrentPage = n">{{ n }}</button>
+            </template>
+            <button type="button" class="page-btn" :disabled="gcCurrentPage === gcTotalPages" @click="gcCurrentPage++">›</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- 編輯課程方案 Modal -->
-    <AppModal v-model:visible="showEditProduct" title="編輯課程方案內容" icon="" size="md">
-      <form id="editProductForm" @submit.prevent="updateProduct">
-        <div class="form-group">
-          <label class="form-label">方案名稱</label>
-          <input v-model="editForm.name" class="form-input" required />
+    <!-- TAB 2: 私教課程管理 (唯讀 / 下架) -->
+    <div v-else-if="currentTab === 'privateCourses'">
+      <!-- 統一搜尋與篩選列 -->
+      <SearchFilter
+        v-model="pcFilterParams"
+        keyword-label="私教課程搜尋"
+        keyword-placeholder="搜尋課程名稱、教練姓名..."
+        date-label="上架日期範圍"
+        @search="onPcSearch"
+        @reset="resetPcFilters"
+      />
+
+      <!-- 私教課程列表 -->
+      <div class="admin-table card">
+        <!-- 筆數與顯示數量控制列 (包含上方分頁) -->
+        <div class="list-control-header bg-none" style="margin: 1rem 1rem 1.5rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
+            <span class="total-count-text">共 {{ pcTotalItems }} 筆課程</span>
+            <div class="page-size-selector">
+              <label>顯示數量：</label>
+              <select v-model.number="pcItemsPerPage" class="select-sm" @change="pcCurrentPage = 1">
+                <option :value="5">5 筆</option>
+                <option :value="10">10 筆</option>
+                <option :value="20">20 筆</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 上方分頁按鈕 -->
+          <div class="pagination" v-if="pcTotalPages > 1" style="margin: 0;">
+            <button type="button" class="page-btn" :disabled="pcCurrentPage === 1" @click="pcCurrentPage--">‹</button>
+            <template v-for="n in pcVisiblePages" :key="n">
+              <span v-if="n === '...'" class="page-ellipsis">...</span>
+              <button v-else type="button" :class="['page-btn', { active: pcCurrentPage === n }]" @click="pcCurrentPage = n">{{ n }}</button>
+            </template>
+            <button type="button" class="page-btn" :disabled="pcCurrentPage === pcTotalPages" @click="pcCurrentPage++">›</button>
+          </div>
         </div>
-        <div class="form-grid-responsive">
-          <div class="form-group">
-            <label class="form-label">項目類型</label>
-            <select v-model="editForm.type" class="form-input" disabled>
-              <option value="PRIVATE_COURSE">私教課方案</option>
-              <option value="GROUP_COURSE">團課方案</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">售價 (NT$)</label>
-            <input v-model.number="editForm.price" type="number" class="form-input" min="1" required />
-          </div>
-          <div class="form-group" v-if="editForm.type === 'COURSE'">
-            <label class="form-label">每班容納人數 / 上限</label>
-            <input v-model="editForm.classSize" class="form-input" placeholder="例如: 1 對 1, 最多 8 人" />
-          </div>
-          <div class="form-group" v-if="editForm.type === 'COURSE'">
-            <label class="form-label">每份方案包含堂數 <span style="color:#94a3b8;font-size:0.8em">（購課後發放給學員）</span></label>
-            <input v-model.number="editForm.sessionsPerUnit" type="number" class="form-input" min="1" max="999" placeholder="例如: 10" />
-          </div>
-          <div class="form-group" v-if="editForm.type === 'SUBSCRIPTION'">
-            <label class="form-label">天數設定 / 限制</label>
-            <input v-model.number="editForm.stock" type="number" class="form-input" min="1" />
-          </div>
-          <div v-if="editForm.type === 'COURSE'" class="form-group checkbox-group" style="display:flex; align-items:center; min-height: 38px;">
-            <label class="checkbox-container">
-              <input v-model="editForm.isTrial" type="checkbox" class="custom-checkbox" />
-              <span class="checkmark"></span>
-              <span class="checkbox-label-text">開放免費體驗（每位會員限一次）</span>
-            </label>
+
+        <div class="product-table-wrap">
+          <table style="table-layout: fixed; width: 100%;">
+            <thead>
+              <tr>
+                <th style="width: 80px;">ID</th>
+                <th style="width: 100px;">圖片</th>
+                <th style="width: 300px;">課程名稱 &amp; 說明</th>
+                <th style="width: 150px;">指導教練</th>
+                <th style="width: 120px;">包含堂數</th>
+                <th style="width: 120px;">定價金額</th>
+                <th style="width: 100px;">狀態</th>
+                <th style="width: 150px;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in paginatedPrivateCourses" :key="c.id || c.privateCourseId">
+                <td>#{{ c.id || c.privateCourseId }}</td>
+                <td>
+                  <img :src="c.imageUrl ? formatImageUrl(c.imageUrl) : 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=400&auto=format&fit=crop&q=60'" class="product-thumb" alt="Course Image" />
+                </td>
+                <td class="product-name-cell">
+                  <div class="name-text">{{ c.name }}</div>
+                  <div class="desc-text" :title="c.description">{{ c.description || '無詳細說明' }}</div>
+                </td>
+                <td class="trainer-cell">
+                  <div style="font-weight: 600; color: var(--primary-dark);">{{ c.trainerName || c.trainer?.name || '專屬教練' }}</div>
+                </td>
+                <td>
+                  <span>{{ c.sessionPerUnit || c.sessionsPerUnit || 1 }} 堂</span>
+                </td>
+                <td style="font-weight: 700; color: var(--accent);">NT$ {{ Number(c.price || 0).toLocaleString() }}</td>
+                <td>
+                  <div class="status-cell-wrap">
+                    <span :class="['status-dot', c.status === 'ACTIVE' || c.status === undefined ? 'active' : 'inactive']"></span>
+                    <span :class="['status-text-label', c.status === 'ACTIVE' || c.status === undefined ? 'text-active' : 'text-inactive']">
+                      {{ c.status === 'ACTIVE' || c.status === undefined ? '上架中' : '已下架' }}
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <div class="action-buttons-wrap">
+                    <button v-if="c.status === 'ACTIVE' || c.status === undefined" class="btn btn-danger deactive-btn-style btn-sm" @click="deactivatePrivateCourse(c.id || c.privateCourseId)">下架</button>
+                    <button v-if="c.status === 'INACTIVE'" class="btn btn-edit edit-btn-style btn-sm" @click="activatePrivateCourse(c.id || c.privateCourseId)">上架</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="filteredPrivateCourses.length === 0">
+                <td colspan="8" style="text-align: center; padding: 3rem; color: #94a3b8;">
+                  目前沒有符合條件的私教課程。
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 下方分頁按鈕 -->
+        <div v-if="pcTotalPages > 1" style="padding: 1rem; display: flex; justify-content: center; border-top: 1px solid #f1f5f9;">
+          <div class="pagination" style="margin: 0;">
+            <button type="button" class="page-btn" :disabled="pcCurrentPage === 1" @click="pcCurrentPage--">‹</button>
+            <template v-for="n in pcVisiblePages" :key="n">
+              <span v-if="n === '...'" class="page-ellipsis">...</span>
+              <button v-else type="button" :class="['page-btn', { active: pcCurrentPage === n }]" @click="pcCurrentPage = n">{{ n }}</button>
+            </template>
+            <button type="button" class="page-btn" :disabled="pcCurrentPage === pcTotalPages" @click="pcCurrentPage++">›</button>
           </div>
         </div>
-        <div class="form-group" style="margin-top: 1rem;">
-          <label class="form-label">照片設定 <span style="color:#94a3b8;font-size:0.8em">（限 5MB 以內）</span></label>
-          <div class="file-upload-wrapper">
-            <label class="custom-file-btn">
-              重新上傳
-              <input type="file" @change="e => uploadFile(e, 'edit')" accept="image/*" class="hidden-file-input" />
-            </label>
-            <span v-if="uploadingFile" class="loading-spinner-inline"></span>
-            <img v-if="editForm.imageUrl" :src="formatImageUrl(editForm.imageUrl)" class="form-preview-thumb" alt="Preview" />
-          </div>
-          <input v-model="editForm.imageUrl" class="form-input url-input" placeholder="圖片位址 URL" />
-        </div>
-        <div class="form-group" style="margin-top: 1rem;">
-          <label class="form-label">詳細說明介紹</label>
-          <textarea v-model="editForm.description" class="form-input" rows="3"></textarea>
-        </div>
-      </form>
-      <template #footer>
-        <button type="button" class="btn btn-ghost" @click="showEditProduct = false">取消</button>
-        <button type="submit" form="editProductForm" class="btn btn-primary">保存修改資料</button>
-      </template>
-    </AppModal>
+      </div>
+    </div>
 
     <!-- 編輯團體課程 Modal -->
-    <AppModal v-model:visible="showEditGroupCourse" title="編輯團體課程內容" icon="" size="md">
+    <AppModal v-model:visible="showEditGroupCourse" title="編輯團體課程內容" size="md">
       <form id="editGroupCourseForm" @submit.prevent="updateGroupCourse">
         <div class="form-group">
           <label class="form-label">課程名稱</label>
@@ -502,8 +333,8 @@
             <label class="form-label">指導教練</label>
             <select v-model="editGroupCourseForm.trainerId" class="form-input" required>
               <option :value="null" disabled>請選擇指導教練</option>
-              <option v-for="t in trainersList" :key="t.id" :value="t.id">
-                {{ t.name }} ({{ t.specialty }})
+              <option v-for="t in trainersList" :key="t.trainerId" :value="t.trainerId">
+                {{ t.displayName }} ({{ t.specialty }})
               </option>
             </select>
           </div>
@@ -559,13 +390,13 @@
     </AppModal>
 
     <!-- 分類管理 Modal -->
-    <AppModal v-model:visible="showCategoryManager" title="管理課程分類" icon="" size="md">
+    <AppModal v-model:visible="showCategoryManager" title="管理課程分類" size="md">
       <div class="category-manager-content">
         <!-- 新增分類表單 -->
         <form @submit.prevent="createCategory" class="card" style="padding: 1rem; margin-bottom: 1.5rem; background: var(--bg-soft);">
           <h5 style="margin-bottom: 0.75rem; font-weight: 700;">新增分類</h5>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <input v-model="newCategoryForm.name" class="form-input" style="flex: 2; min-width: 150px;" placeholder="分類名稱，例如：團課" required />
+            <input v-model="newCategoryForm.name" class="form-input" style="flex: 2; min-width: 150px;" placeholder="分類名稱，例如：瑜珈" required />
             <button type="submit" class="btn btn-primary" style="padding: 0.5rem 1rem;">新增</button>
           </div>
         </form>
@@ -604,96 +435,53 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, inject, watch } from 'vue'
-import { storeToRefs } from 'pinia'
+import { ref, computed, onMounted, inject, watch, onUnmounted } from 'vue'
 import AppModal from '@/components/AppModal.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'
+import AdminFormCard from '@/components/AdminFormCard.vue'
 import { formatImageUrl } from '@/utils/image.js'
 import api from '@/api/axios.instance.js'
+import { notify } from '@/api/error-bus.js'
 
-// 為了方案B，我們將產品與分類改為直接打後端 API，不用不存在的 useEmployeeStore
-const products = ref([])
-const courseCategories = ref([])
+const showToastInject = inject('showToast', null)
+const showToast = (msg, type = 'success') => {
+  if (showToastInject) {
+    showToastInject(msg, type)
+  } else {
+    notify(type === 'error' ? '系統錯誤' : '成功', msg, type)
+  }
+}
 
-const showToast = inject('showToast')
-// [響應式狀態] coursesList (courses清單)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const coursesList = ref([])
+const currentTab = ref('groupCourses')
 
-// [響應式狀態] showAddProduct (顯示新增product)
-// 為什麼要這麼做：開啟或切換特定版面、提示或按鈕的顯示狀態，實現動態的 UI 響應式交互。
-const showAddProduct = ref(false)
-// [響應式狀態] showEditProduct (顯示編輯product)
-// 為什麼要這麼做：開啟或切換特定版面、提示或按鈕的顯示狀態，實現動態的 UI 響應式交互。
-const showEditProduct = ref(false)
-// [響應式狀態] showCategoryManager (顯示categorymanager)
-// 為什麼要這麼做：開啟或切換特定版面、提示或按鈕的顯示狀態，實現動態的 UI 響應式交互。
-const showCategoryManager = ref(false)
-// [響應式狀態] uploadingFile (uploadingfile)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const uploadingFile = ref(false)
-// [響應式狀態] activeTableFilter (activetable篩選)
-// 為什麼要這麼做：依據指定屬性將不符合條件的陣列元素濾除，確保畫面只呈現使用者感興趣的資料。
-const activeTableFilter = ref('ALL')
-
-// ERP Tabs 控制
-// [響應式狀態] currentTab (currenttab)
-// 為什麼要這麼做：目前選取的資料，以便進行單一資料展示、編輯或預約操作。
-const currentTab = ref('products')
-// [響應式狀態] showAddGroupCourse (顯示新增groupcourse)
-// 為什麼要這麼做：開啟或切換特定版面、提示或按鈕的顯示狀態，實現動態的 UI 響應式交互。
+// --- 團體課程管理狀態 (Tab 1) ---
+const rawGroupCourses = ref([])
 const showAddGroupCourse = ref(false)
-// [響應式狀態] showEditGroupCourse (顯示編輯groupcourse)
-// 為什麼要這麼做：開啟或切換特定版面、提示或按鈕的顯示狀態，實現動態的 UI 響應式交互。
 const showEditGroupCourse = ref(false)
-// [響應式狀態] saving (saving)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
+const showCategoryManager = ref(false)
 const saving = ref(false)
-// [響應式狀態] loading (loading)
-// 為什麼要這麼做：是否正在載入資料的布林標記，用以在請求完成前控制 Spinner 載入動畫的顯示。
-const loading = ref(false)
+const uploadingFile = ref(false)
 
-// 團課分頁與篩選狀態
-// [響應式狀態] groupCoursesList (groupcourses清單)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const groupCoursesList = ref([])
-// [響應式狀態] gcCurrentPage (gccurrentpage)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const gcCurrentPage = ref(1)
-// [響應式狀態] gcItemsPerPage (gcitemsperpage)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const gcItemsPerPage = ref(10)
-// [響應式狀態] gcTotalPages (gctotalpages)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const gcTotalPages = ref(1)
-// [響應式狀態] gcTotalItems (gctotalitems)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const gcTotalItems = ref(0)
-// [響應式狀態] gcFilterParams (gc篩選params)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
+
 const gcFilterParams = ref({
   keyword: '',
   startDate: '',
   endDate: ''
 })
-// [響應式狀態] gcActiveFilter (gcactive篩選)
-// 為什麼要這麼做：依據指定屬性將不符合條件的陣列元素濾除，確保畫面只呈現使用者感興趣的資料。
 const gcActiveFilter = ref('ALL')
-// [計算屬性] gcCategoryFilters (gccategoryfilters)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const gcCategoryFilters = computed(() => [
+
+const gcCategoryFilters = [
   { value: 'ALL',      label: '全部課程' },
   { value: 'ACTIVE',   label: '上架中' },
   { value: 'INACTIVE', label: '已下架' }
-])
-// [響應式狀態] trainersList (trainers清單)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
+]
+
 const trainersList = ref([])
+const courseCategories = ref([])
 
-
-// [響應式狀態] groupCourseForm (groupcourseform)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const groupCourseForm = ref({
   name: '',
   trainerId: null,
@@ -701,12 +489,9 @@ const groupCourseForm = ref({
   categoryId: null,
   description: '',
   imageUrl: '',
-  isTrial: false,
-  status: 'ACTIVE'
+  isTrial: false
 })
 
-// [響應式狀態] editGroupCourseForm (編輯groupcourseform)
-// 為什麼要這麼做：開啟編輯模式或彈窗，並預先載入欲修改項目的現有資料，提供良好的使用者修改體驗。
 const editGroupCourseForm = ref({
   groupCourseId: null,
   name: '',
@@ -719,96 +504,125 @@ const editGroupCourseForm = ref({
   status: 'ACTIVE'
 })
 
-// 搜尋與篩選狀態
-// [響應式狀態] filterParams (篩選params)
-// 為什麼要這麼做：依據指定屬性將不符合條件的陣列元素濾除，確保畫面只呈現使用者感興趣的資料。
-const filterParams = ref({
+// --- 私教課程管理狀態 (Tab 2) ---
+const rawPrivateCourses = ref([])
+const pcCurrentPage = ref(1)
+const pcItemsPerPage = ref(10)
+
+const pcFilterParams = ref({
   keyword: '',
   startDate: '',
   endDate: ''
 })
 
-// [功能方法] resetFilters (重置filters)
-// 為什麼要這麼做：將所有篩選條件、分頁或表單狀態還原至預設初值，解決狀態殘留引起的查詢問題。
-function resetFilters() {
-  filterParams.value.keyword = ''
-  filterParams.value.startDate = ''
-  filterParams.value.endDate = ''
-}
+// 課程分類管理新增表單
+const newCategoryForm = ref({ name: '' })
 
-// 分頁狀態
-// [響應式狀態] currentPage (currentpage)
-// 為什麼要這麼做：目前選取的資料，以便進行單一資料展示、編輯或預約操作。
-const currentPage = ref(1)
-// [響應式狀態] itemsPerPage (itemsperpage)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const itemsPerPage = ref(10)
-// [響應式狀態] totalItems (totalitems)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const totalItems = ref(0)
-// [響應式狀態] totalPages (totalpages)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const totalPages = ref(1)
-
-// 當篩選條件改變時，重置頁碼到第一頁並載入資料
-// [監聽器] 監聽特定狀態變化
-// 為什麼要這麼做：當監聽的數據或屬性發生異動時，即時觸發與其關聯的連動業務邏輯、重新計算數值或重新載入資料。
-watch([activeTableFilter, () => filterParams.value.keyword, () => filterParams.value.startDate, () => filterParams.value.endDate], () => {
-
-  currentPage.value = 1
-  loadProducts()
+// 監聽 Tab 切換
+watch(currentTab, () => {
+  if (currentTab.value === 'groupCourses') {
+    gcCurrentPage.value = 1
+    loadGroupCourses()
+  } else {
+    pcCurrentPage.value = 1
+    loadPrivateCourses()
+  }
 })
 
-// 當頁碼或每頁數量變更時，重新載入資料
-// [監聽器] 監聽特定狀態變化
-// 為什麼要這麼做：當監聽的數據或屬性發生異動時，即時觸發與其關聯的連動業務邏輯、重新計算數值或重新載入資料。
-watch([currentPage, itemsPerPage], () => {
-  loadProducts()
+// --- 團體課程過濾與計算屬性 ---
+const filteredGroupCourses = computed(() => {
+  let list = rawGroupCourses.value
+
+  // 1. 快速狀態篩選 (ALL, ACTIVE, INACTIVE)
+  if (gcActiveFilter.value !== 'ALL') {
+    list = list.filter(c => c.status === gcActiveFilter.value)
+  }
+
+  // 2. 關鍵字篩選 (課程名稱、指導教練姓名)
+  if (gcFilterParams.value.keyword.trim()) {
+    const kw = gcFilterParams.value.keyword.trim().toLowerCase()
+    list = list.filter(c =>
+      c.name?.toLowerCase().includes(kw) ||
+      c.trainer?.name?.toLowerCase().includes(kw) ||
+      c.trainer?.displayName?.toLowerCase().includes(kw)
+    )
+  }
+
+  // 3. 上架日期篩選
+  if (gcFilterParams.value.startDate) {
+    const sDate = new Date(gcFilterParams.value.startDate + 'T00:00:00')
+    list = list.filter(c => !c.createdAt || new Date(c.createdAt) >= sDate)
+  }
+  if (gcFilterParams.value.endDate) {
+    const eDate = new Date(gcFilterParams.value.endDate + 'T23:59:59')
+    list = list.filter(c => !c.createdAt || new Date(c.createdAt) <= eDate)
+  }
+
+  return list
 })
 
+const gcTotalItems = computed(() => filteredGroupCourses.value.length)
+const gcTotalPages = computed(() => Math.ceil(gcTotalItems.value / gcItemsPerPage.value) || 1)
 
-// products and courseCategories are now defined as local refs at the top of script setup
-
-// [響應式狀態] productForm (productform)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const productForm = ref({ name: '', type: 'PRIVATE_COURSE', price: null, stock: 9999, description: '', imageUrl: '', productCategoryId: null, classSize: '', isTrial: false, sessionsPerUnit: 1 })
-// [響應式狀態] editForm (編輯form)
-// 為什麼要這麼做：開啟編輯模式或彈窗，並預先載入欲修改項目的現有資料，提供良好的使用者修改體驗。
-const editForm = ref({ id: null, name: '', type: 'PRIVATE_COURSE', price: null, stock: 9999, description: '', imageUrl: '', productCategoryId: null, classSize: '', isTrial: false, sessionsPerUnit: 1 })
-// [響應式狀態] newCategoryForm (newcategoryform)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const newCategoryForm = ref({ name: '', categoryType: 'COURSE', iconUrl: '', sortOrder: 0 })
-
-// [計算屬性] tableFilters (tablefilters)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const tableFilters = computed(() => {
-  return [
-    { value: 'ALL', label: '全部課程方案' },
-    { value: 'PRIVATE_COURSE', label: '私教課方案' },
-    { value: 'GROUP_COURSE', label: '團課方案' },
-    { value: 'INACTIVE', label: '已下架項目' }
-  ]
+const groupCoursesList = computed(() => {
+  const start = (gcCurrentPage.value - 1) * gcItemsPerPage.value
+  const end = start + gcItemsPerPage.value
+  return filteredGroupCourses.value.slice(start, end)
 })
 
-// [計算屬性] filteredTableProducts (filteredtableproducts)
-// 為什麼要這麼做：依據指定屬性將不符合條件的陣列元素濾除，確保畫面只呈現使用者感興趣的資料。
-const filteredTableProducts = computed(() => {
-  return coursesList.value
+// --- 團體課程過濾監聽 ---
+watch([gcActiveFilter, () => gcFilterParams.value.startDate, () => gcFilterParams.value.endDate], () => {
+  gcCurrentPage.value = 1
 })
 
-// [計算屬性] paginatedProducts (paginatedproducts)
-// 為什麼要這麼做：在架商品清單，提供頁面渲染商品列表的資料來源。
-const paginatedProducts = computed(() => {
-  return coursesList.value
+let gcSearchTimer = null
+watch(() => gcFilterParams.value.keyword, () => {
+  clearTimeout(gcSearchTimer)
+  gcSearchTimer = setTimeout(() => {
+    gcCurrentPage.value = 1
+  }, 400)
 })
 
+// --- 私教課程過濾監聽 (前端過濾與分頁) ---
+const filteredPrivateCourses = computed(() => {
+  let list = rawPrivateCourses.value
 
+  // 關鍵字篩選
+  if (pcFilterParams.value.keyword.trim()) {
+    const kw = pcFilterParams.value.keyword.trim().toLowerCase()
+    list = list.filter(c =>
+      c.name?.toLowerCase().includes(kw) ||
+      c.trainerName?.toLowerCase().includes(kw) ||
+      c.trainer?.name?.toLowerCase().includes(kw)
+    )
+  }
 
-// [計算屬性] visiblePages (visiblepages)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const visiblePages = computed(() => {
-  const current = currentPage.value
-  const total = totalPages.value
+  // 日期篩選
+  if (pcFilterParams.value.startDate) {
+    const sDate = new Date(pcFilterParams.value.startDate + 'T00:00:00')
+    list = list.filter(c => !c.createdAt || new Date(c.createdAt) >= sDate)
+  }
+  if (pcFilterParams.value.endDate) {
+    const eDate = new Date(pcFilterParams.value.endDate + 'T23:59:59')
+    list = list.filter(c => !c.createdAt || new Date(c.createdAt) <= eDate)
+  }
+
+  return list
+})
+
+const pcTotalItems = computed(() => filteredPrivateCourses.value.length)
+const pcTotalPages = computed(() => Math.ceil(pcTotalItems.value / pcItemsPerPage.value) || 1)
+
+const paginatedPrivateCourses = computed(() => {
+  const start = (pcCurrentPage.value - 1) * pcItemsPerPage.value
+  const end = start + pcItemsPerPage.value
+  return filteredPrivateCourses.value.slice(start, end)
+})
+
+const gcVisiblePages = computed(() => getVisiblePagesArray(gcCurrentPage.value, gcTotalPages.value))
+const pcVisiblePages = computed(() => getVisiblePagesArray(pcCurrentPage.value, pcTotalPages.value))
+
+function getVisiblePagesArray(current, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   const pages = []
   pages.push(1)
@@ -820,35 +634,18 @@ const visiblePages = computed(() => {
   if (end < total - 1) pages.push('...')
   pages.push(total)
   return pages
-})
-
-// [計算屬性] gcVisiblePages (gcvisiblepages)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const gcVisiblePages = computed(() => {
-  const current = gcCurrentPage.value
-  const total = gcTotalPages.value
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const pages = []
-  pages.push(1)
-  let start = Math.max(2, current - 2)
-  let end = Math.min(total - 1, current + 2)
-  if (current <= 4) { end = 5 } else if (current >= total - 3) { start = total - 4 }
-  if (start > 2) pages.push('...')
-  for (let i = start; i <= end; i++) pages.push(i)
-  if (end < total - 1) pages.push('...')
-  pages.push(total)
-  return pages
-})
-
-// [功能方法] getProductImage (取得productimage)
-// 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
-function getProductImage(p) {
-  if (p.imageUrl) return formatImageUrl(p.imageUrl)
-  return 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=400&auto=format&fit=crop&q=60'
 }
 
-// [功能方法] uploadFile (uploadfile)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
+function onPcSearch() {
+  pcCurrentPage.value = 1
+}
+
+function resetPcFilters() {
+  pcFilterParams.value = { keyword: '', startDate: '', endDate: '' }
+  pcCurrentPage.value = 1
+}
+
+// --- 檔案上傳 ---
 async function uploadFile(event, mode) {
   const file = event.target.files[0]
   if (!file) return
@@ -860,199 +657,53 @@ async function uploadFile(event, mode) {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    const res = await api.post('/api/employee/products/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+    const res = await api.post('/api/admin/products/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
     })
-    uploadingFile.value = false
-    if (res.data && res.data.url) {
-      if (mode === 'add') {
-        productForm.value.imageUrl = res.data.url
-      } else if (mode === 'edit') {
-        editForm.value.imageUrl = res.data.url
-      } else if (mode === 'addGroupCourse') {
-        groupCourseForm.value.imageUrl = res.data.url
+    const url = res.url || res.data?.url
+    if (url) {
+      if (mode === 'addGroupCourse') {
+        groupCourseForm.value.imageUrl = url
       } else if (mode === 'editGroupCourse') {
-        editGroupCourseForm.value.imageUrl = res.data.url
+        editGroupCourseForm.value.imageUrl = url
       }
       showToast('圖片上傳成功')
-    } else {
-      showToast('上傳失敗', 'error')
     }
   } catch (err) {
+    showToast('圖片上傳失敗', 'error')
+  } finally {
     uploadingFile.value = false
-    showToast(err.message || '上傳失敗', 'error')
   }
 }
 
-// [功能方法] createProduct (建立product)
-// 為什麼要這麼做：初始化一個全新資源或訂單物件，為使用者接下來的編輯與提交做好準備。
-async function createProduct() {
-  const priceVal = productForm.value.price === "" || productForm.value.price === null ? 0 : Number(productForm.value.price)
-  const stockVal = productForm.value.stock === "" || productForm.value.stock === null ? 9999 : Number(productForm.value.stock)
-  const sessionsVal = productForm.value.sessionsPerUnit === "" || productForm.value.sessionsPerUnit === null ? 1 : Number(productForm.value.sessionsPerUnit)
-
-  const payload = {
-    name: productForm.value.name,
-    type: productForm.value.type,
-    price: priceVal,
-    stock: stockVal,
-    description: productForm.value.description || '',
-    imageUrl: productForm.value.imageUrl || '',
-    productCategoryId: null, // 課程不需要綁商品分類
-    classSize: productForm.value.classSize || '',
-    isTrial: productForm.value.isTrial === true,
-    sessionsPerUnit: sessionsVal
-  }
-
-  try {
-    await api.post('/api/employee/products', payload)
-    showToast('新課程方案上架成功！')
-    showAddProduct.value = false
-    productForm.value = { name: '', type: 'COURSE', price: null, stock: 9999, description: '', imageUrl: '', productCategoryId: null, classSize: '', isTrial: false, sessionsPerUnit: 1 }
-    await loadProducts()
-  } catch (e) {
-    showToast(e.response?.data?.message || '新增課程失敗', 'error')
-  }
-}
-
-// [功能方法] openEditModal (開啟編輯modal)
-// 為什麼要這麼做：控制特定彈窗 (Modal) 或抽屜的顯示狀態，引導使用者進行下一步的核心操作。
-function openEditModal(p) {
-  editForm.value = {
-    id: p.id,
-    name: p.name,
-    type: p.type,
-    price: p.price,
-    stock: p.stock || 9999,
-    description: p.description || '',
-    imageUrl: p.imageUrl || '',
-    productCategoryId: null,
-    classSize: p.classSize || '',
-    isTrial: p.isTrial === true,
-    sessionsPerUnit: p.sessionsPerUnit || 1
-  }
-  showEditProduct.value = true
-}
-
-// [功能方法] updateProduct (更新product)
-// 為什麼要這麼做：將使用者修改後的資料同步至伺服器或本地 State，完成狀態更新並提供正確的介面呈現。
-async function updateProduct() {
-  try {
-    await api.put(`/api/employee/products/${editForm.value.id}`, editForm.value)
-    showToast('課程方案資料更新成功')
-    showEditProduct.value = false
-    await loadProducts()
-  } catch (e) {
-    showToast(e.response?.data?.message || '更新失敗', 'error')
-  }
-}
-
-// [功能方法] deleteProduct (刪除product)
-// 為什麼要這麼做：呼叫後端刪除 API 移除指定資料，並在完成後重新整理列表以確保畫面步調一致。
-async function deleteProduct(id) {
-  if (!confirm('確認將此課程方案下架？會員將無法再線上購買此方案。')) return
-  try {
-    await api.delete(`/api/employee/products/${id}`)
-    showToast('該項目已成功下架')
-    await loadProducts()
-  } catch (e) {
-    showToast(e.response?.data?.message || '下架失敗', 'error')
-  }
-}
-
-// [功能方法] createCategory (建立category)
-// 為什麼要這麼做：初始化一個全新資源或訂單物件，為使用者接下來的編輯與提交做好準備。
-async function createCategory() {
-  if (!newCategoryForm.value.name.trim()) return
-  try {
-    await api.post('/api/employee/course-categories', { name: newCategoryForm.value.name })
-    showToast('課程分類新增成功')
-    newCategoryForm.value.name = ''
-    await loadCategories()
-  } catch (e) {
-    showToast(e.response?.data?.message || '新增分類失敗', 'error')
-  }
-}
-
-// [功能方法] deleteCategory (刪除category)
-// 為什麼要這麼做：呼叫後端刪除 API 移除指定資料，並在完成後重新整理列表以確保畫面步調一致。
-async function deleteCategory(cat) {
-  if (!confirm(`確認刪除課程分類「${cat.name}」？`)) return
-  try {
-    await api.delete(`/api/employee/course-categories/${cat.id}`)
-    showToast('分類已刪除')
-    await loadCategories()
-  } catch (e) {
-    showToast(e.response?.data?.message || '刪除分類失敗', 'error')
-  }
-}
-
-// 團體課程 ERP 管理邏輯 (後端 Pageable 串接)
-// [功能方法] loadGroupCourses (載入groupcourses)
-// 為什麼要這麼做：向後端 API 請求最新數據，確保頁面載入或重新整理時，使用者能看到最即時且正確的資料。
+// --- 團體課程 API 串接 ---
 async function loadGroupCourses() {
   try {
-    const statusParam = gcActiveFilter.value === 'ALL' ? undefined : gcActiveFilter.value
-    const res = await api.get('/api/employee/group-courses', {
+    const res = await api.get('/api/admin/group-courses', {
       params: {
-        page: gcCurrentPage.value - 1,
-        size: gcItemsPerPage.value,
-        keyword: gcFilterParams.value.keyword || undefined,
-        status: statusParam,
-        startDate: gcFilterParams.value.startDate || undefined,
-        endDate: gcFilterParams.value.endDate || undefined
+        page: 0,
+        size: 1000
       }
     })
-    const page = res.data
-    groupCoursesList.value = page.content || []
-    gcTotalPages.value = page.totalPages || 1
-    gcTotalItems.value = page.totalElements || 0
+    const data = res.data
+    rawGroupCourses.value = data.items || data.content || []
   } catch (err) {
     console.error('Failed to load group courses:', err)
   }
 }
 
-// [功能方法] onGcSearch (當gc搜尋)
-// 為什麼要這麼做：根據使用者輸入的關鍵字或篩選條件，重新過濾出符合條件的清單，提供快速檢索功能。
 function onGcSearch() {
   gcCurrentPage.value = 1
   loadGroupCourses()
 }
 
-// [功能方法] resetGcFilters (重置gcfilters)
-// 為什麼要這麼做：將所有篩選條件、分頁或表單狀態還原至預設初值，解決狀態殘留引起的查詢問題。
 function resetGcFilters() {
-  gcFilterParams.value.keyword = ''
-  gcFilterParams.value.startDate = ''
-  gcFilterParams.value.endDate = ''
+  gcFilterParams.value = { keyword: '', startDate: '', endDate: '' }
   gcActiveFilter.value = 'ALL'
   gcCurrentPage.value = 1
   loadGroupCourses()
 }
 
-// 監聽分頁與狀態條件變化
-// [監聽器] 監聽特定狀態變化
-// 為什麼要這麼做：當監聽的數據或屬性發生異動時，即時觸發與其關聯的連動業務邏輯、重新計算數值或重新載入資料。
-watch([gcCurrentPage, gcItemsPerPage, gcActiveFilter, () => gcFilterParams.value.startDate, () => gcFilterParams.value.endDate], () => {
-  loadGroupCourses()
-})
-
-
-// [功能方法] loadTrainers (載入trainers)
-// 為什麼要這麼做：向後端 API 請求最新數據，確保頁面載入或重新整理時，使用者能看到最即時且正確的資料。
-async function loadTrainers() {
-  try {
-    const res = await api.get('/api/member/trainers')
-    trainersList.value = res.data || []
-  } catch (err) {
-    console.error('Failed to load trainers:', err)
-  }
-}
-
-// [功能方法] createGroupCourse (建立groupcourse)
-// 為什麼要這麼做：初始化一個全新資源或訂單物件，為使用者接下來的編輯與提交做好準備。
 async function createGroupCourse() {
   if (!groupCourseForm.value.name || !groupCourseForm.value.trainerId || !groupCourseForm.value.categoryId) {
     showToast('請填寫完整必填欄位', 'warning')
@@ -1060,8 +711,16 @@ async function createGroupCourse() {
   }
   saving.value = true
   try {
-    await api.post('/api/employee/group-courses', groupCourseForm.value)
-    showToast('團體課程新增上傳成功！')
+    await api.post('/api/admin/group-courses', {
+      name: groupCourseForm.value.name,
+      trainerId: groupCourseForm.value.trainerId,
+      maxCapacity: groupCourseForm.value.maxCapacity,
+      courseCategoryId: groupCourseForm.value.categoryId,
+      description: groupCourseForm.value.description,
+      imageUrl: groupCourseForm.value.imageUrl || null,
+      isTrial: groupCourseForm.value.isTrial
+    })
+    showToast('團體課程新增成功！')
     showAddGroupCourse.value = false
     groupCourseForm.value = {
       name: '',
@@ -1070,8 +729,7 @@ async function createGroupCourse() {
       categoryId: null,
       description: '',
       imageUrl: '',
-      isTrial: false,
-      status: 'ACTIVE'
+      isTrial: false
     }
     await loadGroupCourses()
   } catch (e) {
@@ -1081,8 +739,6 @@ async function createGroupCourse() {
   }
 }
 
-// [功能方法] openEditGroupCourseModal (開啟編輯groupcoursemodal)
-// 為什麼要這麼做：控制特定彈窗 (Modal) 或抽屜的顯示狀態，引導使用者進行下一步的核心操作。
 function openEditGroupCourseModal(c) {
   editGroupCourseForm.value = {
     groupCourseId: c.groupCourseId,
@@ -1098,12 +754,18 @@ function openEditGroupCourseModal(c) {
   showEditGroupCourse.value = true
 }
 
-// [功能方法] updateGroupCourse (更新groupcourse)
-// 為什麼要這麼做：將使用者修改後的資料同步至伺服器或本地 State，完成狀態更新並提供正確的介面呈現。
 async function updateGroupCourse() {
   saving.value = true
   try {
-    await api.put(`/api/employee/group-courses/${editGroupCourseForm.value.groupCourseId}`, editGroupCourseForm.value)
+    await api.put(`/api/admin/group-courses/${editGroupCourseForm.value.groupCourseId}`, {
+      name: editGroupCourseForm.value.name,
+      description: editGroupCourseForm.value.description,
+      imageUrl: editGroupCourseForm.value.imageUrl || null,
+      isTrial: editGroupCourseForm.value.isTrial,
+      maxCapacity: editGroupCourseForm.value.maxCapacity,
+      courseCategoryId: editGroupCourseForm.value.categoryId,
+      status: editGroupCourseForm.value.status
+    })
     showToast('團體課程資料修改成功！')
     showEditGroupCourse.value = false
     await loadGroupCourses()
@@ -1114,80 +776,59 @@ async function updateGroupCourse() {
   }
 }
 
-// [功能方法] deleteGroupCourse (刪除groupcourse)
-// 為什麼要這麼做：呼叫後端刪除 API 移除指定資料，並在完成後重新整理列表以確保畫面步調一致。
 async function deleteGroupCourse(id) {
   if (!confirm('確認將此團體課程下架？下架後學員將無法排班此課程。')) return
   try {
-    await api.delete(`/api/employee/group-courses/${id}`)
+    await api.delete(`/api/admin/group-courses/${id}`)
     showToast('課程下架成功')
     await loadGroupCourses()
   } catch (e) {
-    showToast(e.response?.data?.message || '下架失敗', 'error')
+    showToast('下架失敗', 'error')
   }
 }
 
-// [功能方法] loadProducts (載入products)
-// 為什麼要這麼做：向後端 API 請求最新數據，確保頁面載入或重新整理時，使用者能看到最即時且正確的資料。
-async function loadProducts() {
-  loading.value = true
+async function activateGroupCourse(id) {
   try {
-    const statusParam = activeTableFilter.value === 'ALL' ? undefined : activeTableFilter.value
-    
-    // 如果快速篩選是特定狀態 (比如 INACTIVE)，或是特定商品類型，我們可以做映射
-    let mappedStatus = undefined
-    let mappedType = undefined
-    
-    if (activeTableFilter.value === 'INACTIVE') {
-      mappedStatus = 'INACTIVE'
-    } else if (activeTableFilter.value === 'PRIVATE_COURSE') {
-      mappedType = 'PRIVATE_COURSE'
-      mappedStatus = 'ACTIVE'
-    } else if (activeTableFilter.value === 'GROUP_COURSE') {
-      mappedType = 'GROUP_COURSE'
-      mappedStatus = 'ACTIVE'
-    } else {
-      mappedStatus = 'ACTIVE'
-    }
-
-    const res = await api.get('/api/employee/products', {
-      params: {
-        page: currentPage.value - 1,
-        size: itemsPerPage.value,
-        keyword: filterParams.value.keyword || undefined,
-        status: mappedStatus,
-        type: mappedType,
-        startDate: filterParams.value.startDate || undefined,
-        endDate: filterParams.value.endDate || undefined
-      }
-    })
-    const page = res.data
-    coursesList.value = (page.content || []).map(c => ({
-      id: c.productId,
-      name: c.name,
-      description: c.description,
-      imageUrl: c.imageUrl,
-      price: c.price || 0,
-      sessionsPerUnit: c.sessionsPerUnit || 1,
-      classSize: c.classSize || '1 對 1',
-      trainerName: c.categoryName || '',
-      status: c.status === 'ACTIVE' ? 1 : 0,
-      type: c.type || 'PRIVATE_COURSE',
-      createdAt: c.createdAt || new Date().toISOString()
-    }))
-    totalPages.value = page.totalPages || 1
-    totalItems.value = page.totalElements || 0
-  } catch (err) {
-    console.error('Failed to load courses:', err)
-    showToast('加載課程資料失敗', 'error')
-  } finally {
-    loading.value = false
+    await api.post(`/api/admin/group-courses/${id}/activate`)
+    showToast('課程重新上架成功')
+    await loadGroupCourses()
+  } catch (e) {
+    showToast('上架失敗', 'error')
   }
 }
 
+// --- 私教課程 API 串接 ---
+async function loadPrivateCourses() {
+  try {
+    const res = await api.get('/api/private-courses')
+    rawPrivateCourses.value = res.data || []
+  } catch (err) {
+    console.error('Failed to load private courses:', err)
+  }
+}
 
-// [功能方法] loadCategories (載入categories)
-// 為什麼要這麼做：向後端 API 請求最新數據，確保頁面載入或重新整理時，使用者能看到最即時且正確的資料。
+async function deactivatePrivateCourse(id) {
+  if (!confirm('確認下架此私教課程？下架後會員將無法預約此課程。')) return
+  try {
+    await api.post(`/api/admin/private-courses/${id}/deactivate`)
+    showToast('私教課程已下架')
+    await loadPrivateCourses()
+  } catch (e) {
+    showToast('下架失敗', 'error')
+  }
+}
+
+async function activatePrivateCourse(id) {
+  try {
+    await api.post(`/api/admin/private-courses/${id}/activate`)
+    showToast('私教課程已重新上架')
+    await loadPrivateCourses()
+  } catch (e) {
+    showToast('上架失敗', 'error')
+  }
+}
+
+// --- 課程分類管理 ---
 async function loadCategories() {
   try {
     const res = await api.get('/api/course-categories')
@@ -1200,13 +841,46 @@ async function loadCategories() {
   }
 }
 
-// [生命週期掛載] 組件初始化載入
-// 為什麼要這麼做：在 Vue 元件完全掛載至網頁 DOM 後，立即向後端發送請求載入初始頁面資料，提供即時的視覺展現。
+async function createCategory() {
+  if (!newCategoryForm.value.name.trim()) return
+  try {
+    await api.post('/api/admin/course-categories', { name: newCategoryForm.value.name })
+    showToast('課程分類新增成功')
+    newCategoryForm.value.name = ''
+    await loadCategories()
+  } catch (e) {
+    showToast('新增分類失敗', 'error')
+  }
+}
+
+async function deleteCategory(cat) {
+  if (!confirm(`確認刪除課程分類「${cat.name}」？`)) return
+  try {
+    await api.delete(`/api/admin/course-categories/${cat.id}`)
+    showToast('分類已刪除')
+    await loadCategories()
+  } catch (e) {
+    showToast('刪除分類失敗', 'error')
+  }
+}
+
+async function loadTrainers() {
+  try {
+    const res = await api.get('/api/trainers')
+    trainersList.value = res.data || []
+  } catch (err) {
+    console.error('Failed to load trainers:', err)
+  }
+}
+
 onMounted(() => {
-  loadProducts()
-  loadCategories()
   loadGroupCourses()
+  loadCategories()
   loadTrainers()
+})
+
+onUnmounted(() => {
+  clearTimeout(gcSearchTimer)
 })
 </script>
 
@@ -1230,8 +904,40 @@ onMounted(() => {
   border-bottom-color: var(--primary);
 }
 
-.admin-table table td {
+.admin-table {
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+  border: 1px solid #e2e8f0;
+}
+.admin-table table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  word-break: break-word;
+}
+.admin-table table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.78rem;
+  letter-spacing: 0.3px;
   vertical-align: middle;
+}
+.admin-table table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  font-size: 0.78rem;
+  vertical-align: middle;
+  text-align: center;
+}
+.admin-table table tr:hover td {
+  background: #f8fafc;
 }
 .product-name-cell {
   text-align: center;
@@ -1240,7 +946,6 @@ onMounted(() => {
   font-weight: 700;
   color: #0f172a;
   margin-bottom: 0.25rem;
-  text-align: center;
 }
 .product-name-cell .desc-text {
   font-size: 0.72rem;
@@ -1252,6 +957,7 @@ onMounted(() => {
   margin-top: 0.2rem;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1268,7 +974,7 @@ onMounted(() => {
   opacity: 0;
 }
 
-/* Custom Checkbox 美化樣式 */
+/* Custom Checkbox */
 .checkbox-container {
   display: inline-flex;
   align-items: center;
@@ -1279,7 +985,6 @@ onMounted(() => {
   font-weight: 600;
   color: var(--text-secondary);
 }
-
 .checkbox-container .custom-checkbox {
   position: absolute;
   opacity: 0;
@@ -1287,7 +992,6 @@ onMounted(() => {
   height: 0;
   width: 0;
 }
-
 .checkbox-container .checkmark {
   position: relative;
   display: inline-block;
@@ -1298,26 +1002,21 @@ onMounted(() => {
   border-radius: 4px;
   transition: all 0.2s ease;
 }
-
 .checkbox-container:hover .custom-checkbox ~ .checkmark {
   border-color: var(--primary);
 }
-
 .checkbox-container .custom-checkbox:checked ~ .checkmark {
   background-color: var(--primary);
   border-color: var(--primary);
 }
-
 .checkbox-container .checkmark:after {
   content: "";
   position: absolute;
   display: none;
 }
-
 .checkbox-container .custom-checkbox:checked ~ .checkmark:after {
   display: block;
 }
-
 .checkbox-container .checkmark:after {
   left: 5px;
   top: 1.5px;
@@ -1328,11 +1027,23 @@ onMounted(() => {
   transform: rotate(45deg);
 }
 
-.checkbox-label-text {
-  font-size: 0.82rem;
+/* Pagination & List Control */
+.list-control-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-section, #f8fafc);
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border, #e2e8f0);
 }
-
-/* 共用分頁樣式 */
+.list-control-header.bg-none {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 0;
+}
 .total-count-text {
   font-size: 0.88rem;
   color: var(--text-secondary, #64748b);
@@ -1354,20 +1065,13 @@ onMounted(() => {
   color: var(--text-primary);
   cursor: pointer;
 }
-.pagination .page-btn {
-  width: 28px !important;
-  height: 28px !important;
-  font-size: 0.8rem !important;
-  border-radius: 4px !important;
-}
 
-/* 固定表格欄寬、防止分頁時表格跳動 */
 .product-table-wrap {
   overflow-x: auto;
-  min-height: 560px;     /* 外層固定最小高度，row 筆數少時不縮水 */
+  min-height: 560px;
 }
 .admin-table table {
-  table-layout: fixed !important;   /* 強制固定欄寬，不隨內容伸縮 */
+  table-layout: fixed !important;
   width: 100% !important;
 }
 .admin-table table th,
@@ -1377,7 +1081,6 @@ onMounted(() => {
   white-space: nowrap;
   vertical-align: middle;
 }
-/* 允許折行與顯示完整文字的欄位 */
 .product-name-cell,
 .trainer-cell,
 .desc-text {
@@ -1386,9 +1089,261 @@ onMounted(() => {
   overflow: visible !important;
 }
 .admin-table table tbody tr {
-  height: 72px;          /* 每行固定高度 */
+  height: 72px;
+}
+
+/* ===== 分頁按鈕樣式補強 (高解析度/小尺寸復刻) ===== */
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.page-btn {
+  width: 28px !important;
+  height: 28px !important;
+  border: 1.5px solid var(--border, #e8e0d9);
+  border-radius: 4px !important;
+  background: var(--bg-section, #ffffff);
+  color: var(--text-secondary, #6b5f58);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem !important;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.page-btn.active,
+.page-btn:hover {
+  background: var(--primary, #5a4a42) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+
+.page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--bg-section, #ffffff) !important;
+  color: var(--text-secondary, #6b5f58) !important;
+  border-color: var(--border, #e8e0d9) !important;
+}
+
+.page-ellipsis {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-secondary, #6b5f58);
+  font-size: 0.8rem;
+}
+
+/* --- 按鈕與表單全域樣式 --- */
+:deep(.btn), .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 38px !important;
+  padding: 0 1.25rem !important;
+  border-radius: 9999px; /* radius-xl */
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  letter-spacing: 0.03em;
+  background-clip: padding-box;
+  box-sizing: border-box !important;
+}
+
+:deep(.btn-primary), .btn-primary {
+  background: var(--primary-dark, #3c302b) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none;
+}
+
+:deep(.btn-primary:hover), .btn-primary:hover {
+  background: var(--primary, #5a4a42) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(60, 48, 43, 0.03);
+}
+
+:deep(.btn-outline), .btn-outline {
+  background: transparent !important;
+  border: 2px solid var(--primary-dark, #3c302b) !important;
+  color: var(--primary-dark, #3c302b) !important;
+}
+
+:deep(.btn-outline:hover), .btn-outline:hover {
+  background: var(--primary-dark, #3c302b) !important;
+  color: #ffffff !important;
+}
+
+:deep(.btn-edit), .btn-edit, :deep(.edit-btn-style), .edit-btn-style {
+  border: 1px solid var(--border, #e8e0d9) !important;
+  background: var(--bg-section, #ffffff) !important;
+  color: var(--text-secondary, #6b5f58) !important;
+  font-weight: 600 !important;
+}
+
+:deep(.btn-edit:hover), .btn-edit:hover, :deep(.edit-btn-style:hover), .edit-btn-style:hover {
+  background: var(--bg-soft, #f5efe9) !important;
+  color: var(--primary-dark, #3c302b) !important;
+}
+
+:deep(.btn-danger), .btn-danger, :deep(.deactive-btn-style), .deactive-btn-style {
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  background: rgba(239, 68, 68, 0.02) !important;
+  color: #c0392b !important;
+  font-weight: 600 !important;
+}
+
+:deep(.btn-danger:hover), .btn-danger:hover, :deep(.deactive-btn-style:hover), .deactive-btn-style:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
+  color: #962d22 !important;
+}
+
+/* 表單與輸入框 */
+:deep(.form-group), .form-group {
+  margin-bottom: 0.75rem;
+}
+
+:deep(.form-label), .form-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--text-secondary, #6b5f58);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+:deep(.form-input), .form-input {
+  width: 100%;
+  height: 38px !important;
+  padding: 0 0.75rem;
+  background: var(--bg-section, #ffffff);
+  border: 1.5px solid var(--border, #e8e0d9);
+  border-radius: 8px; /* radius-sm */
+  color: var(--text-primary, #2b2320);
+  font-size: 0.88rem;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-sizing: border-box !important;
+}
+
+:deep(.form-input:focus), .form-input:focus {
+  border-color: var(--primary-light, #5a4a42);
+  box-shadow: 0 0 0 3px rgba(188, 163, 143, 0.15);
+}
+
+/* 額外輔助小尺寸按鈕樣式 */
+:deep(.btn-sm), .btn-sm {
+  height: 30px !important;
+  padding: 0 0.8rem !important;
+  font-size: 0.78rem !important;
+}
+
+/* ===== 新增表單區塊與上傳樣式 ===== */
+.add-form-card {
+  margin-bottom: 2rem;
+  border: 1px solid var(--border, #e8e0d9) !important;
+  background: #ffffff;
+  padding: 1.75rem;
+  border-radius: 16px;
+  animation: slideDown 0.3s ease-out;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border, #e8e0d9);
+  padding-bottom: 0.75rem;
+}
+.form-header h4 {
+  font-size: 1.05rem;
+  color: var(--primary-dark, #3c302b);
+  font-weight: 700;
+  margin: 0;
+}
+.form-helper {
+  font-size: 0.75rem;
+  color: #ef4444;
+}
+.form-grid-responsive {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+.file-upload-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.custom-file-btn {
+  background: var(--bg-soft, #f5efe9);
+  border: 1px solid var(--border, #e8e0d9);
+  color: var(--text-secondary, #6b5f58);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.custom-file-btn:hover {
+  background: var(--primary-light, #5a4a42);
+  color: #ffffff;
+}
+.hidden-file-input {
+  display: none;
+}
+.url-input {
+  margin-top: 0.5rem;
+}
+.form-preview-thumb {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border, #e8e0d9);
+}
+
+/* ===== 課程分類管理表格樣式 (復刻自 EmployeeLayout) ===== */
+.category-manager-content table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.category-manager-content table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1.5px solid var(--border, #e8e0d9);
+  font-size: 0.82rem;
+}
+.category-manager-content table td {
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--text-primary, #2b2320);
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+.category-manager-content table tr:hover td {
+  background: #f8fafc;
 }
 </style>
-
-
-

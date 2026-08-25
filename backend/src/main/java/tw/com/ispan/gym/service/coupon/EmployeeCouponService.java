@@ -227,11 +227,12 @@ public class EmployeeCouponService {
 
 		int count = 0;
 		for (Integer memberId : memberIds) {
-			Member member = memberRepository.findById(memberId).orElse(null);
-			if (member == null)
-				continue;
-			if (memberCouponRepository.existsByMemberIdAndCouponId(memberId, couponId))
-				continue;
+			Member member = memberRepository.findById(memberId)
+					.orElseThrow(() -> new ResourceNotFoundException("查無此會員 ID: " + memberId));
+
+			if (memberCouponRepository.existsByMemberIdAndCouponId(memberId, couponId)) {
+				throw new BusinessRuleException("會員 (ID: " + memberId + ") 已擁有此優惠券");
+			}
 
 			coupon.setClaimedQuantity(coupon.getClaimedQuantity() + 1);
 			if (coupon.getClaimedQuantity() > coupon.getTotalQuantity()) {

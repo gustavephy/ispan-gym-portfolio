@@ -16,9 +16,7 @@ export const useCartStore = defineStore('cart', () => {
   const totalAmount = ref(0)     // 後端算好的購物車總額
   const loading = ref(false)
 
-  const itemCount = computed(() =>
-    items.value.reduce((sum, item) => sum + Number(item.quantity), 0)
-  )
+  const itemCount = computed(() => items.value.length)
 
   // 從後端載入購物車；未登入、或登入者沒有會員身分時直接清空本地狀態，不打 API。
   //

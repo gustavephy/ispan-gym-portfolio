@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { getSubscriptionPlans, getMySubscription } from '@/api/subscription.js'
 import { checkoutDirectSubscriptionWithEcpay } from '@/api/order.js'
 import { submitEcpayForm } from '@/utils/ecpay.js'
@@ -8,6 +9,7 @@ import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 
 const auth = useAuthStore()
+const router = useRouter()
 
 const plans = ref([])
 const mySubscription = ref(null)
@@ -55,7 +57,7 @@ async function loadMySubscription() {
 
 async function purchase(plan) {
   if (!auth.isLoggedIn) {
-    showFeedback('請先登入會員後再訂閱', 'error')
+    router.push({ name: 'login', query: { redirect: '/subscription' } })
     return
   }
   purchasingId.value = plan.subscriptionPlanId

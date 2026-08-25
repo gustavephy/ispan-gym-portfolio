@@ -84,13 +84,14 @@ api.interceptors.response.use(
 
     // 401：token 過期或未登入。登入／註冊等匿名端點的 401 屬於「帳密錯誤」之類的
     // 正常結果，交給呼叫端自己顯示，不可清 token 也不該導向登入頁。
+    // skipGlobal 為 true 表示呼叫端自行處理（例如首頁選填 API），同樣跳過全域登出流程。
     if (apiError.status === 401 && !isAnonymousEndpoint(url)) {
-      try {
-        useAuthStore().logout()
-      } catch (e) {
-        // store 不可用時仍要繼續通知，不讓例外中斷錯誤流程
-      }
       if (!skipGlobal) {
+        try {
+          useAuthStore().logout()
+        } catch (e) {
+          // store 不可用時仍要繼續通知，不讓例外中斷錯誤流程
+        }
         notifySessionExpired(apiError)
       }
       return Promise.reject(apiError)

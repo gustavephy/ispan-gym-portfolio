@@ -1,19 +1,21 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useProductsStore } from '@/stores/products.js'
 import ProductCard from '@/components/ProductCard.vue'
+import AppPagination from '@/components/AppPagination.vue'
 
 const productsStore = useProductsStore()
 const route = useRoute()
+const router = useRouter()
 
 // [自 Store 解構響應式屬性] products, categories, loading
 const { products, categories, loading } = storeToRefs(productsStore)
 
 // ---- 狀態 ----
 // [響應式狀態] page (page)
-const page = ref(0)
+const page = ref(1)
 const itemsPerPage = ref(12)
 
 // [響應式狀態] selectedCategoryKey (selectedcategorykey)
@@ -126,15 +128,17 @@ const paginatedProducts = computed(() => productsStore.products)
 // [功能方法] enterCategory (entercategory)
 // 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 function enterCategory(key) {
-  selectedCategoryKey.value = key
   resetFilters()
+  router.push({ query: { ...route.query, category: key } })
 }
 
 // [功能方法] exitCategory (exitcategory)
 // 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 function exitCategory() {
-  selectedCategoryKey.value = ''
   resetFilters()
+  const query = { ...route.query }
+  delete query.category
+  router.push({ query })
 }
 
 // [功能方法] resetFilters (重置filters)
@@ -147,7 +151,7 @@ function resetFilters() {
   minWeight.value = null
   maxWeight.value = null
   selectedBrands.value = []
-  page.value = 0
+  page.value = 1
 }
 
 // [功能方法] toggleBrand (切換brand)
@@ -158,35 +162,33 @@ function toggleBrand(brand) {
   else selectedBrands.value.push(brand)
 }
 
-// [功能方法] changePage (變更page)
-// 為什麼要這麼做：當特定數值或選單選項被變更時觸發，立即執行與其關聯的連動業務邏輯。
-function changePage(n) {
-  page.value = n
-}
 
 
 // 後端商品載入方法
 async function fetchProducts() {
   await productsStore.loadProducts({
-    page: page.value,
+    page: page.value - 1,
     size: selectedCategoryKey.value ? itemsPerPage.value : 100,
-    categoryId: selectedCategoryKey.value ? Number(selectedCategoryKey.value) : null,
+    productCategoryId: selectedCategoryKey.value ? Number(selectedCategoryKey.value) : null,
     keyword: searchParams.value.keyword || '',
     brand: selectedBrands.value.join(',') || undefined,
     minPrice: minPrice.value || null,
-    maxPrice: maxPrice.value || null
+    maxPrice: maxPrice.value || null,
+    minWeight: minWeight.value !== null ? minWeight.value : undefined,
+    maxWeight: maxWeight.value !== null ? maxWeight.value : undefined,
+    sort: priceSort.value !== 'default' ? priceSort.value : undefined,
   })
 }
 
 // 監聽所有篩選與每頁數量變更，重置頁碼並重新載入
 watch([selectedCategoryKey, selectedBrands, priceSort, minPrice, maxPrice, minWeight, maxWeight], () => {
-  page.value = 0
+  page.value = 1
   fetchProducts()
 }, { deep: true })
 
 // 監聽關鍵字輸入變更（不帶 page=0 重置，改由 doGlobalSearch 手動觸發或 debounce 處理較佳，但此處維持變動即載入）
 watch(() => searchParams.value.keyword, () => {
-  page.value = 0
+  page.value = 1
   fetchProducts()
 })
 
@@ -201,9 +203,13 @@ function applyRouteQuery(query) {
   const categoryFromQuery = Number(query.category)
   if (Number.isInteger(categoryFromQuery) && categoryFromQuery > 0) {
     selectedCategoryKey.value = String(categoryFromQuery)
+  } else {
+    selectedCategoryKey.value = ''
   }
   if (query.search) {
     searchParams.value.keyword = query.search
+  } else {
+    searchParams.value.keyword = ''
   }
 }
 
@@ -450,15 +456,12 @@ onMounted(async () => {
           </div>
 
           <!-- 分頁 -->
-          <div class="pagination" v-if="totalPages > 1">
-            <button class="page-btn" :disabled="page === 0" @click="changePage(page-1)">‹</button>
-            <button
-              v-for="n in totalPages" :key="n-1"
-              :class="['page-btn', { active: page === n-1 }]"
-              @click="changePage(n-1)"
-            >{{ n }}</button>
-            <button class="page-btn" :disabled="page >= totalPages-1" @click="changePage(page+1)">›</button>
-          </div>
+          <AppPagination
+            v-model="page"
+            :totalPages="totalPages"
+            :totalElements="totalItems"
+            :pageSize="itemsPerPage"
+          />
         </main>
       </div>
     </div>

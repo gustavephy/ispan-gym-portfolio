@@ -77,7 +77,7 @@ class StompAuthChannelInterceptorTest {
 
     private Employee employee(Integer id, EmployeeStatus status) {
         Employee employee = new Employee();
-        ReflectionTestUtils.setField(employee, "employeeId", id);
+        ReflectionTestUtils.setField(employee, "id", id);
         employee.setStatus(status);
         return employee;
     }

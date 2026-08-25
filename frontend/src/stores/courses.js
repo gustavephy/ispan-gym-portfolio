@@ -29,19 +29,17 @@ export const useCoursesStore = defineStore('courses', () => {
     }))
   }
 
-  // 計算屬性： 合併私教課和團課
   const allCourses = computed(() => {
-    const privates = privateCourses.value.map(c => ({
-      ...c,
-      id: c.id || c.courseId,
-      isPrivate: true
-    }))
-    const groups = groupCourses.value.map(c => ({
-      ...c,
-      id: c.id || c.courseId || c.groupCourseId,
-      isPrivate: false
-    }))
-    return [...privates, ...groups]
+    const privates = Array.isArray(privateCourses.value) ? privateCourses.value : []
+    const groups = Array.isArray(groupCourses.value)
+      ? groupCourses.value
+      : (groupCourses.value?.content && Array.isArray(groupCourses.value.content)
+          ? groupCourses.value.content
+          : [])
+    return [
+      ...privates.map(c => ({ ...c, id: c.id || c.courseId, isPrivate: true })),
+      ...groups.map(c => ({ ...c, id: c.id || c.courseId || c.groupCourseId, isPrivate: false }))
+    ]
   })
 
   // 搜尋與篩選的狀態欄位 (響應式)
@@ -105,7 +103,7 @@ export const useCoursesStore = defineStore('courses', () => {
     selectedTrainerId.value = params.trainerId || null
     searchQuery.value = params.keyword || ''
 
-    if (privateCourses.value.length === 0 && groupCourses.value.length === 0) {
+    if (privateCourses.value.length === 0 || groupCourses.value.length === 0) {
       loading.value = true
       try {
         const [privateRes, groupRes] = await Promise.all([
@@ -113,8 +111,12 @@ export const useCoursesStore = defineStore('courses', () => {
           getGroupCoursesPublic()
         ])
 
-        privateCourses.value = privateRes.data || []
-        groupCourses.value = groupRes.data || []
+        const rawGroup = groupRes.data
+        privateCourses.value = Array.isArray(privateRes.data) ? privateRes.data : (privateRes.data?.content || [])
+        groupCourses.value = Array.isArray(rawGroup) ? rawGroup : (Array.isArray(rawGroup?.content) ? rawGroup.content : [])
+      } catch (e) {
+        // 公開課程 API 若失敗（如後端尚未啟動），靜默處理，不讓錯誤往上拋造成全域 session expired 流程
+        console.warn('loadCourses failed:', e?.message || e)
       } finally {
         loading.value = false
       }
@@ -195,6 +197,7 @@ export const useCoursesStore = defineStore('courses', () => {
     loadCategories,
     privateCourses,
     groupCourses,
+    allCourses,
     currentPageNum,
     totalSize,
     searchQuery,

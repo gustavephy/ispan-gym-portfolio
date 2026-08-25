@@ -111,7 +111,7 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.employee.EmployeeReviewController.class,
         tw.com.ispan.gym.controller.employee.AdminEmployeeController.class,
         tw.com.ispan.gym.controller.employee.EmployeeProfileController.class,
-        tw.com.ispan.gym.controller.coupon.EmployeeCouponController.class,
+        tw.com.ispan.gym.controller.coupon.AdminCouponController.class,
         tw.com.ispan.gym.controller.member.AdminMemberController.class,
         tw.com.ispan.gym.controller.member.MemberProfileController.class,
         tw.com.ispan.gym.controller.product.ProductController.class,
@@ -532,16 +532,18 @@ class EndpointAuthorizationTest {
     }
 
     @Test
-    void 優惠券管理需員工身分() throws Exception {
-        expectUnauthorizedWhenAnonymous(get("/api/employee/coupons"));
-        expectForbidden(get("/api/employee/coupons"), memberToken());
-        expectAuthorized(get("/api/employee/coupons"), employeeToken());
+    void 優惠券管理需管理員身分() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/coupons"));
+        expectForbidden(get("/api/admin/coupons"), memberToken());
+        expectForbidden(get("/api/admin/coupons"), employeeToken());
+        expectAuthorized(get("/api/admin/coupons"), adminToken());
     }
 
     @Test
-    void 群發優惠券需員工身分() throws Exception {
-        expectForbidden(post("/api/employee/coupons/1/distribute-all"), memberToken());
-        expectAuthorized(post("/api/employee/coupons/1/distribute-all"), employeeToken());
+    void 群發優惠券需管理員身分() throws Exception {
+        expectForbidden(post("/api/admin/coupons/1/distribute-all"), memberToken());
+        expectForbidden(post("/api/admin/coupons/1/distribute-all"), employeeToken());
+        expectAuthorized(post("/api/admin/coupons/1/distribute-all"), adminToken());
     }
 
     // === TRAINER：教練排班 =====================================================

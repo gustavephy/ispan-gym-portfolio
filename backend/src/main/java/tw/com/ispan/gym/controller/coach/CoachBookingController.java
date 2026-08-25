@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
+import tw.com.ispan.gym.dto.coach.MemberCourseQuotaResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
@@ -90,5 +91,14 @@ public class CoachBookingController {
         Integer memberId = currentUserProvider.requireCurrentMemberId();
         PageResponse<CoachBookingHistoryResponse> bookings = coachBookingService.getMyBookings(memberId, page, size);
         return ResponseEntity.status(HttpStatus.OK).body(bookings);
+    }
+
+    /** 查詢自己名下的所有課程方案額度 */
+    @GetMapping("/quotas")
+    @PreAuthorize("hasRole('MEMBER')")
+    public ResponseEntity<List<MemberCourseQuotaResponse>> getMyQuotas() {
+        Integer memberId = currentUserProvider.requireCurrentMemberId();
+        List<MemberCourseQuotaResponse> quotas = coachBookingService.getMyQuotas(memberId);
+        return ResponseEntity.status(HttpStatus.OK).body(quotas);
     }
 }

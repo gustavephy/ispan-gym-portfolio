@@ -43,6 +43,11 @@ import tw.com.ispan.gym.entity.order.OrderItem;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.entity.product.ProductCategory;
 import tw.com.ispan.gym.entity.product.Product;
+import tw.com.ispan.gym.repository.coupon.CouponRepository;
+import tw.com.ispan.gym.entity.coupon.Coupon;
+import tw.com.ispan.gym.enums.coupon.CouponType;
+import tw.com.ispan.gym.enums.coupon.CouponStatus;
+import tw.com.ispan.gym.enums.coupon.CouponApplicableType;
 import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 import tw.com.ispan.gym.entity.course.CourseCategory;
 import tw.com.ispan.gym.entity.course.GroupCourse;
@@ -102,6 +107,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final PaymentTransactionRepository paymentTransactions;
     private final MemberSubscriptionRepository memberSubscriptions;
     private final MemberCourseQuotaRepository memberCourseQuotas;
+    private final CouponRepository couponRepository;
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
@@ -122,6 +128,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             PaymentTransactionRepository paymentTransactions,
             MemberSubscriptionRepository memberSubscriptions,
             MemberCourseQuotaRepository memberCourseQuotas,
+            CouponRepository couponRepository,
             JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
             @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
@@ -140,6 +147,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         this.paymentTransactions = paymentTransactions;
         this.memberSubscriptions = memberSubscriptions;
         this.memberCourseQuotas = memberCourseQuotas;
+        this.couponRepository = couponRepository;
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
@@ -392,11 +400,11 @@ public class TestDataSeedRunner implements CommandLineRunner {
      * 組員自己在後台新增的內容不該被本 runner 覆蓋或刪除。
      */
     private void ensureCatalogData(Employee coachEmployee) {
-        ProductCategory supplementCategory = ensureProductCategory();
-        ensureProducts(supplementCategory);
+        ensure46Products();
         ensureSubscriptionPlans();
         CourseCategory groupCategory = ensureCourseCategory();
         ensureGroupCourseAndSession(coachEmployee, groupCategory);
+        ensure17Coupons();
         ensureSampleOrders();
     }
 
@@ -502,39 +510,90 @@ public class TestDataSeedRunner implements CommandLineRunner {
         }
     }
 
-    private ProductCategory ensureProductCategory() {
-        return productCategories.findAll().stream().findFirst().orElseGet(() -> {
-            ProductCategory category = new ProductCategory();
-            category.setName("運動補給");
-            ProductCategory saved = productCategories.save(category);
-            log.info("已建立測試商品分類：{}", saved.getName());
-            return saved;
+    private ProductCategory getOrCreateCategory(String name) {
+        return productCategories.findByName(name).orElseGet(() -> {
+            ProductCategory cat = new ProductCategory();
+            cat.setName(name);
+            return productCategories.save(cat);
         });
     }
 
-    /**
-     * 逐筆以名稱比對補建，不是「整張表空的才播種」——早期資料庫已經有一兩筆手動建立的
-     * 商品，用整表判斷會讓這批種子永遠不會進去，商城與報表都只有零星資料可看。
-     */
-    private void ensureProducts(ProductCategory category) {
-        record Seed(String name, String price, int stock, String brand, String flavor, String desc) {}
+    private void ensure46Products() {
+        record Seed(String name, String price, int stock, String brand, String flavor, String desc,
+                    String catName, String size, String color, String material, String origin, Double weight) {}
         List<Seed> seeds = List.of(
-                new Seed("乳清蛋白 1kg", "1280", 50, "MyProtein", "巧克力", "每份 24g 蛋白質，訓練後補給首選。"),
-                new Seed("BCAA 支鏈胺基酸", "890", 30, "Optimum", "莓果", "訓練中補充，延緩疲勞。"),
-                new Seed("搖搖杯 700ml", "250", 100, "Blender", null, "防漏設計，附攪拌球。"),
-                new Seed("健身手套", "450", 20, "Harbinger", null, "止滑耐磨，保護掌心。"),
-                new Seed("能量棒（12入）", "600", 0, "Quest", "花生", "高蛋白低糖，隨身補給。"),
-                new Seed("肌酸 300g", "780", 40, "Optimum", null, "提升爆發力與訓練表現。"),
-                new Seed("彈力帶組（5條）", "520", 60, "TheraBand", null, "五種阻力，適合暖身與居家訓練。"),
-                new Seed("運動毛巾", "180", 120, "Willy", null, "吸汗快乾，健身房必備。"),
-                new Seed("瑜珈墊 6mm", "990", 25, "Manduka", null, "止滑防潑水，附收納背帶。"),
-                new Seed("護腕（一對）", "320", 45, "Harbinger", null, "大重量訓練穩定腕關節。"));
+            // 補給品 (16 items)
+            new Seed("分離乳清蛋白-巧克力", "1480", 50, "MyProtein", "巧克力", "分離乳清蛋白，吸收更快。", "補給品", "1kg", "無", "粉末", "英國", 1.0),
+            new Seed("分離乳清蛋白-香草", "1480", 45, "MyProtein", "香草", "高品質分離乳清蛋白。", "補給品", "1kg", "無", "粉末", "英國", 1.0),
+            new Seed("植物性蛋白粉-草莓", "1100", 30, "Optimum", "草莓", "全植物性蛋白，純素可食。", "補給品", "500g", "無", "粉末", "美國", 0.5),
+            new Seed("微粉化肌酸", "750", 40, "Optimum", "無味", "提升爆發力，微粉化易溶解。", "補給品", "300g", "無", "粉末", "美國", 0.3),
+            new Seed("發泡錠-維生素C", "180", 100, "Redoxon", "柳橙", "每日維生素C與鋅補充。", "補給品", "15錠", "橘色", "錠劑", "德國", 0.1),
+            new Seed("電解質補給粉-檸檬", "350", 80, "Pocari", "檸檬", "運動中補水與電解質防抽筋。", "補給品", "30包", "黃色", "粉末", "日本", 0.2),
+            new Seed("左旋肉鹼液", "880", 35, "Muscletech", "野莓", "液態左旋肉鹼，促進代謝。", "補給品", "480ml", "紅色", "液態", "美國", 0.5),
+            new Seed("高效氮泵前訓練-西瓜", "1280", 25, "C4", "西瓜", "爆發力配方，提神專注。", "補給品", "390g", "綠色", "粉末", "美國", 0.4),
+            new Seed("綜合維他命加強錠", "600", 60, "Centrum", "無味", "專為運動人士設計的維生素。", "補給品", "120錠", "橘黃", "錠劑", "美國", 0.15),
+            new Seed("鋅鎂膠囊(ZMA)", "680", 55, "Now Foods", "無味", "幫助睡眠恢復與睪酮分泌。", "補給品", "90顆", "黑白", "膠囊", "美國", 0.1),
+            new Seed("魚油軟膠囊", "800", 70, "Kirkland", "無味", "高品質Omega-3保護關節與心血管。", "補給品", "400顆", "黃色", "軟膠囊", "美國", 0.5),
+            new Seed("高蛋白能量棒-花生", "95", 120, "Quest", "花生巧克力", "低糖高纖，方便隨身補充。", "補給品", "60g/條", "棕白", "固體", "美國", 0.06),
+            new Seed("高蛋白曲奇餅", "110", 90, "Lenny", "巧克力豆", "軟餅乾口感，大分量蛋白質補充。", "補給品", "113g/包", "棕色", "固體", "美國", 0.11),
+            new Seed("BCAA 3:1:2 膠囊", "720", 40, "MusclePharm", "無味", "修復肌肉，減緩酸痛。", "補給品", "240顆", "白色", "膠囊", "美國", 0.25),
+            new Seed("穀氨醯胺粉", "890", 30, "Optimum", "無味", "加速肌肉修復與免疫系統健康。", "補給品", "300g", "白色", "粉末", "美國", 0.3),
+            new Seed("關節保養葡萄糖胺", "980", 50, "Move Free", "無味", "保護關節軟骨，減緩磨損。", "補給品", "120錠", "綠白", "錠劑", "美國", 0.15),
+
+            // 器材 (15 items)
+            new Seed("環保瑜珈墊 6mm", "980", 30, "Manduka", "黑", "止滑防汗，環保TPE材質。", "器材", "180x61cm", "黑", "TPE", "德國", 1.5),
+            new Seed("防滑乳膠阻力圈", "250", 80, "TheraBand", "紅-中度", "適合臀腿訓練與暖身激活。", "器材", "標準", "紅", "乳膠", "臺灣", 0.1),
+            new Seed("奧林匹克長槓 2.2m", "5800", 10, "Rogue", "鋼鐵銀", "承重1000磅，專業舉重槓。", "器材", "2.2m", "銀", "鋼鐵", "美國", 20.0),
+            new Seed("專業環保壺鈴 8kg", "980", 15, "Alex", "黑", "鑄鐵包膠，防滑手把。", "器材", "8kg", "黑", "鑄鐵包膠", "臺灣", 8.0),
+            new Seed("專業環保壺鈴 12kg", "1380", 15, "Alex", "黑", "鑄鐵包膠，防滑手把。", "器材", "12kg", "黑", "鑄鐵包膠", "臺灣", 12.0),
+            new Seed("專業環保壺鈴 16kg", "1780", 10, "Alex", "黑", "鑄鐵包膠，防滑手把。", "器材", "16kg", "黑", "鑄鐵包膠", "臺灣", 16.0),
+            new Seed("六角橡膠啞鈴 5kg", "600", 20, "Alex", "黑", "六角設計防滾動，減震降噪。", "器材", "5kg", "黑", "橡膠鑄鐵", "臺灣", 5.0),
+            new Seed("六角橡膠啞鈴 10kg", "1100", 20, "Alex", "黑", "六角設計防滾動，減震降噪。", "器材", "10kg", "黑", "橡膠鑄鐵", "臺灣", 10.0),
+            new Seed("六角橡膠啞鈴 15kg", "1650", 15, "Alex", "黑", "六角設計防滾動，減震降噪。", "器材", "15kg", "黑", "橡膠鑄鐵", "臺灣", 15.0),
+            new Seed("六角橡膠啞鈴 20kg", "2200", 10, "Alex", "黑", "六角設計防滾動，減震降噪。", "器材", "20kg", "黑", "橡膠鑄鐵", "臺灣", 20.0),
+            new Seed("高密度泡沫按摩滾軸", "450", 40, "TriggerPoint", "橘色", "深層筋膜放鬆，舒緩酸痛。", "器材", "33x14cm", "橘", "泡沫", "美國", 0.5),
+            new Seed("加厚阻力帶-拉力繩", "380", 50, "TheraBand", "綠-重度", "適合阻力訓練與引體向上輔助。", "器材", "標準", "綠", "乳膠", "臺灣", 0.3),
+            new Seed("多功能實心藥球 4kg", "750", 15, "Alex", "黑黃", "核心訓練與爆發力投擲。", "器材", "4kg", "黑黃", "橡膠", "臺灣", 4.0),
+            new Seed("多功能實心藥球 6kg", "950", 12, "Alex", "黑紅", "核心訓練與爆發力投擲。", "器材", "6kg", "黑紅", "橡膠", "臺灣", 6.0),
+            new Seed("高彈力抗暴瑜珈球", "620", 25, "Nike", "藍", "核心穩定訓練與伸展。", "器材", "65cm", "藍", "PVC", "中國", 0.8),
+
+            // 配件 (15 items)
+            new Seed("牛皮健身腰帶", "1580", 20, "Valeo", "棕色", "硬舉深蹲核心支撐，厚度10mm。", "配件", "M", "棕", "真皮", "美國", 0.9),
+            new Seed("專業重訓拉力帶", "450", 60, "Harbinger", "黑色", "護腕拉力帶一體，防滑耐磨。", "配件", "均碼", "黑", "尼龍", "美國", 0.15),
+            new Seed("透氣運動防滑手套", "520", 50, "Nike", "灰黑", "透氣網布，掌心避震橡膠。", "配件", "M", "灰黑", "尼龍橡膠", "中國", 0.1),
+            new Seed("加壓型針織護膝(一對)", "780", 40, "Bauerfeind", "藍灰", "3D針織加壓保護，減輕膝蓋負擔。", "配件", "M", "藍灰", "針織", "德國", 0.2),
+            new Seed("專業運動防滑粉", "150", 150, "Rogue", "白", "強力吸汗防滑，舉重體操專用。", "配件", "150g", "白", "碳酸鎂粉", "美國", 0.15),
+            new Seed("高階運動水壺 1000ml", "290", 80, "Nalgene", "透明灰", "Tritan安全材質，防漏耐摔。", "配件", "1000ml", "透明灰", "Tritan", "美國", 0.2),
+            new Seed("多功能乾濕分離運動包", "1280", 30, "UnderArmour", "深藍", "底部獨立鞋袋，乾濕分離設計。", "配件", "35L", "深藍", "尼龍", "中國", 0.8),
+            new Seed("超細纖維吸汗運動毛巾", "180", 100, "Willy", "綠色", "吸水快乾，健身房擦汗必備。", "配件", "100x20cm", "綠", "超細纖維", "臺灣", 0.1),
+            new Seed("運動排汗止汗頭帶", "150", 120, "Nike", "白色", "高彈力排汗材質，防止汗水入眼。", "配件", "均碼", "白", "彈性纖維", "中國", 0.05),
+            new Seed("便攜式滾輪按摩棒", "480", 40, "TriggerPoint", "黑綠", "便攜手動滾輪，隨時舒緩肌肉。", "配件", "40cm", "黑綠", "ABS橡膠", "美國", 0.3),
+            new Seed("專業重訓護腕(一對)", "380", 50, "Schiek", "黑紅", "大重量支撐，高彈力帶。", "配件", "均碼", "黑紅", "棉彈力布", "美國", 0.2),
+            new Seed("阻力帶專用收納袋", "120", 200, "TheraBand", "黑色", "防塵收納，方便攜帶。", "配件", "均碼", "黑", "尼龍", "臺灣", 0.05),
+            new Seed("專業鋼絲跳繩", "350", 70, "Rogue", "黑色", "高速培林，適合有氧與雙下跳。", "配件", "3m可調", "黑", "鋼絲", "美國", 0.2),
+            new Seed("運動護肘加壓帶(一對)", "680", 30, "Bauerfeind", "黑色", "肘關節保護，減緩網球肘症狀。", "配件", "M", "黑", "針織", "德國", 0.15),
+            new Seed("防滑瑜珈鋪巾", "890", 35, "Manduka", "紫色", "鋪於瑜珈墊上防滑吸汗，可機洗。", "配件", "180x61cm", "紫", "超細纖維", "德國", 0.6)
+        );
 
         int created = 0;
+        int updated = 0;
         for (Seed seed : seeds) {
-            if (products.findAll().stream().anyMatch(p -> seed.name().equals(p.getName()))) {
+            java.util.Optional<Product> existing = products.findAll().stream()
+                    .filter(p -> seed.name().equals(p.getName()))
+                    .findFirst();
+            if (existing.isPresent()) {
+                // 補齊缺漏的規格欄位（冪等：已有值則不覆蓋）
+                Product p = existing.get();
+                boolean changed = false;
+                if (p.getSize() == null) { p.setSize(seed.size()); changed = true; }
+                if (p.getColor() == null) { p.setColor(seed.color()); changed = true; }
+                if (p.getMaterial() == null) { p.setMaterial(seed.material()); changed = true; }
+                if (p.getOrigin() == null) { p.setOrigin(seed.origin()); changed = true; }
+                if (p.getWeight() == null) { p.setWeight(seed.weight()); changed = true; }
+                if (changed) { products.save(p); updated++; }
                 continue;
             }
+            ProductCategory category = getOrCreateCategory(seed.catName());
             Product product = new Product();
             product.setName(seed.name());
             product.setPrice(new BigDecimal(seed.price()));
@@ -543,12 +602,16 @@ public class TestDataSeedRunner implements CommandLineRunner {
             product.setFlavor(seed.flavor());
             product.setDescription(seed.desc());
             product.setProductCategory(category);
+            product.setSize(seed.size());
+            product.setColor(seed.color());
+            product.setMaterial(seed.material());
+            product.setOrigin(seed.origin());
+            product.setWeight(seed.weight());
             products.save(product);
             created++;
         }
-        if (created > 0) {
-            // 其中一筆刻意庫存為 0，方便驗證前端的「已售完」呈現
-            log.info("已建立 {} 筆測試商品（含 1 筆零庫存）", created);
+        if (created > 0 || updated > 0) {
+            log.info("測試商品播種：新建 {} 筆，補齊規格 {} 筆", created, updated);
         }
     }
 
@@ -616,4 +679,54 @@ public class TestDataSeedRunner implements CommandLineRunner {
         groupClassSessions.save(session);
         log.info("已建立測試團課主檔與 1 筆未來場次（{}）", start);
     }
+
+    private void ensure17Coupons() {
+        record CouponSeed(String name, String code, CouponType type, BigDecimal value, BigDecimal minSpend,
+                          CouponApplicableType applicableType, String description) {}
+        List<CouponSeed> seeds = List.of(
+            new CouponSeed("新店開張大紅包", "NEWOPEN100", CouponType.CASH, new BigDecimal("100"), new BigDecimal("500"), CouponApplicableType.ALL, "慶祝新店開幕，全館滿500折100！"),
+            new CouponSeed("體驗會籍折價券", "MEMB150", CouponType.CASH, new BigDecimal("150"), new BigDecimal("1500"), CouponApplicableType.SUBSCRIPTION, "會籍方案專屬，滿1500折150！"),
+            new CouponSeed("高級補給品八五折", "SUPP85", CouponType.PERCENT, new BigDecimal("15"), new BigDecimal("1000"), CouponApplicableType.PRODUCT, "商城補給品專用，滿1000享85折優惠！"),
+            new CouponSeed("團體有氧體驗券", "GROUPCLASS50", CouponType.CASH, new BigDecimal("50"), new BigDecimal("400"), CouponApplicableType.COURSE, "團體/預約課程專用，滿400折50！"),
+            new CouponSeed("專業啞鈴器材優惠", "DUMBBELL90", CouponType.PERCENT, new BigDecimal("10"), new BigDecimal("800"), CouponApplicableType.PRODUCT, "商城器材類別專屬，滿800享9折優惠！"),
+            new CouponSeed("年度會籍大特惠", "ANNUAL90", CouponType.PERCENT, new BigDecimal("10"), new BigDecimal("10000"), CouponApplicableType.SUBSCRIPTION, "訂閱年費方案專用，滿10000享9折優惠！"),
+            new CouponSeed("私教課程特別折扣", "PTVIP200", CouponType.CASH, new BigDecimal("200"), new BigDecimal("2000"), CouponApplicableType.COURSE, "一對一私人教練課專屬，滿2000折200！"),
+            new CouponSeed("運動配件大禮包", "ACC80", CouponType.PERCENT, new BigDecimal("20"), new BigDecimal("300"), CouponApplicableType.PRODUCT, "商城配件類別專用，滿300享8折優惠！"),
+            new CouponSeed("瑜珈專屬回饋券", "YOGA120", CouponType.CASH, new BigDecimal("120"), new BigDecimal("1200"), CouponApplicableType.COURSE, "瑜珈伸展課程專屬，滿1200折120！"),
+            new CouponSeed("乳清蛋白專屬優惠", "WHEY50", CouponType.CASH, new BigDecimal("50"), new BigDecimal("500"), CouponApplicableType.PRODUCT, "補給品分類專屬，滿500折50！"),
+            new CouponSeed("季費會籍專屬特惠", "SEASON300", CouponType.CASH, new BigDecimal("300"), new BigDecimal("4000"), CouponApplicableType.SUBSCRIPTION, "季費會籍方案專屬，滿4000折300！"),
+            new CouponSeed("核心穩定課程優惠", "CORE85", CouponType.PERCENT, new BigDecimal("15"), new BigDecimal("1500"), CouponApplicableType.COURSE, "核心肌群訓練課程專用，滿1500享85折！"),
+            new CouponSeed("健身拉力帶專屬折扣", "STRAP88", CouponType.PERCENT, new BigDecimal("12"), new BigDecimal("400"), CouponApplicableType.PRODUCT, "配件商品專用，滿400享88折！"),
+            new CouponSeed("全館慶典狂歡券", "CELEBRATE200", CouponType.CASH, new BigDecimal("200"), new BigDecimal("2000"), CouponApplicableType.ALL, "全館不限商品/課程/訂閱，滿2000折200！"),
+            new CouponSeed("新會員首購好禮", "FIRSTFREE", CouponType.PERCENT, new BigDecimal("5"), new BigDecimal("100"), CouponApplicableType.ALL, "新朋友體驗好禮，滿100享95折優惠！"),
+            new CouponSeed("重磅壺鈴系列折價", "KETTLEBELL150", CouponType.CASH, new BigDecimal("150"), new BigDecimal("1500"), CouponApplicableType.PRODUCT, "商城器材類別專屬，滿1500折150！"),
+            new CouponSeed("雙人同行會籍優惠", "DOUBLE95", CouponType.PERCENT, new BigDecimal("5"), new BigDecimal("3000"), CouponApplicableType.SUBSCRIPTION, "會籍方案專屬，滿3000享95折！")
+        );
+
+        int created = 0;
+        for (CouponSeed seed : seeds) {
+            if (couponRepository.findByCode(seed.code()).isPresent()) {
+                continue;
+            }
+            Coupon coupon = new Coupon();
+            coupon.setName(seed.name());
+            coupon.setCode(seed.code());
+            coupon.setType(seed.type());
+            coupon.setValue(seed.value());
+            coupon.setMinSpend(seed.minSpend());
+            coupon.setApplicableType(seed.applicableType());
+            coupon.setDescription(seed.description());
+            coupon.setStatus(CouponStatus.ACTIVE);
+            coupon.setTotalQuantity(1000); // 限量 1000 張
+            coupon.setClaimedQuantity(0);
+            coupon.setStartDate(LocalDate.now());
+            coupon.setEndDate(LocalDate.now().plusYears(1));
+            couponRepository.save(coupon);
+            created++;
+        }
+        if (created > 0) {
+            log.info("已建立 {} 筆測試優惠券（總共 17 項，分屬產品、課程、會籍、全館）", created);
+        }
+    }
 }
+

@@ -30,13 +30,16 @@ public class ProductController {
 			@RequestParam(name = "productSize", required = false) String size,
 			@RequestParam(required = false) BigDecimal minPrice,
 			@RequestParam(required = false) BigDecimal maxPrice,
+			@RequestParam(required = false) Double minWeight,
+			@RequestParam(required = false) Double maxWeight,
+			@RequestParam(required = false, defaultValue = "default") String sort,
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(name = "size", defaultValue = "10") int pageSize) {
 		log.info(
-				"Request to get products: productCategoryId={}, keyword={}, brand={}, flavor={}, size={}, minPrice={}, maxPrice={}, page={}, size={}",
-				productCategoryId, keyword, brand, flavor, size, minPrice, maxPrice, page, pageSize);
+				"Request to get products: productCategoryId={}, keyword={}, brand={}, flavor={}, size={}, minPrice={}, maxPrice={}, minWeight={}, maxWeight={}, sort={}, page={}, size={}",
+				productCategoryId, keyword, brand, flavor, size, minPrice, maxPrice, minWeight, maxWeight, sort, page, pageSize);
 		return ResponseEntity.ok(productService.getProducts(productCategoryId, keyword, brand, flavor, size, minPrice,
-				maxPrice, page, pageSize));
+				maxPrice, minWeight, maxWeight, sort, page, pageSize));
 	}
 
 	// 查詢單一商品詳情

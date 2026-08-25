@@ -2,7 +2,7 @@
   <div class="search-filter-card card" style="padding: 1.25rem; margin-bottom: 1.5rem; background: var(--bg-card, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: var(--radius-md, 8px);">
     <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: flex-end;">
       <!-- 關鍵字搜尋 -->
-      <div style="flex: 2; min-width: 200px;">
+      <div style="flex: 2; min-width: 240px;">
         <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 700; color: var(--text-secondary, #64748b);">{{ keywordLabel }}</label>
         <input 
           v-model="localValue.keyword" 
@@ -14,7 +14,7 @@
       </div>
 
       <!-- 日期範圍 -->
-      <div style="flex: 1.5; min-width: 150px;">
+      <div style="flex: 1; min-width: 140px;">
         <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 700; color: var(--text-secondary, #64748b);">{{ dateLabel }} (起)</label>
         <input 
           v-model="localValue.startDate" 
@@ -24,7 +24,7 @@
         />
       </div>
 
-      <div style="flex: 1.5; min-width: 150px;">
+      <div style="flex: 1; min-width: 140px;">
         <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 700; color: var(--text-secondary, #64748b);">{{ dateLabel }} (迄)</label>
         <input 
           v-model="localValue.endDate" 
@@ -75,16 +75,28 @@ const localValue = ref({
 
 watch(() => props.modelValue, (newVal) => {
   if (newVal) {
-    localValue.value = {
-      keyword: newVal.keyword || '',
-      startDate: newVal.startDate || '',
-      endDate: newVal.endDate || ''
+    if (
+      localValue.value.keyword !== (newVal.keyword || '') ||
+      localValue.value.startDate !== (newVal.startDate || '') ||
+      localValue.value.endDate !== (newVal.endDate || '')
+    ) {
+      localValue.value = {
+        keyword: newVal.keyword || '',
+        startDate: newVal.startDate || '',
+        endDate: newVal.endDate || ''
+      }
     }
   }
 }, { deep: true })
 
 watch(localValue, (newVal) => {
-  emit('update:modelValue', newVal)
+  if (
+    props.modelValue.keyword !== newVal.keyword ||
+    props.modelValue.startDate !== newVal.startDate ||
+    props.modelValue.endDate !== newVal.endDate
+  ) {
+    emit('update:modelValue', { ...newVal })
+  }
 }, { deep: true })
 
 function emitSearch() {

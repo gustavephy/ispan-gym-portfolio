@@ -5,13 +5,17 @@ import { useCartStore } from '@/stores/cart.js';
 import { useAuthStore } from '@/stores/auth.js';
 import { useFeedback } from '@/composables/useFeedback.js';
 import FeedbackToast from '@/components/FeedbackToast.vue';
+import { useRouter } from 'vue-router';
 
 const props = defineProps({
   product: { type: Object, required: true }
 })
 
+const emit = defineEmits(['add-to-cart'])
+
 const cartStore = useCartStore();
 const authStore = useAuthStore();
+const router = useRouter();
 const { feedback, showFeedback } = useFeedback(2000);
 
 // 格式化價格為千分位字串 (例如: 10,000)
@@ -19,9 +23,8 @@ const formatPrice = (price) => Number(price).toLocaleString('zh-TW')
 
 const addToCart = async () => {
   if (!authStore.isLoggedIn) {
-    showFeedback('請先登入會員以進行商品購買', 'error')
     localStorage.setItem('pending_add_to_cart_product_id', props.product.productId)
-    window.location.href = '/login?redirect=/cart'
+    router.push({ name: 'login', query: { redirect: '/products' } })
     return
   }
   try {
