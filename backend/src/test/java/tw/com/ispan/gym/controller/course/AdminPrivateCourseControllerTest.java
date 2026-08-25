@@ -38,7 +38,7 @@ class AdminPrivateCourseControllerTest {
 
     private PrivateCourseResponse sample(CourseStatus status) {
         return new PrivateCourseResponse(30, "重量訓練體驗課", 1, 1, BigDecimal.TEN, null, null, false,
-                status, (TrainerDto) null, null, null);
+                status, null, null, (TrainerDto) null, null, null);
     }
 
     @Test

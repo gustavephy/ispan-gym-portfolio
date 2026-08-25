@@ -3,11 +3,12 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { login } from '@/api/auth.js'
 import { useAuthStore } from '@/stores/auth.js'
+import OperationMessage from '@/components/OperationMessage.vue'
 
 /**
  * 登入頁。同時也是「就地顯示錯誤」的示範：
- * /api/auth/login 屬於匿名端點，攔截器不會為它跳全域錯誤或導向登入頁，
- * 帳密錯誤等結果由這裡自己顯示在表單上。
+ * /api/auth/login 屬於匿名端點（見 api/auth.js 的 ANONYMOUS_CONFIG），
+ * 攔截器不會為它跳全域錯誤或導向登入頁，帳密錯誤等結果由這裡自己顯示在表單上。
  */
 const route = useRoute()
 const router = useRouter()
@@ -16,8 +17,6 @@ const auth = useAuthStore()
 const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
-// 連續輸錯時訊息文字相同，key 遞增才能重新觸發搖晃動畫
-const errorKey = ref(0)
 const submitting = ref(false)
 
 /**
@@ -51,9 +50,9 @@ async function onSubmit() {
     // 登入前被攔截的頁面；沒有就回首頁
     router.replace(route.query.redirect || '/')
   } catch (e) {
-    // 攔截器已正規化，直接取 message（後端會回「帳號或密碼錯誤」「員工帳號尚待審核」等具體說明）
+    // 攔截器已正規化，直接取 message（後端會回「帳號或密碼錯誤」「員工帳號尚待審核」
+    // 「登入嘗試次數過多，請稍後再試」等具體說明）
     errorMessage.value = e.message
-    errorKey.value++
   } finally {
     submitting.value = false
   }
@@ -61,30 +60,49 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main class="login">
-    <h1 class="login__title">登入</h1>
+  <main class="auth-page">
+    <section class="auth-card">
+      <h1 class="auth-card__title">登入</h1>
+      <p class="auth-card__subtitle">歡迎回來，請輸入帳號密碼</p>
 
-    <form class="login__form" @submit.prevent="onSubmit">
-      <label class="login__field">
-        <span>Email</span>
-        <input v-model.trim="email" type="email" required autocomplete="email" />
-      </label>
+      <form @submit.prevent="onSubmit">
+        <div class="form-group">
+          <label class="form-label" for="login-email">Email</label>
+          <input
+            id="login-email"
+            v-model.trim="email"
+            class="form-input"
+            type="email"
+            required
+            autocomplete="email"
+            placeholder="you@example.com"
+          />
+        </div>
 
-      <label class="login__field">
-        <span>密碼</span>
-        <input v-model="password" type="password" required autocomplete="current-password" />
-      </label>
+        <div class="form-group">
+          <label class="form-label" for="login-password">密碼</label>
+          <input
+            id="login-password"
+            v-model="password"
+            class="form-input"
+            type="password"
+            required
+            autocomplete="current-password"
+          />
+        </div>
 
-      <Transition name="login-error">
-        <p v-if="errorMessage" :key="errorKey" class="login__error" role="alert">
-          {{ errorMessage }}
-        </p>
-      </Transition>
+        <OperationMessage :message="errorMessage" tone="error" />
 
-      <button class="login__submit" type="submit" :disabled="submitting">
-        {{ submitting ? '登入中…' : '登入' }}
-      </button>
-    </form>
+        <button class="btn btn-accent btn-block" type="submit" :disabled="submitting">
+          {{ submitting ? '登入中…' : '登入' }}
+        </button>
+      </form>
+
+      <div class="auth-card__links">
+        <RouterLink to="/forgot-password">忘記密碼？</RouterLink>
+        <span>還沒有帳號？<RouterLink to="/register">立即註冊</RouterLink></span>
+      </div>
+    </section>
 
     <section v-if="showTestAccounts" class="test-accounts" aria-label="測試帳號">
       <h2 class="test-accounts__title">測試帳號（點擊自動填入）</h2>
@@ -104,97 +122,25 @@ async function onSubmit() {
 </template>
 
 <style scoped>
-.login {
-  max-width: 22rem;
-  margin: 4rem auto;
-  padding: 0 1rem;
-}
-
-.login__title {
-  margin-bottom: 1.5rem;
-  font-size: 1.5rem;
-}
-
-.login__form {
-  display: flex;
+.auth-page {
   flex-direction: column;
-  gap: 1rem;
-}
-
-.login__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.875rem;
-}
-
-.login__field input {
-  padding: 0.5rem 0.65rem;
-  border: 1px solid #ccc;
-  border-radius: 0.35rem;
-  font-size: 1rem;
-}
-
-.login__error {
-  margin: 0;
-  color: #c0392b;
-  font-size: 0.875rem;
-}
-
-/* 錯誤出現：淡入＋左右搖晃（幅度遞減）；再次失敗由 key 重掛重新觸發 */
-.login-error-enter-active {
-  animation: login-error-shake 0.4s ease-out;
-}
-
-.login-error-leave-active {
-  transition: opacity 0.15s ease;
-}
-
-.login-error-leave-to {
-  opacity: 0;
-}
-
-@keyframes login-error-shake {
-  0% { opacity: 0; transform: translateX(0); }
-  20% { opacity: 1; transform: translateX(-0.4rem); }
-  40% { transform: translateX(0.35rem); }
-  60% { transform: translateX(-0.25rem); }
-  80% { transform: translateX(0.15rem); }
-  100% { transform: translateX(0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .login-error-enter-active {
-    animation: none;
-  }
-}
-
-.login__submit {
-  padding: 0.6rem;
-  border: 0;
-  border-radius: 0.35rem;
-  background: #222;
-  color: #fff;
-  font-size: 1rem;
-  cursor: pointer;
-}
-
-.login__submit:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  gap: 1.25rem;
 }
 
 .test-accounts {
-  margin-top: 2rem;
-  padding-top: 1.25rem;
-  border-top: 1px dashed #ccc;
+  width: 100%;
+  max-width: 26rem;
+  padding: 1.1rem 1.4rem;
+  background: var(--bg-section);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
 }
 
 .test-accounts__title {
   margin: 0 0 0.75rem;
   font-size: 0.8rem;
-  font-weight: 600;
-  color: #888;
+  font-weight: 700;
+  color: var(--text-muted);
 }
 
 .test-accounts__list {
@@ -212,32 +158,34 @@ async function onSubmit() {
   gap: 0 0.5rem;
   width: 100%;
   padding: 0.5rem 0.65rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 0.35rem;
-  background: #fafafa;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
   text-align: left;
   font-size: 0.8rem;
   cursor: pointer;
+  transition: var(--transition);
 }
 
 .test-accounts__item:hover {
-  border-color: #999;
-  background: #f0f0f0;
+  border-color: var(--accent);
+  background: #fff;
 }
 
 .test-accounts__role {
   grid-row: span 2;
   align-self: center;
   font-weight: 600;
+  color: var(--primary-dark);
 }
 
 .test-accounts__email {
-  color: #444;
+  color: var(--text-secondary);
   font-family: monospace;
 }
 
 .test-accounts__password {
-  color: #999;
+  color: var(--text-muted);
   font-family: monospace;
 }
 </style>

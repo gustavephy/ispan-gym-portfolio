@@ -163,6 +163,11 @@ class JwtSecuritySmokeTest {
             return "ok";
         }
 
+        @PostMapping("/api/accounts/check-email-availability")
+        String checkEmailAvailability() {
+            return "ok";
+        }
+
         @PreAuthorize("hasRole('EMPLOYEE')")
         @GetMapping("/api/probe/employee")
         String employeeProbe() {
@@ -265,10 +270,11 @@ class JwtSecuritySmokeTest {
 
     @Test
     void 註冊與Email驗證端點不需登入() throws Exception {
-        // 兩者都是未登入者才會用到：註冊時還沒有帳號，
-        // 驗證連結則是從信件點進來的。漏開會讓整條註冊流程鎖死。
+        // 三者都是未登入者才會用到：註冊時還沒有帳號，驗證連結則是從信件點進來的，
+        // 即時可用性檢查是填表單當下、也還沒有帳號。漏開會讓整條註冊流程鎖死。
         mockMvc.perform(post("/api/members/register")).andExpect(status().isOk());
         mockMvc.perform(get("/api/accounts/verify-email")).andExpect(status().isOk());
+        mockMvc.perform(post("/api/accounts/check-email-availability")).andExpect(status().isOk());
     }
 
     @Test

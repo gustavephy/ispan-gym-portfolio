@@ -136,7 +136,30 @@ const router = createRouter({
           return typeof to.query.redirect === 'string' ? to.query.redirect : '/'
         }
       }
-    }
+    },
+    // 以下四條與 /login 同層級、不掛 DefaultLayout（跟登入頁一樣，匿名流程不需要側邊主選單）
+    {
+      path: '/register',
+      name: 'register',
+      component: () => import('@/views/account/RegisterView.vue'),
+    },
+    // 後端 app.mail.verification-base-url 直接導到這個路徑，路徑名稱不可隨意更動
+    {
+      path: '/verify-email',
+      name: 'verify-email',
+      component: () => import('@/views/account/EmailVerificationView.vue'),
+    },
+    {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/account/ForgotPasswordView.vue'),
+    },
+    // 後端 app.mail.password-reset-base-url 直接導到這個路徑，路徑名稱不可隨意更動
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/account/ResetPasswordView.vue'),
+    },
   ],
 })
 
