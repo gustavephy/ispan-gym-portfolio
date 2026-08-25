@@ -51,6 +51,9 @@ import tw.com.ispan.gym.enums.coupon.CouponApplicableType;
 import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 import tw.com.ispan.gym.entity.course.CourseCategory;
 import tw.com.ispan.gym.entity.course.GroupCourse;
+import tw.com.ispan.gym.entity.course.PrivateCourse;
+import tw.com.ispan.gym.enums.course.CourseStatus;
+import tw.com.ispan.gym.repository.course.PrivateCourseRepository;
 import tw.com.ispan.gym.entity.coach.GroupClassSession;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import java.math.BigDecimal;
@@ -101,6 +104,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final SubscriptionPlanRepository subscriptionPlans;
     private final CourseCategoryRepository courseCategories;
     private final GroupCourseRepository groupCourses;
+    private final PrivateCourseRepository privateCourses;
     private final GroupClassSessionRepository groupClassSessions;
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
@@ -122,6 +126,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             SubscriptionPlanRepository subscriptionPlans,
             CourseCategoryRepository courseCategories,
             GroupCourseRepository groupCourses,
+            PrivateCourseRepository privateCourses,
             GroupClassSessionRepository groupClassSessions,
             OrderRepository orders,
             OrderItemRepository orderItems,
@@ -141,6 +146,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         this.subscriptionPlans = subscriptionPlans;
         this.courseCategories = courseCategories;
         this.groupCourses = groupCourses;
+        this.privateCourses = privateCourses;
         this.groupClassSessions = groupClassSessions;
         this.orders = orders;
         this.orderItems = orderItems;
@@ -404,6 +410,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         ensureSubscriptionPlans();
         CourseCategory groupCategory = ensureCourseCategory();
         ensureGroupCourseAndSession(coachEmployee, groupCategory);
+        ensurePrivateCourses(coachEmployee);
         ensure17Coupons();
         ensureSampleOrders();
     }
@@ -678,6 +685,53 @@ public class TestDataSeedRunner implements CommandLineRunner {
         session.setStatus(GroupClassSessionStatus.SCHEDULED);
         groupClassSessions.save(session);
         log.info("已建立測試團課主檔與 1 筆未來場次（{}）", start);
+    }
+
+    /**
+     * 私教課方案：前台「課程方案」頁私教區塊的資料來源（GET /api/private-courses 只回 ACTIVE）。
+     * 比照其他目錄資料「表為空才建立」，不覆蓋組員在後台自建的內容；
+     * 分類另建「一對一私教」（依名稱找、找不到才建），與團課的「團體有氧」區隔，
+     * 讓前台的分類篩選有兩個以上的選項可切換。
+     */
+    private void ensurePrivateCourses(Employee coachEmployee) {
+        // 判斷「有沒有 ACTIVE」而不是「表是否為空」：前台只顯示 ACTIVE，
+        // 表裡只剩下架課（例如遺留的測試資料）時頁面照樣空白，這時仍該播種
+        if (!privateCourses.findByStatus(CourseStatus.ACTIVE).isEmpty()) {
+            return;
+        }
+        Trainer trainer = trainers.findByEmployeeId(coachEmployee.getId()).orElse(null);
+        if (trainer == null) {
+            log.warn("找不到測試教練，略過私教課播種");
+            return;
+        }
+        CourseCategory category = courseCategories.findAll().stream()
+                .filter(c -> "一對一私教".equals(c.getName()))
+                .findFirst()
+                .orElseGet(() -> {
+                    CourseCategory created = new CourseCategory();
+                    created.setName("一對一私教");
+                    return courseCategories.save(created);
+                });
+
+        record Seed(String name, String desc, int price, int sessions, boolean trial) {}
+        List<Seed> seeds = List.of(
+                new Seed("一對一體驗課", "首次體驗專屬，單堂一對一指導，評估體能狀態並規劃訓練方向。", 800, 1, true),
+                new Seed("一對一重訓入門（5堂）", "從姿勢與呼吸打底，建立深蹲、硬舉、臥推三大動作基礎。", 6500, 5, false),
+                new Seed("體態雕塑計畫（10堂）", "依 InBody 數據客製課表，搭配飲食建議，十堂完成階段性目標。", 12000, 10, false),
+                new Seed("核心與體能強化（8堂）", "強化核心穩定與心肺耐力，適合久坐族與運動初學者。", 9600, 8, false));
+
+        for (Seed seed : seeds) {
+            PrivateCourse course = new PrivateCourse();
+            course.setName(seed.name());
+            course.setDescription(seed.desc());
+            course.setPrice(new BigDecimal(seed.price()));
+            course.setSessionPerUnit(seed.sessions());
+            course.setTrainer(trainer);
+            course.setCategory(category);
+            course.setIsTrial(seed.trial());
+            privateCourses.save(course);
+        }
+        log.info("已建立 {} 筆測試私教課方案", seeds.size());
     }
 
     private void ensure17Coupons() {
