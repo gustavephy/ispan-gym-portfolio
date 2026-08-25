@@ -37,7 +37,7 @@ import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
-import tw.com.ispan.gym.service.coach.MemberCourseQuotaService;
+import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.member.AdminMemberService;
 
 /**
@@ -141,8 +141,8 @@ class AdminMemberMethodSecurityTest {
         @Bean @Primary AdminMemberService adminMemberService() {
             return Mockito.mock(AdminMemberService.class);
         }
-        @Bean @Primary MemberCourseQuotaService memberCourseQuotaService() {
-            return Mockito.mock(MemberCourseQuotaService.class);
+        @Bean @Primary CoachBookingService coachBookingService() {
+            return Mockito.mock(CoachBookingService.class);
         }
     }
 
@@ -152,7 +152,7 @@ class AdminMemberMethodSecurityTest {
     @Autowired EmployeeRepository employees;
     @Autowired TrainerRepository trainers;
     @Autowired AdminMemberService adminMemberService;
-    @Autowired MemberCourseQuotaService memberCourseQuotaService;
+    @Autowired CoachBookingService coachBookingService;
 
     private static final String VALID_UPDATE_BODY = """
             {
@@ -169,7 +169,7 @@ class AdminMemberMethodSecurityTest {
      */
     @BeforeEach
     void resetMocks() {
-        Mockito.reset(adminMemberService, memberCourseQuotaService, accounts, employees, trainers);
+        Mockito.reset(adminMemberService, coachBookingService, accounts, employees, trainers);
     }
 
     private String tokenFor(int accountId, int employeeId, String email, EmployeeRole role) {
@@ -318,8 +318,7 @@ class AdminMemberMethodSecurityTest {
                         .header("Authorization", "Bearer " + employeeToken()))
                 .andExpect(status().isForbidden());
 
-        Mockito.verify(memberCourseQuotaService, Mockito.never())
-                .getQuotasByMember(Mockito.any(), Mockito.anyInt(), Mockito.anyInt());
+        Mockito.verify(coachBookingService, Mockito.never()).getMyQuotas(Mockito.any());
     }
 
     @Test
@@ -328,7 +327,6 @@ class AdminMemberMethodSecurityTest {
                         .header("Authorization", "Bearer " + adminToken()))
                 .andExpect(status().isOk());
 
-        Mockito.verify(memberCourseQuotaService)
-                .getQuotasByMember(Mockito.eq(1), Mockito.anyInt(), Mockito.anyInt());
+        Mockito.verify(coachBookingService).getMyQuotas(1);
     }
 }

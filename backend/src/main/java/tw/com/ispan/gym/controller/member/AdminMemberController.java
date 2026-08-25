@@ -12,14 +12,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 import jakarta.validation.Valid;
 import tw.com.ispan.gym.dto.coach.MemberCourseQuotaResponse;
-import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberSummaryResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberUpdateRequest;
 import tw.com.ispan.gym.enums.member.UserStatus;
-import tw.com.ispan.gym.service.coach.MemberCourseQuotaService;
+import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.member.AdminMemberService;
 
 /**
@@ -40,12 +41,12 @@ import tw.com.ispan.gym.service.member.AdminMemberService;
 public class AdminMemberController {
 
     private final AdminMemberService adminMemberService;
-    private final MemberCourseQuotaService memberCourseQuotaService;
+    private final CoachBookingService coachBookingService;
 
     public AdminMemberController(AdminMemberService adminMemberService,
-            MemberCourseQuotaService memberCourseQuotaService) {
+            CoachBookingService coachBookingService) {
         this.adminMemberService = adminMemberService;
-        this.memberCourseQuotaService = memberCourseQuotaService;
+        this.coachBookingService = coachBookingService;
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -66,13 +67,15 @@ public class AdminMemberController {
         return adminMemberService.getById(memberId);
     }
 
+    /**
+     * 查詢指定會員的課程額度。與會員端 GET /api/member/quotas 共用
+     * CoachBookingService.getMyQuotas，差異只在 memberId 是管理者指定而非從 token 反查。
+     */
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/{memberId}/course-quotas")
-    public ResponseEntity<PageResponse<MemberCourseQuotaResponse>> getQuotas(
-            @PathVariable Integer memberId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(memberCourseQuotaService.getQuotasByMember(memberId, page, size));
+    public ResponseEntity<List<MemberCourseQuotaResponse>> getQuotas(
+            @PathVariable Integer memberId) {
+        return ResponseEntity.ok(coachBookingService.getMyQuotas(memberId));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

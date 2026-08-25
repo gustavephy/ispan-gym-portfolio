@@ -329,19 +329,29 @@ class EmployeeCouponServiceTest {
 
     // === distributeToMembers() ==================================================
 
+    // 2026-08-25 admin-ui-standardization 之後語義改變：名單有問題不再靜默跳過，
+    // 而是整批擋下（@Transactional 回滾），讓管理者知道名單有誤而不是默默少發幾張
+
     @Test
-    void 指定發放跳過不存在的會員與已持有者() {
+    void 指定發放名單含不存在的會員時整批擋下() {
         Coupon coupon = coupon(COUPON_ID, "GIFT", CouponStatus.ACTIVE);
         when(coupons.findById(COUPON_ID)).thenReturn(Optional.of(coupon));
         when(members.findById(1)).thenReturn(Optional.of(member(1, UserStatus.ACTIVE)));
         when(members.findById(2)).thenReturn(Optional.empty()); // 不存在
-        when(members.findById(3)).thenReturn(Optional.of(member(3, UserStatus.ACTIVE)));
-        when(memberCoupons.existsByMemberIdAndCouponId(3, COUPON_ID)).thenReturn(true); // 已持有
 
-        int count = service.distributeToMembers(COUPON_ID, List.of(1, 2, 3));
+        assertThatThrownBy(() -> service.distributeToMembers(COUPON_ID, List.of(1, 2)))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
 
-        assertThat(count).isEqualTo(1);
-        assertThat(coupon.getClaimedQuantity()).isEqualTo(1);
+    @Test
+    void 指定發放名單含已持有者時整批擋下() {
+        Coupon coupon = coupon(COUPON_ID, "GIFT", CouponStatus.ACTIVE);
+        when(coupons.findById(COUPON_ID)).thenReturn(Optional.of(coupon));
+        when(members.findById(1)).thenReturn(Optional.of(member(1, UserStatus.ACTIVE)));
+        when(memberCoupons.existsByMemberIdAndCouponId(1, COUPON_ID)).thenReturn(true); // 已持有
+
+        assertThatThrownBy(() -> service.distributeToMembers(COUPON_ID, List.of(1)))
+                .isInstanceOf(BusinessRuleException.class);
     }
 
     @Test

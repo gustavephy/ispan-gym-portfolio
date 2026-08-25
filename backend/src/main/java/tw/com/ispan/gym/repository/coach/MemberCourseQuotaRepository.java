@@ -3,8 +3,6 @@ package tw.com.ispan.gym.repository.coach;
 
 import java.util.List;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,14 +21,5 @@ public interface MemberCourseQuotaRepository extends JpaRepository<MemberCourseQ
             + "ORDER BY q.expiryDate ASC")
     List<MemberCourseQuota> findEligibleQuota(@Param("memberId") Integer memberId, @Param("trainerId") Integer trainerId);
 
-    /**
-     * 查詢某會員名下的所有課程包額度（不篩選狀態，ACTIVE/DEPLETED/EXPIRED 都回傳，
-     * 由呼叫端或前端自行判斷要不要篩選），依到期日由早到晚排序
-     * （expiryDate 為 null 視為永久有效，排在最後）。
-     * 會員查自己、管理者查指定會員，共用這個方法，差異只在呼叫端傳入的 memberId
-     * 是否受信任，不在查詢邏輯本身。
-     */
-    @Query("SELECT q FROM MemberCourseQuota q WHERE q.member.id = :memberId "
-            + "ORDER BY CASE WHEN q.expiryDate IS NULL THEN 1 ELSE 0 END, q.expiryDate ASC")
-    Page<MemberCourseQuota> findByMemberId(@Param("memberId") Integer memberId, Pageable pageable);
+    List<MemberCourseQuota> findByMemberId(Integer memberId);
 }

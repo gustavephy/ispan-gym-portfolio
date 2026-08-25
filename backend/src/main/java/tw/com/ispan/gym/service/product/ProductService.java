@@ -31,13 +31,22 @@ public class ProductService {
         this.productCategories = productCategories;
     }
 
-    // 前台商品列表：只回上架中的商品，可依分類／關鍵字／品牌／口味／尺寸／價格區間篩選
+    // 前台商品列表：只回上架中的商品，可依分類／關鍵字／品牌／口味／尺寸／價格區間／重量區間篩選，以及價格排序
     public Page<ProductResponse> getProducts(Integer productCategoryId, String keyword, String brand,
-            String flavor, String size, BigDecimal minPrice, BigDecimal maxPrice, int page, int pageSize) {
-        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("createdAt").descending());
+            String flavor, String size, BigDecimal minPrice, BigDecimal maxPrice,
+            Double minWeight, Double maxWeight, String sort, int page, int pageSize) {
+        Sort sortOrder;
+        if ("lowToHigh".equals(sort)) {
+            sortOrder = Sort.by("price").ascending();
+        } else if ("highToLow".equals(sort)) {
+            sortOrder = Sort.by("price").descending();
+        } else {
+            sortOrder = Sort.by("createdAt").descending();
+        }
+        Pageable pageable = PageRequest.of(page, pageSize, sortOrder);
         String kw = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
         return products.findProductsWithFilters(ProductStatus.ACTIVE, productCategoryId, kw,
-                brand, flavor, size, minPrice, maxPrice, pageable)
+                brand, flavor, size, minPrice, maxPrice, minWeight, maxWeight, pageable)
                 .map(ProductResponse::from);
     }
 

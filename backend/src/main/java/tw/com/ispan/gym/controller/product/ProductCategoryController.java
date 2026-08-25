@@ -1,6 +1,5 @@
 package tw.com.ispan.gym.controller.product;
 
-
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
@@ -24,27 +23,10 @@ public class ProductCategoryController {
 
 	private final ProductCategoryService productCategoryService;
 
-	//查詢商品分類
+	// 查詢商品分類
 	@GetMapping("/api/product-categories")
 	public ResponseEntity<List<ProductCategoryDto>> getProductCategories() {
 		log.info("Request to get all product categories");
 		return ResponseEntity.ok(productCategoryService.getAllProductCategories());
-	}
-
-	//新增商品分類(管理員)
-	@PostMapping("/api/admin/product-categories")
-	@PreAuthorize("hasRole('ADMIN')")
-	public ResponseEntity<ProductCategoryDto> createProductCategory(@RequestBody ProductCategoryDto category) {
-		log.info("Request to create product category: name={}", category.name());
-		return ResponseEntity.ok(productCategoryService.createProductCategory(category));
-	}
-
-	//刪除商品分類(管理員)
-	@DeleteMapping("/api/admin/product-categories/{id}")
-	@PreAuthorize("hasRole('ADMIN')")
-	public ResponseEntity<String> deleteProductCategory(@PathVariable Integer productCategoryId) {
-		log.info("Request to delete product category: id={}", productCategoryId);
-		productCategoryService.deleteProductCategory(productCategoryId);
-		return ResponseEntity.ok("商品分類已刪除");
 	}
 }

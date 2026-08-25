@@ -90,47 +90,48 @@ class ProductServiceTest {
 
     @Test
     void 前台列表只查上架中的商品() {
-        when(products.findProductsWithFilters(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(products.findProductsWithFilters(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(product())));
 
-        service.getProducts(null, null, null, null, null, null, null, 0, 10);
+        service.getProducts(null, null, null, null, null, null, null, null, null, null, 0, 10);
 
         // 第一個參數固定是 ACTIVE，前台看不到下架商品
         verify(products).findProductsWithFilters(eq(ProductStatus.ACTIVE), isNull(), isNull(), isNull(),
-                isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
     void 空白關鍵字正規化為null而不是搜尋空字串() {
-        when(products.findProductsWithFilters(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(products.findProductsWithFilters(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        service.getProducts(null, "   ", null, null, null, null, null, 0, 10);
+        service.getProducts(null, "   ", null, null, null, null, null, null, null, null, 0, 10);
 
         verify(products).findProductsWithFilters(eq(ProductStatus.ACTIVE), isNull(), isNull(), isNull(),
-                isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
     void 關鍵字前後空白會被修掉再查詢() {
-        when(products.findProductsWithFilters(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(products.findProductsWithFilters(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        service.getProducts(null, "  乳清  ", null, null, null, null, null, 0, 10);
+        service.getProducts(null, "  乳清  ", null, null, null, null, null, null, null, null, 0, 10);
 
         verify(products).findProductsWithFilters(eq(ProductStatus.ACTIVE), isNull(), eq("乳清"), isNull(),
-                isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
     void 分頁參數原樣帶入查詢() {
-        when(products.findProductsWithFilters(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(products.findProductsWithFilters(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        service.getProducts(CATEGORY_ID, null, null, null, null, new BigDecimal("100"), new BigDecimal("500"), 2, 20);
+        service.getProducts(CATEGORY_ID, null, null, null, null, new BigDecimal("100"), new BigDecimal("500"),
+                null, null, null, 2, 20);
 
         verify(products).findProductsWithFilters(eq(ProductStatus.ACTIVE), eq(CATEGORY_ID), isNull(), isNull(),
-                isNull(), isNull(), eq(new BigDecimal("100")), eq(new BigDecimal("500")),
+                isNull(), isNull(), eq(new BigDecimal("100")), eq(new BigDecimal("500")), isNull(), isNull(),
                 org.mockito.ArgumentMatchers.argThat((Pageable p) ->
                         p.getPageNumber() == 2 && p.getPageSize() == 20));
     }
