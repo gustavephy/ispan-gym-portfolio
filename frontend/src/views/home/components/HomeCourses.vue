@@ -156,12 +156,15 @@ onMounted(async () => {
     coursesLoading.value = false
     loadDbTrainers()
 
-    if (auth.isLoggedIn) {
+    // 只有 Member 才查會員訂閱狀態——純 Employee/Admin 沒有 Member 身分，
+    // 後端 requireCurrentMemberId() 會丟 401，若在這裡吞掉會連帶讓攔截器
+    // 把剛登入的 session 一起登出（見 axios.instance.js 的 401 處理）
+    if (auth.isMember) {
       try {
         const subRes = await api.get('/api/me/subscription', { skipGlobalError: true })
         hasActiveSubscription.value = subRes.data?.isActive || false
       } catch (e) {
-        // 忽略過期 Token 產生的錯誤，避免首頁強制跳轉或警告
+        // 沒有訂閱紀錄等情況維持 false
       }
     }
   } catch (e) {
