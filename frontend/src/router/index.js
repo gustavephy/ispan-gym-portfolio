@@ -137,7 +137,7 @@ const router = createRouter({
         }
       }
     },
-    // 以下四條與 /login 同層級、不掛 DefaultLayout（跟登入頁一樣，匿名流程不需要側邊主選單）
+    // 以下匿名路由與 /login 同層級、不掛 DefaultLayout（跟登入頁一樣，匿名流程不需要側邊主選單）
     {
       path: '/register',
       name: 'register',
@@ -159,6 +159,16 @@ const router = createRouter({
       path: '/reset-password',
       name: 'reset-password',
       component: () => import('@/views/account/ResetPasswordView.vue'),
+    },
+    {
+      path: '/employee-register',
+      name: 'employee-register',
+      component: () => import('@/views/employee/EmployeeRegisterView.vue'),
+    },
+    {
+      path: '/employee-reapply',
+      name: 'employee-reapply',
+      component: () => import('@/views/employee/EmployeeReapplyView.vue'),
     },
   ],
 })

@@ -355,6 +355,7 @@ async function confirmAndRegister() {
 
         <div class="auth-card__links">
           <span>已經有帳號？<RouterLink to="/login">前往登入</RouterLink></span>
+          <span>想申請員工帳號？<RouterLink to="/employee-register">前往員工申請</RouterLink></span>
         </div>
       </template>
     </section>
