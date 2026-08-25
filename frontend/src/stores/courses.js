@@ -74,7 +74,8 @@ export const useCoursesStore = defineStore('courses', () => {
     if (selectedTrainerId.value) {
       const tId = Number(selectedTrainerId.value)
       result = result.filter(course => {
-        const trId = course.trainerId || course.trainer?.trainerId
+        // 團課是扁平的 trainerId；私教課是巢狀 trainer 物件（TrainerDto 的主鍵叫 id）
+        const trId = course.trainerId || course.trainer?.trainerId || course.trainer?.id
         return Number(trId) === tId
       })
     }
@@ -113,7 +114,12 @@ export const useCoursesStore = defineStore('courses', () => {
 
         const rawGroup = groupRes.data
         privateCourses.value = Array.isArray(privateRes.data) ? privateRes.data : (privateRes.data?.content || [])
-        groupCourses.value = Array.isArray(rawGroup) ? rawGroup : (Array.isArray(rawGroup?.content) ? rawGroup.content : [])
+        // 團課走後端共用的 PageResponse，分頁清單放在 items（不是 Spring Page 的 content）；
+        // content 保留當備援，避免之後有端點改回 Page 直接序列化
+        groupCourses.value = Array.isArray(rawGroup)
+          ? rawGroup
+          : (Array.isArray(rawGroup?.items) ? rawGroup.items
+            : (Array.isArray(rawGroup?.content) ? rawGroup.content : []))
       } catch (e) {
         // 公開課程 API 若失敗（如後端尚未啟動），靜默處理，不讓錯誤往上拋造成全域 session expired 流程
         console.warn('loadCourses failed:', e?.message || e)

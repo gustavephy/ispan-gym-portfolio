@@ -18,6 +18,9 @@ public record PrivateCourseResponse(
         String imageUrl,
         Boolean isTrial,
         CourseStatus status,
+        // 前台課程方案頁的分類篩選靠這兩個欄位；category 在 DB 允許為 null，前端需自行容錯
+        Integer courseCategoryId,
+        String courseCategoryName,
         TrainerDto trainer,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
@@ -27,6 +30,7 @@ public record PrivateCourseResponse(
             return null;
         }
 
+        var category = course.getCategory();
         return new PrivateCourseResponse(
                 course.getId(),
                 course.getName(),
@@ -37,6 +41,8 @@ public record PrivateCourseResponse(
                 course.getImageUrl(),
                 course.getIsTrial(),
                 course.getStatus(),
+                category != null ? category.getCourseCategoryId() : null,
+                category != null ? category.getName() : null,
                 TrainerDto.from(course.getTrainer()),
                 course.getCreatedAt(),
                 course.getUpdatedAt()

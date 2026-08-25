@@ -351,4 +351,36 @@ class PrivateCourseServiceTest {
 
         assertThat(result).hasSize(2);
     }
+
+    // === getPublicCourses()：前台課程方案頁 =======================================
+
+    @Test
+    void 公開清單帶出分類欄位供前台篩選() {
+        // 迴歸（2026-08-25 課程方案頁分類篩選壞掉的根因之一）：前端分類篩選靠
+        // courseCategoryId 比對，DTO 漏掉這個欄位時私教課會被所有分類條件濾光
+        CourseCategory category = new CourseCategory();
+        category.setCourseCategoryId(CATEGORY_ID);
+        category.setName("一對一私教");
+        PrivateCourse course = course(CourseStatus.ACTIVE);
+        course.setCategory(category);
+        when(courses.findByStatus(CourseStatus.ACTIVE)).thenReturn(List.of(course));
+
+        List<PrivateCourseResponse> result = service.getPublicCourses();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).courseCategoryId()).isEqualTo(CATEGORY_ID);
+        assertThat(result.get(0).courseCategoryName()).isEqualTo("一對一私教");
+    }
+
+    @Test
+    void 公開清單分類為null時不炸_分類欄位回null() {
+        // category 是可為 null 的 FK；映射必須容錯，不能讓一筆沒分類的課炸掉整個清單
+        when(courses.findByStatus(CourseStatus.ACTIVE)).thenReturn(List.of(course(CourseStatus.ACTIVE)));
+
+        List<PrivateCourseResponse> result = service.getPublicCourses();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).courseCategoryId()).isNull();
+        assertThat(result.get(0).courseCategoryName()).isNull();
+    }
 }
