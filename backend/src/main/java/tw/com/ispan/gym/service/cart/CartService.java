@@ -69,6 +69,8 @@ public class CartService {
             }
         } else {
             item = new CartItem(member, product, request.quantity());
+            // 加入當下的價格快照；僅供前端顯示「加入後是否變價」，結帳仍以現價計算
+            item.setUnitPriceSnapshot(product.getPrice());
         }
         validateStock(product, item.getQuantity());
         return toResponse(cartItems.save(item));
@@ -127,8 +129,14 @@ public class CartService {
 
     private CartItemResponse toResponse(CartItem item) {
         Product product = item.getProduct();
-        BigDecimal subtotal = product.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
+        BigDecimal currentPrice = product.getPrice();
+        BigDecimal subtotal = currentPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
+        BigDecimal priceWhenAdded = item.getUnitPriceSnapshot();
+        boolean priceChanged = priceWhenAdded != null && priceWhenAdded.compareTo(currentPrice) != 0;
+        boolean available = ProductStatus.ACTIVE.equals(product.getStatus())
+                && product.getStock() != null && product.getStock() >= item.getQuantity();
         return new CartItemResponse(item.getCartItemId(), product.getProductId(), product.getName(),
-                product.getImageUrl(), product.getPrice(), item.getQuantity(), subtotal);
+                product.getImageUrl(), currentPrice, item.getQuantity(), subtotal,
+                priceWhenAdded, priceChanged, available, product.getStock());
     }
 }

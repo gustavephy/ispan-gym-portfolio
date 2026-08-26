@@ -34,7 +34,7 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
-          path: 'orders',
+          path: 'orders/:id?',
           component: () => import('@/views/member/OrderListView.vue'),
           meta: { requiresAuth: true },
         },
@@ -96,6 +96,11 @@ const router = createRouter({
         {
           path: 'admin/orders',
           component: () => import('@/views/admin/AdminOrderView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
+          path: 'admin/payments',
+          component: () => import('@/views/admin/AdminPaymentView.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {

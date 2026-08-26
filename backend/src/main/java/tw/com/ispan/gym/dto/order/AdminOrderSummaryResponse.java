@@ -9,6 +9,7 @@ public record AdminOrderSummaryResponse(
         Integer orderId,
         String orderNo,
         String merchantTradeNo,
+        String title,
         Integer memberId,
         String memberName,
         String memberEmail,

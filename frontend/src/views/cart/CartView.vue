@@ -100,6 +100,12 @@ onMounted(() => {
           <div class="item-info">
             <h3 class="item-name">{{ item.productName }}</h3>
             <p class="item-unit-price">NT$ {{ Number(item.unitPrice).toLocaleString() }} / 件</p>
+            <p v-if="item.available === false" class="item-warn danger">
+              此商品已下架或庫存不足（現有 {{ item.stock }}），結帳前請移除
+            </p>
+            <p v-else-if="item.priceChanged" class="item-warn">
+              加入時 NT$ {{ Number(item.priceWhenAdded).toLocaleString() }}，現價已調整
+            </p>
           </div>
 
           <div class="item-qty">
@@ -218,6 +224,14 @@ onMounted(() => {
 .item-unit-price {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+.item-warn {
+  font-size: 0.75rem;
+  color: #a06400;
+  margin-top: 0.2rem;
+}
+.item-warn.danger {
+  color: #c92a2a;
 }
 .item-qty { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
 .qty-btn {

@@ -60,6 +60,7 @@
         { to: '/admin/inventory', label: '庫存管理', requires: 'ADMIN' },
         { to: '/admin/orders', label: '訂單管理', requires: 'ADMIN' },
         { to: '/admin/refunds', label: '退款處理', requires: 'ADMIN' },
+        { to: '/admin/payments', label: '交易紀錄', requires: 'ADMIN' },
         { to: '/admin/employee-reviews', label: '員工審核' },
       ],
     },
