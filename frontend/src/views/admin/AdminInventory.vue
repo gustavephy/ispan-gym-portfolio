@@ -95,7 +95,7 @@
                 </div>
               </td>
               <td style="text-align: center;">
-                <RouterLink to="/admin/products" class="btn btn-primary btn-xs" style="text-decoration: none; display: inline-block;">
+                <RouterLink to="/admin/products" class="btn btn-primary btn-xs" style="text-decoration: none;">
                   前往補貨
                 </RouterLink>
               </td>
