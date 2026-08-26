@@ -257,7 +257,7 @@
         >
           登入
         </RouterLink>
-        <RouterLink class="nav-auth__button" to="/register">
+        <RouterLink class="nav-auth__button" to="/member-register">
           註冊
         </RouterLink>
       </div>

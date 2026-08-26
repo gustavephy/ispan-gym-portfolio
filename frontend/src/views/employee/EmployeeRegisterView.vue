@@ -207,6 +207,7 @@ async function onSubmit() {
         <div class="auth-card__links">
           <span>申請曾被拒絕？<RouterLink to="/employee-reapply">重新申請</RouterLink></span>
           <span>已經有帳號？<RouterLink to="/login">前往登入</RouterLink></span>
+          <span class="auth-card__links--secondary">暫時不繼續？<RouterLink to="/">返回首頁</RouterLink></span>
         </div>
       </template>
     </section>
@@ -262,5 +263,12 @@ async function onSubmit() {
   .pwd-rules {
     grid-template-columns: 1fr;
   }
+}
+
+/* 返回首頁連結刻意弱化，避免跟主要動線搶視覺焦點 */
+.auth-card__links--secondary {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 </style>

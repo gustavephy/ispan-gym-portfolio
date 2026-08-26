@@ -100,7 +100,8 @@ async function onSubmit() {
 
       <div class="auth-card__links">
         <RouterLink to="/forgot-password">忘記密碼？</RouterLink>
-        <span>還沒有帳號？<RouterLink to="/register">立即註冊</RouterLink></span>
+        <span>還沒有帳號？<RouterLink to="/member-register">立即註冊</RouterLink></span>
+        <span>暫時不繼續？<RouterLink to="/">返回首頁</RouterLink></span>
         <span class="auth-card__links--secondary">員工註冊&nbsp;&nbsp;<RouterLink to="/employee-register">提出員工申請</RouterLink></span>
         <span class="auth-card__links--secondary">員工申請未通過&nbsp;&nbsp;<RouterLink to="/employee-reapply">重新申請</RouterLink></span>
       </div>
@@ -131,9 +132,13 @@ async function onSubmit() {
 
 /* 員工申請入口刻意弱化，避免跟登入頁主要動線（忘記密碼／會員註冊）搶視覺焦點 */
 .auth-card__links--secondary {
-  margin-top: 0.4rem;
+  margin-top: 1rem;
   font-size: 0.75rem;
+  line-height: 1.2;
   color: var(--text-muted);
+}
+.auth-card__links--secondary + .auth-card__links--secondary {
+  margin-top: 0;
 }
 
 .test-accounts {
