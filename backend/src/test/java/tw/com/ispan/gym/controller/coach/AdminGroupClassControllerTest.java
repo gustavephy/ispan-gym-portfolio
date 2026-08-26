@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import tw.com.ispan.gym.dto.coach.GroupClassSessionResponse;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.GlobalExceptionHandler;
@@ -38,7 +39,7 @@ class AdminGroupClassControllerTest {
     private static final String VALID_BODY = """
             {
               "groupCourseId": 1,
-              "roomName": "A教室",
+              "roomName": "YOGA_ROOM",
               "startAt": "2030-01-01T10:00:00",
               "endAt": "2030-01-01T11:00:00"
             }
@@ -47,7 +48,7 @@ class AdminGroupClassControllerTest {
     @Test
     void 建立成功回201與場次資料() throws Exception {
         when(groupClassService.createSession(any())).thenReturn(new GroupClassSessionResponse(
-                5, 1, 1, "王 教練", "空中瑜珈", "A教室",
+                5, 1, 1, "王 教練", "空中瑜珈", ClassRoom.YOGA_ROOM, "瑜珈教室", "#c9973f",
                 LocalDateTime.of(2030, 1, 1, 10, 0),
                 LocalDateTime.of(2030, 1, 1, 11, 0),
                 20, 0, 20, false, GroupClassSessionStatus.SCHEDULED, 0,
@@ -68,7 +69,7 @@ class AdminGroupClassControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {
-                          "roomName": "A教室",
+                          "roomName": "YOGA_ROOM",
                           "startAt": "2030-01-01T10:00:00",
                           "endAt": "2030-01-01T11:00:00"
                         }
@@ -84,7 +85,7 @@ class AdminGroupClassControllerTest {
                 .content("""
                         {
                           "groupCourseId": 1,
-                          "roomName": "A教室",
+                          "roomName": "YOGA_ROOM",
                           "startAt": "2030-01-01T11:00:00",
                           "endAt": "2030-01-01T10:00:00"
                         }

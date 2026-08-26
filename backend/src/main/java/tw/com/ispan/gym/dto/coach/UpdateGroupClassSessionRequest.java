@@ -5,17 +5,17 @@ import java.time.LocalDateTime;
 
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Future;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 
 @Data
 public class UpdateGroupClassSessionRequest {
     /**
      * 編輯場次時可更新的欄位。此 DTO 用於後台管理介面的 PUT /api/admin/group-classes/{id}。
      */
-    @NotBlank(message = "教室不可為空")
-    private String roomName;
+    @NotNull(message = "教室不可為空")
+    private ClassRoom roomName;
 
     @NotNull(message = "開始時間不可為空")
     @Future(message = "開始時間必須是未來時間")

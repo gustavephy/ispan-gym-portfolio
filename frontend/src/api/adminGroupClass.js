@@ -15,8 +15,15 @@ export const getSessions = ({ page = 0, size = 10, search = '' } = {}) =>
   api.get('/api/admin/group-classes', { params: { page, size, search } })
 
 /**
+ * 取得所有合法的教室選項（代碼＋中文名稱＋顏色），教室清單後端已改為固定 enum，
+ * 前端不再自己維護一份可能失準的清單，下拉選單改用這支端點回傳的資料組成。
+ * @returns {Promise<{data: Array<{code: string, displayName: string, color: string}>}>}
+ */
+export const getRoomOptions = () => api.get('/api/admin/group-classes/rooms')
+
+/**
  * 建立團課場次，需登入且為 ADMIN
- * @param {{groupCourseId: number, roomName: string, startAt: string, endAt: string, capacity?: number}} payload
+ * @param {{groupCourseId: number, roomName: string, startAt: string, endAt: string, capacity?: number}} payload roomName 須為教室代碼之一（如 'YOGA_ROOM'），不是中文顯示名稱
  */
 export const createSession = (payload) => api.post('/api/admin/group-classes', payload)
 
@@ -24,7 +31,7 @@ export const createSession = (payload) => api.post('/api/admin/group-classes', p
  * 修改團課場次，需登入且為 ADMIN。version 為樂觀鎖版本，必須帶目前列表拿到的值，
  * 版本不符會回 409（見 GroupClassService.updateSession）。capacity 留空維持原本容量
  * @param {number} id 要修改的場次 id
- * @param {{roomName: string, startAt: string, endAt: string, capacity?: number, version: number}} payload
+ * @param {{roomName: string, startAt: string, endAt: string, capacity?: number, version: number}} payload roomName 須為教室代碼之一（如 'YOGA_ROOM'），不是中文顯示名稱
  */
 export const updateSession = (id, payload) => api.put(`/api/admin/group-classes/${id}`, payload)
 

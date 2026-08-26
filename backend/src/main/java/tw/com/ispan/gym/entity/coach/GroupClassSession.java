@@ -3,6 +3,7 @@ package tw.com.ispan.gym.entity.coach;
 import tw.com.ispan.gym.entity.course.GroupCourse;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 
@@ -43,8 +44,9 @@ public class GroupClassSession extends TaipeiTimestampEntity {
     @JoinColumn(name = "group_course_id", nullable = false)
     private GroupCourse course;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "room_name", length = 100, columnDefinition = "NVARCHAR(100)")
-    private String roomName;
+    private ClassRoom roomName;
 
     @Column(name = "start_at", nullable = false, columnDefinition = "datetime2")
     private LocalDateTime startAt;

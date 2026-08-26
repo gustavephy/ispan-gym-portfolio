@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.service.coach;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +23,7 @@ import tw.com.ispan.gym.entity.course.GroupCourse;
 import tw.com.ispan.gym.enums.course.CourseStatus;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.entity.member.MemberSubscription;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
@@ -66,6 +68,15 @@ public class GroupClassService {
          */
         private static final int ROOM_CLEANUP_BUFFER_MINUTES = 10;
 
+        /**
+         * 教室關鍵字搜尋用：search 字串是否命中某教室的中文顯示名稱。
+         * ClassRoom 是 enum，JPQL 對 enum 欄位套字串函式（LOWER/LIKE）並不保證能編譯，
+         * 故在這裡先把 search 對照顯示名稱算成固定 boolean，查詢裡只做字面值相等比較。
+         */
+        private boolean matchesRoom(ClassRoom room, String search) {
+                return search != null && !search.isBlank() && room.getDisplayName().contains(search);
+        }
+
         @Transactional(readOnly = true)
         public List<GroupClassSessionResponse> getUpcomingSessions() {
                 // 注意：此查詢會沿用 Lazy 關聯存取 trainer/employee/課程名稱，可能引發 N+1。
@@ -85,6 +96,8 @@ public class GroupClassService {
                                                                                 .getLastName(),
                                                 session.getCourse().getName(),
                                                 session.getRoomName(),
+                                                session.getRoomName().getDisplayName(),
+                                                session.getRoomName().getColorHex(),
                                                 session.getStartAt(),
                                                 session.getEndAt(),
                                                 session.getCapacity(),
@@ -113,7 +126,9 @@ public class GroupClassService {
                 Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "startAt"));
 
                 Page<GroupClassSession> result = groupClassSessionRepository.searchUpcomingSessions(
-                                GroupClassSessionStatus.SCHEDULED, LocalDateTime.now(), search, pageable);
+                                GroupClassSessionStatus.SCHEDULED, LocalDateTime.now(), search,
+                                matchesRoom(ClassRoom.YOGA_ROOM, search), matchesRoom(ClassRoom.BOXING_ROOM, search),
+                                matchesRoom(ClassRoom.WEIGHT_ROOM, search), pageable);
 
                 List<GroupClassSessionResponse> items = result.getContent().stream()
                                 .map(session -> new GroupClassSessionResponse(
@@ -125,6 +140,8 @@ public class GroupClassService {
                                                                                 .getLastName(),
                                                 session.getCourse().getName(),
                                                 session.getRoomName(),
+                                                session.getRoomName().getDisplayName(),
+                                                session.getRoomName().getColorHex(),
                                                 session.getStartAt(),
                                                 session.getEndAt(),
                                                 session.getCapacity(),
@@ -217,7 +234,8 @@ public class GroupClassService {
                                 groupCourse.getTrainer().getId(),
                                 groupCourse.getTrainer().getEmployee().getFirstName() + " "
                                                 + groupCourse.getTrainer().getEmployee().getLastName(),
-                                groupCourse.getName(), saved.getRoomName(), saved.getStartAt(), saved.getEndAt(),
+                                groupCourse.getName(), saved.getRoomName(), saved.getRoomName().getDisplayName(),
+                                saved.getRoomName().getColorHex(), saved.getStartAt(), saved.getEndAt(),
                                 saved.getCapacity(),
                                 saved.getBookedCount(), saved.getRemainingSeats(),
                                 saved.getBookedCount() >= saved.getCapacity(),
@@ -296,7 +314,8 @@ public class GroupClassService {
                                 saved.getCourse().getTrainer().getId(),
                                 saved.getCourse().getTrainer().getEmployee().getFirstName() + " "
                                                 + saved.getCourse().getTrainer().getEmployee().getLastName(),
-                                saved.getCourse().getName(), saved.getRoomName(), saved.getStartAt(), saved.getEndAt(),
+                                saved.getCourse().getName(), saved.getRoomName(), saved.getRoomName().getDisplayName(),
+                                saved.getRoomName().getColorHex(), saved.getStartAt(), saved.getEndAt(),
                                 saved.getCapacity(),
                                 saved.getBookedCount(), saved.getRemainingSeats(),
                                 saved.getBookedCount() >= saved.getCapacity(),
@@ -363,7 +382,8 @@ public class GroupClassService {
 
                 // 7) 回傳 booking response（包含場次基本資訊，供前端顯示）
                 GroupClassBookingResponse resp = new GroupClassBookingResponse(saveBooking.getId(), sessionId,
-                                groupClassSession.getCourse().getName(), groupClassSession.getRoomName(),
+                                groupClassSession.getCourse().getName(),
+                                groupClassSession.getRoomName().getDisplayName(),
                                 groupClassSession.getStartAt(), groupClassSession.getEndAt(), saveBooking.getStatus());
                 return resp;
         }
@@ -405,7 +425,8 @@ public class GroupClassService {
                 GroupClassBooking saved = groupClassBookingRepository.save(booking);
 
                 GroupClassBookingResponse resp = new GroupClassBookingResponse(saved.getId(), session.getId(),
-                                session.getCourse().getName(), session.getRoomName(), session.getStartAt(),
+                                session.getCourse().getName(), session.getRoomName().getDisplayName(),
+                                session.getStartAt(),
                                 session.getEndAt(),
                                 saved.getStatus());
 
@@ -413,13 +434,17 @@ public class GroupClassService {
         }
 
         /**
-         * 分頁查詢會員自己的所有團課報名紀錄，可依課程名稱或教室搜尋，依場次開始時間由近到遠排序
-         * （Pageable 的 Sort，不寫在 JPQL 裡，理由同 {@code GroupCourseRepository#searchCourses}）。
+         * 分頁查詢會員自己的所有團課報名紀錄，可依課程名稱或教室搜尋、依狀態與場次開始日期區間篩選，
+         * 依場次開始時間由近到遠排序（Pageable 的 Sort，不寫在 JPQL 裡，理由同
+         * {@code GroupCourseRepository#searchCourses}）。
          * size 做安全上限（1~100）、page 不可小於 0，理由同 {@code GroupCourseService#getAllCourses}。
+         * dateFrom／dateTo 是使用者在畫面上選的「日期」（不含時間），dateTo 內部轉成隔天 00:00
+         * 做上界（不含），讓 dateTo 當天整天都算在篩選範圍內。
          */
         @Transactional(readOnly = true)
         public PageResponse<GroupClassBookingResponse> getMyBookings(Integer memberId, int page, int size,
-                        String search) {
+                        String search, GroupClassBookingStatus status, LocalDate dateFrom,
+                        LocalDate dateTo) {
                 int safePage = Math.max(page, 0);
                 int safeSize = Math.min(Math.max(size, 1), 100);
                 // 先依狀態再依開課時間：BOOKED 排在 CANCELLED 之前（EnumType.STRING 存的是字面值，
@@ -429,15 +454,20 @@ public class GroupClassService {
                 Pageable pageable = PageRequest.of(safePage, safeSize,
                                 Sort.by(Sort.Order.asc("status"), Sort.Order.asc("session.startAt")));
 
+                LocalDateTime startAtFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
+                LocalDateTime startAtTo = dateTo == null ? null : dateTo.plusDays(1).atStartOfDay();
+
                 Page<GroupClassBooking> result = groupClassBookingRepository.searchMyBookings(memberId, search,
-                                pageable);
+                                matchesRoom(ClassRoom.YOGA_ROOM, search), matchesRoom(ClassRoom.BOXING_ROOM, search),
+                                matchesRoom(ClassRoom.WEIGHT_ROOM, search),
+                                status, startAtFrom, startAtTo, pageable);
 
                 List<GroupClassBookingResponse> items = result.getContent().stream()
                                 .map(booking -> new GroupClassBookingResponse(
                                                 booking.getId(),
                                                 booking.getSession().getId(),
                                                 booking.getSession().getCourse().getName(),
-                                                booking.getSession().getRoomName(),
+                                                booking.getSession().getRoomName().getDisplayName(),
                                                 booking.getSession().getStartAt(),
                                                 booking.getSession().getEndAt(),
                                                 booking.getStatus()))
@@ -499,7 +529,8 @@ public class GroupClassService {
                                 saved.getCourse().getTrainer().getId(),
                                 saved.getCourse().getTrainer().getEmployee().getFirstName() + " "
                                                 + saved.getCourse().getTrainer().getEmployee().getLastName(),
-                                saved.getCourse().getName(), saved.getRoomName(), saved.getStartAt(),
+                                saved.getCourse().getName(), saved.getRoomName(), saved.getRoomName().getDisplayName(),
+                                saved.getRoomName().getColorHex(), saved.getStartAt(),
                                 saved.getEndAt(), saved.getCapacity(), saved.getBookedCount(),
                                 saved.getRemainingSeats(), saved.getBookedCount() >= saved.getCapacity(),
                                 saved.getStatus(), saved.getVersion(), saved.getCreatedAt(), saved.getUpdatedAt());

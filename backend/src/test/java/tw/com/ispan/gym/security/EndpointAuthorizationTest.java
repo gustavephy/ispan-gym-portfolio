@@ -440,7 +440,7 @@ class EndpointAuthorizationTest {
               "startAt": "2030-01-01T10:00:00",
               "endAt": "2030-01-01T11:00:00",
               "groupCourseId": 1,
-              "roomName": "A教室",
+              "roomName": "YOGA_ROOM",
               "version": 0,
               "checkInKey": "KEY123",
               "reviewNote": "OK",
