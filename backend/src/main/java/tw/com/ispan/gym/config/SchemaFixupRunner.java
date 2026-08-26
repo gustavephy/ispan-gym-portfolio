@@ -66,6 +66,7 @@ public class SchemaFixupRunner implements CommandLineRunner {
         extendOauthAccountForGoogleLogin();
         addOauthExchangeCodeVersionColumn();
         createOAuthSecurityConstraints();
+        migrateGroupClassRoomToEnum();
     }
 
     // === 員工審核模型修正（2026-08-14 定案：EmployeeRole/EmployeeStatus 改版）========
@@ -1059,6 +1060,43 @@ public class SchemaFixupRunner implements CommandLineRunner {
         }
         jdbc.execute(ddl);
         log.info("已建立外鍵 {}", constraintName);
+    }
+
+
+    /**
+     * group_class_session.room_name 從自由字串改成 {@code ClassRoom} enum（EnumType.STRING）後，
+     * 既有列存的是「A 教室」「拳擊教室」這類人類可讀字串，對不上 enum 常數名，
+     * Hibernate 讀取時會丟 IllegalArgumentException，整個團課場次列表直接 500。
+     *
+     * <p>依顯示名稱把舊值映射到常數名；對不上的（早期隨手輸入的雜項）一律歸到
+     * WEIGHT_ROOM，寧可歸錯教室也不能讓整張表讀不出來——教室只是展示與衝堂判斷用的欄位，
+     * 後台可以再手動改，但讀取失敗是全面性的。
+     *
+     * <p>冪等：每個 UPDATE 都排除已經是合法 enum 值的列，跑第二次不會有任何異動。
+     */
+    private void migrateGroupClassRoomToEnum() {
+        if (!tableExists("group_class_session") || !columnExists("group_class_session", "room_name")) {
+            return;
+        }
+        // 依顯示名稱比對；LIKE 是因為早期資料有「A 教室」「A教室」這類空白不一致的寫法
+        backfill("group_class_session.room_name → YOGA_ROOM", """
+                UPDATE group_class_session SET room_name = 'YOGA_ROOM'
+                    WHERE room_name LIKE N'%瑜珈%' OR room_name LIKE N'%瑜伽%'
+                """);
+        backfill("group_class_session.room_name → BOXING_ROOM", """
+                UPDATE group_class_session SET room_name = 'BOXING_ROOM'
+                    WHERE room_name LIKE N'%拳擊%'
+                """);
+        backfill("group_class_session.room_name → WEIGHT_ROOM", """
+                UPDATE group_class_session SET room_name = 'WEIGHT_ROOM'
+                    WHERE room_name LIKE N'%重訓%' OR room_name LIKE N'%重量%'
+                """);
+        // 其餘對不上的（含 NULL 以外的任意舊值）收斂到 WEIGHT_ROOM，確保沒有一列讀不出來
+        backfill("group_class_session.room_name → WEIGHT_ROOM（無法辨識的舊值）", """
+                UPDATE group_class_session SET room_name = 'WEIGHT_ROOM'
+                    WHERE room_name IS NOT NULL
+                      AND room_name NOT IN ('YOGA_ROOM', 'BOXING_ROOM', 'WEIGHT_ROOM')
+                """);
     }
 
     private void backfill(String target, String sql) {
