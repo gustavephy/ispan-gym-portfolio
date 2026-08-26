@@ -65,6 +65,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 // 引入 API 實例：api 用於取得教練清單 (第 183 行)
 import api from '@/api/axios.instance.js'
+import { getMySubscription } from '@/api/subscription.js'
 // 引入會員狀態：用於確認登入 (第 110 行) 與檢查個人資料完整性 (第 117 行)
 import { useAuthStore } from '@/stores/auth.js'
 // 引入商品狀態：用於取得課程方案列表 (第 196 行)
@@ -156,16 +157,12 @@ onMounted(async () => {
     coursesLoading.value = false
     loadDbTrainers()
 
-    // 只有 Member 才查會員訂閱狀態——純 Employee/Admin 沒有 Member 身分，
-    // 後端 requireCurrentMemberId() 會丟 401，若在這裡吞掉會連帶讓攔截器
-    // 把剛登入的 session 一起登出（見 axios.instance.js 的 401 處理）
-    if (auth.isMember) {
-      try {
-        const subRes = await api.get('/api/me/subscription', { skipGlobalError: true })
-        hasActiveSubscription.value = subRes.data?.isActive || false
-      } catch (e) {
-        // 沒有訂閱紀錄等情況維持 false
-      }
+    // 非會員由 getMySubscription 內部擋下，這裡不必再判斷身分
+    try {
+      const subRes = await getMySubscription()
+      hasActiveSubscription.value = subRes.data?.isActive || false
+    } catch (e) {
+      // 沒有訂閱紀錄等情況維持 false
     }
   } catch (e) {
     coursesLoading.value = false

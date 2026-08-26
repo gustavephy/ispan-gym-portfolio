@@ -93,19 +93,14 @@ async function handleAddToCart(course) {
 const hasActiveSubscription = ref(false)
 
 async function checkMemberSubscription() {
-  // 只有 Member 才查——純 Employee/Admin 沒有 Member 身分，後端 requireCurrentMemberId()
-  // 會丟 401，攔截器會把剛登入的 session 一起登出（見 HomeCourses.vue 的同一道守衛）
-  if (!authStore.isLoggedIn || !authStore.isMember) {
-    hasActiveSubscription.value = false
-    return
-  }
+  // 非會員與未登入者由 getMySubscription 內部擋下並回 { data: null }，這裡不必再判斷身分
   try {
-    // 走 api/subscription.js 的包裝：那支已帶 skipGlobalError，
-    // 尚無訂閱紀錄時後端回的 404 是預期狀態，不該跳全域錯誤提示
     const res = await getMySubscription()
     if (res.data) {
       // 判斷是否為 ACTIVE 且未過期
       hasActiveSubscription.value = res.data.isActive === true || res.data.status === 'ACTIVE'
+    } else {
+      hasActiveSubscription.value = false
     }
   } catch (err) {
     // 沒有訂閱紀錄等情況維持 false，不阻斷整頁載入

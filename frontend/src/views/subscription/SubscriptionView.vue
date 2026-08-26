@@ -41,13 +41,7 @@ async function loadPlans() {
 }
 
 async function loadMySubscription() {
-  // 未登入者不查：這支 API 需要登入，401 會被 axios 攔截器當成 session 過期，
-  // 強制登出並導向 /login，把原本可以匿名瀏覽方案的訪客也一併踢出去。
-  // 非會員（純 Employee/Admin）同樣不查：名下不可能有會籍訂閱，問了必定拿到 401。
-  if (!auth.isLoggedIn || !auth.isMember) {
-    mySubscription.value = null
-    return
-  }
+  // 非會員與未登入者由 getMySubscription 內部擋下並回 { data: null }，這裡不必再判斷身分
   try {
     const res = await getMySubscription()
     mySubscription.value = res.data
