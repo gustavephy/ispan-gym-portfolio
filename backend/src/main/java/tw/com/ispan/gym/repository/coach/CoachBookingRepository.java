@@ -51,5 +51,5 @@ public interface CoachBookingRepository extends JpaRepository<CoachBooking, Inte
      * 沒有直接欄位可用衍生查詢方法名稱表達，故手寫 JPQL。
      */
     @Query("SELECT COUNT(b) FROM CoachBooking b WHERE b.coachSlot.trainer.id = :trainerId AND b.status = :status")
-    long countByTrainerIdAndStatus(@Param("trainerId") Integer trainerId, @Param("status") CoachBookingStatus status);
+    int countByTrainerIdAndStatus(@Param("trainerId") Integer trainerId, @Param("status") CoachBookingStatus status);
 }
