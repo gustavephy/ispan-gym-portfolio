@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.repository.coach;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -13,10 +14,20 @@ import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 
 public interface CoachBookingRepository extends JpaRepository<CoachBooking, Integer> {
     /**
-     * 分頁查詢某會員的所有預約紀錄，供會員查看自己的預約歷史。排序交給呼叫端組出的
-     * Pageable 決定（依 coachSlot.startAt 新到舊），不需要搜尋參數，衍生查詢方法名稱就能處理。
+     * 分頁查詢某會員的所有預約紀錄，可依狀態與時段開始時間區間篩選，供會員查看自己的預約歷史。
+     * 排序交給呼叫端組出的 Pageable 決定（依 coachSlot.startAt 新到舊）。
+     * status／startAtFrom／startAtTo 皆為 null 代表不篩選該條件。
      */
-    Page<CoachBooking> findByMemberId(Integer memberId, Pageable pageable);
+    @Query("""
+            SELECT b FROM CoachBooking b
+            WHERE b.member.id = :memberId
+                AND (:status IS NULL OR b.status = :status)
+                AND (:startAtFrom IS NULL OR b.coachSlot.startAt >= :startAtFrom)
+                AND (:startAtTo IS NULL OR b.coachSlot.startAt < :startAtTo)
+            """)
+    Page<CoachBooking> searchMyBookings(@Param("memberId") Integer memberId,
+            @Param("status") CoachBookingStatus status, @Param("startAtFrom") LocalDateTime startAtFrom,
+            @Param("startAtTo") LocalDateTime startAtTo, Pageable pageable);
 
     /**
      * 查詢某時段目前是否有指定狀態的預約。

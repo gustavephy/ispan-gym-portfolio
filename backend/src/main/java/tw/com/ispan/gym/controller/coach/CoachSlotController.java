@@ -1,6 +1,8 @@
 package tw.com.ispan.gym.controller.coach;
 
 
+import java.time.LocalDate;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -65,14 +67,22 @@ public class CoachSlotController {
         return ResponseEntity.status(HttpStatus.OK).body(resp);
     }
 
-    /** 分頁查詢自己的所有時段（含已取消的舊紀錄）。 */
+    /**
+     * 分頁查詢自己的所有時段（含已取消的舊紀錄）。
+     * status 對應表格實際顯示的四種狀態（AVAILABLE／PENDING／COMPLETED／CANCELLED），
+     * 詳見 {@link tw.com.ispan.gym.service.coach.CoachSlotService#getMySlots}。
+     */
     @GetMapping("/schedules")
     @PreAuthorize("hasRole('TRAINER')")
     public ResponseEntity<PageResponse<CoachSlotResponse>> getMySlots(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo) {
         Integer accountId = currentUserProvider.requireCurrentUserId();
-        PageResponse<CoachSlotResponse> slots = coachSlotService.getMySlots(accountId, page, size);
+        PageResponse<CoachSlotResponse> slots = coachSlotService.getMySlots(accountId, page, size, status, dateFrom,
+                dateTo);
 
         return ResponseEntity.status(HttpStatus.OK).body(slots);
     }

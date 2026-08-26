@@ -29,11 +29,18 @@ const formError = ref('')
 // 取消／核銷這兩個列表按鈕操作共用同一個就地訊息，顯示在表格上方（這兩個操作本來就沒有 modal）
 const slotActionMessage = ref('')
 
-// 分頁狀態；這頁沒有搜尋需求
+// 分頁狀態
 const page = ref(0)
 const size = ref(10)
 const totalItems = ref(0)
 const totalPages = ref(0)
+
+// 狀態篩選：空字串代表「全部」。對應表格實際顯示的四種狀態，不是後端 SlotStatus 本身
+// （BOOKED 依關聯的預約狀態再細分成「待核銷」／「已完成」，見 slotStatusInfo）
+const statusFilter = ref('')
+// 開始日期區間篩選（yyyy-MM-dd），任一為空代表不限制該端
+const dateFrom = ref('')
+const dateTo = ref('')
 
 // 開始日期改到比目前結束日期更晚時，原本選的結束日期就不合法了，清空讓使用者重選
 watch(
@@ -93,7 +100,13 @@ function formatDateTime(value) {
 async function fetchSlots() {
   loading.value = true
   try {
-    const res = await getMySlots({ page: page.value, size: size.value })
+    const res = await getMySlots({
+      page: page.value,
+      size: size.value,
+      status: statusFilter.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+    })
     // 已信任後端回傳的排序，不再於前端重新 sort 一次
     slots.value = res.data.items
     totalItems.value = res.data.totalItems
@@ -113,6 +126,12 @@ function handleSizeChange(newSize) {
   page.value = 0
   fetchSlots()
 }
+
+// 狀態／日期區間一變動就重新查詢，並把 page 重設為 0，避免卡在篩選後不存在的頁碼
+watch([statusFilter, dateFrom, dateTo], () => {
+  page.value = 0
+  fetchSlots()
+})
 
 // 今天的日期字串（YYYY-MM-DD），給「開始日期」欄位的 :min 用。
 // 故意不用 new Date().toISOString().split('T')[0]：那個寫法會先轉成 UTC 再切字串，
@@ -350,6 +369,27 @@ onUnmounted(() => {
     </form>
     <p v-if="formError" class="form-error">{{ formError }}</p>
 
+    <div class="filter-row">
+      <div class="filter-field">
+        <label for="slotsStatus">狀態</label>
+        <select id="slotsStatus" v-model="statusFilter">
+          <option value="">全部</option>
+          <option value="AVAILABLE">可預約</option>
+          <option value="PENDING">已預約（待核銷）</option>
+          <option value="COMPLETED">已完成</option>
+          <option value="CANCELLED">已取消</option>
+        </select>
+      </div>
+      <div class="filter-field">
+        <label for="slotsDateFrom">開始日期（從）</label>
+        <input id="slotsDateFrom" v-model="dateFrom" type="date" :max="dateTo || undefined" />
+      </div>
+      <div class="filter-field">
+        <label for="slotsDateTo">開始日期（到）</label>
+        <input id="slotsDateTo" v-model="dateTo" type="date" :min="dateFrom || undefined" />
+      </div>
+    </div>
+
     <OperationMessage :message="slotActionMessage" />
 
     <div v-if="loading" class="spinner"></div>
@@ -480,6 +520,34 @@ onUnmounted(() => {
   color: #b3452f;
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.filter-field label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.filter-field select,
+.filter-field input {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: var(--text-primary);
 }
 
 .empty-state {

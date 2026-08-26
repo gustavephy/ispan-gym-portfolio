@@ -30,6 +30,7 @@ import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.entity.trainer.Trainer;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import tw.com.ispan.gym.enums.course.CourseStatus;
@@ -109,7 +110,7 @@ class GroupClassServiceTest {
         GroupClassSession session = new GroupClassSession();
         session.setId(SESSION_ID);
         session.setCourse(course());
-        session.setRoomName("A教室");
+        session.setRoomName(ClassRoom.YOGA_ROOM);
         session.setStartAt(startAt);
         session.setEndAt(startAt.plusHours(1));
         session.setStatus(status);
@@ -127,7 +128,7 @@ class GroupClassServiceTest {
         return booking;
     }
 
-    private UpdateGroupClassSessionRequest updateRequest(String roomName, LocalDateTime startAt,
+    private UpdateGroupClassSessionRequest updateRequest(ClassRoom roomName, LocalDateTime startAt,
             LocalDateTime endAt, Integer capacity, Integer version) {
         UpdateGroupClassSessionRequest request = new UpdateGroupClassSessionRequest();
         request.setRoomName(roomName);
@@ -381,12 +382,12 @@ class GroupClassServiceTest {
         GroupCourse course = course();
         CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
         request.setGroupCourseId(COURSE_ID);
-        request.setRoomName("B教室");
+        request.setRoomName(ClassRoom.BOXING_ROOM);
         request.setStartAt(LocalDateTime.now().plusDays(5));
         request.setEndAt(LocalDateTime.now().plusDays(5).plusHours(1));
 
         when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
-        when(sessions.findOverlappingByRoom(eq("B教室"), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(List.of());
         stubSessionSaveReturnsArgument();
 
@@ -401,13 +402,13 @@ class GroupClassServiceTest {
         GroupCourse course = course();
         CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
         request.setGroupCourseId(COURSE_ID);
-        request.setRoomName("B教室");
+        request.setRoomName(ClassRoom.BOXING_ROOM);
         request.setStartAt(LocalDateTime.now().plusDays(5));
         request.setEndAt(LocalDateTime.now().plusDays(5).plusHours(1));
         request.setCapacity(8);
 
         when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
-        when(sessions.findOverlappingByRoom(eq("B教室"), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(List.of());
         stubSessionSaveReturnsArgument();
 
@@ -420,7 +421,7 @@ class GroupClassServiceTest {
     void 建立_查無課程回404且不建立場次() {
         CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
         request.setGroupCourseId(COURSE_ID);
-        request.setRoomName("B教室");
+        request.setRoomName(ClassRoom.BOXING_ROOM);
         request.setStartAt(LocalDateTime.now().plusDays(5));
         request.setEndAt(LocalDateTime.now().plusDays(5).plusHours(1));
         when(courses.findById(COURSE_ID)).thenReturn(Optional.empty());
@@ -436,7 +437,7 @@ class GroupClassServiceTest {
         inactiveCourse.setStatus(CourseStatus.INACTIVE);
         CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
         request.setGroupCourseId(COURSE_ID);
-        request.setRoomName("B教室");
+        request.setRoomName(ClassRoom.BOXING_ROOM);
         request.setStartAt(LocalDateTime.now().plusDays(5));
         request.setEndAt(LocalDateTime.now().plusDays(5).plusHours(1));
         when(courses.findById(COURSE_ID)).thenReturn(Optional.of(inactiveCourse));
@@ -455,11 +456,11 @@ class GroupClassServiceTest {
         GroupCourse course = course();
         CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
         request.setGroupCourseId(COURSE_ID);
-        request.setRoomName("B教室");
+        request.setRoomName(ClassRoom.BOXING_ROOM);
         request.setStartAt(LocalDateTime.now().plusDays(5));
         request.setEndAt(LocalDateTime.now().plusDays(5).plusHours(1));
         when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
-        when(sessions.findOverlappingByRoom(eq("B教室"), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(List.of(session(GroupClassSessionStatus.SCHEDULED, 10, 0, LocalDateTime.now().plusDays(5))));
 
         assertThatThrownBy(() -> service.createSession(request))
@@ -475,12 +476,12 @@ class GroupClassServiceTest {
         LocalDateTime end = start.plusHours(1);
         CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
         request.setGroupCourseId(COURSE_ID);
-        request.setRoomName("B教室");
+        request.setRoomName(ClassRoom.BOXING_ROOM);
         request.setStartAt(start);
         request.setEndAt(end);
         when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
         // 只 stub「原始時間」查詢命中真重疊，緩衝查詢不 stub，若程式誤先查緩衝會直接 NPE 讓測試失敗
-        when(sessions.findOverlappingByRoom(eq("B教室"), eq(start), eq(end)))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), eq(start), eq(end)))
                 .thenReturn(List.of(session(GroupClassSessionStatus.SCHEDULED, 10, 0, start)));
 
         assertThatThrownBy(() -> service.createSession(request))
@@ -497,17 +498,17 @@ class GroupClassServiceTest {
         LocalDateTime end = start.plusHours(1);
         CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
         request.setGroupCourseId(COURSE_ID);
-        request.setRoomName("B教室");
+        request.setRoomName(ClassRoom.BOXING_ROOM);
         request.setStartAt(start);
         request.setEndAt(end);
         when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
         // 原始時間沒有真重疊
-        when(sessions.findOverlappingByRoom(eq("B教室"), eq(start), eq(end)))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), eq(start), eq(end)))
                 .thenReturn(List.of());
         // 緊接著間隔 5 分鐘的另一場次，只有撐大緩衝後才會查到
         GroupClassSession tooCloseSession = session(GroupClassSessionStatus.SCHEDULED, 10, 0,
                 end.plusMinutes(5));
-        when(sessions.findOverlappingByRoom(eq("B教室"), eq(start.minusMinutes(10)), eq(end.plusMinutes(10))))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), eq(start.minusMinutes(10)), eq(end.plusMinutes(10))))
                 .thenReturn(List.of(tooCloseSession));
 
         assertThatThrownBy(() -> service.createSession(request))
@@ -525,7 +526,7 @@ class GroupClassServiceTest {
         GroupCourse course = course();
         CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
         request.setGroupCourseId(COURSE_ID);
-        request.setRoomName("B教室");
+        request.setRoomName(ClassRoom.BOXING_ROOM);
         request.setStartAt(LocalDateTime.now().plusDays(5));
         request.setEndAt(LocalDateTime.now().plusDays(5).plusHours(1));
         when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
@@ -548,16 +549,16 @@ class GroupClassServiceTest {
         LocalDateTime newEnd = newStart.plusHours(1);
         when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(existing));
         // 重疊查詢只查到自己，updateSession 內部要把自己排除掉才不會誤判衝突
-        when(sessions.findOverlappingByRoom(eq("B教室"), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(new ArrayList<>(List.of(existing)));
         stubSessionSaveAndFlushReturnsArgument();
 
-        UpdateGroupClassSessionRequest request = updateRequest("B教室", newStart, newEnd, 12, 2);
+        UpdateGroupClassSessionRequest request = updateRequest(ClassRoom.BOXING_ROOM, newStart, newEnd, 12, 2);
         GroupClassSessionResponse response = service.updateSession(SESSION_ID, request);
 
-        assertThat(existing.getRoomName()).isEqualTo("B教室");
+        assertThat(existing.getRoomName()).isEqualTo(ClassRoom.BOXING_ROOM);
         assertThat(existing.getCapacity()).isEqualTo(12);
-        assertThat(response.getRoomName()).isEqualTo("B教室");
+        assertThat(response.getRoomName()).isEqualTo("拳擊教室");
         verify(sessions).saveAndFlush(existing);
     }
 
@@ -568,11 +569,11 @@ class GroupClassServiceTest {
         LocalDateTime newStart = LocalDateTime.now().plusDays(6);
         LocalDateTime newEnd = newStart.plusHours(1);
         when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(existing));
-        when(sessions.findOverlappingByRoom(eq("B教室"), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(new ArrayList<>());
         stubSessionSaveAndFlushReturnsArgument();
 
-        UpdateGroupClassSessionRequest request = updateRequest("B教室", newStart, newEnd, null, 2);
+        UpdateGroupClassSessionRequest request = updateRequest(ClassRoom.BOXING_ROOM, newStart, newEnd, null, 2);
         service.updateSession(SESSION_ID, request);
 
         assertThat(existing.getCapacity()).isEqualTo(10);
@@ -582,7 +583,7 @@ class GroupClassServiceTest {
     void 更新_查無此場次回404() {
         when(sessions.findById(SESSION_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest("B教室",
+        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest(ClassRoom.BOXING_ROOM,
                 LocalDateTime.now().plusDays(6), LocalDateTime.now().plusDays(6).plusHours(1), 10, 1)))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(sessions, never()).saveAndFlush(any());
@@ -594,7 +595,7 @@ class GroupClassServiceTest {
         existing.setVersion(2);
         when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest("B教室",
+        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest(ClassRoom.BOXING_ROOM,
                 LocalDateTime.now().plusDays(6), LocalDateTime.now().plusDays(6).plusHours(1), 10, 2)))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("已被取消");
@@ -607,7 +608,7 @@ class GroupClassServiceTest {
         existing.setVersion(2);
         when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest("B教室",
+        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest(ClassRoom.BOXING_ROOM,
                 LocalDateTime.now().plusDays(6), LocalDateTime.now().plusDays(6).plusHours(1), 10, 1)))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("已被其他人修改");
@@ -621,10 +622,10 @@ class GroupClassServiceTest {
         GroupClassSession other = new GroupClassSession();
         other.setId(SESSION_ID + 1);
         when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(existing));
-        when(sessions.findOverlappingByRoom(eq("B教室"), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(new ArrayList<>(List.of(other)));
 
-        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest("B教室",
+        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest(ClassRoom.BOXING_ROOM,
                 LocalDateTime.now().plusDays(6), LocalDateTime.now().plusDays(6).plusHours(1), 10, 2)))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("重疊");
@@ -636,10 +637,10 @@ class GroupClassServiceTest {
         GroupClassSession existing = session(GroupClassSessionStatus.SCHEDULED, 10, 8, LocalDateTime.now().plusDays(5));
         existing.setVersion(2);
         when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(existing));
-        when(sessions.findOverlappingByRoom(eq("B教室"), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(sessions.findOverlappingByRoom(eq(ClassRoom.BOXING_ROOM), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(new ArrayList<>());
 
-        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest("B教室",
+        assertThatThrownBy(() -> service.updateSession(SESSION_ID, updateRequest(ClassRoom.BOXING_ROOM,
                 LocalDateTime.now().plusDays(6), LocalDateTime.now().plusDays(6).plusHours(1), 5, 2)))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("不可小於");

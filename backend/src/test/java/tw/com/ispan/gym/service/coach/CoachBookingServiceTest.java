@@ -10,13 +10,20 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
+import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.coach.CoachBooking;
 import tw.com.ispan.gym.entity.coach.CoachSlot;
 import tw.com.ispan.gym.entity.coach.MemberCourseQuota;
@@ -461,5 +468,47 @@ class CoachBookingServiceTest {
                 .hasMessageContaining("核銷碼錯誤");
         verify(quotas, never()).save(any());
         verify(deductionLogs, never()).save(any());
+    }
+
+    // === getMyBookings ========================================================
+
+    @Test
+    void getMyBookings_未帶篩選條件時查詢邊界皆為null() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "coachSlot.startAt"));
+        when(bookings.searchMyBookings(MEMBER_ID, null, null, null, pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+        when(deductionLogs.findByCoachBookingIdInOrderByIdDesc(List.of())).thenReturn(List.of());
+
+        PageResponse<CoachBookingHistoryResponse> response = service.getMyBookings(MEMBER_ID, 0, 10, null, null,
+                null);
+
+        assertThat(response.getItems()).isEmpty();
+        verify(bookings).searchMyBookings(MEMBER_ID, null, null, null, pageable);
+    }
+
+    @Test
+    void getMyBookings_狀態與日期區間正確轉換並傳給查詢() {
+        // 這是這批篩選功能真正要保證的事：dateTo 是使用者選的「那一天」，查詢邊界要撐到
+        // 隔天 00:00（不含）才會把 dateTo 當天整天都算進去，不是直接拿 dateTo 當天 00:00 當上限
+        // （Mockito 對 repository 的 mock 沒辦法驗證 JPQL 本身，這裡驗證的是 Service 層
+        // LocalDate→LocalDateTime 的轉換邏輯有沒有算對）。
+        LocalDate dateFrom = LocalDate.of(2026, 9, 1);
+        LocalDate dateTo = LocalDate.of(2026, 9, 5);
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "coachSlot.startAt"));
+        Member member = member(MEMBER_ID);
+        CoachSlot slot = slot(LocalDateTime.of(2026, 9, 3, 10, 0));
+        CoachBooking existingBooking = booking(member, slot, quota(7, 4, 1), CoachBookingStatus.COMPLETED);
+        when(bookings.searchMyBookings(MEMBER_ID, CoachBookingStatus.COMPLETED,
+                LocalDateTime.of(2026, 9, 1, 0, 0), LocalDateTime.of(2026, 9, 6, 0, 0), pageable))
+                .thenReturn(new PageImpl<>(List.of(existingBooking), pageable, 1));
+        when(deductionLogs.findByCoachBookingIdInOrderByIdDesc(List.of(BOOKING_ID))).thenReturn(List.of());
+
+        PageResponse<CoachBookingHistoryResponse> response = service.getMyBookings(MEMBER_ID, 0, 10,
+                CoachBookingStatus.COMPLETED, dateFrom, dateTo);
+
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).getStatus()).isEqualTo(CoachBookingStatus.COMPLETED);
+        verify(bookings).searchMyBookings(MEMBER_ID, CoachBookingStatus.COMPLETED,
+                LocalDateTime.of(2026, 9, 1, 0, 0), LocalDateTime.of(2026, 9, 6, 0, 0), pageable);
     }
 }

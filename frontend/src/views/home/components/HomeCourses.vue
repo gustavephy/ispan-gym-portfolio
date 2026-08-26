@@ -157,7 +157,7 @@ onMounted(async () => {
     coursesLoading.value = false
     loadDbTrainers()
 
-    // 非會員由 getMySubscription 內部擋下，這裡不必再判斷身分
+    // 身分判斷與 skipAuthRedirect 都收在 getMySubscription 內部，這裡不必再重複一次
     try {
       const subRes = await getMySubscription()
       hasActiveSubscription.value = subRes.data?.isActive || false

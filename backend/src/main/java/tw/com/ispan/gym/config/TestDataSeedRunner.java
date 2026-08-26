@@ -55,6 +55,7 @@ import tw.com.ispan.gym.entity.course.PrivateCourse;
 import tw.com.ispan.gym.enums.course.CourseStatus;
 import tw.com.ispan.gym.repository.course.PrivateCourseRepository;
 import tw.com.ispan.gym.entity.coach.GroupClassSession;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import java.math.BigDecimal;
 import java.util.List;
@@ -678,7 +679,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
                 .withSecond(0).withNano(0);
         GroupClassSession session = new GroupClassSession();
         session.setCourse(savedCourse);
-        session.setRoomName("A 教室");
+        session.setRoomName(ClassRoom.YOGA_ROOM);
         session.setStartAt(start);
         session.setEndAt(start.plusHours(1));
         session.setCapacity(20);

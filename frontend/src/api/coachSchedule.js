@@ -4,11 +4,16 @@ import api from './axios.instance.js'
 // GET/POST/PUT /api/trainer/schedules。取消時段是下一步再加。
 
 /**
- * 分頁查詢目前登入教練自己的所有時段（含已取消的舊紀錄，由畫面自行決定怎麼呈現）
- * @param {{page?: number, size?: number}} params page 從 0 開始
+ * 分頁查詢目前登入教練自己的所有時段（含已取消的舊紀錄，由畫面自行決定怎麼呈現），
+ * 可依表格顯示的狀態與開始日期區間篩選
+ * @param {{page?: number, size?: number, status?: string, dateFrom?: string, dateTo?: string}} params
+ *   page 從 0 開始；status 為 AVAILABLE/PENDING/COMPLETED/CANCELLED（對應表格顯示的狀態，
+ *   不是後端 SlotStatus 本身）；dateFrom/dateTo 為 yyyy-MM-dd
  */
-export const getMySlots = ({ page = 0, size = 10 } = {}) =>
-  api.get('/api/trainer/schedules', { params: { page, size } })
+export const getMySlots = ({ page = 0, size = 10, status = '', dateFrom = '', dateTo = '' } = {}) =>
+  api.get('/api/trainer/schedules', {
+    params: { page, size, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
+  })
 
 /**
  * 建立新時段

@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import tw.com.ispan.gym.entity.coach.GroupClassSession;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 
 public interface GroupClassSessionRepository extends JpaRepository<GroupClassSession, Integer> {
@@ -24,7 +25,7 @@ public interface GroupClassSessionRepository extends JpaRepository<GroupClassSes
          */
         @Query("SELECT s FROM GroupClassSession s WHERE s.roomName = :roomName AND s.startAt < :endAt AND s.endAt > :startAt AND s.status <> 'CANCELLED'")
         List<GroupClassSession> findOverlappingByRoom(
-                        @Param("roomName") String roomName,
+                        @Param("roomName") ClassRoom roomName,
                         @Param("startAt") LocalDateTime startAt,
                         @Param("endAt") LocalDateTime endAt);
 
@@ -49,6 +50,11 @@ public interface GroupClassSessionRepository extends JpaRepository<GroupClassSes
          * 且 startAt 在指定時間之後）。用 JOIN FETCH 一次撈出 course/trainer/employee，
          * 避免 service 層映射時觸發 N+1；排序交給呼叫端組出的 Pageable 決定，不在這裡寫 ORDER BY。
          */
+        /**
+         * roomName 是 enum（見 {@link tw.com.ispan.gym.enums.coach.ClassRoom}），JPQL 對 enum
+         * 欄位套字串函式（LOWER/LIKE）並不保證能編譯，故改由呼叫端（GroupClassService）先把
+         * search 字串對照 ClassRoom 的中文顯示名稱算出三個固定 boolean，這裡只做字面值相等比較。
+         */
         @Query("""
                         SELECT s FROM GroupClassSession s
                         JOIN FETCH s.course c
@@ -58,10 +64,14 @@ public interface GroupClassSessionRepository extends JpaRepository<GroupClassSes
                             AND (:search IS NULL OR :search = ''
                                 OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))
                                 OR LOWER(CONCAT(e.firstName, e.lastName)) LIKE LOWER(CONCAT('%', :search, '%'))
-                                OR LOWER(s.roomName) LIKE LOWER(CONCAT('%', :search, '%')))
+                                OR (:matchesYoga = true AND s.roomName = 'YOGA_ROOM')
+                                OR (:matchesBoxing = true AND s.roomName = 'BOXING_ROOM')
+                                OR (:matchesWeight = true AND s.roomName = 'WEIGHT_ROOM'))
                         """)
         Page<GroupClassSession> searchUpcomingSessions(@Param("status") GroupClassSessionStatus status,
-                        @Param("after") LocalDateTime after, @Param("search") String search, Pageable pageable);
+                        @Param("after") LocalDateTime after, @Param("search") String search,
+                        @Param("matchesYoga") boolean matchesYoga, @Param("matchesBoxing") boolean matchesBoxing,
+                        @Param("matchesWeight") boolean matchesWeight, Pageable pageable);
 
         /**
          * 教練停用前檢查用：名下還有多少「未完成」團課場次。教練綁在 GroupCourse 主檔，
