@@ -43,7 +43,7 @@ class CoachBookingControllerHistoryTest {
     @Test
     void 查詢成功回200與預約歷史() throws Exception {
         when(currentUser.requireCurrentMemberId()).thenReturn(MEMBER_ID);
-        when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10)).thenReturn(new PageResponse<>(List.of(
+        when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10, null, null, null)).thenReturn(new PageResponse<>(List.of(
                 new CoachBookingHistoryResponse(10, 3, 2,
                         LocalDateTime.of(2030, 1, 1, 10, 0),
                         LocalDateTime.of(2030, 1, 1, 11, 0),
@@ -64,7 +64,7 @@ class CoachBookingControllerHistoryTest {
     @Test
     void 無稽核紀錄的舊預約快照為null() throws Exception {
         when(currentUser.requireCurrentMemberId()).thenReturn(MEMBER_ID);
-        when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10)).thenReturn(new PageResponse<>(List.of(
+        when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10, null, null, null)).thenReturn(new PageResponse<>(List.of(
                 new CoachBookingHistoryResponse(11, 4, 2,
                         LocalDateTime.of(2029, 1, 1, 10, 0),
                         LocalDateTime.of(2029, 1, 1, 11, 0),
@@ -79,7 +79,7 @@ class CoachBookingControllerHistoryTest {
     @Test
     void 無任何預約回200空陣列() throws Exception {
         when(currentUser.requireCurrentMemberId()).thenReturn(MEMBER_ID);
-        when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10)).thenReturn(new PageResponse<>(List.of(), 0, 10, 0, 0));
+        when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10, null, null, null)).thenReturn(new PageResponse<>(List.of(), 0, 10, 0, 0));
 
         mockMvc.perform(get("/api/member/bookings"))
                 .andExpect(status().isOk())

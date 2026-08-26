@@ -24,11 +24,12 @@ export const getTrainerSchedules = (trainerId) => api.get(`/api/member/trainers/
 export const createBooking = (slotId) => api.post(`/api/member/schedules/${slotId}/booking`)
 
 /**
- * 分頁查詢自己的所有預約紀錄，需登入
- * @param {{page?: number, size?: number}} params page 從 0 開始
+ * 分頁查詢自己的所有預約紀錄，可依狀態與上課日期區間篩選，需登入
+ * @param {{page?: number, size?: number, status?: string, dateFrom?: string, dateTo?: string}} params
+ *   page 從 0 開始；status 為 PENDING/COMPLETED/CANCELLED；dateFrom/dateTo 為 yyyy-MM-dd
  */
-export const getMyBookings = ({ page = 0, size = 10 } = {}) =>
-  api.get('/api/member/bookings', { params: { page, size } })
+export const getMyBookings = ({ page = 0, size = 10, status = '', dateFrom = '', dateTo = '' } = {}) =>
+  api.get('/api/member/bookings', { params: { page, size, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined } })
 
 /**
  * 取消指定的預約，需登入

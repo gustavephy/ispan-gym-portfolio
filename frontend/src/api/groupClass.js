@@ -21,11 +21,14 @@ export const getUpcomingSessions = () => api.get('/api/member/group-classes')
 export const bookSession = (sessionId) => api.post(`/api/member/group-classes/${sessionId}/booking`)
 
 /**
- * 分頁查詢自己的所有團課報名紀錄，可依課程名稱或教室搜尋，需登入
- * @param {{page?: number, size?: number, search?: string}} params page 從 0 開始
+ * 分頁查詢自己的所有團課報名紀錄，可依課程名稱或教室搜尋、依狀態與開課日期區間篩選，需登入
+ * @param {{page?: number, size?: number, search?: string, status?: string, dateFrom?: string, dateTo?: string}} params
+ *   page 從 0 開始；status 為 BOOKED/CANCELLED；dateFrom/dateTo 為 yyyy-MM-dd
  */
-export const getMyBookings = ({ page = 0, size = 10, search = '' } = {}) =>
-  api.get('/api/member/group-classes/bookings', { params: { page, size, search } })
+export const getMyBookings = ({ page = 0, size = 10, search = '', status = '', dateFrom = '', dateTo = '' } = {}) =>
+  api.get('/api/member/group-classes/bookings', {
+    params: { page, size, search, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
+  })
 
 /**
  * 取消指定的團課報名，需登入。不像私教課取消需要二次確認額度消耗，

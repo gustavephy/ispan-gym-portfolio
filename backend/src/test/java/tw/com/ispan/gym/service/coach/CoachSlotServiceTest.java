@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -389,12 +390,36 @@ class CoachSlotServiceTest {
         Trainer trainer = loginAsTrainer();
         CoachSlot cancelled = slot(trainer, SlotStatus.CANCELLED);
         Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
-        when(slots.findByTrainerId(TRAINER_ID, pageable)).thenReturn(new PageImpl<>(List.of(cancelled), pageable, 1));
+        when(slots.searchMySlots(TRAINER_ID, null, null, null, pageable))
+                .thenReturn(new PageImpl<>(List.of(cancelled), pageable, 1));
 
-        PageResponse<CoachSlotResponse> response = service.getMySlots(ACCOUNT_ID, 0, 10);
+        PageResponse<CoachSlotResponse> response = service.getMySlots(ACCOUNT_ID, 0, 10, null, null, null);
 
         assertThat(response.getItems()).hasSize(1);
         assertThat(response.getItems().get(0).getStatus()).isEqualTo(SlotStatus.CANCELLED);
+    }
+
+    @Test
+    void getMySlots_狀態與日期區間正確轉換並傳給查詢() {
+        // 這是這批篩選功能真正要保證的事：dateTo 是使用者選的「那一天」，查詢邊界要撐到
+        // 隔天 00:00（不含）才會把 dateTo 當天整天都算進去；status 字串（對應表格顯示的四種
+        // 狀態，見 CoachSlotRepository#searchMySlots 的說明）要原封不動傳給 repository，
+        // PENDING/COMPLETED 這種要靠關聯的 CoachBooking 狀態才分得出來的邏輯在 JPQL 裡，
+        // Mockito 對 repository 的 mock 驗證不到，這裡只驗證 Service 層的參數轉換正確。
+        Trainer trainer = loginAsTrainer();
+        LocalDate dateFrom = LocalDate.of(2026, 9, 1);
+        LocalDate dateTo = LocalDate.of(2026, 9, 5);
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
+        CoachSlot pending = slot(trainer, SlotStatus.BOOKED);
+        when(slots.searchMySlots(TRAINER_ID, "PENDING", LocalDateTime.of(2026, 9, 1, 0, 0),
+                LocalDateTime.of(2026, 9, 6, 0, 0), pageable))
+                .thenReturn(new PageImpl<>(List.of(pending), pageable, 1));
+
+        PageResponse<CoachSlotResponse> response = service.getMySlots(ACCOUNT_ID, 0, 10, "PENDING", dateFrom, dateTo);
+
+        assertThat(response.getItems()).hasSize(1);
+        verify(slots).searchMySlots(TRAINER_ID, "PENDING", LocalDateTime.of(2026, 9, 1, 0, 0),
+                LocalDateTime.of(2026, 9, 6, 0, 0), pageable);
     }
 
     @Test

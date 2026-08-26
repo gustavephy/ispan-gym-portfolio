@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.controller.coach;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import tw.com.ispan.gym.dto.coach.GroupClassBookingResponse;
 import tw.com.ispan.gym.dto.coach.GroupClassSessionResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
+import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.coach.GroupClassService;
 
@@ -74,10 +76,13 @@ public class GroupClassController {
     public ResponseEntity<PageResponse<GroupClassBookingResponse>> getMyBookings(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) GroupClassBookingStatus status,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo) {
         Integer memberId = currentUserProvider.requireCurrentMemberId();
         PageResponse<GroupClassBookingResponse> bookings = groupClassService.getMyBookings(memberId, page, size,
-                search);
+                search, status, dateFrom, dateTo);
         return ResponseEntity.status(HttpStatus.OK).body(bookings);
     }
 

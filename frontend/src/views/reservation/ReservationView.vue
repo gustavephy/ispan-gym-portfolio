@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import {
   getTrainers,
   getTrainerSchedules,
@@ -41,11 +41,17 @@ const myBookingsLoading = ref(true)
 // 預約／取消預約的就地錯誤訊息，顯示在「我的預約」區塊上方
 const bookingActionMessage = ref('')
 
-// 「我的預約」的分頁狀態；這個區塊沒有搜尋需求
+// 「我的預約」的分頁狀態
 const page = ref(0)
 const size = ref(10)
 const totalItems = ref(0)
 const totalPages = ref(0)
+
+// 狀態篩選：空字串代表「全部」，對應後端 CoachBookingStatus（PENDING/COMPLETED/CANCELLED）
+const statusFilter = ref('')
+// 上課日期區間篩選（yyyy-MM-dd），任一為空代表不限制該端
+const dateFrom = ref('')
+const dateTo = ref('')
 
 // 依開始時間排序，未來時段在前（跟 TrainerScheduleView 的 sortedSlots 同樣的排序邏輯）
 const sortedSlots = computed(() =>
@@ -116,7 +122,13 @@ async function fetchTrainerSchedules(trainerId) {
 async function fetchMyBookings() {
   myBookingsLoading.value = true
   try {
-    const res = await getMyBookings({ page: page.value, size: size.value })
+    const res = await getMyBookings({
+      page: page.value,
+      size: size.value,
+      status: statusFilter.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+    })
     myBookings.value = res.data.items
     totalItems.value = res.data.totalItems
     totalPages.value = res.data.totalPages
@@ -135,6 +147,12 @@ function handleSizeChange(newSize) {
   page.value = 0
   fetchMyBookings()
 }
+
+// 狀態／日期區間一變動就重新查詢，並把 page 重設為 0，避免卡在篩選後不存在的頁碼
+watch([statusFilter, dateFrom, dateTo], () => {
+  page.value = 0
+  fetchMyBookings()
+})
 
 // 呼叫取消預約 API；若後端回 CONFIRMATION_REQUIRED（距上課不到 72 小時，取消視同消耗額度），
 // 跳出瀏覽器原生確認視窗，使用者按確定就帶著 acknowledgeConsumption: true 重送一次，
@@ -311,6 +329,26 @@ onMounted(() => {
     <div v-if="viewMode === 'bookings'" class="my-bookings-section">
       <h3 class="schedule-title">我的預約</h3>
 
+      <div class="filter-row">
+        <div class="filter-field">
+          <label for="myBookingsStatus">狀態</label>
+          <select id="myBookingsStatus" v-model="statusFilter">
+            <option value="">全部</option>
+            <option value="PENDING">待上課</option>
+            <option value="COMPLETED">已完成</option>
+            <option value="CANCELLED">已取消</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="myBookingsDateFrom">上課日期（從）</label>
+          <input id="myBookingsDateFrom" v-model="dateFrom" type="date" :max="dateTo || undefined" />
+        </div>
+        <div class="filter-field">
+          <label for="myBookingsDateTo">上課日期（到）</label>
+          <input id="myBookingsDateTo" v-model="dateTo" type="date" :min="dateFrom || undefined" />
+        </div>
+      </div>
+
       <OperationMessage :message="bookingActionMessage" />
 
       <div v-if="myBookingsLoading" class="spinner"></div>
@@ -461,6 +499,34 @@ onMounted(() => {
 
 .my-bookings-section {
   margin-top: 2.5rem;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.filter-field label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.filter-field select,
+.filter-field input {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: var(--text-primary);
 }
 
 .schedule-title {
