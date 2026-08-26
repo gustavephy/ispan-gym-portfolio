@@ -313,6 +313,15 @@ onMounted(() => {
   font-size: 0.85rem;
   vertical-align: middle;
   text-align: center;
+  /* 這裡重新定義了儲存格，會蓋掉 main.css 給 .admin-table 的同一條規則；
+     沒有它「前往補貨」這種短標籤在欄寬不足時會被折成兩行 */
+  white-space: nowrap;
+}
+
+/* 儲存格不折行後，視窗窄時改由表格自己橫向捲動，不讓整頁跟著左右跑。
+   .admin-table 的 overflow:hidden 是給圓角用的，捲動要放在內層這一層 */
+.product-table-wrap {
+  overflow-x: auto;
 }
 .admin-table table tr:hover td {
   background: #f8fafc;
