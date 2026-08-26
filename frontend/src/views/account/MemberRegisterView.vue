@@ -355,6 +355,8 @@ async function confirmAndRegister() {
 
         <div class="auth-card__links">
           <span>已經有帳號？<RouterLink to="/login">前往登入</RouterLink></span>
+          <span class="auth-card__links--secondary">員工註冊&nbsp;&nbsp;<RouterLink to="/employee-register">提出員工申請</RouterLink></span>
+          <span class="auth-card__links--secondary">暫時不繼續？<RouterLink to="/">返回首頁</RouterLink></span>
         </div>
       </template>
     </section>
@@ -476,5 +478,20 @@ async function confirmAndRegister() {
   display: flex;
   gap: 0.75rem;
   margin-top: 1.5rem;
+}
+
+/* 返回首頁連結刻意弱化，避免跟主要動線（前往登入）搶視覺焦點 */
+.auth-card__links--secondary {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* 窄螢幕（比照員工申請頁的既有斷點）雙欄改單欄 */
+@media (max-width: 560px) {
+  .form-row,
+  .pwd-rules {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
