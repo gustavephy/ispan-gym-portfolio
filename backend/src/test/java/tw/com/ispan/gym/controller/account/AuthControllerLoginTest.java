@@ -293,7 +293,7 @@ class AuthControllerLoginTest {
     }
 
     @Test
-    void 員工帳號REJECTED時回401且訊息提示可重新申請() throws Exception {
+    void 員工帳號REJECTED且無拒絕原因時回401並維持原本固定訊息() throws Exception {
         Account account = employeeAccount();
         Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com")).thenReturn(Optional.of(account));
         Mockito.when(employees.findByAccountId(9))
@@ -304,6 +304,37 @@ class AuthControllerLoginTest {
                         .content(loginBody("employee@example.com", RAW_PASSWORD)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("員工申請未通過，如需重新申請請使用重新申請功能。"));
+    }
+
+    @Test
+    void 員工帳號REJECTED且有拒絕原因時訊息包含該原因() throws Exception {
+        Account account = employeeAccount();
+        Employee rejected = employee(account, EmployeeStatus.REJECTED);
+        rejected.setReviewNote("  學經歷不符合需求  ");
+        Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com")).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(9)).thenReturn(Optional.of(rejected));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("employee@example.com", RAW_PASSWORD)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message")
+                        .value("員工申請未通過，原因：學經歷不符合需求。如需重新申請請使用重新申請功能。"));
+    }
+
+    @Test
+    void 員工帳號REJECTED但密碼錯誤時不洩漏拒絕原因() throws Exception {
+        Account account = employeeAccount();
+        Employee rejected = employee(account, EmployeeStatus.REJECTED);
+        rejected.setReviewNote("學經歷不符合需求");
+        Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com")).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(9)).thenReturn(Optional.of(rejected));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("employee@example.com", "wrong-password")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("帳號或密碼錯誤"));
     }
 
     @Test

@@ -6,6 +6,7 @@ import java.util.Locale;
 import tw.com.ispan.gym.dto.account.LoginRequest;
 import tw.com.ispan.gym.dto.account.LoginResponse;
 import tw.com.ispan.gym.entity.account.Account;
+import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.exception.LoginRateLimitedException;
 import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
@@ -109,9 +110,22 @@ public class AuthController {
                 .filter(e -> e.getDeletedAt() == null)
                 .map(e -> switch (e.getStatus()) {
                     case PENDING_APPROVAL -> new DisabledException("員工帳號尚待審核，請等候通知。");
-                    case REJECTED -> new DisabledException("員工申請未通過，如需重新申請請使用重新申請功能。");
+                    case REJECTED -> new DisabledException(rejectedMessage(e));
                     default -> new DisabledException("此帳號目前沒有可用的身分，請聯繫管理員。");
                 })
                 .orElseGet(() -> new DisabledException("此帳號目前沒有可用的身分，請聯繫管理員。"));
+    }
+
+    /**
+     * REJECTED 的登入錯誤訊息帶上審核者填寫的拒絕原因，讓申請人不必另外詢問就能知道
+     * 為什麼被拒、下一步該怎麼做。這裡不算新的匿名洩漏——密碼已經在 login() 驗證過
+     * 才會走到這個分支，等於已證明是本人（同一套原則見本類別上方 Javadoc）。
+     */
+    private String rejectedMessage(Employee employee) {
+        String reason = employee.getReviewNote();
+        if (reason == null || reason.isBlank()) {
+            return "員工申請未通過，如需重新申請請使用重新申請功能。";
+        }
+        return "員工申請未通過，原因：" + reason.strip() + "。如需重新申請請使用重新申請功能。";
     }
 }
