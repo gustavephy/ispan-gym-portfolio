@@ -160,10 +160,10 @@ public class AdminTrainerService {
 
     private Blockers countBlockers(Integer trainerId) {
         LocalDateTime now = LocalDateTime.now();
-        long openSlots = coachSlots.countOpenByTrainerId(trainerId, now);
-        long activeBookings = coachBookings.countByTrainerIdAndStatus(trainerId, CoachBookingStatus.PENDING);
-        long activePrivateCourses = privateCourses.countByTrainerIdAndStatus(trainerId, CourseStatus.ACTIVE);
-        long upcomingGroupClassSessions = groupClassSessions.countByTrainerIdAndStatusAndEndAtAfter(
+        int openSlots = coachSlots.countOpenByTrainerId(trainerId, now);
+        int activeBookings = coachBookings.countByTrainerIdAndStatus(trainerId, CoachBookingStatus.PENDING);
+        int activePrivateCourses = privateCourses.countByTrainerIdAndStatus(trainerId, CourseStatus.ACTIVE);
+        int upcomingGroupClassSessions = groupClassSessions.countByTrainerIdAndStatusAndEndAtAfter(
                 trainerId, GroupClassSessionStatus.SCHEDULED, now);
         return new Blockers(openSlots, activeBookings, activePrivateCourses, upcomingGroupClassSessions);
     }

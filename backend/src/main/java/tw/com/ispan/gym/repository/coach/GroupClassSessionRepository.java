@@ -74,6 +74,6 @@ public interface GroupClassSessionRepository extends JpaRepository<GroupClassSes
          */
         @Query("SELECT COUNT(s) FROM GroupClassSession s JOIN s.course c "
                         + "WHERE c.trainer.id = :trainerId AND s.status = :status AND s.endAt > :after")
-        long countByTrainerIdAndStatusAndEndAtAfter(@Param("trainerId") Integer trainerId,
+        int countByTrainerIdAndStatusAndEndAtAfter(@Param("trainerId") Integer trainerId,
                         @Param("status") GroupClassSessionStatus status, @Param("after") LocalDateTime after);
 }
