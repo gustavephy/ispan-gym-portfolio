@@ -58,6 +58,7 @@ import tw.com.ispan.gym.entity.coach.GroupClassSession;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.time.LocalDateTime;
 
 /**
@@ -192,6 +193,9 @@ public class TestDataSeedRunner implements CommandLineRunner {
         // 這兩樣是「wendy 這個帳號的個人狀態」，語意不同。
         ensureActiveSubscription(wendyMember);
         ensureCourseQuota(wendyMember, coachTrainer);
+
+        // 樣本訂單（含上面的訂閱訂單）都是直接建單、沒走 OrderService，補上狀態時間軸
+        ensureSampleOrderHistory();
 
         log.info("測試帳號播種完成（密碼一律 {}；正式環境請以 SEED_TEST_DATA_ENABLED=false 停用）", TEST_PASSWORD);
     }
@@ -515,6 +519,71 @@ public class TestDataSeedRunner implements CommandLineRunner {
         if (created > 0) {
             log.info("已建立 {} 筆測試訂單（狀態涵蓋 PAID／UNPAID／REFUNDED／CANCELLED）", created);
         }
+    }
+
+    /**
+     * 樣本訂單（{@link #ensureSampleOrders} 的 SEED-ORD- 與 {@link #ensureActiveSubscription}
+     * 的 SEED-SUB-）為了控制日期分佈直接建單、沒有走 {@code OrderService}，因此不會留下
+     * order_status_history，「我的訂單」／後台訂單展開後就看不到時間軸。這裡冪等補上：
+     * 只挑 order_no 以 {@code SEED-} 開頭、且目前完全沒有任何歷程列的訂單，依現況狀態推出
+     * 對應事件（note 短代碼對齊前端 historyNoteMeta）。時間戳直接下 SQL——{@code changed_at}
+     * 是 {@code @CreatedDate}／{@code updatable=false}，跟本檔其他日期回填同樣做法。
+     */
+    private void ensureSampleOrderHistory() {
+        List<Map<String, Object>> seedOrders = jdbc.queryForList(
+                "SELECT id, status, created_at, paid_at, member_id FROM orders WHERE order_no LIKE 'SEED-%'");
+        int filled = 0;
+        for (Map<String, Object> row : seedOrders) {
+            int orderId = ((Number) row.get("id")).intValue();
+            Integer existing = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM order_status_history WHERE order_id = ?", Integer.class, orderId);
+            if (existing != null && existing > 0) {
+                continue;
+            }
+            String status = String.valueOf(row.get("status"));
+            Integer memberId = row.get("member_id") == null ? null : ((Number) row.get("member_id")).intValue();
+            // 讀出來的日期原樣寫回 changed_at，跟 orders.created_at 是同一組值（同樣經 Hibernate 讀取時的
+            // jdbc.time_zone=UTC 位移），前端時間軸與訂單成立時間才會對齊
+            LocalDateTime createdAt = toLocalDateTime(row.get("created_at"));
+            LocalDateTime paidAt = row.get("paid_at") == null ? createdAt : toLocalDateTime(row.get("paid_at"));
+
+            insertOrderHistory(orderId, null, "UNPAID", memberId, "USER", "CHECKOUT", createdAt);
+            switch (status) {
+                case "PAID" -> insertOrderHistory(orderId, "UNPAID", "PAID", memberId, "SYSTEM", "ECPAY_NOTIFY", paidAt);
+                case "CANCELLED" -> insertOrderHistory(orderId, "UNPAID", "CANCELLED", memberId, "USER", "CANCEL",
+                        createdAt.plusHours(1));
+                case "REFUNDED" -> {
+                    insertOrderHistory(orderId, "UNPAID", "PAID", memberId, "SYSTEM", "ECPAY_NOTIFY", paidAt);
+                    insertOrderHistory(orderId, "PAID", "PAID", memberId, "USER", "REFUND_REQUEST", paidAt.plusDays(1));
+                    insertOrderHistory(orderId, "PAID", "REFUNDED", memberId, "ADMIN", "REFUND_COMPLETE",
+                            paidAt.plusDays(2));
+                }
+                default -> { /* UNPAID／FAILED：只留 CHECKOUT 一列 */ }
+            }
+            filled++;
+        }
+        if (filled > 0) {
+            log.info("已為 {} 筆樣本訂單補上狀態時間軸", filled);
+        }
+    }
+
+    private void insertOrderHistory(int orderId, String fromStatus, String toStatus, Integer changedById,
+            String changeSource, String note, LocalDateTime changedAt) {
+        jdbc.update("INSERT INTO order_status_history "
+                + "(order_id, from_status, to_status, changed_by_id, change_source, note, changed_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                orderId, fromStatus, toStatus, changedById, changeSource, note, changedAt);
+    }
+
+    /** queryForList 對 datetime2 可能回 java.sql.Timestamp 或 LocalDateTime，統一成牆上時間的 LocalDateTime */
+    private static LocalDateTime toLocalDateTime(Object value) {
+        if (value instanceof LocalDateTime ldt) {
+            return ldt;
+        }
+        if (value instanceof java.sql.Timestamp ts) {
+            return ts.toLocalDateTime();
+        }
+        throw new IllegalStateException("非預期的日期型別：" + (value == null ? "null" : value.getClass()));
     }
 
     private ProductCategory getOrCreateCategory(String name) {

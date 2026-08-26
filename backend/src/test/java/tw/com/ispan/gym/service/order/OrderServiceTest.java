@@ -3,6 +3,7 @@ package tw.com.ispan.gym.service.order;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,6 +34,7 @@ import tw.com.ispan.gym.entity.member.MemberCoupon;
 import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.entity.order.Order;
 import tw.com.ispan.gym.entity.order.OrderItem;
+import tw.com.ispan.gym.entity.order.OrderStatusHistory;
 import tw.com.ispan.gym.entity.payment.PaymentRefund;
 import tw.com.ispan.gym.entity.payment.PaymentTransaction;
 import tw.com.ispan.gym.entity.product.Product;
@@ -91,6 +93,9 @@ class OrderServiceTest {
     private static final Integer COUPON_ID = 50;
     private static final Integer ORDER_ID = 900;
     private static final String COUPON_CODE = "SAVE100";
+    /** 購物車結帳需要收件地址（實體商品一定要出貨），成功路徑一律帶上這個 */
+    private static final String RECEIVER_ADDR = "台北市中正區測試路 1 號";
+    private static final CreateOrderRequest ADDR_ONLY = new CreateOrderRequest(null, null, null, RECEIVER_ADDR);
 
     private final CartItemRepository cartItems = mock(CartItemRepository.class);
     private final ProductRepository products = mock(ProductRepository.class);
@@ -246,7 +251,7 @@ class OrderServiceTest {
         stubOrderSaveAssignsId();
         stubNoOrderItems();
 
-        OrderDetailResponse response = service.createOrderFromCart(MEMBER_ID, null);
+        OrderDetailResponse response = service.createOrderFromCart(MEMBER_ID, ADDR_ONLY);
 
         // 2×1000 + 3×250.50 = 2751.50
         assertThat(response.totalAmount()).isEqualByComparingTo("2751.50");
@@ -261,9 +266,26 @@ class OrderServiceTest {
     void 空購物車不能結帳() {
         when(cartItems.findAllByMemberIdOrderByCreatedAtAsc(MEMBER_ID)).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, null))
+        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, ADDR_ONLY))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("購物車是空的");
+
+        verify(orders, never()).save(any());
+    }
+
+    @Test
+    void 購物車結帳未填收件地址時擋下() {
+        Product a = product(PRODUCT_ID, 10, "1000");
+        stubCart(new CartItem(member(), a, 1));
+
+        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID,
+                new CreateOrderRequest(null, "王小明", "0912345678", "  ")))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("收件地址");
+
+        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, null))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("收件地址");
 
         verify(orders, never()).save(any());
     }
@@ -277,7 +299,7 @@ class OrderServiceTest {
         stubOrderSaveAssignsId();
         stubNoOrderItems();
 
-        service.createOrderFromCart(MEMBER_ID, null);
+        service.createOrderFromCart(MEMBER_ID, ADDR_ONLY);
 
         // 併發防護：每一項商品都重新以鎖定查詢載入，而不是沿用購物車帶來的快照
         verify(products).findByIdForUpdate(PRODUCT_ID);
@@ -290,7 +312,7 @@ class OrderServiceTest {
         stubCart(new CartItem(member(), a, 2));
         stubProductLock(a);
 
-        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, null))
+        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, ADDR_ONLY))
                 .isInstanceOf(InsufficientStockException.class);
 
         assertThat(a.getStock()).isEqualTo(1); // 沒有被扣
@@ -305,7 +327,7 @@ class OrderServiceTest {
         stubCart(new CartItem(member(), a, 1));
         stubProductLock(a);
 
-        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, null))
+        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, ADDR_ONLY))
                 .isInstanceOf(ProductUnavailableException.class);
 
         verify(orders, never()).save(any());
@@ -317,7 +339,7 @@ class OrderServiceTest {
         stubCart(new CartItem(member(), a, 1));
         when(products.findByIdForUpdate(PRODUCT_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, null))
+        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, ADDR_ONLY))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -335,7 +357,7 @@ class OrderServiceTest {
         stubHoldsCoupon(coupon, held);
 
         OrderDetailResponse response = service.createOrderFromCart(MEMBER_ID,
-                new CreateOrderRequest(COUPON_CODE, null, null, null));
+                new CreateOrderRequest(COUPON_CODE, null, null, RECEIVER_ADDR));
 
         assertThat(response.totalAmount()).isEqualByComparingTo("900");
         // 券被核銷
@@ -354,7 +376,7 @@ class OrderServiceTest {
         stubHoldsCoupon(coupon, heldCoupon(coupon));
 
         OrderDetailResponse response = service.createOrderFromCart(MEMBER_ID,
-                new CreateOrderRequest(COUPON_CODE, null, null, null));
+                new CreateOrderRequest(COUPON_CODE, null, null, RECEIVER_ADDR));
 
         assertThat(response.totalAmount()).isEqualByComparingTo("283.33");
     }
@@ -370,7 +392,7 @@ class OrderServiceTest {
         stubHoldsCoupon(coupon, heldCoupon(coupon));
 
         OrderDetailResponse response = service.createOrderFromCart(MEMBER_ID,
-                new CreateOrderRequest(COUPON_CODE, null, null, null));
+                new CreateOrderRequest(COUPON_CODE, null, null, RECEIVER_ADDR));
 
         assertThat(response.totalAmount()).isEqualByComparingTo("0");
     }
@@ -385,7 +407,7 @@ class OrderServiceTest {
         when(coupons.findByCode(COUPON_CODE)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID,
-                new CreateOrderRequest(COUPON_CODE, null, null, null)))
+                new CreateOrderRequest(COUPON_CODE, null, null, RECEIVER_ADDR)))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -436,7 +458,7 @@ class OrderServiceTest {
                 MEMBER_ID, COUPON_ID, MemberCouponStatus.UNUSED)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID,
-                new CreateOrderRequest(COUPON_CODE, null, null, null)))
+                new CreateOrderRequest(COUPON_CODE, null, null, RECEIVER_ADDR)))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("尚未持有");
 
@@ -449,7 +471,7 @@ class OrderServiceTest {
         stubHoldsCoupon(coupon, heldCoupon(coupon));
 
         assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID,
-                new CreateOrderRequest(COUPON_CODE, null, null, null)))
+                new CreateOrderRequest(COUPON_CODE, null, null, RECEIVER_ADDR)))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining(messageFragment);
     }
@@ -598,6 +620,39 @@ class OrderServiceTest {
 
         // 課程明細沒有商品可還原，不應該去鎖任何商品
         verify(products, never()).findByIdForUpdate(any());
+    }
+
+    // === expireStaleUnpaidOrders()：逾時未付款訂單自動取消 ======================
+
+    @Test
+    void 逾時未付款訂單自動取消並還原庫存與優惠券() {
+        Order order = savedOrder();
+        MemberCoupon used = heldCoupon(coupon(CouponType.CASH, "100"));
+        used.setStatus(MemberCouponStatus.USED);
+        ReflectionTestUtils.setField(order, "memberCoupon", used);
+        Product product = product(PRODUCT_ID, 5, "1000");
+        when(orders.findAllByStatusAndCreatedAtBefore(eq(OrderStatus.UNPAID), any()))
+                .thenReturn(List.of(order));
+        when(orderItems.findAllByOrderIdOrderByIdAsc(ORDER_ID))
+                .thenReturn(List.of(productItem(order, product, 3, 1)));
+        stubProductLock(product);
+
+        int cancelled = service.expireStaleUnpaidOrders(java.time.Duration.ofMinutes(30));
+
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(product.getStock()).isEqualTo(8); // 5 + 3 還原
+        assertThat(used.getStatus()).isEqualTo(MemberCouponStatus.UNUSED);
+        verify(orderStatusHistories).save(org.mockito.ArgumentMatchers.argThat(
+                (OrderStatusHistory h) -> "CANCEL".equals(h.getNote()) && "SYSTEM".equals(h.getChangeSource())));
+    }
+
+    @Test
+    void 沒有逾時訂單時不做任何事() {
+        when(orders.findAllByStatusAndCreatedAtBefore(eq(OrderStatus.UNPAID), any())).thenReturn(List.of());
+
+        assertThat(service.expireStaleUnpaidOrders(java.time.Duration.ofMinutes(30))).isZero();
+        verify(orderStatusHistories, never()).save(any());
     }
 
     @Test

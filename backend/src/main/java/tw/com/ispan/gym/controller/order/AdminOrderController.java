@@ -8,6 +8,7 @@ import tw.com.ispan.gym.dto.order.PendingRefundResponse;
 import tw.com.ispan.gym.dto.order.RejectRefundRequest;
 import tw.com.ispan.gym.dto.report.OrderOverviewResponse;
 import tw.com.ispan.gym.enums.order.OrderStatus;
+import tw.com.ispan.gym.service.payment.EcpayService;
 import tw.com.ispan.gym.service.report.OperationReportService;
 import tw.com.ispan.gym.service.order.AdminOrderQueryService;
 import tw.com.ispan.gym.service.order.OrderService;
@@ -33,12 +34,14 @@ public class AdminOrderController {
     private final OperationReportService reportService;
     private final OrderService orderService;
     private final AdminOrderQueryService orderQueryService;
+    private final EcpayService ecpayService;
 
     public AdminOrderController(OperationReportService reportService, OrderService orderService,
-            AdminOrderQueryService orderQueryService) {
+            AdminOrderQueryService orderQueryService, EcpayService ecpayService) {
         this.reportService = reportService;
         this.orderService = orderService;
         this.orderQueryService = orderQueryService;
+        this.ecpayService = ecpayService;
     }
 
     /**
@@ -72,6 +75,17 @@ public class AdminOrderController {
     @PostMapping("/{orderId}/complete")
     public OrderDetailResponse complete(@PathVariable Integer orderId) {
         return orderService.completeOrder(orderId);
+    }
+
+    /**
+     * 模擬付款成功（本機展示用；受 {@code app.payment.simulate-enabled} 開關保護）。
+     * 走與綠界付款成功通知完全相同的「標記付款 + 履約」路徑，只是免去簽章與 server-to-server 通知。
+     * 本機沒有對外 URL、綠界的付款結果通知連不進來時，用這個把 UNPAID 訂單推進到已付款。
+     */
+    @PostMapping("/{orderId}/simulate-payment")
+    public AdminOrderDetailResponse simulatePayment(@PathVariable Integer orderId) {
+        ecpayService.simulatePaymentSuccess(orderId);
+        return orderQueryService.findById(orderId);
     }
 
     @GetMapping("/reports/overview")

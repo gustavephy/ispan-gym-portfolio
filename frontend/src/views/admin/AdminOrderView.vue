@@ -6,6 +6,7 @@ import {
   getAdminOrderDetail,
   shipOrder as apiShipOrder,
   completeOrder as apiCompleteOrder,
+  simulateOrderPayment as apiSimulatePayment,
   getPendingRefunds,
 } from '@/api/adminOrder.js'
 import { isInlineError } from '@/api/api-error.js'
@@ -29,6 +30,7 @@ const statusMeta = {
 const historyNoteMeta = {
   CHECKOUT: '建立訂單',
   ECPAY_NOTIFY: '綠界付款結果通知',
+  SIMULATE_PAYMENT: '模擬付款（測試）',
   CANCEL: '取消訂單',
   REFUND_REQUEST: '申請退款',
   REFUND_COMPLETE: '退款完成',
@@ -64,6 +66,18 @@ const { feedback, showFeedback } = useFeedback()
 
 function formatDate(isoString) {
   return isoString ? new Date(isoString).toLocaleString('zh-TW', { hour12: false }) : '—'
+}
+
+function formatMoney(amount) {
+  return `NT$ ${Number(amount).toLocaleString()}`
+}
+
+// 私教課品項的補充說明：共 N 堂、負責教練
+function courseItemMeta(item) {
+  const parts = []
+  if (item.totalSessions != null) parts.push(`共 ${item.totalSessions} 堂`)
+  if (item.trainerName) parts.push(`教練 ${item.trainerName}`)
+  return parts.join('・')
 }
 
 function searchParams() {
@@ -170,6 +184,20 @@ async function handleComplete(order) {
   }
 }
 
+async function handleSimulatePayment(order) {
+  if (!window.confirm(`確定要模擬訂單 ${order.merchantTradeNo} 付款成功嗎？將走與綠界付款相同的履約流程（本機展示用）。`)) return
+  actingId.value = order.orderId
+  try {
+    const res = await apiSimulatePayment(order.orderId)
+    await refreshRow(order.orderId, res.data)
+    showFeedback('已模擬付款成功，訂單已轉為已付款')
+  } catch (err) {
+    showFeedback(err.message || '操作失敗，請稍後再試', 'error')
+  } finally {
+    actingId.value = null
+  }
+}
+
 onMounted(async () => {
   // 從退款處理頁點「查看訂單」跳過來時，網址會帶 ?keyword=merchantTradeNo，
   // 直接代入搜尋框並送出查詢；查到唯一一筆時順便展開，省得使用者再點一次
@@ -223,6 +251,7 @@ onMounted(async () => {
         <div v-for="order in orders" :key="order.orderId" class="order-card">
           <button class="order-header" @click="toggleExpand(order)">
             <div class="order-header-main">
+              <span class="order-title">{{ order.title || order.merchantTradeNo }}</span>
               <span class="order-no mono">{{ order.merchantTradeNo }}</span>
               <span class="order-member">{{ order.memberName }}（{{ order.memberEmail }}）</span>
               <span class="order-date">下單 {{ formatDate(order.createdAt) }}</span>
@@ -248,10 +277,36 @@ onMounted(async () => {
 
               <div class="detail-section">
                 <h4 class="detail-title">訂單品項</h4>
-                <div v-for="item in detail[order.orderId].items" :key="item.orderItemId" class="detail-item-row">
-                  <span>{{ item.productNameAtBuy }} × {{ item.quantity }}</span>
-                  <span>NT$ {{ Number(item.lineAmount).toLocaleString() }}</span>
+
+                <div v-if="detail[order.orderId].subscription" class="detail-item-row">
+                  <div class="detail-item-info">
+                    <span class="detail-item-name">{{ detail[order.orderId].subscription.name }}</span>
+                    <span class="detail-item-meta">
+                      會員訂閱方案・{{ detail[order.orderId].subscription.durationDays }} 天使用期
+                    </span>
+                    <span
+                      v-if="detail[order.orderId].subscription.description"
+                      class="detail-item-meta"
+                    >{{ detail[order.orderId].subscription.description }}</span>
+                  </div>
+                  <span>{{ formatMoney(detail[order.orderId].subscription.price) }}</span>
                 </div>
+
+                <div v-for="item in detail[order.orderId].items" :key="item.orderItemId" class="detail-item-row">
+                  <div class="detail-item-info">
+                    <span class="detail-item-name">{{ item.productNameAtBuy }} × {{ item.quantity }}</span>
+                    <span v-if="item.itemType === 'COURSE'" class="detail-item-meta">
+                      私教課程<template v-if="courseItemMeta(item)">・{{ courseItemMeta(item) }}</template>
+                    </span>
+                    <span v-if="item.quantity > 1" class="detail-item-meta">單價 {{ formatMoney(item.priceAtBuy) }}</span>
+                  </div>
+                  <span>{{ formatMoney(item.lineAmount) }}</span>
+                </div>
+
+                <div
+                  v-if="!detail[order.orderId].subscription && detail[order.orderId].items.length === 0"
+                  class="detail-text"
+                >（無品項資料）</div>
               </div>
 
               <div v-if="pendingRefundsByOrder[order.orderId]" class="refund-callout">
@@ -268,6 +323,13 @@ onMounted(async () => {
               </div>
 
               <div class="detail-actions">
+                <button
+                  v-if="detail[order.orderId].status === 'UNPAID'"
+                  class="btn btn-accent"
+                  :disabled="actingId === order.orderId"
+                  title="本機沒有對外 URL、綠界通知連不進來時，用這個把訂單推進到已付款"
+                  @click="handleSimulatePayment(order)"
+                >{{ actingId === order.orderId ? '處理中…' : '模擬付款成功' }}</button>
                 <button
                   v-if="detail[order.orderId].status === 'PAID'"
                   class="btn btn-outline"
@@ -385,6 +447,16 @@ onMounted(async () => {
   font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
   font-size: 0.85rem;
 }
+.order-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.order-header .mono {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
 .order-member {
   font-size: 0.82rem;
   color: var(--text-secondary);
@@ -443,9 +515,29 @@ onMounted(async () => {
 .detail-item-row {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
   font-size: 0.88rem;
   color: var(--text-secondary);
-  padding: 0.3rem 0;
+  padding: 0.4rem 0;
+}
+.detail-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.detail-item-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.detail-item-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.detail-item-row > span {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .detail-actions {
   display: flex;

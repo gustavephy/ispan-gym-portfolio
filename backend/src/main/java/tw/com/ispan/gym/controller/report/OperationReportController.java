@@ -24,6 +24,7 @@ import tw.com.ispan.gym.dto.report.SalesStatsResponse;
 import tw.com.ispan.gym.enums.report.ReportItemType;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.report.OperationReportService;
+import tw.com.ispan.gym.service.report.ReportCsvService;
 import tw.com.ispan.gym.service.report.ReportPdfService;
 
 /** 營運報表。掛在 /api/admin 下，由 SecurityConfig 的 hasRole("ADMIN") 統一把關。 */
@@ -33,13 +34,16 @@ public class OperationReportController {
 
     private final OperationReportService reportService;
     private final ReportPdfService reportPdfService;
+    private final ReportCsvService reportCsvService;
     private final CurrentUserProvider currentUser;
 
     public OperationReportController(OperationReportService reportService,
                                      ReportPdfService reportPdfService,
+                                     ReportCsvService reportCsvService,
                                      CurrentUserProvider currentUser) {
         this.reportService = reportService;
         this.reportPdfService = reportPdfService;
+        this.reportCsvService = reportCsvService;
         this.currentUser = currentUser;
     }
 
@@ -78,6 +82,17 @@ public class OperationReportController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"operation-report-" + reportId + ".pdf\"")
                 .body(pdf);
+    }
+
+    /** 單份報表的品項排行匯出 CSV（UTF-8 with BOM，可直接用 Excel 開） */
+    @GetMapping("/{reportId}/csv")
+    public ResponseEntity<byte[]> downloadCsv(@PathVariable Integer reportId) {
+        byte[] csv = reportCsvService.generateRankingCsv(reportId);
+        return ResponseEntity.ok()
+                .contentType(new MediaType("text", "csv", java.nio.charset.StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"operation-report-" + reportId + "-ranking.csv\"")
+                .body(csv);
     }
 
     /** 手動生成（或重算）快照；操作者以帳號 id 記錄（service 反查 Employee） */

@@ -7,6 +7,7 @@ import tw.com.ispan.gym.dto.order.CreateOrderRequest;
 import tw.com.ispan.gym.dto.order.DirectCheckoutRequest;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.OrderItemResponse;
+import tw.com.ispan.gym.dto.order.OrderSubscriptionResponse;
 import tw.com.ispan.gym.dto.order.PendingRefundResponse;
 import tw.com.ispan.gym.dto.order.SubscriptionCheckoutRequest;
 import tw.com.ispan.gym.entity.cart.CartItem;
@@ -61,6 +62,7 @@ import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -150,6 +152,11 @@ public class OrderService {
         String receiverName = request == null ? null : request.receiverName();
         String receiverPhone = request == null ? null : request.receiverPhone();
         String receiverAddress = request == null ? null : request.receiverAddress();
+
+        // 購物車只裝實體商品，一定要出貨——沒有收件地址無法履約
+        if (receiverAddress == null || receiverAddress.isBlank()) {
+            throw new BusinessRuleException("請填寫收件地址");
+        }
 
         Order order = createOrder(member, lines, couponCode, receiverName, receiverPhone, receiverAddress,
                 CouponApplicableType.PRODUCT);
@@ -333,6 +340,27 @@ public class OrderService {
         orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(), order.getMember(),
                 "USER", "CANCEL"));
         return toDetailResponse(order);
+    }
+
+    /**
+     * 逾時未付款訂單的自動收尾：超過 {@code ttl} 仍是 UNPAID 的訂單，比照使用者手動取消——
+     * 還原庫存、退回優惠券、寫一筆 source=SYSTEM 的 CANCEL 歷程。庫存在建單當下就扣掉，
+     * 少了這個排程，使用者放棄綠界付款後庫存會一直卡著。由 {@link StaleOrderCleanupScheduler} 定期呼叫。
+     *
+     * @return 這次取消的訂單數
+     */
+    @Transactional
+    public int expireStaleUnpaidOrders(Duration ttl) {
+        LocalDateTime cutoff = LocalDateTime.now(TAIPEI).minus(ttl);
+        List<Order> stale = orders.findAllByStatusAndCreatedAtBefore(OrderStatus.UNPAID, cutoff);
+        for (Order order : stale) {
+            order.cancel("逾時未付款，系統自動取消");
+            restoreStock(order);
+            restoreCoupon(order);
+            orderStatusHistories.save(new OrderStatusHistory(order, OrderStatus.UNPAID.name(),
+                    order.getStatus().name(), order.getMember(), "SYSTEM", "CANCEL"));
+        }
+        return stale.size();
     }
 
     private void requestRefund(Order order, String reason) {
@@ -587,16 +615,34 @@ public class OrderService {
         return discount.min(subtotal);
     }
 
+    /**
+     * merchant_trade_no 欄位長度上限 20，"GYM" + 14 碼時間戳只剩 3 碼給亂數，同一秒內有 1/1000
+     * 撞號機率。這裡先查存在性、撞到就重產（最多 5 次），正常路徑不會拋例外汙染交易；
+     * 連 5 次都撞（實務上不會發生）才交給 UQ_orders_mtn 唯一約束當最後防線（會回可重試的 409）。
+     */
     private String generateMerchantTradeNo() {
-        String timestamp = LocalDateTime.now(TAIPEI).format(TRADE_NO_FORMAT);
-        int suffix = RANDOM.nextInt(1000);
-        return "GYM" + timestamp + String.format("%03d", suffix);
+        for (int i = 0; i < 5; i++) {
+            String candidate = "GYM" + LocalDateTime.now(TAIPEI).format(TRADE_NO_FORMAT)
+                    + String.format("%03d", RANDOM.nextInt(1000));
+            if (!orders.existsByMerchantTradeNo(candidate)) {
+                return candidate;
+            }
+        }
+        return "GYM" + LocalDateTime.now(TAIPEI).format(TRADE_NO_FORMAT)
+                + String.format("%03d", RANDOM.nextInt(1000));
     }
 
+    /** order_no 欄位長度上限 30，亂數放到 6 碼；比照 merchant_trade_no 先查存在性再重產 */
     private String generateOrderNo() {
-        String timestamp = LocalDateTime.now(TAIPEI).format(TRADE_NO_FORMAT);
-        int suffix = RANDOM.nextInt(10000);
-        return "ORD" + timestamp + String.format("%04d", suffix);
+        for (int i = 0; i < 5; i++) {
+            String candidate = "ORD" + LocalDateTime.now(TAIPEI).format(TRADE_NO_FORMAT)
+                    + String.format("%06d", RANDOM.nextInt(1_000_000));
+            if (!orders.existsByOrderNo(candidate)) {
+                return candidate;
+            }
+        }
+        return "ORD" + LocalDateTime.now(TAIPEI).format(TRADE_NO_FORMAT)
+                + String.format("%06d", RANDOM.nextInt(1_000_000));
     }
 
     private String generateRefundNo() {
@@ -612,14 +658,12 @@ public class OrderService {
     private OrderDetailResponse toDetailResponse(Order order) {
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
                 .sorted(Comparator.comparing(OrderItem::getId))
-                .map(item -> new OrderItemResponse(item.getId(),
-                        item.isCourseItem() ? null : item.getProduct().getProductId(),
-                        item.isCourseItem() ? item.getCourse().getId() : null,
-                        item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
-                        item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
+                .map(OrderItemResponse::from)
                 .toList();
-        return new OrderDetailResponse(order.getId(), order.getMerchantTradeNo(), order.getTotalAmount(),
-                order.getStatus(), order.getCreatedAt(), items);
+        OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
+        return new OrderDetailResponse(order.getId(), order.getMerchantTradeNo(),
+                OrderDetailResponse.title(subscription, items), order.getTotalAmount(),
+                order.getStatus(), order.getCreatedAt(), items, subscription);
     }
 
     private record OrderLine(Product product, int quantity) {}

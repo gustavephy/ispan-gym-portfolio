@@ -1,15 +1,18 @@
 package tw.com.ispan.gym.service.order;
 
-import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.OrderItemResponse;
 import tw.com.ispan.gym.dto.order.OrderStatusHistoryResponse;
+import tw.com.ispan.gym.dto.order.OrderSubscriptionResponse;
 import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
 import tw.com.ispan.gym.entity.order.Order;
+import tw.com.ispan.gym.entity.order.OrderItem;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
 import tw.com.ispan.gym.repository.order.OrderStatusHistoryRepository;
@@ -29,21 +32,24 @@ public class OrderQueryService {
     }
 
     public List<OrderSummaryResponse> findMine(Integer memberId) {
-        return orders.findAllByMemberIdOrderByCreatedAtDesc(memberId).stream().map(this::summary).toList();
+        List<Order> mine = orders.findAllByMemberIdOrderByCreatedAtDesc(memberId);
+        // 一次撈齊所有訂單的明細再依 order id 分組，避免逐筆查明細算標題的 N+1
+        Map<Integer, List<OrderItem>> itemsByOrder = orderItems.findAllByOrderIdInOrderByOrderIdAscIdAsc(
+                mine.stream().map(Order::getId).toList()).stream()
+                .collect(Collectors.groupingBy(item -> item.getOrder().getId()));
+        return mine.stream().map(order -> summary(order, itemsByOrder.getOrDefault(order.getId(), List.of()))).toList();
     }
 
     public OrderDetailResponse findMineById(Integer memberId, Integer orderId) {
         Order order = orders.findByIdAndMemberId(orderId, memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
-                .map(item -> new OrderItemResponse(item.getId(),
-                        item.isCourseItem() ? null : item.getProduct().getProductId(),
-                        item.isCourseItem() ? item.getCourse().getId() : null,
-                        item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
-                        item.getPriceAtBuy().multiply(BigDecimal.valueOf(item.getQuantity()))))
+                .map(OrderItemResponse::from)
                 .toList();
-        return new OrderDetailResponse(order.getId(), order.getMerchantTradeNo(), order.getTotalAmount(),
-                order.getStatus(), order.getCreatedAt(), items);
+        OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
+        return new OrderDetailResponse(order.getId(), order.getMerchantTradeNo(),
+                OrderDetailResponse.title(subscription, items), order.getTotalAmount(),
+                order.getStatus(), order.getCreatedAt(), items, subscription);
     }
 
     /** 訂單狀態時間軸，僅限本人訂單 */
@@ -55,8 +61,10 @@ public class OrderQueryService {
                 .toList();
     }
 
-    private OrderSummaryResponse summary(Order order) {
-        return new OrderSummaryResponse(order.getId(), order.getMerchantTradeNo(), order.getTotalAmount(),
+    private OrderSummaryResponse summary(Order order, List<OrderItem> items) {
+        OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
+        String title = OrderDetailResponse.title(subscription, items.stream().map(OrderItemResponse::from).toList());
+        return new OrderSummaryResponse(order.getId(), order.getMerchantTradeNo(), title, order.getTotalAmount(),
                 order.getStatus(), order.getCreatedAt());
     }
 }
