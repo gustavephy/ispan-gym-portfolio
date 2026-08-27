@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { test, expect, ACCOUNTS, loginAs, uniqueSuffix } from './fixtures.js'
 
 /**
@@ -9,6 +10,30 @@ import { test, expect, ACCOUNTS, loginAs, uniqueSuffix } from './fixtures.js'
  * <p>新增表單的 label 沒有用 for/id 綁 input，getByLabel 定位不到，
  * 只能靠 placeholder；下架走的是 window.confirm，需要掛 dialog handler。
  */
+
+/**
+ * 跑完清掉本檔建立的商品。
+ *
+ * <p>下架端點只是把 status 改成 INACTIVE，列不會消失，累積下來會把
+ * /products 預設畫面的播種商品擠掉（各分類只列前 4 項，且新的排前面），
+ * 連帶讓 shop.spec.js 找不到「運動毛巾」而失敗。
+ *
+ * <p>已被結帳測試買過的商品有 order_item 參照，刪不掉（FK_oi_product），
+ * 只能改成 INACTIVE——前台端點固定只回 ACTIVE，一樣不會再擋到播種商品。
+ */
+test.afterAll(() => {
+  const sql = `
+    DELETE FROM product
+    WHERE name LIKE 'E2E %'
+      AND product_id NOT IN (SELECT product_id FROM order_item WHERE product_id IS NOT NULL);
+    UPDATE product SET status = 'INACTIVE' WHERE name LIKE 'E2E %';`
+  execFileSync(
+    'sqlcmd',
+    ['-S', 'localhost', '-d', 'ispan-proj-gymdb', '-U', 'sa', '-P', process.env.DB_PASSWORD,
+      '-C', '-Q', sql],
+    { encoding: 'utf8' },
+  )
+})
 
 /** 商品列。用 tr 過濾名稱，比從 td 往上找穩定 */
 function productRow(page, name) {
