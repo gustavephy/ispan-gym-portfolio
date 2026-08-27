@@ -1,7 +1,5 @@
 package tw.com.ispan.gym.entity.aihealthchat;
 
-import tw.com.ispan.gym.entity.employee.Employee;
-
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

@@ -11,8 +11,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDateTime;
 
 /**
- * model_name 預設 'gpt-4o-mini'，@Builder.Default 只保證 Java 端 builder 的預設值，
- * 資料庫 schema 仍須另外設定 DEFAULT('gpt-4o-mini')，兩邊要同步維持一致。
+ * model_name 由 AiAdvisorService 建立 plan 時以 geminiClient.getModel() 寫入，
+ * 對應 app.ai.gemini.model 設定，Entity 本身不設預設值。
  * @CreatedDate 需搭配 @EnableJpaAuditing（見 JpaAuditingConfig）才會生效。
  *
  * ★ Service 層產生課表前務必檢查：inbodyRecordId 所屬的 InbodyRecord.memberId
@@ -52,9 +52,8 @@ public class AiHealthPlan {
     @Column(name = "plan_content", nullable = false, columnDefinition = "nvarchar(max)")
     private String planContent;
 
-    @Builder.Default
     @Column(name = "model_name", nullable = false, length = 50)
-    private String modelName = "gpt-4o-mini";
+    private String modelName;
 
     @Column(name = "pdf_url", length = 500)
     private String pdfUrl;
