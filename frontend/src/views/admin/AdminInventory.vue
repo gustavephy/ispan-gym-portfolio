@@ -62,8 +62,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="p in filteredProducts" :key="p.id">
-              <td>#{{ p.id }}</td>
+            <tr v-for="p in filteredProducts" :key="p.productId">
+              <td>#{{ p.productId }}</td>
               <td>
                 <img :src="getProductImage(p)" class="product-thumb" alt="Product Image" />
               </td>
@@ -313,8 +313,14 @@ onMounted(() => {
   font-size: 0.85rem;
   vertical-align: middle;
   text-align: center;
-  /* 這裡重新定義了儲存格，會蓋掉 main.css 給 .admin-table 的同一條規則；
-     沒有它「前往補貨」這種短標籤在欄寬不足時會被折成兩行 */
+}
+
+/* 九個欄位擠在固定寬度裡，品項名稱與說明本來就需要折行才看得完，
+   所以不對整列下 nowrap——只讓「本來就該一行講完」的數字欄不折。
+   「前往補貨」按鈕的不折行由 main.css 的 .btn 統一處理，這裡不必重複。
+   （先前為了修按鈕折行對整個 td 下 nowrap，結果把名稱欄的文字截斷了） */
+.admin-table table td.price-text,
+.admin-table table td.stock-text {
   white-space: nowrap;
 }
 
@@ -340,6 +346,10 @@ onMounted(() => {
   font-weight: 700;
   color: #0f172a; /* 黑色字體，避免白色 */
   margin-bottom: 0.25rem;
+  /* 商品名稱可能很長（尤其含規格描述），欄位又只有一百多 px，
+     跟底下的說明一樣讓它折行，不要截斷成看不出是哪個商品 */
+  white-space: normal;
+  word-break: break-word;
 }
 .product-name-cell .desc-text {
   font-size: 0.75rem;

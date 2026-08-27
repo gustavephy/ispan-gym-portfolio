@@ -55,6 +55,13 @@ async function purchase(plan) {
     router.push({ name: 'login', query: { redirect: '/subscription' } })
     return
   }
+  // 已登入但沒有會員身分（純員工／管理員）：會籍綁在 member 上，後端的
+  // requireCurrentMemberId() 會回 401，而攔截器把 401 一律當成 session 過期，
+  // 會把人直接登出並踢回登入頁。這裡先擋下並給明確訊息。
+  if (!auth.isMember) {
+    showFeedback('此帳號沒有會員身分，無法訂閱會籍', 'error')
+    return
+  }
   purchasingId.value = plan.subscriptionPlanId
   try {
     const res = await checkoutDirectSubscriptionWithEcpay({

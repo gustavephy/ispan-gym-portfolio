@@ -125,8 +125,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in paginatedProducts" :key="p.id">
-            <td class="hide-md">#{{ p.id }}</td>
+          <tr v-for="p in paginatedProducts" :key="p.productId">
+            <td class="hide-md">#{{ p.productId }}</td>
             <td>
               <img :src="getProductImage(p)" class="product-thumb" alt="Product Image" />
             </td>
@@ -556,7 +556,9 @@ async function deleteCategory(cat) {
 // 載入商品列表
 async function loadProducts() {
   try {
-    const res = await api.get('/api/products', {
+    // 打後台端點而不是前台的 /api/products——後者固定只回 ACTIVE，
+    // 用它當資料來源會讓「已下架商品」篩選永遠是空的、下架後的商品也無從檢視
+    const res = await api.get('/api/admin/products', {
       params: { page: 0, size: 1000 }
     })
     const data = res.data
