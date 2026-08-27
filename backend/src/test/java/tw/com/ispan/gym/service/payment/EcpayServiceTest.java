@@ -234,6 +234,24 @@ class EcpayServiceTest {
         assertThat(form.get("ItemName")).isEqualTo("乳清蛋白#搖搖杯");
     }
 
+    /**
+     * ItemName 超過 400 字元時綠界會自行截斷，截斷點落在多位元組字元中間會使
+     * 雙方算出的 CheckMacValue 不一致而掉單，因此送出前必須自己先截。
+     */
+    @Test
+    void 商品名超過四百字元時先截斷再送出() {
+        Order order = order("1000");
+        List<OrderItem> many = new java.util.ArrayList<>();
+        for (int i = 0; i < 30; i++) {
+            many.add(item(order, "高蛋白乳清粉末營養補給品組合包" + i, "100"));
+        }
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(many);
+
+        Map<String, String> form = service.buildCheckoutForm(order);
+
+        assertThat(form.get("ItemName")).hasSize(400);
+    }
+
     @Test
     void 沒有明細時商品名退回訂單編號() {
         Order order = order("1500");

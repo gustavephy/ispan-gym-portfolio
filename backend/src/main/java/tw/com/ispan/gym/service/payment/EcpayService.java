@@ -67,6 +67,8 @@ public class EcpayService {
 
     /** 支援的付款方式；購物車一般商品結帳可三選一，訂閱／私教課直接結帳固定用 Credit（見 OrderController） */
     private static final java.util.Set<String> SUPPORTED_PAYMENT_METHODS = java.util.Set.of("Credit", "ATM", "CVS");
+    /** 綠界對 ItemName 的長度上限；超過會被對方截斷而導致 CheckMacValue 不一致 */
+    private static final int MAX_ITEM_NAME_LENGTH = 400;
     /** ATM 虛擬帳號有效期限（天），綠界允許 1-60 天，此處用官方文件建議的預設值 */
     private static final String ATM_EXPIRE_DAYS = "3";
     /** 超商代碼有效期限（分鐘），綠界預設 10080 分鐘＝7 天 */
@@ -158,10 +160,10 @@ public class EcpayService {
         // 使用者在付款頁中途離開後回來重新付款就是這個情形，因此每次組表單前都換一組新號。
         order.renewMerchantTradeNo();
 
-        String itemName = orderItems.findAllByOrderIdOrderByIdAsc(order.getOrderId()).stream()
+        String itemName = truncateItemName(orderItems.findAllByOrderIdOrderByIdAsc(order.getOrderId()).stream()
                 .map(OrderItem::getProductNameAtBuy)
                 .reduce((a, b) -> a + "#" + b)
-                .orElse("訂單" + order.getOrderNo());
+                .orElse("訂單" + order.getOrderNo()));
 
         Map<String, String> params = new LinkedHashMap<>();
         params.put("MerchantID", merchantId);
@@ -331,6 +333,20 @@ public class EcpayService {
 
         webhook.setProcessingStatus("PROCESSED");
         webhook.setProcessedAt(LocalDateTime.now(TAIPEI));
+    }
+
+    /**
+     * 把 ItemName 截到綠界的 400 字元上限內。
+     *
+     * <p>超過的話綠界會自行截斷，而截斷點若落在 UTF-8 多位元組字元中間會產生亂碼，
+     * 使綠界端算出的 CheckMacValue 與我方不一致而掉單。自己先截就不會有這個問題——
+     * 明細品項多或商品名稱長的訂單（以 # 串接）就可能超過。
+     */
+    private String truncateItemName(String itemName) {
+        if (itemName == null || itemName.length() <= MAX_ITEM_NAME_LENGTH) {
+            return itemName;
+        }
+        return itemName.substring(0, MAX_ITEM_NAME_LENGTH);
     }
 
     /**
