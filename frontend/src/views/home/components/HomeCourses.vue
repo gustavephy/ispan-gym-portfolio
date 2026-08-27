@@ -65,6 +65,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 // 引入 API 實例：api 用於取得教練清單 (第 183 行)
 import api from '@/api/axios.instance.js'
+import { getMySubscription } from '@/api/subscription.js'
 // 引入會員狀態：用於確認登入 (第 110 行) 與檢查個人資料完整性 (第 117 行)
 import { useAuthStore } from '@/stores/auth.js'
 // 引入商品狀態：用於取得課程方案列表 (第 196 行)
@@ -156,13 +157,12 @@ onMounted(async () => {
     coursesLoading.value = false
     loadDbTrainers()
 
-    if (auth.isLoggedIn) {
-      try {
-        const subRes = await api.get('/api/me/subscription', { skipGlobalError: true })
-        hasActiveSubscription.value = subRes.data?.isActive || false
-      } catch (e) {
-        // 忽略過期 Token 產生的錯誤，避免首頁強制跳轉或警告
-      }
+    // 身分判斷與 skipAuthRedirect 都收在 getMySubscription 內部，這裡不必再重複一次
+    try {
+      const subRes = await getMySubscription()
+      hasActiveSubscription.value = subRes.data?.isActive || false
+    } catch (e) {
+      // 沒有訂閱紀錄等情況維持 false
     }
   } catch (e) {
     coursesLoading.value = false

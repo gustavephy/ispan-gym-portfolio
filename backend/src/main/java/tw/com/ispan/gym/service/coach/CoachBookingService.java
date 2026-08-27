@@ -2,6 +2,7 @@ package tw.com.ispan.gym.service.coach;
 
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -397,9 +398,12 @@ public class CoachBookingService {
         }
 
         /**
-         * 分頁查詢會員自己的所有私教課預約紀錄，依上課時間（coachSlot.startAt）由近到遠排序
-         * （Pageable 的 Sort，不寫 JPQL，理由同 {@code GroupCourseRepository#searchCourses}）。
+         * 分頁查詢會員自己的所有私教課預約紀錄，可依狀態與上課日期區間篩選，依上課時間
+         * （coachSlot.startAt）由近到遠排序（Pageable 的 Sort，不寫 JPQL，理由同
+         * {@code GroupCourseRepository#searchCourses}）。
          * size 做安全上限（1~100）、page 不可小於 0，理由同 {@code GroupCourseService#getAllCourses}。
+         * dateFrom／dateTo 是使用者在畫面上選的「日期」（不含時間），dateTo 內部轉成隔天 00:00
+         * 做上界（不含），讓 dateTo 當天整天都算在篩選範圍內。
          *
          * <p>
          * remainingCourseSnapshot 的來源是 SessionDeductionLog.afterRemaining，取「這筆預約
@@ -417,12 +421,17 @@ public class CoachBookingService {
          * 分頁後批次查詢的範圍縮小到單頁筆數，比原本一次撈全部預約再批次查更省。
          */
         @Transactional(readOnly = true)
-        public PageResponse<CoachBookingHistoryResponse> getMyBookings(Integer memberId, int page, int size) {
+        public PageResponse<CoachBookingHistoryResponse> getMyBookings(Integer memberId, int page, int size,
+                        CoachBookingStatus status, LocalDate dateFrom, LocalDate dateTo) {
                 int safePage = Math.max(page, 0);
                 int safeSize = Math.min(Math.max(size, 1), 100);
                 Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "coachSlot.startAt"));
 
-                Page<CoachBooking> result = coachBookingRepository.findByMemberId(memberId, pageable);
+                LocalDateTime startAtFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
+                LocalDateTime startAtTo = dateTo == null ? null : dateTo.plusDays(1).atStartOfDay();
+
+                Page<CoachBooking> result = coachBookingRepository.searchMyBookings(memberId, status, startAtFrom,
+                                startAtTo, pageable);
                 List<CoachBooking> myBooking = result.getContent();
 
                 List<Integer> bookingIds = myBooking.stream().map(booking -> booking.getId()).toList();

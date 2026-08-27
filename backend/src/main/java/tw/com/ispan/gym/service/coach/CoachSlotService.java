@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.service.coach;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -189,16 +190,25 @@ public class CoachSlotService {
          * 理由同 {@code GroupCourseRepository#searchCourses}）。
          * 回傳內容包含 CANCELLED 的舊紀錄，不在這一層過濾，交由前端決定顯示方式。
          * size 做安全上限（1~100）、page 不可小於 0，理由同 {@code GroupCourseService#getAllCourses}。
+         * status 對應前端表格顯示的四種狀態（AVAILABLE／PENDING／COMPLETED／CANCELLED，
+         * 見 {@link CoachSlotRepository#searchMySlots} 的說明），null 代表不篩選。
+         * dateFrom／dateTo 是使用者在畫面上選的「日期」（不含時間），dateTo 內部轉成隔天 00:00
+         * 做上界（不含），讓 dateTo 當天整天都算在篩選範圍內。
          */
         @Transactional(readOnly = true)
-        public PageResponse<CoachSlotResponse> getMySlots(Integer accountId, int page, int size) {
+        public PageResponse<CoachSlotResponse> getMySlots(Integer accountId, int page, int size, String status,
+                        LocalDate dateFrom, LocalDate dateTo) {
                 Trainer trainer = requireTrainerByAccount(accountId);
 
                 int safePage = Math.max(page, 0);
                 int safeSize = Math.min(Math.max(size, 1), 100);
                 Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "startAt"));
 
-                Page<CoachSlot> result = coachSlotRepository.findByTrainerId(trainer.getId(), pageable);
+                LocalDateTime startAtFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
+                LocalDateTime startAtTo = dateTo == null ? null : dateTo.plusDays(1).atStartOfDay();
+
+                Page<CoachSlot> result = coachSlotRepository.searchMySlots(trainer.getId(), status, startAtFrom,
+                                startAtTo, pageable);
                 List<CoachSlotResponse> items = result.getContent().stream().map(slot -> {
                         CoachBooking activeBooking = findActiveBooking(slot.getId());
                         return new CoachSlotResponse(slot.getId(),

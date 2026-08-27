@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import tw.com.ispan.gym.dto.coach.GroupClassSessionResponse;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import tw.com.ispan.gym.exception.GlobalExceptionHandler;
 import tw.com.ispan.gym.security.CurrentUserProvider;
@@ -33,10 +34,10 @@ class GroupClassControllerTest {
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
-    private static GroupClassSessionResponse session(Integer id, String courseName, String roomName,
+    private static GroupClassSessionResponse session(Integer id, String courseName, ClassRoom room,
             LocalDateTime startAt, LocalDateTime endAt, int capacity, int bookedCount) {
-        return new GroupClassSessionResponse(id, 1, 1, "王 教練", courseName, roomName,
-                startAt, endAt, capacity, bookedCount, capacity - bookedCount,
+        return new GroupClassSessionResponse(id, 1, 1, "王 教練", courseName, room, room.getDisplayName(),
+                room.getColorHex(), startAt, endAt, capacity, bookedCount, capacity - bookedCount,
                 bookedCount >= capacity, GroupClassSessionStatus.SCHEDULED, 0,
                 LocalDateTime.of(2029, 12, 1, 9, 0), LocalDateTime.of(2029, 12, 1, 9, 0));
     }
@@ -44,10 +45,10 @@ class GroupClassControllerTest {
     @Test
     void 查詢成功回200與場次列表() throws Exception {
         when(groupClassService.getUpcomingSessions()).thenReturn(List.of(
-                session(1, "空中瑜珈", "A教室",
+                session(1, "空中瑜珈", ClassRoom.YOGA_ROOM,
                         LocalDateTime.of(2030, 1, 1, 10, 0),
                         LocalDateTime.of(2030, 1, 1, 11, 0), 20, 12),
-                session(2, "飛輪", "B教室",
+                session(2, "飛輪", ClassRoom.BOXING_ROOM,
                         LocalDateTime.of(2030, 1, 2, 18, 0),
                         LocalDateTime.of(2030, 1, 2, 19, 0), 15, 15)));
 

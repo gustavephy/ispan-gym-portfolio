@@ -11,6 +11,7 @@ public record AdminOrderDetailResponse(
         String orderNo,
         String merchantTradeNo,
         String tradeNo,
+        String title,
         Integer memberId,
         String memberName,
         String memberEmail,
@@ -28,4 +29,5 @@ public record AdminOrderDetailResponse(
         String receiverEmail,
         LocalDateTime createdAt,
         List<OrderItemResponse> items,
+        OrderSubscriptionResponse subscription,
         List<OrderStatusHistoryResponse> history) {}

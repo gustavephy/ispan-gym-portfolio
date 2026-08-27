@@ -21,7 +21,7 @@ public interface PrivateCourseRepository extends JpaRepository<PrivateCourse, In
 	 * 商品本身沒有「解除指派」的中間狀態，故只看 status，不看日期——本表沒有到期日欄位
 	 * （見 trainer_management_next_phase 規格基準的核對結果）。
 	 */
-	long countByTrainerIdAndStatus(Integer trainerId, CourseStatus status);
+	int countByTrainerIdAndStatus(Integer trainerId, CourseStatus status);
 
 	/**
 	 * AI 課程推薦（ChatAiResponderService）專用：category 是 LAZY 關聯，該服務組 prompt

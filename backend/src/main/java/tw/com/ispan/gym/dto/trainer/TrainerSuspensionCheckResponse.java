@@ -6,8 +6,8 @@ package tw.com.ispan.gym.dto.trainer;
  */
 public record TrainerSuspensionCheckResponse(boolean canSuspend, Blockers blockers) {
 
-    public record Blockers(long openSlots, long activeBookings, long activePrivateCourses,
-            long upcomingGroupClassSessions) {
+    public record Blockers(int openSlots, int activeBookings, int activePrivateCourses,
+            int upcomingGroupClassSessions) {
 
         public boolean any() {
             return openSlots > 0 || activeBookings > 0 || activePrivateCourses > 0

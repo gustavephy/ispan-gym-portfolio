@@ -13,7 +13,6 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import listPlugin from '@fullcalendar/list'
 import zhTwLocale from '@fullcalendar/core/locales/zh-tw'
-import { getRoomColor } from '@/utils/rooms.js'
 import tippy from 'tippy.js'
 import 'tippy.js/dist/tippy.css'
 
@@ -71,6 +70,11 @@ const myBookingsMessage = ref('')
 const page = ref(0)
 const size = ref(10)
 const search = ref('')
+// 狀態篩選：空字串代表「全部」，對應後端 GroupClassBookingStatus（BOOKED/CANCELLED）
+const statusFilter = ref('')
+// 開課日期區間篩選（yyyy-MM-dd），任一為空代表不限制該端
+const dateFrom = ref('')
+const dateTo = ref('')
 const totalItems = ref(0)
 const totalPages = ref(0)
 let searchDebounceTimer = null
@@ -121,8 +125,8 @@ const calendarEvents = computed(() =>
       : `${session.courseName}｜${session.trainerName}`,
     start: session.startAt,
     end: session.endAt,
-    backgroundColor: getRoomColor(session.roomName),
-    borderColor: getRoomColor(session.roomName),
+    backgroundColor: session.roomColor,
+    borderColor: session.roomColor,
     textColor: '#fff',
     classNames: session.isFull ? ['gcs-event-full'] : [],
     // 存整筆場次資料，點擊事件時不用再回頭用 id 查一次 sessions 陣列
@@ -349,7 +353,14 @@ async function fetchSessions() {
 async function fetchMyBookings() {
   myBookingsLoading.value = true
   try {
-    const res = await getMyBookings({ page: page.value, size: size.value, search: search.value })
+    const res = await getMyBookings({
+      page: page.value,
+      size: size.value,
+      search: search.value,
+      status: statusFilter.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+    })
     myBookings.value = res.data.items
     totalItems.value = res.data.totalItems
     totalPages.value = res.data.totalPages
@@ -366,6 +377,13 @@ watch(search, () => {
     page.value = 0
     fetchMyBookings()
   }, 400)
+})
+
+// 狀態／日期區間是離散選擇（下拉、日期選擇器），不像自由輸入的搜尋字串需要 debounce，
+// 選完立即查詢即可；同樣要把 page 重設為 0，理由同上
+watch([statusFilter, dateFrom, dateTo], () => {
+  page.value = 0
+  fetchMyBookings()
 })
 
 function handlePageChange(newPage) {
@@ -475,8 +493,26 @@ onUnmounted(() => {
     <div v-if="auth.isMember && viewMode === 'bookings'" class="my-bookings-section">
       <h3 class="schedule-title">我的團課報名</h3>
 
-      <div class="search-field">
-        <input id="myBookingsSearch" v-model="search" type="text" placeholder="搜尋課程名稱或教室" />
+      <div class="filter-row">
+        <div class="search-field">
+          <input id="myBookingsSearch" v-model="search" type="text" placeholder="搜尋課程名稱或教室" />
+        </div>
+        <div class="filter-field">
+          <label for="myBookingsStatus">狀態</label>
+          <select id="myBookingsStatus" v-model="statusFilter">
+            <option value="">全部</option>
+            <option value="BOOKED">已報名</option>
+            <option value="CANCELLED">已取消</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="myBookingsDateFrom">開課日期（從）</label>
+          <input id="myBookingsDateFrom" v-model="dateFrom" type="date" :max="dateTo || undefined" />
+        </div>
+        <div class="filter-field">
+          <label for="myBookingsDateTo">開課日期（到）</label>
+          <input id="myBookingsDateTo" v-model="dateTo" type="date" :min="dateFrom || undefined" />
+        </div>
       </div>
 
       <OperationMessage :message="myBookingsMessage" />
@@ -753,13 +789,37 @@ onUnmounted(() => {
   margin-top: 2.5rem;
 }
 
-.search-field {
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
   margin-bottom: 1rem;
 }
 
 .search-field input {
   width: 100%;
   max-width: 320px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: var(--text-primary);
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.filter-field label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.filter-field select,
+.filter-field input {
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

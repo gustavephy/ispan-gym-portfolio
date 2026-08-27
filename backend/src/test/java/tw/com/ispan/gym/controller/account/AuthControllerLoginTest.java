@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,7 @@ import tw.com.ispan.gym.repository.account.AccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.security.ApiErrorWriter;
+import tw.com.ispan.gym.security.InMemoryRateLimiter;
 import tw.com.ispan.gym.security.JsonAccessDeniedHandler;
 import tw.com.ispan.gym.security.JsonAuthenticationEntryPoint;
 import tw.com.ispan.gym.security.JwtAuthFilter;
@@ -175,6 +177,23 @@ class AuthControllerLoginTest {
     @Autowired AccountRepository accounts;
     @Autowired MemberRepository members;
     @Autowired EmployeeRepository employees;
+    @Autowired InMemoryRateLimiter rateLimiter;
+
+    /**
+     * {@link InMemoryRateLimiter} 是這個測試類別共用 Spring context 內的單例，
+     * 不清乾淨的話前一個測試留下的失敗次數會累加到下一個測試，尤其是本檔案裡
+     * 好幾個測試都重覆使用 member@example.com／employee@example.com 這兩個 email。
+     * 限流專屬測試都用自己專屬、不與其他測試重疊的 email，這裡只保險清掉本檔案
+     * 既有測試會用到的兩個 email 與本機測試用的 IP。
+     */
+    @BeforeEach
+    void clearRateLimiter() {
+        rateLimiter.clear("login:email:member@example.com");
+        rateLimiter.clear("login:email:employee@example.com");
+        rateLimiter.clear("login:email:nobody@example.com");
+        rateLimiter.clear("login:ip-minute:127.0.0.1");
+        rateLimiter.clear("login:ip-hourly:127.0.0.1");
+    }
 
     private Account account() {
         Account account = new Account();
@@ -274,7 +293,7 @@ class AuthControllerLoginTest {
     }
 
     @Test
-    void 員工帳號REJECTED時回401且訊息提示可重新申請() throws Exception {
+    void 員工帳號REJECTED且無拒絕原因時回401並維持原本固定訊息() throws Exception {
         Account account = employeeAccount();
         Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com")).thenReturn(Optional.of(account));
         Mockito.when(employees.findByAccountId(9))
@@ -285,6 +304,37 @@ class AuthControllerLoginTest {
                         .content(loginBody("employee@example.com", RAW_PASSWORD)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("員工申請未通過，如需重新申請請使用重新申請功能。"));
+    }
+
+    @Test
+    void 員工帳號REJECTED且有拒絕原因時訊息包含該原因() throws Exception {
+        Account account = employeeAccount();
+        Employee rejected = employee(account, EmployeeStatus.REJECTED);
+        rejected.setReviewNote("  學經歷不符合需求  ");
+        Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com")).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(9)).thenReturn(Optional.of(rejected));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("employee@example.com", RAW_PASSWORD)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message")
+                        .value("員工申請未通過，原因：學經歷不符合需求。如需重新申請請使用重新申請功能。"));
+    }
+
+    @Test
+    void 員工帳號REJECTED但密碼錯誤時不洩漏拒絕原因() throws Exception {
+        Account account = employeeAccount();
+        Employee rejected = employee(account, EmployeeStatus.REJECTED);
+        rejected.setReviewNote("學經歷不符合需求");
+        Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com")).thenReturn(Optional.of(account));
+        Mockito.when(employees.findByAccountId(9)).thenReturn(Optional.of(rejected));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("employee@example.com", "wrong-password")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("帳號或密碼錯誤"));
     }
 
     @Test
@@ -368,5 +418,119 @@ class AuthControllerLoginTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginBody("member@example.com", "")))
                 .andExpect(status().isBadRequest());
+    }
+
+    // === 登入限流（AuthController.LOGIN_EMAIL_MAX_ATTEMPTS=5／15分鐘、IP 10/分鐘、30/小時） ===
+
+    @Test
+    void 連續5次密碼錯誤後第6次觸發429限流() throws Exception {
+        Mockito.when(accounts.findByEmailIgnoreCase("member@example.com"))
+                .thenReturn(Optional.of(account()));
+
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(loginBody("member@example.com", "wrong-password")))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("member@example.com", "wrong-password")))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("LOGIN_RATE_LIMITED"));
+    }
+
+    @Test
+    void 觸發限流後即使密碼正確仍回429() throws Exception {
+        Mockito.when(accounts.findByEmailIgnoreCase("member@example.com"))
+                .thenReturn(Optional.of(account()));
+
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(loginBody("member@example.com", "wrong-password")))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        // 限流檢查在密碼比對之前就擋下，第 6 次改用正確密碼也救不回來
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("member@example.com", RAW_PASSWORD)))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void 登入成功會清空該email的失敗計數() throws Exception {
+        Account account = account();
+        Mockito.when(accounts.findByEmailIgnoreCase("member@example.com")).thenReturn(Optional.of(account));
+        Mockito.when(members.findByAccountId(7)).thenReturn(Optional.of(activeMember(account)));
+
+        // 3 次錯誤，未達 5 次門檻
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(loginBody("member@example.com", "wrong-password")))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        // 密碼答對，應清空這個 email 的失敗計數
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("member@example.com", RAW_PASSWORD)))
+                .andExpect(status().isOk());
+
+        // 再錯 3 次：若沒清空，累計失敗次數會是 3+3=6，早該觸發限流；
+        // 這裡預期仍是 401，證明計數確實從 0 重新算
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(loginBody("member@example.com", "wrong-password")))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    @Test
+    void 不同email的失敗計數互不影響() throws Exception {
+        Mockito.when(accounts.findByEmailIgnoreCase("member@example.com"))
+                .thenReturn(Optional.of(account()));
+
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(loginBody("member@example.com", "wrong-password")))
+                    .andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("member@example.com", "wrong-password")))
+                .andExpect(status().isTooManyRequests());
+
+        // employee@example.com 完全沒被牽連，第一次錯誤密碼仍正常回401（不是429）
+        Mockito.when(accounts.findByEmailIgnoreCase("employee@example.com"))
+                .thenReturn(Optional.of(employeeAccount()));
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("employee@example.com", "wrong-password")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+    }
+
+    @Test
+    void 同IP大量嘗試即使各自email不同仍觸發IP層限流() throws Exception {
+        // AuthController.LOGIN_IP_MINUTE_MAX = 10；每次用不同 email，證明擋下的是 IP 層而非 email 層
+        for (int i = 0; i < 10; i++) {
+            String email = "ip-rate-limit-test-" + i + "@example.com";
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(loginBody(email, "wrong-password")))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody("ip-rate-limit-test-final@example.com", "wrong-password")))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("LOGIN_RATE_LIMITED"));
     }
 }

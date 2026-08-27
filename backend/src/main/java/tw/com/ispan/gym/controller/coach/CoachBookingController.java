@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.controller.coach;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
 import tw.com.ispan.gym.dto.coach.MemberCourseQuotaResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
+import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
 import tw.com.ispan.gym.service.coach.CoachSlotService;
@@ -87,9 +89,13 @@ public class CoachBookingController {
     @PreAuthorize("hasRole('MEMBER')")
     public ResponseEntity<PageResponse<CoachBookingHistoryResponse>> getMyBookings(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) CoachBookingStatus status,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo) {
         Integer memberId = currentUserProvider.requireCurrentMemberId();
-        PageResponse<CoachBookingHistoryResponse> bookings = coachBookingService.getMyBookings(memberId, page, size);
+        PageResponse<CoachBookingHistoryResponse> bookings = coachBookingService.getMyBookings(memberId, page, size,
+                status, dateFrom, dateTo);
         return ResponseEntity.status(HttpStatus.OK).body(bookings);
     }
 

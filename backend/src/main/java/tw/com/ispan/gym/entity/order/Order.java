@@ -26,9 +26,10 @@ public class Order extends TaipeiTimestampEntity {
     @Column(name = "order_id", nullable = false)
     private Integer orderId;
 
-    public Integer getId() {
+    public Integer getOrderId() {
         return orderId;
     }
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "FK_orders_member"))
     private Member member;
@@ -176,10 +177,12 @@ public class Order extends TaipeiTimestampEntity {
     /**
      * 標記為已完成。
      *
-     * <p>含實體商品的訂單必須先出貨（PAID → SHIPPED → COMPLETED）；私教課與訂閱方案
+     * <p>
+     * 含實體商品的訂單必須先出貨（PAID → SHIPPED → COMPLETED）；私教課與訂閱方案
      * 沒有實體要寄，付款後可直接完成（PAID → COMPLETED），不必經過出貨。
      *
-     * <p>{@code hasPhysicalProduct} 由呼叫端查明細後傳入——Order 沒有持有 orderItems
+     * <p>
+     * {@code hasPhysicalProduct} 由呼叫端查明細後傳入——Order 沒有持有 orderItems
      * 關聯（明細以 order_id 反向關聯，見 OrderItem），實體本身查不到自己的品項組成。
      */
     public void markCompleted(boolean hasPhysicalProduct) {
@@ -191,8 +194,6 @@ public class Order extends TaipeiTimestampEntity {
         }
         this.status = OrderStatus.COMPLETED;
     }
-
-
 
     public Member getMember() {
         return member;

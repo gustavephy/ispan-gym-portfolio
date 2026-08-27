@@ -109,7 +109,8 @@ onMounted(fetchRefunds)
     <template v-else>
       <p v-if="refunds.length === 0" class="empty-state">目前沒有待處理的退款申請。</p>
 
-      <table v-else class="slot-table">
+      <div v-else class="table-scroll">
+        <table class="slot-table">
         <thead>
           <tr>
             <th>訂單編號</th>
@@ -157,7 +158,8 @@ onMounted(fetchRefunds)
             </td>
           </tr>
         </tbody>
-      </table>
+        </table>
+      </div>
     </template>
   </div>
 </template>
@@ -173,13 +175,19 @@ onMounted(fetchRefunds)
   padding: 2rem 0;
 }
 
-.slot-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--bg-section);
+/* 操作按鈕不再壓縮後，視窗窄時改由表格自己橫向捲動，不讓整頁跟著左右跑。
+   圓角與邊框移到這層：表格自身的 overflow:hidden 會蓋掉捲軸 */
+.table-scroll {
+  overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  overflow: hidden;
+}
+
+.slot-table {
+  width: 100%;
+  min-width: 46rem;
+  border-collapse: collapse;
+  background: var(--bg-section);
 }
 
 .slot-table th,
@@ -208,6 +216,14 @@ onMounted(fetchRefunds)
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+/* 這一格的按鈕文字都很短（駁回／完成退款），卻會因為 flex item 預設可縮到比內容還窄
+   而被折成兩行。nowrap 保住文字、flex-shrink:0 保住按鈕本身的寬度，
+   欄位不夠寬時讓表格自己橫向捲動，而不是把字擠爛 */
+.action-cell .btn {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .view-order-link {

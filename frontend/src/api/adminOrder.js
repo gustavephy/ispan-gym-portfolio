@@ -23,6 +23,12 @@ export const shipOrder = (orderId) => api.post(`/api/admin/orders/${orderId}/shi
 /** 標記訂單完成：SHIPPED → COMPLETED，或無出貨步驟的訂單直接 PAID → COMPLETED，需登入且為 ADMIN */
 export const completeOrder = (orderId) => api.post(`/api/admin/orders/${orderId}/complete`)
 
+/**
+ * 模擬付款成功（本機展示用）：把 UNPAID 訂單走與綠界付款成功相同的履約路徑推進到已付款。
+ * 受後端 app.payment.simulate-enabled 開關保護，需登入且為 ADMIN。
+ */
+export const simulateOrderPayment = (orderId) => api.post(`/api/admin/orders/${orderId}/simulate-payment`)
+
 /** 查詢待人工處理的退款清單（會員取消已付款訂單後產生），需登入且為 ADMIN */
 export const getPendingRefunds = () => api.get('/api/admin/orders/refunds/pending')
 

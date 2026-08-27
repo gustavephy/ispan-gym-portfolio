@@ -66,6 +66,11 @@ public class CartItem extends TaipeiTimestampEntity {
         return unitPriceSnapshot;
     }
 
+    /** 加入購物車當下的價格快照；僅供顯示「加入後是否變價」，結帳仍以商品現價計算 */
+    public void setUnitPriceSnapshot(BigDecimal unitPriceSnapshot) {
+        this.unitPriceSnapshot = unitPriceSnapshot;
+    }
+
     public Integer getVersion() {
         return version;
     }

@@ -35,6 +35,24 @@ public class ProductService {
     public Page<ProductResponse> getProducts(Integer productCategoryId, String keyword, String brand,
             String flavor, String size, BigDecimal minPrice, BigDecimal maxPrice,
             Double minWeight, Double maxWeight, String sort, int page, int pageSize) {
+        return search(ProductStatus.ACTIVE, productCategoryId, keyword, brand, flavor, size,
+                minPrice, maxPrice, minWeight, maxWeight, sort, page, pageSize);
+    }
+
+    /**
+     * 後台商品列表：不限狀態，已下架的商品也要回，後台才有辦法檢視與重新上架。
+     * 前台的 {@link #getProducts} 固定只回 ACTIVE，兩者刻意分開，避免哪天改動前台
+     * 篩選時不小心把下架商品也曝光給一般使用者。
+     */
+    public Page<ProductResponse> getProductsForAdmin(ProductStatus status, Integer productCategoryId,
+            String keyword, int page, int pageSize) {
+        return search(status, productCategoryId, keyword, null, null, null,
+                null, null, null, null, "default", page, pageSize);
+    }
+
+    private Page<ProductResponse> search(ProductStatus status, Integer productCategoryId, String keyword,
+            String brand, String flavor, String size, BigDecimal minPrice, BigDecimal maxPrice,
+            Double minWeight, Double maxWeight, String sort, int page, int pageSize) {
         Sort sortOrder;
         if ("lowToHigh".equals(sort)) {
             sortOrder = Sort.by("price").ascending();
@@ -45,7 +63,7 @@ public class ProductService {
         }
         Pageable pageable = PageRequest.of(page, pageSize, sortOrder);
         String kw = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
-        return products.findProductsWithFilters(ProductStatus.ACTIVE, productCategoryId, kw,
+        return products.findProductsWithFilters(status, productCategoryId, kw,
                 brand, flavor, size, minPrice, maxPrice, minWeight, maxWeight, pageable)
                 .map(ProductResponse::from);
     }

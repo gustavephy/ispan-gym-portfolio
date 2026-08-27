@@ -234,12 +234,14 @@ async function checkMemberSubscription() {
     return
   }
   try {
-    const api = (await import('@/api/axios.instance.js')).default
-    const res = await api.get('/api/me/subscription')
+    const res = await getMySubscription()
     if (res.data) {
       hasActiveSubscription.value = res.data.isActive === true || res.data.status === 'ACTIVE'
+    } else {
+      hasActiveSubscription.value = false
     }
   } catch (err) {
+    // 沒有訂閱紀錄等情況維持 false，不阻斷整頁載入
     hasActiveSubscription.value = false
   }
 }

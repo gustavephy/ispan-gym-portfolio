@@ -6,6 +6,7 @@ import {
   getCourseCategories
 } from '@/api/course/course.js'
 import api from '@/api/axios.instance.js'
+import { submitEcpayForm } from '@/utils/ecpay.js'
 
 // [全域狀態庫] useCoursesStore (courses)
 // 定義課程相關的 Pinia 狀態庫，提供課程方案與教練課程的資料管理功能。
@@ -162,32 +163,10 @@ export const useCoursesStore = defineStore('courses', () => {
 
       showToast('課程訂單已建立，引導至付款頁面...', 'success')
 
-      // 2. 獲取綠界金流 HTML 表單
+      // 2. 獲取綠界金流表單欄位，組成隱藏表單在新分頁送出（與購物車結帳共用 utils/ecpay.js）
       const ecpayRes = await api.post(`/api/payments/ecpay/checkout/${orderData.orderId}`)
-      
       if (ecpayRes.data) {
-        // 金流 API 通常返回一個包含 key-value 的 Form 參數物件，需要動態生成 form 送出
-        const formObj = ecpayRes.data
-        const actionUrl = formObj.ActionUrl || 'https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5'
-        
-        const form = document.createElement('form')
-        form.method = 'POST'
-        form.action = actionUrl
-        form.target = '_blank'
-
-        Object.keys(formObj).forEach(key => {
-          if (key !== 'ActionUrl') {
-            const input = document.createElement('input')
-            input.type = 'hidden'
-            input.name = key
-            input.value = formObj[key]
-            form.appendChild(input)
-          }
-        })
-
-        document.body.appendChild(form)
-        form.submit()
-        document.body.removeChild(form)
+        submitEcpayForm(ecpayRes.data, { target: '_blank' })
         showToast('已在新分頁開啟支付頁面！', 'success')
       }
     } catch (err) {

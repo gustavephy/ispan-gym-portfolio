@@ -1,13 +1,18 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { getActiveCourses } from '@/api/groupClass.js'
-import { getSessions, createSession, updateSession, cancelSession } from '@/api/adminGroupClass.js'
+import {
+  getSessions,
+  getRoomOptions,
+  createSession,
+  updateSession,
+  cancelSession,
+} from '@/api/adminGroupClass.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import Pagination from '@/components/Pagination.vue'
 import { TIME_OPTIONS } from '@/utils/businessHours.js'
-import { ROOM_OPTIONS } from '@/utils/rooms.js'
 
 // 場次狀態對照表：後端回傳 SCHEDULED/CANCELLED，畫面顯示中文與顏色
 const STATUS_MAP = {
@@ -17,6 +22,9 @@ const STATUS_MAP = {
 
 const courses = ref([])
 const coursesLoading = ref(true)
+
+// 教室選項（代碼＋中文名稱＋顏色），來自後端 ClassRoom enum，不再前端寫死
+const roomOptions = ref([])
 
 const sessions = ref([])
 const sessionsLoading = ref(true)
@@ -129,6 +137,11 @@ async function fetchCourses() {
   } finally {
     coursesLoading.value = false
   }
+}
+
+async function fetchRoomOptions() {
+  const res = await getRoomOptions()
+  roomOptions.value = res.data
 }
 
 async function fetchSessions() {
@@ -259,7 +272,7 @@ function openEditModal(session) {
   const start = splitIsoDateTime(session.startAt)
   const end = splitIsoDateTime(session.endAt)
   editForm.value = {
-    roomName: session.roomName,
+    roomName: session.roomCode,
     startDate: start.date,
     startTime: start.time,
     endDate: end.date,
@@ -334,6 +347,7 @@ async function handleEditSubmit() {
 
 onMounted(() => {
   fetchCourses()
+  fetchRoomOptions()
   fetchSessions()
 })
 
@@ -362,7 +376,7 @@ onUnmounted(() => {
         <label for="sessionRoom">教室</label>
         <select id="sessionRoom" v-model="form.roomName" required>
           <option value="" disabled>請選擇</option>
-          <option v-for="room in ROOM_OPTIONS" :key="room" :value="room">{{ room }}</option>
+          <option v-for="room in roomOptions" :key="room.code" :value="room.code">{{ room.displayName }}</option>
         </select>
       </div>
       <div class="field">
@@ -468,7 +482,7 @@ onUnmounted(() => {
               <label for="editSessionRoom">教室</label>
               <select id="editSessionRoom" v-model="editForm.roomName" required>
                 <option value="" disabled>請選擇</option>
-                <option v-for="room in ROOM_OPTIONS" :key="room" :value="room">{{ room }}</option>
+                <option v-for="room in roomOptions" :key="room.code" :value="room.code">{{ room.displayName }}</option>
               </select>
             </div>
             <div class="field-row">

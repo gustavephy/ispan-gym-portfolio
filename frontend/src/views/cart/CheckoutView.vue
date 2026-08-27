@@ -77,10 +77,21 @@ async function loadMemberProfile() {
   }
 }
 
+// 購物車有任一品項已下架或庫存不足時擋下結帳
+const hasUnavailableItem = computed(() => items.value.some((i) => i.available === false))
+
 // 按「確認結帳並前往付款」先開確認彈窗讓使用者再檢查一次，不是直接送出
 function openConfirm() {
   if (items.value.length === 0) {
     showFeedback('購物車是空的，無法結帳', 'error')
+    return
+  }
+  if (hasUnavailableItem.value) {
+    showFeedback('購物車有商品已下架或庫存不足，請先回購物車移除', 'error')
+    return
+  }
+  if (!effectiveReceiver.value.address) {
+    showFeedback('請填寫收件地址', 'error')
     return
   }
   showConfirm.value = true
@@ -101,6 +112,8 @@ async function handleCheckout() {
     const formRes = await getEcpayCheckoutForm(orderId)
     cart.reset() // 訂單建立後後端已清空購物車，本地狀態跟著清空即可，不必再打一次 API
 
+    // 從綠界返回 /orders 後，OrderListView 會輪詢這筆訂單的付款結果
+    sessionStorage.setItem('pendingPaymentOrderId', String(orderId))
     submitEcpayForm(formRes.data)
     // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 submitting，避免使用者在轉導期間重複點擊
   } catch (err) {
@@ -133,13 +146,24 @@ onMounted(() => {
         <div class="form-card">
           <h3>訂單商品</h3>
           <div v-for="item in items" :key="item.cartItemId" class="order-item-row">
-            <span class="order-item-name">{{ item.productName }} × {{ item.quantity }}</span>
+            <span class="order-item-name">
+              {{ item.productName }} × {{ item.quantity }}
+              <span v-if="item.available === false" class="item-flag danger">已下架 / 庫存不足</span>
+              <span v-else-if="item.priceChanged" class="item-flag warn">
+                價格已變動（加入時 NT$ {{ Number(item.priceWhenAdded).toLocaleString() }}）
+              </span>
+            </span>
             <span class="order-item-amount">NT$ {{ Number(item.subtotal).toLocaleString() }}</span>
           </div>
+          <p v-if="hasUnavailableItem" class="checkout-blocker">
+            購物車有商品已下架或庫存不足，請先
+            <RouterLink to="/cart">回購物車</RouterLink>
+            移除後再結帳。
+          </p>
         </div>
 
         <div class="form-card">
-          <h3>收件資訊（選填）</h3>
+          <h3>收件資訊<span class="req">＊</span></h3>
 
           <div v-if="hasProfileAddress" class="receiver-mode-select" role="group" aria-label="收件資訊來源">
             <button
@@ -175,7 +199,7 @@ onMounted(() => {
               <input v-model="receiverPhone" class="form-input" placeholder="選填" />
             </div>
             <div class="field-group">
-              <label>收件地址</label>
+              <label>收件地址<span class="req">＊</span></label>
               <div class="address-region-row">
                 <select v-model="receiverCity" class="form-input region-select">
                   <option value="">縣市</option>
@@ -220,7 +244,7 @@ onMounted(() => {
         <p class="ecpay-note">目前僅支援信用卡付款，送出後將導向綠界安全金流支付頁輸入卡號完成付款</p>
         <button
           class="btn btn-accent submit-btn"
-          :disabled="submitting"
+          :disabled="submitting || hasUnavailableItem"
           @click="openConfirm"
         >確認結帳並前往付款</button>
       </div>
@@ -303,6 +327,27 @@ onMounted(() => {
   font-weight: 700;
   margin-bottom: 1rem;
 }
+.req {
+  color: #c92a2a;
+  margin-left: 0.15rem;
+}
+.item-flag {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.item-flag.danger { background: #fde2e2; color: #c92a2a; }
+.item-flag.warn { background: #fff3cd; color: #a06400; }
+.checkout-blocker {
+  margin-top: 0.75rem;
+  font-size: 0.82rem;
+  color: #c92a2a;
+}
+.checkout-blocker a { color: var(--accent-hover); font-weight: 600; }
 .order-item-row {
   display: flex;
   justify-content: space-between;

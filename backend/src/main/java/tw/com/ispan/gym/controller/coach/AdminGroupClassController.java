@@ -1,5 +1,8 @@
 package tw.com.ispan.gym.controller.coach;
 
+import java.util.Arrays;
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,9 +19,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import tw.com.ispan.gym.dto.coach.CreateGroupClassSessionRequest;
+import tw.com.ispan.gym.dto.coach.RoomOptionResponse;
 import tw.com.ispan.gym.dto.coach.UpdateGroupClassSessionRequest;
 import tw.com.ispan.gym.dto.coach.GroupClassSessionResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.service.coach.GroupClassService;
 
 /**
@@ -31,6 +36,21 @@ import tw.com.ispan.gym.service.coach.GroupClassService;
 public class AdminGroupClassController {
 
     private final GroupClassService groupClassService;
+
+    /**
+     * 列出所有合法的教室選項（代碼＋中文名稱＋顏色），供後台建立/編輯場次表單的下拉選單使用。
+     * 全專案第一支「列舉 enum 選項給前端下拉選單」的端點——教室清單改成固定 enum
+     * （見 {@link tw.com.ispan.gym.enums.coach.ClassRoom}）後，後端變成唯一權威來源，
+     * 前端不用再自己維護一份可能失準的清單。
+     */
+    @GetMapping("/rooms")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<RoomOptionResponse>> getRoomOptions() {
+        List<RoomOptionResponse> rooms = Arrays.stream(ClassRoom.values())
+                .map(r -> new RoomOptionResponse(r.name(), r.getDisplayName(), r.getColorHex()))
+                .toList();
+        return ResponseEntity.ok(rooms);
+    }
 
     /**
      * 分頁查詢即將開始、開放報名的團課場次，可依課程名稱／教練姓名／教室搜尋，成功回 200。

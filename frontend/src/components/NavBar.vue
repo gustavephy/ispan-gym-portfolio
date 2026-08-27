@@ -60,6 +60,7 @@
         { to: '/admin/inventory', label: '庫存管理', requires: 'ADMIN' },
         { to: '/admin/orders', label: '訂單管理', requires: 'ADMIN' },
         { to: '/admin/refunds', label: '退款處理', requires: 'ADMIN' },
+        { to: '/admin/payments', label: '交易紀錄', requires: 'ADMIN' },
         { to: '/admin/employee-reviews', label: '員工審核' },
       ],
     },
@@ -250,14 +251,17 @@
         </ul>
         <button type="button" class="nav-auth__button" @click="onLogout">登出</button>
       </div>
-      <RouterLink
-        v-else
-        key="out"
-        class="nav-auth__button nav-auth__button--primary"
-        :to="{ name: 'login', query: route.fullPath !== '/' ? { redirect: route.fullPath } : {} }"
-      >
-        登入
-      </RouterLink>
+      <div v-else key="out" class="nav-auth__panel">
+        <RouterLink
+          class="nav-auth__button nav-auth__button--primary"
+          :to="{ name: 'login', query: route.fullPath !== '/' ? { redirect: route.fullPath } : {} }"
+        >
+          登入
+        </RouterLink>
+        <RouterLink class="nav-auth__button" to="/member-register">
+          註冊
+        </RouterLink>
+      </div>
       </Transition>
     </div>
 
@@ -508,6 +512,13 @@
     .nav-auth__email { display: none; }
     .nav-auth__roles { flex-wrap: nowrap; }
     .nav-auth__role { white-space: nowrap; }
+    /* nav-auth__panel 桌面版是直向堆疊（側邊欄夠高），手機版橫向的 60px 頂欄放不下，
+       改橫向並排——同時涵蓋已登入（角色徽章＋登出）與訪客（登入＋註冊）兩種狀態 */
+    .nav-auth__panel {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
+    }
     .nav-auth__button {
       padding: 0.35rem 0.7rem;
       font-size: 0.82rem;

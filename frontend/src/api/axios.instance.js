@@ -35,20 +35,6 @@ const api = axios.create({
   },
 })
 
-/** 這些端點就算回 401 也不該觸發「登出並導向登入頁」——它們本來就是未登入狀態在打 */
-const ANONYMOUS_ENDPOINTS = [
-  '/api/auth/login',
-  '/api/members/register',
-  '/api/employees/register',
-  '/api/employees/reapply',
-  '/api/accounts/verify-email',
-  '/api/accounts/resend-verification-email',
-]
-
-function isAnonymousEndpoint(url = '') {
-  return ANONYMOUS_ENDPOINTS.some((path) => url.includes(path))
-}
-
 // ==============================
 // Request 攔截器（發出請求前執行）
 // 自動從 Pinia store 取出 JWT Token 加入 Header
@@ -79,19 +65,24 @@ api.interceptors.response.use(
   // 錯誤回應：正規化 → 依類型分流 → 一律 reject 正規化後的物件
   (error) => {
     const apiError = normalizeApiError(error)
-    const url = error.config?.url ?? ''
     const skipGlobal = error.config?.skipGlobalError === true
+    // 匿名流程（登入、註冊、Email 驗證、忘記／重設密碼…）的呼叫端自己知道
+    // 「這支端點本來就是未登入狀態在打」，用這個旗標主動聲明，而不是攔截器
+    // 反過來用 URL 字串猜——呼叫端一多，URL 清單遲早會漏加新端點。
+    const skipAuthRedirect = error.config?.skipAuthRedirect === true
 
-    // 401：token 過期或未登入。登入／註冊等匿名端點的 401 屬於「帳密錯誤」之類的
-    // 正常結果，交給呼叫端自己顯示，不可清 token 也不該導向登入頁。
-    // skipGlobal 為 true 表示呼叫端自行處理（例如首頁選填 API），同樣跳過全域登出流程。
-    if (apiError.status === 401 && !isAnonymousEndpoint(url)) {
+    // 401：token 過期或未登入。匿名端點的 401 屬於「帳密錯誤」「token 無效」之類的
+    // 正常結果，交給呼叫端自己顯示，不可清 token 也不該導向登入頁，用 skipAuthRedirect 聲明。
+    // skipGlobal 只代表「不要跳全域錯誤提示」，跟登入狀態無關——即使呼叫端自己處理錯誤顯示
+    // （例如首頁選填 API），token 真的過期時仍要清掉，不然使用者會帶著死掉的 token 卡住，
+    // 直到剛好打到一支沒設 skipGlobal 的 API 才會被登出。
+    if (apiError.status === 401 && !skipAuthRedirect) {
+      try {
+        useAuthStore().logout()
+      } catch (e) {
+        // store 不可用時仍要繼續通知，不讓例外中斷錯誤流程
+      }
       if (!skipGlobal) {
-        try {
-          useAuthStore().logout()
-        } catch (e) {
-          // store 不可用時仍要繼續通知，不讓例外中斷錯誤流程
-        }
         notifySessionExpired(apiError)
       }
       return Promise.reject(apiError)

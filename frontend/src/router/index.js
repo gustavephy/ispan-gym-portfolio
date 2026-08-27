@@ -34,7 +34,7 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
-          path: 'orders',
+          path: 'orders/:id?',
           component: () => import('@/views/member/OrderListView.vue'),
           meta: { requiresAuth: true },
         },
@@ -99,6 +99,11 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
+          path: 'admin/payments',
+          component: () => import('@/views/admin/AdminPaymentView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
           path: 'admin/employee-reviews',
           component: () => import('@/views/admin/EmployeeReviewView.vue'),
           // 同儕審核：任何在職員工皆可審核，不限管理者（後端也是 hasRole('EMPLOYEE')）
@@ -136,7 +141,42 @@ const router = createRouter({
           return typeof to.query.redirect === 'string' ? to.query.redirect : '/'
         }
       }
-    }
+    },
+    // 以下匿名路由與 /login 同層級、不掛 DefaultLayout（跟登入頁一樣，匿名流程不需要側邊主選單）
+    {
+      path: '/member-register',
+      name: 'member-register',
+      component: () => import('@/views/account/MemberRegisterView.vue'),
+    },
+    // 舊路徑重新導向，避免既有連結／書籤直接變成 404
+    { path: '/register', redirect: '/member-register' },
+    // 後端 app.mail.verification-base-url 直接導到這個路徑，路徑名稱不可隨意更動
+    {
+      path: '/verify-email',
+      name: 'verify-email',
+      component: () => import('@/views/account/EmailVerificationView.vue'),
+    },
+    {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/account/ForgotPasswordView.vue'),
+    },
+    // 後端 app.mail.password-reset-base-url 直接導到這個路徑，路徑名稱不可隨意更動
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/account/ResetPasswordView.vue'),
+    },
+    {
+      path: '/employee-register',
+      name: 'employee-register',
+      component: () => import('@/views/employee/EmployeeRegisterView.vue'),
+    },
+    {
+      path: '/employee-reapply',
+      name: 'employee-reapply',
+      component: () => import('@/views/employee/EmployeeReapplyView.vue'),
+    },
   ],
 })
 

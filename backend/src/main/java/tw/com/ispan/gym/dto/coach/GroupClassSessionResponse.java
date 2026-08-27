@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 
 @Data
@@ -33,7 +34,13 @@ public class GroupClassSessionResponse {
     private String trainerName; // 授課教練顯示名
 
     private String courseName;
+
+    /** 教室代碼（enum 本身），後台編輯表單回填 &lt;select&gt; 用。 */
+    private ClassRoom roomCode;
+    /** 教室中文顯示名稱，由 roomCode.getDisplayName() 產生，純顯示用途維持不變。 */
     private String roomName;
+    /** 教室代表色（hex），取代前端原本自己維護的顏色對照表。 */
+    private String roomColor;
     private LocalDateTime startAt;
     private LocalDateTime endAt;
     private Integer capacity;
