@@ -29,8 +29,10 @@ public class GroupCourseController {
     public ResponseEntity<PageResponse<GroupCourseResponse>> getActiveCourses(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer trainerId,
             @RequestParam(required = false) String search) {
-        PageResponse<GroupCourseResponse> courses = groupCourseService.getActiveCoursesPaged(page, size, search);
+        PageResponse<GroupCourseResponse> courses = groupCourseService.getActiveCoursesPaged(page, size, categoryId, trainerId, search);
         return ResponseEntity.status(HttpStatus.OK).body(courses);
     }
 }

@@ -46,8 +46,8 @@ public class AdminOrderQueryService {
         Order order = orders.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
 
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
-                .sorted(Comparator.comparing(item -> item.getId()))
-                .map(item -> new OrderItemResponse(item.getId(),
+                .sorted(Comparator.comparing(item -> item.getOrderItemId()))
+                .map(item -> new OrderItemResponse(item.getOrderItemId(),
                         item.isCourseItem() ? null : item.getProduct().getProductId(),
                         item.isCourseItem() ? item.getCourse().getId() : null,
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),

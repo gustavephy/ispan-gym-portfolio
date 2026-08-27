@@ -21,7 +21,8 @@ import lombok.Setter;
  * （{@link #tokenHash}）——資料庫外洩也拿不到可直接使用的憑證，查詢時把收到的
  * token 雜湊後再比對。
  *
- * <p>{@link #usedAt}／{@link #invalidatedAt} 語意不同：usedAt 是這把 token 真的
+ * <p>
+ * {@link #usedAt}／{@link #invalidatedAt} 語意不同：usedAt 是這把 token 真的
  * 完成過一次密碼重設；invalidatedAt 是被更新的申請取代、或同帳號另一把 token
  * 成功重設後一併作廢——同帳號永遠只有最新申請的那封信有效。
  */
@@ -33,7 +34,16 @@ public class PasswordResetToken {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Integer id;
+	@Column(name = "password_reset_token_id")
+	private Integer passwordResetTokenId;
+
+	public Integer getId() {
+		return passwordResetTokenId;
+	}
+
+	public void setId(Integer id) {
+		this.passwordResetTokenId = id;
+	}
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "account_id", nullable = false, foreignKey = @ForeignKey(name = "FK_password_reset_token_account_id"))

@@ -34,7 +34,16 @@ public class MemberCourseQuota {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    @Column(name = "member_course_quota_id")
+    private Integer memberCourseQuotaId;
+
+    public Integer getId() {
+        return memberCourseQuotaId;
+    }
+
+    public void setId(Integer id) {
+        this.memberCourseQuotaId = id;
+    }
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id", nullable = false)

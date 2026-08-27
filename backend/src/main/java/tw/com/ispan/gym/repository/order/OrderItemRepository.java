@@ -11,7 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface OrderItemRepository extends JpaRepository<OrderItem, Integer> {
-    List<OrderItem> findAllByOrderIdOrderByIdAsc(Integer orderId);
+    @Query("SELECT oi FROM OrderItem oi WHERE oi.order.id = :orderId ORDER BY oi.orderItemId ASC")
+    List<OrderItem> findAllByOrderIdOrderByIdAsc(@Param("orderId") Integer orderId);
 
     /**
      * 這筆訂單是否含實體商品（product_id 非空的明細列）。

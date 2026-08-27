@@ -168,30 +168,50 @@ public class TestDataSeedRunner implements CommandLineRunner {
         }
 
         Account wendy = ensureAccount("wendy-test@local.test", AccountType.MEMBER);
-        Member wendyMember = ensureMember(wendy, "斐凝", "測試", "0911111111");
+        Member wendyMember = ensureMember(wendy, "斐凝", "王", "0911111111");
 
         Account admin = ensureAccount("emp-admin@local.test", AccountType.MEMBER, AccountType.EMPLOYEE);
-        ensureMember(admin, "管理", "測試", "0922222222");
-        ensureEmployee(admin, "管理", "測試", "0922222222", EmployeeRole.ADMIN);
+        ensureMember(admin, "大同", "王", "0922222222");
+        ensureEmployee(admin, "大同", "王", "0922222222", EmployeeRole.ADMIN);
 
         // 純管理員：刻意不建 member 列，roles 只有 ["EMPLOYEE","ADMIN"]。
         // emp-admin 帶著會員身分（適合展示角色疊加），但那也讓 NavBar 同時出現會員與管理
         // 兩個工作區；要呈現乾淨的管理端畫面時用這組，不必動用 AdminSeedRunner 的始祖帳號。
         Account adminOnly = ensureAccount("admin-only@local.test", AccountType.EMPLOYEE);
-        ensureEmployee(adminOnly, "純管", "測試", "0944444444", EmployeeRole.ADMIN);
+        ensureEmployee(adminOnly, "小美", "張", "0944444444", EmployeeRole.ADMIN);
 
-        Account coach = ensureAccount("emp-trainer@local.test", AccountType.MEMBER, AccountType.EMPLOYEE);
-        ensureMember(coach, "教練", "測試", "0933333333");
-        Employee coachEmployee = ensureEmployee(coach, "教練", "測試", "0933333333", EmployeeRole.EMPLOYEE);
-        Trainer coachTrainer = ensureTrainer(coachEmployee);
+        record TrainerSeed(String email, String lastName, String firstName, String phone, String specialty) {}
+        List<TrainerSeed> trainerSeeds = List.of(
+            new TrainerSeed("emp-trainer@local.test", "林", "志強", "0933333333", "重量訓練、肌力提升"),
+            new TrainerSeed("emp-trainer2@local.test", "王", "志明", "0933333334", "重量訓練、心肺耐力"),
+            new TrainerSeed("emp-trainer3@local.test", "張", "美玲", "0933333335", "空中瑜珈、柔軟伸展"),
+            new TrainerSeed("emp-trainer4@local.test", "李", "健宏", "0933333336", "TRX懸吊、核心強化"),
+            new TrainerSeed("emp-trainer5@local.test", "陳", "怡君", "0933333337", "Zumba、流動瑜珈"),
+            new TrainerSeed("emp-trainer6@local.test", "黃", "冠宇", "0933333338", "重量訓練、爆發力訓練"),
+            new TrainerSeed("emp-trainer7@local.test", "吳", "淑芬", "0933333339", "哈達瑜珈、冥想靜心"),
+            new TrainerSeed("emp-trainer8@local.test", "徐", "浩然", "0933333340", "拳擊有氧、體能循環"),
+            new TrainerSeed("emp-trainer9@local.test", "楊", "凱婷", "0933333341", "踏板有氧、皮拉提斯"),
+            new TrainerSeed("emp-trainer10@local.test", "朱", "建國", "0933333342", "高強度間歇、敏捷反應"),
+            new TrainerSeed("emp-trainer11@local.test", "蔡", "雅婷", "0933333343", "舒壓瑜珈、陰瑜珈"),
+            new TrainerSeed("emp-trainer12@local.test", "許", "育誠", "0933333344", "徒手健身、核心雕塑")
+        );
 
-        ensureCatalogData(coachEmployee);
+        List<Trainer> seededTrainers = new java.util.ArrayList<>();
+        for (TrainerSeed ts : trainerSeeds) {
+            Account acc = ensureAccount(ts.email(), AccountType.MEMBER, AccountType.EMPLOYEE);
+            ensureMember(acc, ts.firstName(), ts.lastName(), ts.phone());
+            Employee emp = ensureEmployee(acc, ts.firstName(), ts.lastName(), ts.phone(), EmployeeRole.EMPLOYEE);
+            Trainer tr = ensureTrainer(emp, ts.specialty());
+            seededTrainers.add(tr);
+        }
+
+        ensureCatalogData(seededTrainers);
 
         // 預約資格要等目錄資料就緒（訂閱要指向方案、堂數要指向教練）。
         // 放在種子最後而不是併進 ensureCatalogData：目錄資料是「大家看的展示資料」，
         // 這兩樣是「wendy 這個帳號的個人狀態」，語意不同。
         ensureActiveSubscription(wendyMember);
-        ensureCourseQuota(wendyMember, coachTrainer);
+        ensureCourseQuota(wendyMember, seededTrainers.get(0));
 
         log.info("測試帳號播種完成（密碼一律 {}；正式環境請以 SEED_TEST_DATA_ENABLED=false 停用）", TEST_PASSWORD);
     }
@@ -278,7 +298,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
     }
 
     /** 教練列不存在就建立；存在則導正為未刪除（status 不動，UNAVAILABLE 是合法展示情境） */
-    private Trainer ensureTrainer(Employee employee) {
+    private Trainer ensureTrainer(Employee employee, String specialty) {
         Trainer trainer = trainers.findByEmployeeId(employee.getId()).orElse(null);
         if (trainer == null) {
             trainer = new Trainer();
@@ -287,11 +307,17 @@ public class TestDataSeedRunner implements CommandLineRunner {
             trainer.setFirstName(employee.getFirstName());
             trainer.setLastName(employee.getLastName());
             trainer.setEmail(employee.getAccount().getEmail());
-            trainer.setSpecialty("重量訓練、體態雕塑");
+            trainer.setSpecialty(specialty);
             trainer.setExperience("五年一對一私人教練經驗");
-            trainer.setBio("測試用教練帳號，供本機開發與功能展示。");
-            log.info("已建立測試教練（employee={}）", employee.getId());
+            trainer.setBio("專注於" + specialty + "，致力於以科學且安全的方式帶領學員達到心目中的理想體態。");
+            log.info("已建立專業教練（employee={}）", employee.getId());
             return trainers.save(trainer);
+        }
+        if (!specialty.equals(trainer.getSpecialty())) {
+            trainer.setSpecialty(specialty);
+            trainer.setBio("專注於" + specialty + "，致力於以科學且安全的方式帶領學員達到心目中的理想體態。");
+            trainer = trainers.save(trainer);
+            log.info("已更新測試教練 {} 的專長為 {}", employee.getLastName() + employee.getFirstName(), specialty);
         }
         if (trainer.getDeletedAt() != null) {
             trainer.setDeletedAt(null);
@@ -386,7 +412,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         MemberCourseQuota quota = new MemberCourseQuota();
         quota.setMember(member);
         quota.setTrainer(trainer);
-        quota.setCourseName("測試用私教堂數");
+        quota.setCourseName("一對一重量訓練額度");
         quota.setRemainingCourse(10);
         quota.setReservedCourse(0);
         quota.setUsedCourse(0);
@@ -405,12 +431,27 @@ public class TestDataSeedRunner implements CommandLineRunner {
      * <p>判斷方式一律是「該表為空才建立」而非逐筆比對——這些是展示用資料，
      * 組員自己在後台新增的內容不該被本 runner 覆蓋或刪除。
      */
-    private void ensureCatalogData(Employee coachEmployee) {
+    private void ensureCatalogData(List<Trainer> seededTrainers) {
         ensure46Products();
         ensureSubscriptionPlans();
+        // 清除舊的一對一私教分類與舊課程，因為私教課只適用重量訓練分類
+        jdbc.execute("DELETE FROM private_course WHERE course_category_id IN (SELECT course_category_id FROM course_category WHERE name = '一對一私教')");
+        jdbc.execute("DELETE FROM course_category WHERE name = '一對一私教'");
+
+        long distinctTrainers = groupCourses.findAll().stream().map(gc -> gc.getTrainer().getId()).distinct().count();
+        boolean hasInvalidPrivateTrainer = privateCourses.findAll().stream()
+                .anyMatch(pc -> pc.getTrainer() == null || !pc.getTrainer().getSpecialty().contains("重量訓練"));
+        boolean hasBodySculptingCourse = privateCourses.findAll().stream()
+                .anyMatch(pc -> pc.getName().contains("體態雕塑"));
+        if (distinctTrainers <= 1 || groupCourses.count() < 16 || privateCourses.count() != 3 || hasInvalidPrivateTrainer || hasBodySculptingCourse) {
+            log.info("團體課程教練未分散、私教課數不為 3、教練專長不符或含有舊私教名稱，重新清除並播種以分配至 12 位教練…");
+            jdbc.execute("DELETE FROM group_class_session");
+            jdbc.execute("DELETE FROM group_course");
+            jdbc.execute("DELETE FROM private_course");
+        }
         CourseCategory groupCategory = ensureCourseCategory();
-        ensureGroupCourseAndSession(coachEmployee, groupCategory);
-        ensurePrivateCourses(coachEmployee);
+        ensureGroupCourseAndSession(seededTrainers, groupCategory);
+        ensurePrivateCourses(seededTrainers);
         ensure17Coupons();
         ensureSampleOrders();
     }
@@ -642,96 +683,143 @@ public class TestDataSeedRunner implements CommandLineRunner {
         log.info("已建立 {} 筆測試訂閱方案", seeds.size());
     }
 
+    /** 確保 4 個課程分類存在，回傳分類 Map (名稱 -> 實體) */
+    private java.util.Map<String, CourseCategory> ensureAllCourseCategories() {
+        String[] names = {"有氧燃脂", "重量訓練", "瑜珈伸展", "功能性訓練"};
+        java.util.Map<String, CourseCategory> map = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < names.length; i++) {
+            final String name = names[i];
+            final int order = i + 1;
+            CourseCategory cat = courseCategories.findByName(name).orElseGet(() -> {
+                CourseCategory c = new CourseCategory();
+                c.setName(name);
+                c.setSortOrder(order);
+                CourseCategory saved = courseCategories.save(c);
+                log.info("已建立課程分類：{}", saved.getName());
+                return saved;
+            });
+            map.put(name, cat);
+        }
+        return map;
+    }
+
     private CourseCategory ensureCourseCategory() {
-        return courseCategories.findAll().stream().findFirst().orElseGet(() -> {
-            CourseCategory category = new CourseCategory();
-            category.setName("團體有氧");
-            CourseCategory saved = courseCategories.save(category);
-            log.info("已建立測試課程分類：{}", saved.getName());
-            return saved;
-        });
+        java.util.Map<String, CourseCategory> cats = ensureAllCourseCategories();
+        return cats.values().iterator().next();
     }
 
     /**
-     * 團課主檔與場次一起建立：只有主檔而沒有場次時，前台團課頁仍是空的
-     * （那頁顯示的是「即將開始且開放報名的場次」，不是課程本身）。
-     * 場次時間刻意設在未來，才會出現在前台列表。
+     * 團課：建立 4 分類 × 4 課程 = 16 筆，每筆附 1 個未來場次。
+     * 表非空時直接 return，保留後台手動新增的資料。
      */
-    private void ensureGroupCourseAndSession(Employee coachEmployee, CourseCategory category) {
+    private void ensureGroupCourseAndSession(List<Trainer> seededTrainers, CourseCategory ignoredCategory) {
         if (!groupCourses.findAll().isEmpty()) {
             return;
         }
-        Trainer trainer = trainers.findByEmployeeId(coachEmployee.getId()).orElse(null);
-        if (trainer == null) {
+        if (seededTrainers.isEmpty()) {
             log.warn("找不到測試教練，略過團課播種");
             return;
         }
-        GroupCourse course = new GroupCourse();
-        course.setTrainer(trainer);
-        course.setName("燃脂有氧");
-        course.setDescription("高強度間歇訓練，適合想快速燃脂的學員。");
-        course.setCategory(category);
-        course.setMaxCapacity(20);
-        GroupCourse savedCourse = groupCourses.save(course);
+        java.util.Map<String, CourseCategory> cats = ensureAllCourseCategories();
+        CourseCategory catAero    = cats.get("有氧燃脂");
+        CourseCategory catWeight  = cats.get("重量訓練");
+        CourseCategory catYoga    = cats.get("瑜珈伸展");
+        CourseCategory catFunc    = cats.get("功能性訓練");
 
-        LocalDateTime start = LocalDateTime.now().plusDays(3).withHour(19).withMinute(0)
-                .withSecond(0).withNano(0);
-        GroupClassSession session = new GroupClassSession();
-        session.setCourse(savedCourse);
-        session.setRoomName("A 教室");
-        session.setStartAt(start);
-        session.setEndAt(start.plusHours(1));
-        session.setCapacity(20);
-        session.setStatus(GroupClassSessionStatus.SCHEDULED);
-        groupClassSessions.save(session);
-        log.info("已建立測試團課主檔與 1 筆未來場次（{}）", start);
+        // 16 筆種子資料：name, desc, category, capacity, room, sessionHour
+        record GCSeed(String name, String desc, CourseCategory cat, int cap, String room, int hour) {}
+        List<GCSeed> seeds = List.of(
+            // 有氧燃脂 × 4
+            new GCSeed("高強度燃脂班",     "HIIT 交替訓練，心率拉高極限、快速燃燒體脂。",               catAero,   20, "多功能體能教室", 19),
+            new GCSeed("舞動有氧",          "融合舞蹈律動與有氧訓練，輕鬆享受燃脂樂趣。",               catAero,   25, "多功能體能教室", 20),
+            new GCSeed("跳繩體能訓練",      "跳繩搭配體能循環動作，提升心肺耐力與協調力。",             catAero,   18, "多功能體能教室", 18),
+            new GCSeed("自行車有氧",        "室內飛輪騎乘，間歇爬坡訓練強化下肢並燃燒熱量。",           catAero,   15, "飛輪教室",       7),
+            // 重量訓練 × 4
+            new GCSeed("基礎槓鈴訓練",      "深蹲、硬舉、臥推三大動作紮實入門，安全第一。",             catWeight, 12, "重訓室 A",       9),
+            new GCSeed("壺鈴全身訓練",      "壺鈴擺盪與抓舉動作，全身性力量與爆發力訓練。",             catWeight, 12, "重訓室 A",       10),
+            new GCSeed("啞鈴雕塑班",        "上下肢分離訓練，針對肌肉線條雕塑進行系統訓練。",           catWeight, 15, "重訓室 B",       18),
+            new GCSeed("TRX 懸吊訓練",      "利用自體重量與 TRX 帶進行核心與全身肌力訓練。",            catWeight, 10, "功能訓練區",     19),
+            // 瑜珈伸展 × 4
+            new GCSeed("哈達瑜珈入門",      "呼吸與體位法結合，適合初學者的舒緩瑜珈課程。",             catYoga,   20, "瑜珈教室",       8),
+            new GCSeed("陰瑜珈深層放鬆",    "長時間保持體式以鬆解筋膜，深層修復疲勞肌群。",             catYoga,   18, "瑜珈教室",       9),
+            new GCSeed("流動瑜珈",          "連貫式流動序列訓練，兼顧柔軟度與平衡感。",                 catYoga,   15, "瑜珈教室",       10),
+            new GCSeed("瑜珈伸展舒壓班",    "針對肩頸腰背等緊繃部位進行深度伸展，消除久坐痠痛。",       catYoga,   20, "瑜珈教室",       20),
+            // 功能性訓練 × 4
+            new GCSeed("體能循環訓練",      "多站式循環動作設計，全方位提升心肺與肌力。",               catFunc,   15, "功能訓練區",     18),
+            new GCSeed("核心穩定訓練",      "核心肌肉群鍛鍊，改善體態與脊椎穩定度。",                   catFunc,   12, "功能訓練區",     19),
+            new GCSeed("敏捷速度訓練",      "步伐反應速度訓練與身體靈活性控制。",                       catFunc,   10, "多功能體能教室", 20),
+            new GCSeed("體重訓練入門",      "自體重量肌力鍛鍊，徒手全身核心爆發力鍛鍊。",               catFunc,   20, "多功能體能教室", 9)
+        );
+
+        int dayOffset = 3;
+        for (int i = 0; i < seeds.size(); i++) {
+            GCSeed seed = seeds.get(i);
+            GroupCourse gc = new GroupCourse();
+            // 輪流分配給 12 位教練
+            Trainer trainer = seededTrainers.get(i % seededTrainers.size());
+            gc.setTrainer(trainer);
+            gc.setName(seed.name());
+            gc.setDescription(seed.desc());
+            gc.setCategory(seed.cat());
+            gc.setMaxCapacity(seed.cap());
+            gc.setStatus(CourseStatus.ACTIVE);
+            GroupCourse saved = groupCourses.save(gc);
+
+            LocalDateTime start = LocalDateTime.now().plusDays(dayOffset)
+                    .withHour(seed.hour()).withMinute(0).withSecond(0).withNano(0);
+            GroupClassSession session = new GroupClassSession();
+            session.setCourse(saved);
+            session.setRoomName(seed.room());
+            session.setStartAt(start);
+            session.setEndAt(start.plusHours(1));
+            session.setCapacity(seed.cap());
+            session.setStatus(GroupClassSessionStatus.SCHEDULED);
+            groupClassSessions.save(session);
+            dayOffset++;
+        }
+        log.info("已建立 {} 筆團課主檔與未來場次（4 分類各 4 筆，由 12 位教練分擔）", seeds.size());
     }
 
     /**
-     * 私教課方案：前台「課程方案」頁私教區塊的資料來源（GET /api/private-courses 只回 ACTIVE）。
-     * 比照其他目錄資料「表為空才建立」，不覆蓋組員在後台自建的內容；
-     * 分類另建「一對一私教」（依名稱找、找不到才建），與團課的「團體有氧」區隔，
-     * 讓前台的分類篩選有兩個以上的選項可切換。
+     * 私教課方案：全部歸屬「重量訓練」分類。
      */
-    private void ensurePrivateCourses(Employee coachEmployee) {
-        // 判斷「有沒有 ACTIVE」而不是「表是否為空」：前台只顯示 ACTIVE，
-        // 表裡只剩下架課（例如遺留的測試資料）時頁面照樣空白，這時仍該播種
+    private void ensurePrivateCourses(List<Trainer> seededTrainers) {
         if (!privateCourses.findByStatus(CourseStatus.ACTIVE).isEmpty()) {
             return;
         }
-        Trainer trainer = trainers.findByEmployeeId(coachEmployee.getId()).orElse(null);
-        if (trainer == null) {
+        if (seededTrainers.isEmpty()) {
             log.warn("找不到測試教練，略過私教課播種");
             return;
         }
-        CourseCategory category = courseCategories.findAll().stream()
-                .filter(c -> "一對一私教".equals(c.getName()))
-                .findFirst()
-                .orElseGet(() -> {
-                    CourseCategory created = new CourseCategory();
-                    created.setName("一對一私教");
-                    return courseCategories.save(created);
-                });
+        // 私教課一律掛在「重量訓練」分類下
+        java.util.Map<String, CourseCategory> cats = ensureAllCourseCategories();
+        CourseCategory category = cats.get("重量訓練");
 
         record Seed(String name, String desc, int price, int sessions, boolean trial) {}
         List<Seed> seeds = List.of(
-                new Seed("一對一體驗課", "首次體驗專屬，單堂一對一指導，評估體能狀態並規劃訓練方向。", 800, 1, true),
-                new Seed("一對一重訓入門（5堂）", "從姿勢與呼吸打底，建立深蹲、硬舉、臥推三大動作基礎。", 6500, 5, false),
-                new Seed("體態雕塑計畫（10堂）", "依 InBody 數據客製課表，搭配飲食建議，十堂完成階段性目標。", 12000, 10, false),
-                new Seed("核心與體能強化（8堂）", "強化核心穩定與心肺耐力，適合久坐族與運動初學者。", 9600, 8, false));
+                new Seed("一對一重訓體驗課",     "首次體驗，單堂一對一指導，評估體能並初步規劃重訓方向。",                       800,   1,  true),
+                new Seed("重訓入門計畫（5堂）",  "從姿勢與呼吸打底，建立深蹲、硬舉、臥推三大動作基礎。",                         6500,  5,  false),
+                new Seed("重訓進階計畫（10堂）", "依 InBody 數據客製課表，系統化進行進階重訓，十堂完成階段性目標。",               12000, 10, false));
 
-        for (Seed seed : seeds) {
+        List<Trainer> weightTrainers = seededTrainers.stream()
+                .filter(t -> t.getSpecialty() != null && t.getSpecialty().contains("重量訓練"))
+                .toList();
+
+        for (int i = 0; i < seeds.size(); i++) {
+            Seed seed = seeds.get(i);
             PrivateCourse course = new PrivateCourse();
             course.setName(seed.name());
             course.setDescription(seed.desc());
             course.setPrice(new BigDecimal(seed.price()));
             course.setSessionPerUnit(seed.sessions());
+            Trainer trainer = weightTrainers.isEmpty() ? seededTrainers.get(i % seededTrainers.size()) : weightTrainers.get(i % weightTrainers.size());
             course.setTrainer(trainer);
             course.setCategory(category);
             course.setIsTrial(seed.trial());
+            course.setStatus(CourseStatus.ACTIVE);
             privateCourses.save(course);
         }
-        log.info("已建立 {} 筆測試私教課方案", seeds.size());
+        log.info("已建立 {} 筆私教課方案（分類：重量訓練）", seeds.size());
     }
 
     private void ensure17Coupons() {

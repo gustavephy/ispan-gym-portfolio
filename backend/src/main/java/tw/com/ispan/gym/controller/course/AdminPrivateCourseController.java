@@ -1,7 +1,7 @@
 package tw.com.ispan.gym.controller.course;
 
 import java.util.List;
-
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
 import tw.com.ispan.gym.dto.course.PrivateCourseResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.service.course.PrivateCourseService;
 
 /**
@@ -30,6 +31,20 @@ import tw.com.ispan.gym.service.course.PrivateCourseService;
 public class AdminPrivateCourseController {
 
     private final PrivateCourseService privateCourseService;
+
+    /** 後台管理：分頁查詢所有私教課商品 */
+    @GetMapping("/paged")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PageResponse<PrivateCourseResponse>> getPagedPrivateCourses(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer trainerId,
+            @RequestParam(required = false) String search) {
+        PageResponse<PrivateCourseResponse> courses = privateCourseService.searchPrivateCoursesPaged(
+                page, size, null, categoryId, trainerId, search);
+        return ResponseEntity.ok(courses);
+    }
 
     /** 查詢某教練名下所有私教課商品（不分狀態），供停用前確認要下架哪些商品用 */
     @GetMapping

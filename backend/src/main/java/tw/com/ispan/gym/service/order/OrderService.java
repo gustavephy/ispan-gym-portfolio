@@ -611,8 +611,8 @@ public class OrderService {
 
     private OrderDetailResponse toDetailResponse(Order order) {
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
-                .sorted(Comparator.comparing(OrderItem::getId))
-                .map(item -> new OrderItemResponse(item.getId(),
+                .sorted(Comparator.comparing(OrderItem::getOrderItemId))
+                .map(item -> new OrderItemResponse(item.getOrderItemId(),
                         item.isCourseItem() ? null : item.getProduct().getProductId(),
                         item.isCourseItem() ? item.getCourse().getId() : null,
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),

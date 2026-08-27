@@ -98,7 +98,7 @@ const displayedCourses = computed(() => {
   
   // 4 個私教課 + 4 個團課，各半均衡展示，補上 isPrivate 標記供 CourseCard 判斷
   const selectedPrivate = privates.slice(0, 4).map(c => ({ ...c, isPrivate: true }))
-  const selectedGroup = groups.slice(0, 4).map(c => ({ ...c, isPrivate: false }))
+  const selectedGroup = groups.slice(0, 8 - selectedPrivate.length).map(c => ({ ...c, isPrivate: false }))
   
   return [...selectedPrivate, ...selectedGroup]
 })

@@ -32,4 +32,23 @@ public interface PrivateCourseRepository extends JpaRepository<PrivateCourse, In
 	 */
 	@Query("SELECT c FROM PrivateCourse c LEFT JOIN FETCH c.category WHERE c.status = :status")
 	List<PrivateCourse> findByStatusWithCategory(@Param("status") CourseStatus status);
+
+	// 提供課程方案搜尋使用
+	@Query("""
+			SELECT c FROM PrivateCourse c
+			JOIN c.trainer t
+			JOIN t.employee e
+			WHERE (:status IS NULL OR c.status = :status)
+				AND (:categoryId IS NULL OR c.category.id = :categoryId)
+				AND (:trainerId IS NULL OR t.id = :trainerId)
+				AND (:search IS NULL OR :search = ''
+					OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))
+					OR LOWER(CONCAT(e.firstName, e.lastName)) LIKE LOWER(CONCAT('%', :search, '%')))
+			""")
+	org.springframework.data.domain.Page<PrivateCourse> searchPrivateCourses(
+			@Param("status") CourseStatus status,
+			@Param("categoryId") Integer categoryId,
+			@Param("trainerId") Integer trainerId,
+			@Param("search") String search,
+			org.springframework.data.domain.Pageable pageable);
 }

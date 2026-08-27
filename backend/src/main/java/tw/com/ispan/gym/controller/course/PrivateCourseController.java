@@ -6,10 +6,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
 import tw.com.ispan.gym.dto.course.PrivateCourseResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
+import tw.com.ispan.gym.enums.course.CourseStatus;
 import tw.com.ispan.gym.service.course.PrivateCourseService;
 
 /**
@@ -28,6 +31,19 @@ public class PrivateCourseController {
     @GetMapping
     public ResponseEntity<List<PrivateCourseResponse>> getPublicCourses() {
         List<PrivateCourseResponse> courses = privateCourseService.getPublicCourses();
+        return ResponseEntity.status(HttpStatus.OK).body(courses);
+    }
+
+    /** 分頁取得上架中（ACTIVE）的私教課方案清單 */
+    @GetMapping("/paged")
+    public ResponseEntity<PageResponse<PrivateCourseResponse>> getPublicCoursesPaged(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "6") int size,
+            @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer trainerId,
+            @RequestParam(required = false) String search) {
+        PageResponse<PrivateCourseResponse> courses = privateCourseService.searchPrivateCoursesPaged(
+                page, size, CourseStatus.ACTIVE, categoryId, trainerId, search);
         return ResponseEntity.status(HttpStatus.OK).body(courses);
     }
 }

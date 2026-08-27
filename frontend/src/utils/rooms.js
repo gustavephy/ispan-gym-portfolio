@@ -8,13 +8,13 @@
  * 不會報錯，只是顏色比較不特別。
  */
 
-export const ROOM_OPTIONS = ['瑜珈教室', '拳擊教室', '團體重訓室', '測試用教室A']
+export const ROOM_OPTIONS = ['瑜珈教室', '拳擊教室', '團體重訓室', '多功能體能教室']
 
 const ROOM_COLOR_MAP = {
   '瑜珈教室': '#c9973f',
   '拳擊教室': '#4a7fb5',
   '團體重訓室': '#7a6ba6',
-  '測試用教室A': '#5a9e6f',
+  '多功能體能教室': '#5a9e6f',
 }
 
 const FALLBACK_ROOM_COLOR = '#8a8a8a'

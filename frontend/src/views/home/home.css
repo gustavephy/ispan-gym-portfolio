@@ -482,6 +482,30 @@ main { padding-top: 0; }
 }
 .footer-desc { font-size: 0.85rem; line-height: 1.7; margin-bottom: 1.2rem; }
 .social-links { display: flex; gap: 0.5rem; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.5rem;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.btn-outline {
+  border: 1.5px solid var(--primary-dark) !important;
+  background: transparent !important;
+  color: var(--primary-dark) !important;
+}
+.btn-outline:hover {
+  background: var(--primary-dark) !important;
+  color: #ffffff !important;
+}
 .social-btn {
   background: rgba(255,255,255,0.1);
   color: rgba(255,255,255,0.8);

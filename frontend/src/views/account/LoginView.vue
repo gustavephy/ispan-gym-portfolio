@@ -86,8 +86,8 @@ async function onSubmit() {
       </button>
     </form>
 
-    <section v-if="showTestAccounts" class="test-accounts" aria-label="測試帳號">
-      <h2 class="test-accounts__title">測試帳號（點擊自動填入）</h2>
+    <section v-if="showTestAccounts" class="test-accounts" aria-label="快捷登入">
+      <h2 class="test-accounts__title">快捷登入（點擊自動填入）</h2>
       <ul class="test-accounts__list">
         <li v-for="account in TEST_ACCOUNTS" :key="account.email">
           <button type="button" class="test-accounts__item" @click="fillAccount(account)">

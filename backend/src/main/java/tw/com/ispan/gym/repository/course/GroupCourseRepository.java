@@ -28,23 +28,16 @@ public interface GroupCourseRepository extends JpaRepository<GroupCourse, Intege
 	@Query("SELECT c FROM GroupCourse c LEFT JOIN FETCH c.category WHERE c.status = :status")
 	List<GroupCourse> findByStatusWithCategory(@Param("status") CourseStatus status);
 
-	/**
-	 * 後台團課主檔列表的分頁＋文字搜尋，比對課程名稱與授課教練姓名。
-	 * 用 @Query 手寫 JPQL 而非衍生查詢方法名稱，因為要 join 到 Employee 比對姓名，
-	 * 方法名稱推導不出這種跨關聯的比對條件。
-	 *
-	 * 故意不在這裡寫 ORDER BY——排序交給呼叫端組出的 Pageable 的 Sort 決定，
-	 * 避免 JPQL 手寫的 ORDER BY 跟 Pageable 帶的 Sort 疊加或衝突。
-	 */
 	@Query("""
 			SELECT c FROM GroupCourse c
 			JOIN c.trainer t
 			JOIN t.employee e
-			WHERE :search IS NULL OR :search = ''
-				OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))
-				OR LOWER(CONCAT(e.firstName, e.lastName)) LIKE LOWER(CONCAT('%', :search, '%'))
+			WHERE (:status IS NULL OR c.status = :status)
+				AND (:search IS NULL OR :search = ''
+					OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))
+					OR LOWER(CONCAT(e.firstName, e.lastName)) LIKE LOWER(CONCAT('%', :search, '%')))
 			""")
-	Page<GroupCourse> searchCourses(@Param("search") String search, Pageable pageable);
+	Page<GroupCourse> searchCourses(@Param("status") CourseStatus status, @Param("search") String search, Pageable pageable);
 
 	/**
 	 * 公開團課介紹頁用的分頁＋文字搜尋，只回傳上架中（status=ACTIVE）的課程。
@@ -57,10 +50,16 @@ public interface GroupCourseRepository extends JpaRepository<GroupCourse, Intege
 			JOIN c.trainer t
 			JOIN t.employee e
 			WHERE c.status = :status
+				AND (:categoryId IS NULL OR c.category.id = :categoryId)
+				AND (:trainerId IS NULL OR t.id = :trainerId)
 				AND (:search IS NULL OR :search = ''
 					OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))
 					OR LOWER(CONCAT(e.firstName, e.lastName)) LIKE LOWER(CONCAT('%', :search, '%')))
 			""")
-	Page<GroupCourse> searchActiveCourses(@Param("status") CourseStatus status, @Param("search") String search,
+	Page<GroupCourse> searchActiveCourses(
+			@Param("status") CourseStatus status,
+			@Param("categoryId") Integer categoryId,
+			@Param("trainerId") Integer trainerId,
+			@Param("search") String search,
 			Pageable pageable);
 }

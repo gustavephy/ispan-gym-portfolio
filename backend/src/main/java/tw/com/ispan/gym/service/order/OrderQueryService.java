@@ -36,7 +36,7 @@ public class OrderQueryService {
         Order order = orders.findByIdAndMemberId(orderId, memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
-                .map(item -> new OrderItemResponse(item.getId(),
+                .map(item -> new OrderItemResponse(item.getOrderItemId(),
                         item.isCourseItem() ? null : item.getProduct().getProductId(),
                         item.isCourseItem() ? item.getCourse().getId() : null,
                         item.getProductNameAtBuy(), item.getPriceAtBuy(), item.getQuantity(),
