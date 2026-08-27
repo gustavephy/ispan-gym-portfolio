@@ -360,6 +360,9 @@
     border-right: 2px solid #d5c2ab;
     box-shadow: 6px 0 22px rgba(60, 48, 43, 0.22);
     z-index: 100;
+    /* 側欄是 fixed 且上下撐滿，內容超過視窗高度時預設會被裁掉又無法捲動——
+       多重身分帳號的工作區連結較多，1280x720 這類矮視窗下底部的帳號區塊會完全點不到 */
+    overflow-y: auto;
   }
 
   .brand {
