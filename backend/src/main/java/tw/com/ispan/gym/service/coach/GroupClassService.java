@@ -445,14 +445,34 @@ public class GroupClassService {
         public PageResponse<GroupClassBookingResponse> getMyBookings(Integer memberId, int page, int size,
                         String search, GroupClassBookingStatus status, LocalDate dateFrom,
                         LocalDate dateTo) {
-                int safePage = Math.max(page, 0);
-                int safeSize = Math.min(Math.max(size, 1), 100);
                 // 先依狀態再依開課時間：BOOKED 排在 CANCELLED 之前（EnumType.STRING 存的是字面值，
                 // 字母序剛好是 BOOKED < CANCELLED），讓「還有效的報名」永遠在最前面。
                 // 少了狀態這一層，同一場次的已取消紀錄會跟剛報名的混在一起，
                 // 使用者報名完往下看，第一眼看到的可能是舊的「已取消」，會以為報名失敗。
-                Pageable pageable = PageRequest.of(safePage, safeSize,
+                return searchBookings(memberId, page, size, search, status, dateFrom, dateTo,
                                 Sort.by(Sort.Order.asc("status"), Sort.Order.asc("session.startAt")));
+        }
+
+        /**
+         * 管理者查詢指定會員的所有團課報名紀錄，篩選條件與分頁邏輯跟 {@link #getMyBookings} 完全相同，
+         * 只有排序不同：純依開課時間排序，不把 BOOKED 排到 CANCELLED 前面。
+         * {@code getMyBookings} 的狀態優先排序是為了「會員自己看」設計的（讓還有效的報名在前面、
+         * 一眼認出報名有沒有成功），管理者是要核對紀錄而非確認自己剛做的操作，依時間排序更直覺，
+         * 也才不會讓同一天的多筆紀錄被狀態拆得四散難以對照。
+         */
+        @Transactional(readOnly = true)
+        public PageResponse<GroupClassBookingResponse> getMemberBookingsForAdmin(Integer memberId, int page, int size,
+                        String search, GroupClassBookingStatus status, LocalDate dateFrom, LocalDate dateTo) {
+                return searchBookings(memberId, page, size, search, status, dateFrom, dateTo,
+                                Sort.by(Sort.Direction.ASC, "session.startAt"));
+        }
+
+        private PageResponse<GroupClassBookingResponse> searchBookings(Integer memberId, int page, int size,
+                        String search, GroupClassBookingStatus status, LocalDate dateFrom, LocalDate dateTo,
+                        Sort sort) {
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+                Pageable pageable = PageRequest.of(safePage, safeSize, sort);
 
                 LocalDateTime startAtFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
                 LocalDateTime startAtTo = dateTo == null ? null : dateTo.plusDays(1).atStartOfDay();

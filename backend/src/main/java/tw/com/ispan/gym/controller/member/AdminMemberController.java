@@ -12,15 +12,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import jakarta.validation.Valid;
+import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
+import tw.com.ispan.gym.dto.coach.GroupClassBookingResponse;
 import tw.com.ispan.gym.dto.coach.MemberCourseQuotaResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberSummaryResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberUpdateRequest;
+import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
+import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
 import tw.com.ispan.gym.enums.member.UserStatus;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
+import tw.com.ispan.gym.service.coach.GroupClassService;
 import tw.com.ispan.gym.service.member.AdminMemberService;
 
 /**
@@ -42,11 +49,13 @@ public class AdminMemberController {
 
     private final AdminMemberService adminMemberService;
     private final CoachBookingService coachBookingService;
+    private final GroupClassService groupClassService;
 
     public AdminMemberController(AdminMemberService adminMemberService,
-            CoachBookingService coachBookingService) {
+            CoachBookingService coachBookingService, GroupClassService groupClassService) {
         this.adminMemberService = adminMemberService;
         this.coachBookingService = coachBookingService;
+        this.groupClassService = groupClassService;
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -76,6 +85,43 @@ public class AdminMemberController {
     public ResponseEntity<List<MemberCourseQuotaResponse>> getQuotas(
             @PathVariable Integer memberId) {
         return ResponseEntity.ok(coachBookingService.getMyQuotas(memberId));
+    }
+
+    /**
+     * 查詢指定會員的團課報名紀錄。與會員端 GET /api/member/group-classes/bookings 共用
+     * GroupClassService 的篩選／分頁邏輯，差異只在 memberId 是管理者指定而非從 token 反查，
+     * 且改用 {@link GroupClassService#getMemberBookingsForAdmin} 依開課時間排序
+     * （會員端版本把 BOOKED 排在 CANCELLED 前面，是為了「自己看」設計的，管理者查任意會員的
+     * 紀錄是要核對資料，依時間排序更直覺）。
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{memberId}/group-class-bookings")
+    public ResponseEntity<PageResponse<GroupClassBookingResponse>> getGroupClassBookings(
+            @PathVariable Integer memberId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) GroupClassBookingStatus status,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo) {
+        return ResponseEntity.ok(groupClassService.getMemberBookingsForAdmin(memberId, page, size, search, status,
+                dateFrom, dateTo));
+    }
+
+    /**
+     * 查詢指定會員的私教課預約歷史。與會員端 GET /api/member/bookings 共用
+     * CoachBookingService.getMyBookings，差異只在 memberId 是管理者指定而非從 token 反查。
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{memberId}/coach-bookings")
+    public ResponseEntity<PageResponse<CoachBookingHistoryResponse>> getCoachBookings(
+            @PathVariable Integer memberId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) CoachBookingStatus status,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo) {
+        return ResponseEntity.ok(coachBookingService.getMyBookings(memberId, page, size, status, dateFrom, dateTo));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

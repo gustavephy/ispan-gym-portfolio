@@ -450,13 +450,17 @@ public class CoachBookingService {
                                 .map(booking -> {
                                         SessionDeductionLog log = logMap.getOrDefault(booking.getId(), null);
                                         Integer snapshot = (log == null) ? null : log.getAfterRemaining();
+                                        Trainer trainer = booking.getCoachSlot().getTrainer();
+                                        String trainerName = trainer.getLastName() + trainer.getFirstName();
                                         return new CoachBookingHistoryResponse(
                                                         booking.getId(),
                                                         booking.getCoachSlot().getId(),
-                                                        booking.getCoachSlot().getTrainer().getId(),
+                                                        trainer.getId(),
+                                                        trainerName,
                                                         booking.getCoachSlot().getStartAt(),
                                                         booking.getCoachSlot().getEndAt(),
                                                         booking.getStatus(), booking.getCheckInKey(),
+                                                        booking.getQuota().getCourseName(),
                                                         snapshot);
                                 })
                                 .toList();

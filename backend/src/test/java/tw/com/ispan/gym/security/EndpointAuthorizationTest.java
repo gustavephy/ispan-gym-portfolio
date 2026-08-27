@@ -707,6 +707,14 @@ class EndpointAuthorizationTest {
         expectAuthorized(get("/api/admin/members/1/course-quotas"), adminToken());
     }
 
+    @Test
+    void 查詢指定會員團課報名紀錄僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/members/1/group-class-bookings"));
+        expectForbidden(get("/api/admin/members/1/group-class-bookings"), memberToken());
+        expectForbidden(get("/api/admin/members/1/group-class-bookings"), employeeToken());
+        expectAuthorized(get("/api/admin/members/1/group-class-bookings"), adminToken());
+    }
+
     // === MEMBER：私教課額度查詢 ================================================
     //
     // memberId 一律由 CurrentUserProvider 從 token 反查（controller 不收參數），
