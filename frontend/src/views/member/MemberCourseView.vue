@@ -65,6 +65,17 @@ function formatDate(dateStr) {
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
 }
 
+// [功能方法] formatReservationTimeRange
+// 從 startAt／endAt 組出「日期 HH:mm-HH:mm」的顯示格式
+function formatReservationTimeRange(r) {
+  if (!r.startAt || !r.endAt) return ''
+  const start = new Date(r.startAt)
+  const end = new Date(r.endAt)
+  const pad = (n) => String(n).padStart(2, '0')
+  const timeStr = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return `${formatDate(r.startAt)} ${timeStr(start)}-${timeStr(end)}`
+}
+
 // [功能方法] isNearExpiry (isnearexpiry)
 // 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 function isNearExpiry(expiryDate) {
@@ -121,7 +132,7 @@ function getUsageRecords(quota) {
       const rName = r.courseName.trim().toLowerCase()
       return rName.includes(qName) || qName.includes(rName)
     })
-    .sort((a, b) => new Date(b.reservationDate) - new Date(a.reservationDate))
+    .sort((a, b) => new Date(b.startAt) - new Date(a.startAt))
 }
 
 // [功能方法] toggleHistory (切換history)
@@ -138,13 +149,14 @@ function handleBookCourse(quota) {
   if (quota.courseName) {
     showToast(`正在前往課表預約 ${quota.courseName}`, 'success')
     const isPrivate = getQuotaTypeLabel(quota) === '私教課'
-    router.push({
-      path: '/reservation',
-      query: {
-        keyword: quota.courseName,
-        type: isPrivate ? 'PRIVATE' : 'GROUP'
-      }
-    })
+    if (isPrivate && quota.trainer?.id) {
+      router.push(`/reservation/trainer/${quota.trainer.id}`)
+    } else {
+      router.push({
+        path: '/reservation',
+        query: { keyword: quota.courseName, type: isPrivate ? 'PRIVATE' : 'GROUP' }
+      })
+    }
   } else {
     router.push('/reservation')
   }
@@ -197,20 +209,6 @@ const filteredQuotas = computed(() => quotas.value.filter(q => {
   return true
 }))
 
-// [功能方法] isReservationExpired (isreservationexpired)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-function isReservationExpired(r) {
-  if (!r.reservationDate || !r.reservationTime) return false
-  try {
-    const timeParts = r.reservationTime.split('-')
-    const endTimeStr = timeParts[1] ? timeParts[1].trim() : '00:00'
-    const endDateTime = new Date(`${r.reservationDate}T${endTimeStr}:00`)
-    return endDateTime < new Date()
-  } catch (e) {
-    return false
-  }
-}
-
 onMounted(async () => {
   try {
     const [quotasRes, reservationsRes] = await Promise.all([
@@ -219,7 +217,7 @@ onMounted(async () => {
       coursesStore.loadCourses()
     ])
     quotas.value = quotasRes.data || []
-    myReservations.value = reservationsRes.data?.content || []
+    myReservations.value = reservationsRes.data?.items || []
   } catch (error) {
     console.error('Failed to load courses data:', error)
     showToast('載入課程資料失敗，請重試', 'error')
@@ -334,7 +332,7 @@ onMounted(async () => {
                   >
                     <span class="history-dot"></span>
                     <div class="history-info">
-                      <span class="history-date">{{ formatDate(r.reservationDate) }} {{ r.reservationTime }}</span>
+                      <span class="history-date">{{ formatReservationTimeRange(r) }}</span>
                       <span class="history-trainer">教練：{{ r.trainerName }}</span>
                     </div>
                     <span :class="['badge', r.status === 'COMPLETED' ? 'badge-success' : 'badge-warning']">
