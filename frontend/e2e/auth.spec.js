@@ -1,12 +1,20 @@
 import { test, expect, ACCOUNTS, loginAs, loginViaForm } from './fixtures.js'
 
 /**
- * 身分徽章。不能直接用 getByText 找「教練」「管理員」——導覽列的工作區切換頁籤
- * 用的是同一批字，會同時命中兩個元素。徽章清單有 aria-label="目前身分"，
- * 從那裡進去才是唯一的。
+ * 導覽列上顯示「目前工作區」的徽章。它同時是身分下拉選單的觸發器，
+ * 多工作區時算繪成 button、單一工作區時是 span，所以用 class 定位而不是 role。
+ *
+ * 徽章顯示的是工作區（管理／教練／會員）而非角色——emp-admin 同時具備
+ * MEMBER/EMPLOYEE/ADMIN，徽章只顯示當下所在的那一個，完整角色清單在 title。
  */
-function roleBadge(page, label) {
-  return page.getByLabel('目前身分').getByText(label, { exact: true })
+function workspaceBadge(page) {
+  return page.locator('.nav-auth__role')
+}
+
+/** 展開身分下拉選單，回傳選單本身以便斷言可切換的工作區 */
+async function openWorkspaceMenu(page) {
+  await workspaceBadge(page).click()
+  return page.getByRole('menu', { name: '切換身分' })
 }
 
 test.describe('A2 登入與角色導流', () => {
@@ -14,21 +22,26 @@ test.describe('A2 登入與角色導流', () => {
     await loginAs(page, ACCOUNTS.member)
 
     await expect(page).toHaveURL('/')
-    await expect(roleBadge(page, ACCOUNTS.member.roleLabel)).toBeVisible()
+    await expect(workspaceBadge(page)).toHaveText(ACCOUNTS.member.roleLabel)
   })
 
   test('管理員登入後看得到管理工作區', async ({ page }) => {
     await loginAs(page, ACCOUNTS.admin)
 
-    await expect(roleBadge(page, ACCOUNTS.admin.roleLabel)).toBeVisible()
-    await expect(page.getByRole('tab', { name: '管理' })).toBeVisible()
+    // 徽章本身顯示工作區名稱「管理」，完整角色（含「管理員」）收在 title
+    await expect(workspaceBadge(page)).toHaveAttribute('title', new RegExp(ACCOUNTS.admin.roleLabel))
+
+    const menu = await openWorkspaceMenu(page)
+    await expect(menu.getByRole('menuitemradio', { name: '管理' })).toBeVisible()
   })
 
   test('教練登入後看得到教練工作區', async ({ page }) => {
     await loginAs(page, ACCOUNTS.trainer)
 
-    await expect(roleBadge(page, ACCOUNTS.trainer.roleLabel)).toBeVisible()
-    await expect(page.getByRole('tab', { name: '教練' })).toBeVisible()
+    await expect(workspaceBadge(page)).toHaveAttribute('title', new RegExp(ACCOUNTS.trainer.roleLabel))
+
+    const menu = await openWorkspaceMenu(page)
+    await expect(menu.getByRole('menuitemradio', { name: '教練' })).toBeVisible()
   })
 
   /**
