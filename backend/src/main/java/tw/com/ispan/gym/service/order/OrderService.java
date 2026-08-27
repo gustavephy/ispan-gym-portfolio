@@ -178,7 +178,7 @@ public class OrderService {
         PrivateCourse course = courses.findById(request.privateCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到私教課：" + request.privateCourseId()));
         if (!CourseStatus.ACTIVE.equals(course.getStatus())) {
-            throw new DirectCheckoutNotAllowedException(course.getId());
+            throw new DirectCheckoutNotAllowedException(course.getPrivateCourseId());
         }
         requireActiveSubscription(memberId);
 

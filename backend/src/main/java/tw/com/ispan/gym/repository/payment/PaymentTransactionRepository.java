@@ -10,7 +10,8 @@ import org.springframework.data.repository.query.Param;
 import tw.com.ispan.gym.entity.payment.PaymentTransaction;
 
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Integer> {
-    Optional<PaymentTransaction> findByOrderId(Integer orderId);
+    @Query("SELECT t FROM PaymentTransaction t WHERE t.order.orderId = :orderId")
+    Optional<PaymentTransaction> findByOrderId(@Param("orderId") Integer orderId);
     Optional<PaymentTransaction> findByMerchantTradeNo(String merchantTradeNo);
 
     /**

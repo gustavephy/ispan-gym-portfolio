@@ -459,6 +459,17 @@ public class TestDataSeedRunner implements CommandLineRunner {
         if (distinctTrainers <= 1 || groupCourses.count() < 16 || privateCourses.count() != 3
                 || hasInvalidPrivateTrainer || hasBodySculptingCourse) {
             log.info("團體課程教練未分散、私教課數不為 3、教練專長不符或含有舊私教名稱，重新清除並播種以分配至 12 位教練…");
+            jdbc.execute("DELETE FROM group_class_booking");
+            jdbc.execute("DELETE FROM session_deduction_log");
+            jdbc.execute("DELETE FROM coach_booking");
+            jdbc.execute("DELETE FROM coach_slot");
+            jdbc.execute("DELETE FROM order_item");
+            jdbc.execute("DELETE FROM payment_refund");
+            jdbc.execute("DELETE FROM payment_transaction");
+            jdbc.execute("DELETE FROM payment_webhook");
+            jdbc.execute("DELETE FROM order_status_history");
+            jdbc.execute("DELETE FROM member_subscription");
+            jdbc.execute("DELETE FROM orders");
             jdbc.execute("DELETE FROM group_class_session");
             jdbc.execute("DELETE FROM group_course");
             jdbc.execute("DELETE FROM private_course");
@@ -561,12 +572,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
             // created_at 由 TaipeiTimestampEntity 的 @PrePersist 強制設成「現在」，
             // 不改的話十筆訂單全部落在同一天，趨勢圖只會有一個點。這裡直接下 SQL 回填
             // 分散的日期——是刻意繞過 JPA 的稽核欄位，僅限測試資料播種使用。
-            jdbc.update("UPDATE orders SET created_at = ?, updated_at = ? WHERE id = ?",
-                    placedAt, placedAt, savedOrder.getId());
+            jdbc.update("UPDATE orders SET created_at = ?, updated_at = ? WHERE order_id = ?",
+                    placedAt, placedAt, savedOrder.getOrderId());
             jdbc.update("UPDATE order_item SET created_at = ? WHERE order_id = ?",
-                    placedAt, savedOrder.getId());
+                    placedAt, savedOrder.getOrderId());
             if (savedOrder.getPaidAt() != null) {
-                jdbc.update("UPDATE orders SET paid_at = ? WHERE id = ?", placedAt, savedOrder.getId());
+                jdbc.update("UPDATE orders SET paid_at = ? WHERE order_id = ?", placedAt, savedOrder.getOrderId());
             }
             created++;
         }
@@ -586,7 +597,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
      */
     private void ensureSampleOrderHistory() {
         List<Map<String, Object>> seedOrders = jdbc.queryForList(
-                "SELECT id, status, created_at, paid_at, member_id FROM orders WHERE order_no LIKE 'SEED-%'");
+                "SELECT order_id as id, status, created_at, paid_at, member_id FROM orders WHERE order_no LIKE 'SEED-%'");
         int filled = 0;
         for (Map<String, Object> row : seedOrders) {
             int orderId = ((Number) row.get("id")).intValue();
@@ -856,29 +867,29 @@ public class TestDataSeedRunner implements CommandLineRunner {
         CourseCategory catFunc = cats.get("功能性訓練");
 
         // 16 筆種子資料：name, desc, category, capacity, room, sessionHour
-        record GCSeed(String name, String desc, CourseCategory cat, int cap, String room, int hour) {
+        record GCSeed(String name, String desc, CourseCategory cat, int cap, ClassRoom room, int hour) {
         }
         List<GCSeed> seeds = List.of(
                 // 有氧燃脂 × 4
-                new GCSeed("高強度燃脂班", "HIIT 交替訓練，心率拉高極限、快速燃燒體脂。", catAero, 20, "多功能體能教室", 19),
-                new GCSeed("舞動有氧", "融合舞蹈律動與有氧訓練，輕鬆享受燃脂樂趣。", catAero, 25, "多功能體能教室", 20),
-                new GCSeed("跳繩體能訓練", "跳繩搭配體能循環動作，提升心肺耐力與協調力。", catAero, 18, "多功能體能教室", 18),
-                new GCSeed("自行車有氧", "室內飛輪騎乘，間歇爬坡訓練強化下肢並燃燒熱量。", catAero, 15, "飛輪教室", 7),
+                new GCSeed("高強度燃脂班", "HIIT 交替訓練，心率拉高極限、快速燃燒體脂。", catAero, 20, ClassRoom.BOXING_ROOM, 19),
+                new GCSeed("舞動有氧", "融合舞蹈律動與有氧訓練，輕鬆享受燃脂樂趣。", catAero, 25, ClassRoom.BOXING_ROOM, 20),
+                new GCSeed("跳繩體能訓練", "跳繩搭配體能循環動作，提升心肺耐力與協調力。", catAero, 18, ClassRoom.BOXING_ROOM, 18),
+                new GCSeed("自行車有氧", "室內飛輪騎乘，間歇爬坡訓練強化下肢並燃燒熱量。", catAero, 15, ClassRoom.BOXING_ROOM, 7),
                 // 重量訓練 × 4
-                new GCSeed("基礎槓鈴訓練", "深蹲、硬舉、臥推三大動作紮實入門，安全第一。", catWeight, 12, "重訓室 A", 9),
-                new GCSeed("壺鈴全身訓練", "壺鈴擺盪與抓舉動作，全身性力量與爆發力訓練。", catWeight, 12, "重訓室 A", 10),
-                new GCSeed("啞鈴雕塑班", "上下肢分離訓練，針對肌肉線條雕塑進行系統訓練。", catWeight, 15, "重訓室 B", 18),
-                new GCSeed("TRX 懸吊訓練", "利用自體重量與 TRX 帶進行核心與全身肌力訓練。", catWeight, 10, "功能訓練區", 19),
+                new GCSeed("基礎槓鈴訓練", "深蹲、硬舉、臥推三大動作紮實入門，安全第一。", catWeight, 12, ClassRoom.WEIGHT_ROOM, 9),
+                new GCSeed("壺鈴全身訓練", "壺鈴擺盪與抓舉動作，全身性力量與爆發力訓練。", catWeight, 12, ClassRoom.WEIGHT_ROOM, 10),
+                new GCSeed("啞鈴雕塑班", "上下肢分離訓練，針對肌肉線條雕塑進行系統訓練。", catWeight, 15, ClassRoom.WEIGHT_ROOM, 18),
+                new GCSeed("TRX 懸吊訓練", "利用自體重量與 TRX 帶進行核心與全身肌力訓練。", catWeight, 10, ClassRoom.WEIGHT_ROOM, 19),
                 // 瑜珈伸展 × 4
-                new GCSeed("哈達瑜珈入門", "呼吸與體位法結合，適合初學者的舒緩瑜珈課程。", catYoga, 20, "瑜珈教室", 8),
-                new GCSeed("陰瑜珈深層放鬆", "長時間保持體式以鬆解筋膜，深層修復疲勞肌群。", catYoga, 18, "瑜珈教室", 9),
-                new GCSeed("流動瑜珈", "連貫式流動序列訓練，兼顧柔軟度與平衡感。", catYoga, 15, "瑜珈教室", 10),
-                new GCSeed("瑜珈伸展舒壓班", "針對肩頸腰背等緊繃部位進行深度伸展，消除久坐痠痛。", catYoga, 20, "瑜珈教室", 20),
+                new GCSeed("哈達瑜珈入門", "呼吸與體位法結合，適合初學者的舒緩瑜珈課程。", catYoga, 20, ClassRoom.YOGA_ROOM, 8),
+                new GCSeed("陰瑜珈深層放鬆", "長時間保持體式以鬆解筋膜，深層修復疲勞肌群。", catYoga, 18, ClassRoom.YOGA_ROOM, 9),
+                new GCSeed("流動瑜珈", "連貫式流動序列訓練，兼顧柔軟度與平衡感。", catYoga, 15, ClassRoom.YOGA_ROOM, 10),
+                new GCSeed("瑜珈伸展舒壓班", "針對肩頸腰背等緊繃部位進行深度伸展，消除久坐痠痛。", catYoga, 20, ClassRoom.YOGA_ROOM, 20),
                 // 功能性訓練 × 4
-                new GCSeed("體能循環訓練", "多站式循環動作設計，全方位提升心肺與肌力。", catFunc, 15, "功能訓練區", 18),
-                new GCSeed("核心穩定訓練", "核心肌肉群鍛鍊，改善體態與脊椎穩定度。", catFunc, 12, "功能訓練區", 19),
-                new GCSeed("敏捷速度訓練", "步伐反應速度訓練與身體靈活性控制。", catFunc, 10, "多功能體能教室", 20),
-                new GCSeed("體重訓練入門", "自體重量肌力鍛鍊，徒手全身核心爆發力鍛鍊。", catFunc, 20, "多功能體能教室", 9));
+                new GCSeed("體能循環訓練", "多站式循環動作設計，全方位提升心肺與肌力。", catFunc, 15, ClassRoom.WEIGHT_ROOM, 18),
+                new GCSeed("核心穩定訓練", "核心肌肉群鍛鍊，改善體態與脊椎穩定度。", catFunc, 12, ClassRoom.WEIGHT_ROOM, 19),
+                new GCSeed("敏捷速度訓練", "步伐反應速度訓練與身體靈活性控制。", catFunc, 10, ClassRoom.BOXING_ROOM, 20),
+                new GCSeed("體重訓練入門", "自體重量肌力鍛鍊，徒手全身核心爆發力鍛鍊。", catFunc, 20, ClassRoom.BOXING_ROOM, 9));
 
         int dayOffset = 3;
         for (int i = 0; i < seeds.size(); i++) {

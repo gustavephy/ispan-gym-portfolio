@@ -19,7 +19,7 @@ public record AdminPaymentRefundResponse(
 
     public static AdminPaymentRefundResponse from(PaymentRefund r) {
         var order = r.getPayment().getOrder();
-        return new AdminPaymentRefundResponse(r.getId(), order.getId(), order.getMerchantTradeNo(),
+        return new AdminPaymentRefundResponse(r.getId(), order.getOrderId(), order.getMerchantTradeNo(),
                 r.getRefundNo(), r.getAmount(), r.getStatus(), r.getReason(),
                 r.getRequestedAt(), r.getCompletedAt());
     }

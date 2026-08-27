@@ -21,7 +21,7 @@ public record SubscriptionResponse(
             return null;
         }
         Integer subscriptionPlanId = sub.getSubscriptionPlan() != null ? sub.getSubscriptionPlan().getSubscriptionPlanId() : null;
-        Integer orderId = sub.getOrder() != null ? sub.getOrder().getId() : null;
+        Integer orderId = sub.getOrder() != null ? sub.getOrder().getOrderId() : null;
         boolean isActive = sub.getStatus() == SubscriptionStatus.ACTIVE
                 && sub.getEndDate() != null
                 && sub.getEndDate().isAfter(LocalDateTime.now());

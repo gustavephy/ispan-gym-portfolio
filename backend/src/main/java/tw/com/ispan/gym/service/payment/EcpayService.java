@@ -99,7 +99,7 @@ public class EcpayService {
 
     /** 組出 AioCheckOut/V2 表單欄位（含 CheckMacValue）；ActionUrl 是額外附加的目的地資訊，簽章算完才加，不影響 CheckMacValue */
     public Map<String, String> buildCheckoutForm(Order order) {
-        String itemName = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
+        String itemName = orderItems.findAllByOrderIdOrderByIdAsc(order.getOrderId()).stream()
                 .map(OrderItem::getProductNameAtBuy)
                 .reduce((a, b) -> a + "#" + b)
                 .orElse("訂單" + order.getOrderNo());

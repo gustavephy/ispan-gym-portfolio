@@ -143,7 +143,7 @@ class OrderServiceTest {
 
     private PrivateCourse course(String price, int sessionPerUnit) {
         PrivateCourse course = new PrivateCourse();
-        course.setId(COURSE_ID);
+        course.setPrivateCourseId(COURSE_ID);
         course.setName("一對一重訓");
         course.setPrice(new BigDecimal(price));
         course.setSessionPerUnit(sessionPerUnit);
@@ -207,7 +207,7 @@ class OrderServiceTest {
         Order order = new Order(member(), "GYM1", "ORD1", new BigDecimal("1000"), BigDecimal.ZERO,
                 new BigDecimal("1000"), new BigDecimal("1000"), null, "王小明", "0912345678", null,
                 "buyer@example.com");
-        ReflectionTestUtils.setField(order, "id", ORDER_ID);
+        ReflectionTestUtils.setField(order, "orderId", ORDER_ID);
         return order;
     }
 
@@ -220,7 +220,7 @@ class OrderServiceTest {
     private void stubOrderSaveAssignsId() {
         when(orders.save(any(Order.class))).thenAnswer(inv -> {
             Order order = inv.getArgument(0);
-            ReflectionTestUtils.setField(order, "id", ORDER_ID);
+            ReflectionTestUtils.setField(order, "orderId", ORDER_ID);
             return order;
         });
     }
