@@ -8,6 +8,8 @@ import {
   activateMember,
 } from '@/api/adminMember.js'
 import { getMemberQuotas } from '@/api/memberCourseQuota.js'
+import { getMemberGroupClassBookings } from '@/api/adminGroupClassBooking.js'
+import { getMemberCoachBookings } from '@/api/adminCoachBooking.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import { useFeedback } from '@/composables/useFeedback.js'
@@ -30,6 +32,19 @@ const SORT_OPTIONS = [
   { value: 'createdAt', label: '註冊時間' },
 ]
 
+// 團課報名狀態；對應後端 GroupClassBookingStatus，寫法比照 TrainerScheduleView 的 STATUS_MAP
+const BOOKING_STATUS_MAP = {
+  BOOKED: { label: '已報名', className: 'status-booked' },
+  CANCELLED: { label: '已取消', className: 'status-cancelled' },
+}
+
+// 私教課上課紀錄狀態；對應後端 CoachBookingStatus，寫法比照 TrainerScheduleView 的 STATUS_MAP
+const COACH_BOOKING_STATUS_MAP = {
+  PENDING: { label: '待上課', className: 'status-pending' },
+  COMPLETED: { label: '已完成', className: 'status-completed' },
+  CANCELLED: { label: '已取消', className: 'status-cancelled' },
+}
+
 const members = ref([])
 const listLoading = ref(true)
 const listError = ref(null)
@@ -49,10 +64,34 @@ let searchDebounceTimer = null
 // 編輯抽屜：null 代表關閉；開啟時才載入完整資料（列表刻意不含地址等 PII）
 const editing = ref(null)
 const editLoading = ref(false)
-const memberQuotas = ref([])
-const quotasLoading = ref(false)
 const formError = ref(null)
 const saving = ref(false)
+
+// 查看紀錄面板：獨立於 editing，純唯讀顯示額度與報名紀錄，跟編輯功能各自獨立、
+// 互不影響——「編輯」只管個資，「查看紀錄」只管顯示，職責分開。
+// 內容分「私教課」「團課」兩個 tab，各自的資料只在第一次切到該 tab 時才打 API
+// （coachTabLoaded／groupClassTabLoaded 記錄是否已載入過），避免一開視窗就打完全部請求。
+const viewing = ref(null) // null 代表關閉；開啟時存 { memberId, displayName }
+const recordsTab = ref('coach') // 'coach' | 'groupClass'
+const coachTabLoaded = ref(false)
+const groupClassTabLoaded = ref(false)
+
+const memberQuotas = ref([])
+const quotasLoading = ref(false)
+
+const coachBookings = ref([])
+const coachBookingsLoading = ref(false)
+const coachBookingsPage = ref(0)
+const coachBookingsSize = ref(10)
+const coachBookingsTotalItems = ref(0)
+const coachBookingsTotalPages = ref(0)
+
+const bookings = ref([])
+const bookingsLoading = ref(false)
+const bookingsPage = ref(0)
+const bookingsSize = ref(10)
+const bookingsTotalItems = ref(0)
+const bookingsTotalPages = ref(0)
 
 const { feedback, showFeedback } = useFeedback()
 
@@ -64,6 +103,14 @@ const emptyStateMessage = computed(() =>
 
 function statusInfo(status) {
   return STATUS_MAP[status] ?? { label: status, className: '' }
+}
+
+function bookingStatusInfo(status) {
+  return BOOKING_STATUS_MAP[status] ?? { label: status, className: '' }
+}
+
+function coachBookingStatusInfo(status) {
+  return COACH_BOOKING_STATUS_MAP[status] ?? { label: status, className: '' }
 }
 
 function formatDateTime(value) {
@@ -144,19 +191,6 @@ async function openEdit(memberId) {
       district: data.district ?? '',
       address: data.address ?? '',
     }
-
-    quotasLoading.value = true
-    try {
-      const quotaRes = await getMemberQuotas(memberId)
-      // 後端回傳 List（不分頁），trainer 是巢狀物件（可能為 null）
-      memberQuotas.value = quotaRes.data
-    } catch (quotaError) {
-      // 額度查詢失敗只記錄，不影響會員資料編輯功能本身
-      console.error('查詢會員額度失敗', quotaError)
-      memberQuotas.value = []
-    } finally {
-      quotasLoading.value = false
-    }
   } catch (e) {
     editing.value = null
     notifyApiError(e)
@@ -168,7 +202,128 @@ async function openEdit(memberId) {
 function closeEdit() {
   editing.value = null
   formError.value = null
+}
+
+// 點「查看紀錄」：開啟唯讀面板，預設停在「私教課」tab 並載入它的資料。
+// 「團課」tab 的資料留到使用者真的切過去那一刻才載入（見 switchTab）。
+async function openView(member) {
+  viewing.value = { memberId: member.memberId, displayName: member.displayName }
+  recordsTab.value = 'coach'
+  coachTabLoaded.value = false
+  groupClassTabLoaded.value = false
+  bookingsPage.value = 0
+  coachBookingsPage.value = 0
+  await loadActiveTab()
+}
+
+// tab 切換：只有第一次切到某個 tab 時才打 API，切回去已經載過的 tab 不重打
+// （除非整個視窗關掉重開），避免一開視窗就把兩個 tab 的資料都打完
+function switchTab(tab) {
+  recordsTab.value = tab
+  loadActiveTab()
+}
+
+async function loadActiveTab() {
+  if (recordsTab.value === 'coach' && !coachTabLoaded.value) {
+    coachTabLoaded.value = true
+    await Promise.all([fetchMemberQuotas(), fetchMemberCoachBookings()])
+  } else if (recordsTab.value === 'groupClass' && !groupClassTabLoaded.value) {
+    groupClassTabLoaded.value = true
+    await fetchMemberBookings()
+  }
+}
+
+async function fetchMemberQuotas() {
+  if (!viewing.value) return
+  quotasLoading.value = true
+  try {
+    const { data } = await getMemberQuotas(viewing.value.memberId)
+    // 後端回傳 List（不分頁），trainer 是巢狀物件（可能為 null）
+    memberQuotas.value = data
+  } catch (e) {
+    // 額度查詢失敗只記錄，不影響上課紀錄那邊的顯示
+    console.error('查詢會員額度失敗', e)
+    memberQuotas.value = []
+  } finally {
+    quotasLoading.value = false
+  }
+}
+
+async function fetchMemberCoachBookings() {
+  if (!viewing.value) return
+  coachBookingsLoading.value = true
+  try {
+    const { data } = await getMemberCoachBookings(viewing.value.memberId, {
+      page: coachBookingsPage.value,
+      size: coachBookingsSize.value,
+    })
+    coachBookings.value = data.items
+    coachBookingsTotalItems.value = data.totalItems
+    coachBookingsTotalPages.value = data.totalPages
+  } catch (e) {
+    // 跟額度查詢同一套原則：失敗只記錄，不影響面板其餘內容
+    console.error('查詢會員私教課上課紀錄失敗', e)
+    coachBookings.value = []
+  } finally {
+    coachBookingsLoading.value = false
+  }
+}
+
+function handleCoachBookingsPageChange(newPage) {
+  coachBookingsPage.value = newPage
+  fetchMemberCoachBookings()
+}
+
+function handleCoachBookingsSizeChange(newSize) {
+  coachBookingsSize.value = newSize
+  coachBookingsPage.value = 0
+  fetchMemberCoachBookings()
+}
+
+async function fetchMemberBookings() {
+  if (!viewing.value) return
+  bookingsLoading.value = true
+  try {
+    const { data } = await getMemberGroupClassBookings(viewing.value.memberId, {
+      page: bookingsPage.value,
+      size: bookingsSize.value,
+    })
+    bookings.value = data.items
+    bookingsTotalItems.value = data.totalItems
+    bookingsTotalPages.value = data.totalPages
+  } catch (e) {
+    // 跟額度查詢同一套原則：失敗只記錄，不影響面板其餘內容
+    console.error('查詢會員團課報名紀錄失敗', e)
+    bookings.value = []
+  } finally {
+    bookingsLoading.value = false
+  }
+}
+
+function handleBookingsPageChange(newPage) {
+  bookingsPage.value = newPage
+  fetchMemberBookings()
+}
+
+function handleBookingsSizeChange(newSize) {
+  bookingsSize.value = newSize
+  bookingsPage.value = 0
+  fetchMemberBookings()
+}
+
+function closeView() {
+  viewing.value = null
   memberQuotas.value = []
+  coachBookings.value = []
+  coachBookingsPage.value = 0
+  coachBookingsTotalItems.value = 0
+  coachBookingsTotalPages.value = 0
+  bookings.value = []
+  bookingsPage.value = 0
+  bookingsTotalItems.value = 0
+  bookingsTotalPages.value = 0
+  coachTabLoaded.value = false
+  groupClassTabLoaded.value = false
 }
 
 async function onSave() {
@@ -311,6 +466,7 @@ onMounted(fetchMembers)
             <td>{{ formatDateTime(m.createdAt) }}</td>
             <td class="col-actions">
               <button type="button" class="btn btn-sm" @click="openEdit(m.memberId)">編輯</button>
+              <button type="button" class="btn btn-sm" @click="openView(m)">查看紀錄</button>
               <!-- PENDING 尚未完成驗證，停權／恢復都會被後端擋下，故不顯示按鈕 -->
               <button
                 v-if="m.status === 'ACTIVE'"
@@ -426,35 +582,149 @@ onMounted(fetchMembers)
             </button>
           </div>
         </form>
+      </section>
+    </div>
 
-        <section class="quota-section">
-          <h3>私教課額度</h3>
-          <div v-if="quotasLoading" class="spinner"></div>
-          <p v-else-if="memberQuotas.length === 0" class="quota-empty">
-            此會員目前沒有任何私教課額度紀錄
+    <!-- 查看紀錄面板：唯讀，跟編輯面板各自獨立的 overlay/state，
+         只顯示私教課／團課的額度與報名紀錄，不涉及任何編輯動作 -->
+    <div v-if="viewing" class="edit-overlay" @click.self="closeView">
+      <section class="edit-panel card">
+        <header class="edit-panel__header">
+          <h2>{{ viewing.displayName }} 的紀錄</h2>
+          <button type="button" class="edit-panel__close" @click="closeView">×</button>
+        </header>
+
+        <div class="records-tabs">
+          <button
+            type="button"
+            class="records-tab"
+            :class="{ active: recordsTab === 'coach' }"
+            @click="switchTab('coach')"
+          >
+            私教課
+          </button>
+          <button
+            type="button"
+            class="records-tab"
+            :class="{ active: recordsTab === 'groupClass' }"
+            @click="switchTab('groupClass')"
+          >
+            團課
+          </button>
+        </div>
+
+        <template v-if="recordsTab === 'coach'">
+          <section class="quota-section">
+            <h3>私教課額度</h3>
+            <div v-if="quotasLoading" class="spinner"></div>
+            <p v-else-if="memberQuotas.length === 0" class="quota-empty">
+              此會員目前沒有任何私教課額度紀錄
+            </p>
+            <table v-else class="quota-table">
+              <thead>
+                <tr>
+                  <th>課程</th>
+                  <th>教練</th>
+                  <th>剩餘</th>
+                  <th>預約中</th>
+                  <th>已用</th>
+                  <th>到期日</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="q in memberQuotas" :key="q.id">
+                  <td>{{ q.courseName }}</td>
+                  <td>{{ q.trainer ? `${q.trainer.lastName ?? ''}${q.trainer.firstName ?? ''}` : '—' }}</td>
+                  <td>{{ q.remainingCourse }}</td>
+                  <td>{{ q.reservedCourse }}</td>
+                  <td>{{ q.usedCourse }}</td>
+                  <td>{{ q.expiryDate ? formatDateTime(q.expiryDate) : '無期限' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="quota-section">
+            <h3>上課紀錄</h3>
+            <div v-if="coachBookingsLoading" class="spinner"></div>
+            <p v-else-if="coachBookings.length === 0" class="quota-empty">
+              此會員目前沒有任何私教課上課紀錄
+            </p>
+            <template v-else>
+              <table class="quota-table">
+                <thead>
+                  <tr>
+                    <th>課程</th>
+                    <th>教練</th>
+                    <th>開始時間</th>
+                    <th>結束時間</th>
+                    <th>狀態</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="b in coachBookings" :key="b.id">
+                    <td>{{ b.courseName }}</td>
+                    <td>{{ b.trainerName }}</td>
+                    <td>{{ formatDateTime(b.startAt) }}</td>
+                    <td>{{ formatDateTime(b.endAt) }}</td>
+                    <td>
+                      <span class="status-badge" :class="coachBookingStatusInfo(b.status).className">
+                        {{ coachBookingStatusInfo(b.status).label }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <Pagination
+                :page="coachBookingsPage"
+                :size="coachBookingsSize"
+                :total-pages="coachBookingsTotalPages"
+                @update:page="handleCoachBookingsPageChange"
+                @update:size="handleCoachBookingsSizeChange"
+              />
+            </template>
+          </section>
+        </template>
+
+        <section v-else class="quota-section">
+          <h3>團課報名紀錄</h3>
+          <div v-if="bookingsLoading" class="spinner"></div>
+          <p v-else-if="bookings.length === 0" class="quota-empty">
+            此會員目前沒有任何團課報名紀錄
           </p>
-          <table v-else class="quota-table">
-            <thead>
-              <tr>
-                <th>課程</th>
-                <th>教練</th>
-                <th>剩餘</th>
-                <th>預約中</th>
-                <th>已用</th>
-                <th>到期日</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="q in memberQuotas" :key="q.id">
-                <td>{{ q.courseName }}</td>
-                <td>{{ q.trainer ? `${q.trainer.lastName ?? ''}${q.trainer.firstName ?? ''}` : '—' }}</td>
-                <td>{{ q.remainingCourse }}</td>
-                <td>{{ q.reservedCourse }}</td>
-                <td>{{ q.usedCourse }}</td>
-                <td>{{ q.expiryDate ? formatDateTime(q.expiryDate) : '無期限' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <template v-else>
+            <table class="quota-table">
+              <thead>
+                <tr>
+                  <th>課程</th>
+                  <th>教室</th>
+                  <th>開始時間</th>
+                  <th>結束時間</th>
+                  <th>狀態</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="b in bookings" :key="b.id">
+                  <td>{{ b.courseName }}</td>
+                  <td>{{ b.roomName }}</td>
+                  <td>{{ formatDateTime(b.startAt) }}</td>
+                  <td>{{ formatDateTime(b.endAt) }}</td>
+                  <td>
+                    <span class="status-badge" :class="bookingStatusInfo(b.status).className">
+                      {{ bookingStatusInfo(b.status).label }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <Pagination
+              :page="bookingsPage"
+              :size="bookingsSize"
+              :total-pages="bookingsTotalPages"
+              @update:page="handleBookingsPageChange"
+              @update:size="handleBookingsSizeChange"
+            />
+          </template>
         </section>
       </section>
     </div>
@@ -605,6 +875,23 @@ onMounted(fetchMembers)
   color: #8a6410;
 }
 
+/* 團課報名狀態配色比照 GroupClassView.vue 的 MY_BOOKING_STATUS_MAP，全站維持一致 */
+.status-booked {
+  background: #e8f3e6;
+  color: #3f7a3a;
+}
+
+.status-cancelled {
+  background: #f1ecea;
+  color: var(--text-muted);
+}
+
+/* 私教課上課紀錄「已完成」配色比照 TrainerScheduleView.vue 的 status-completed，全站維持一致 */
+.status-completed {
+  background: #e3ecf5;
+  color: #38618c;
+}
+
 .btn-sm {
   padding: 0.4rem 0.9rem;
   font-size: 0.85rem;
@@ -709,6 +996,29 @@ onMounted(fetchMembers)
   justify-content: flex-end;
   gap: 0.6rem;
   margin-top: 0.4rem;
+}
+
+/* 查看紀錄面板的 tab 切換，樣式與命名慣例比照 OrderListView.vue 的 .order-tabs／.order-tab */
+.records-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.records-tab {
+  padding: 0.6rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.records-tab.active {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
 }
 
 .quota-section {
