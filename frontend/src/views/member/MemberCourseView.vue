@@ -115,13 +115,6 @@ function getQuotaTrainerName(quota) {
   return m?.trainer ? `${m.trainer.lastName || ''}${m.trainer.firstName || ''}` : ''
 }
 
-// [功能方法] getQuotaTypeLabel (取得quotatypelabel)
-// 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
-function getQuotaTypeLabel(quota) {
-  const m = getQuotaCourse(quota)
-  return m ? (isCoursePrivate(m) ? '私教課' : '團課') : ''
-}
-
 // [功能方法] getUsageRecords (取得usagerecords)
 // 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
 function getUsageRecords(quota) {
@@ -148,13 +141,16 @@ function toggleHistory(quotaId) {
 function handleBookCourse(quota) {
   if (quota.courseName) {
     showToast(`正在前往課表預約 ${quota.courseName}`, 'success')
-    const isPrivate = getQuotaTypeLabel(quota) === '私教課'
-    if (isPrivate && quota.trainer?.id) {
+    // 額度必定來自私教課（後端 MemberCourseQuota.trainer 是必填關聯），直接以
+    // trainer 判斷要去哪。原本用「額度名 vs 課程名」的模糊比對推斷是否私教課，
+    // 額度名（如「一對一重量訓練額度」）與課程名不互含時會誤判成團課、
+    // 把使用者丟回 /reservation 而不是該教練的時段頁。
+    if (quota.trainer?.id) {
       router.push(`/reservation/trainer/${quota.trainer.id}`)
     } else {
       router.push({
         path: '/reservation',
-        query: { keyword: quota.courseName, type: isPrivate ? 'PRIVATE' : 'GROUP' }
+        query: { keyword: quota.courseName, type: 'PRIVATE' }
       })
     }
   } else {
