@@ -44,18 +44,20 @@ class CoachBookingControllerHistoryTest {
     void 查詢成功回200與預約歷史() throws Exception {
         when(currentUser.requireCurrentMemberId()).thenReturn(MEMBER_ID);
         when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10, null, null, null)).thenReturn(new PageResponse<>(List.of(
-                new CoachBookingHistoryResponse(10, 3, 2,
+                new CoachBookingHistoryResponse(10, 3, 2, "測試教練",
                         LocalDateTime.of(2030, 1, 1, 10, 0),
                         LocalDateTime.of(2030, 1, 1, 11, 0),
-                        CoachBookingStatus.PENDING, "ABC123", 7)), 0, 10, 1, 1));
+                        CoachBookingStatus.PENDING, "ABC123", "測試用私教課方案", 7)), 0, 10, 1, 1));
 
         mockMvc.perform(get("/api/member/bookings"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].id").value(10))
                 .andExpect(jsonPath("$.items[0].trainerId").value(2))
+                .andExpect(jsonPath("$.items[0].trainerName").value("測試教練"))
                 .andExpect(jsonPath("$.items[0].status").value("PENDING"))
                 .andExpect(jsonPath("$.items[0].checkInKey").value("ABC123"))
+                .andExpect(jsonPath("$.items[0].courseName").value("測試用私教課方案"))
                 .andExpect(jsonPath("$.items[0].remainingCourseSnapshot").value(7))
                 .andExpect(jsonPath("$.totalItems").value(1))
                 .andExpect(jsonPath("$.totalPages").value(1));
@@ -65,10 +67,10 @@ class CoachBookingControllerHistoryTest {
     void 無稽核紀錄的舊預約快照為null() throws Exception {
         when(currentUser.requireCurrentMemberId()).thenReturn(MEMBER_ID);
         when(coachBookingService.getMyBookings(MEMBER_ID, 0, 10, null, null, null)).thenReturn(new PageResponse<>(List.of(
-                new CoachBookingHistoryResponse(11, 4, 2,
+                new CoachBookingHistoryResponse(11, 4, 2, "測試教練",
                         LocalDateTime.of(2029, 1, 1, 10, 0),
                         LocalDateTime.of(2029, 1, 1, 11, 0),
-                        CoachBookingStatus.COMPLETED, "OLD999", null)), 0, 10, 1, 1));
+                        CoachBookingStatus.COMPLETED, "OLD999", "測試用私教課方案", null)), 0, 10, 1, 1));
 
         mockMvc.perform(get("/api/member/bookings"))
                 .andExpect(status().isOk())

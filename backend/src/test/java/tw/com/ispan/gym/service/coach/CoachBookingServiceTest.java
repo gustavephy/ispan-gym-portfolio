@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -374,6 +375,34 @@ class CoachBookingServiceTest {
         verify(quotas).save(quota);
         verify(deductionLogs).save(any());
         assertThat(response.getStatus()).isEqualTo(CoachBookingStatus.COMPLETED);
+    }
+
+    @Test
+    void 核銷_教練幾乎同時點兩次時第二次因樂觀鎖衝突而失敗且不核銷成功() {
+        // 情境：教練手滑連點兩次核銷，兩個請求都在各自的 transaction 裡讀到同一版本的
+        // PENDING 預約與 quota，「檢查狀態」那道防線本身擋不住這種情況（見討論）。
+        // 真正擋住它的是 MemberCourseQuota 的 @Version：這裡模擬「第二個請求」的視角，
+        // 直接 stub quotas.save() 丟出 OptimisticLockingFailureException（模擬它送出的
+        // UPDATE ... WHERE version=? 因為版本已經被第一個請求改掉而影響 0 筆列）。
+        // 純 mock 測試沒有真的資料庫，測不到真正的兩個 transaction 同時競爭，這裡驗證的是
+        // 「save() 失敗時例外正確往外拋、不會誤把預約標記成 COMPLETED、也不會誤寫稽核紀錄」，
+        // 寫法比照 GroupClassServiceTest 的「報名_儲存場次時樂觀鎖衝突例外往外拋且不建立報名紀錄」。
+        Trainer trainer = trainer(TRAINER_ID);
+        CoachSlot slot = slot(LocalDateTime.now().plusDays(1));
+        MemberCourseQuota quota = quota(7, 4, 1);
+        CoachBooking booking = bookingWithCheckInKey(slot, quota, CoachBookingStatus.PENDING, CHECK_IN_KEY);
+        when(slotService.requireTrainerByAccount(ACCOUNT_ID)).thenReturn(trainer);
+        when(bookings.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+        when(quotas.save(quota))
+                .thenThrow(new OptimisticLockingFailureException("此額度已被其他人同時修改，請重新整理後再試一次"));
+
+        assertThatThrownBy(() -> service.checkIn(ACCOUNT_ID, BOOKING_ID, CHECK_IN_KEY))
+                .isInstanceOf(OptimisticLockingFailureException.class);
+
+        // 例外發生在 quotas.save() 之後、booking 狀態改寫與稽核紀錄之前，兩者都不該執行到
+        assertThat(booking.getStatus()).isEqualTo(CoachBookingStatus.PENDING);
+        verify(bookings, never()).save(any());
+        verify(deductionLogs, never()).save(any());
     }
 
     @Test

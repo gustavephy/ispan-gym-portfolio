@@ -27,9 +27,13 @@ public class CoachBookingHistoryResponse {
     private Integer id;
     private Integer coachSlotId;
     private Integer trainerId;
+    /** 教練顯示名，不受教練目前是否在職影響——查的是歷史紀錄，離職教練的舊紀錄也要能正確顯示姓名 */
+    private String trainerName;
     private LocalDateTime startAt;
     private LocalDateTime endAt;
     private CoachBookingStatus status;
     private String checkInKey;
+    /** 課程名稱，是購買當下的名稱快照，不是即時查課程主檔 */
+    private String courseName;
     private Integer remainingCourseSnapshot;
 }

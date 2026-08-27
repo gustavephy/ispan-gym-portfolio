@@ -38,6 +38,7 @@ import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 import tw.com.ispan.gym.service.coach.CoachBookingService;
+import tw.com.ispan.gym.service.coach.GroupClassService;
 import tw.com.ispan.gym.service.member.AdminMemberService;
 
 /**
@@ -144,6 +145,9 @@ class AdminMemberMethodSecurityTest {
         @Bean @Primary CoachBookingService coachBookingService() {
             return Mockito.mock(CoachBookingService.class);
         }
+        @Bean @Primary GroupClassService groupClassService() {
+            return Mockito.mock(GroupClassService.class);
+        }
     }
 
     @Autowired MockMvc mockMvc;
@@ -153,6 +157,7 @@ class AdminMemberMethodSecurityTest {
     @Autowired TrainerRepository trainers;
     @Autowired AdminMemberService adminMemberService;
     @Autowired CoachBookingService coachBookingService;
+    @Autowired GroupClassService groupClassService;
 
     private static final String VALID_UPDATE_BODY = """
             {
@@ -169,7 +174,7 @@ class AdminMemberMethodSecurityTest {
      */
     @BeforeEach
     void resetMocks() {
-        Mockito.reset(adminMemberService, coachBookingService, accounts, employees, trainers);
+        Mockito.reset(adminMemberService, coachBookingService, groupClassService, accounts, employees, trainers);
     }
 
     private String tokenFor(int accountId, int employeeId, String email, EmployeeRole role) {
@@ -328,5 +333,49 @@ class AdminMemberMethodSecurityTest {
                 .andExpect(status().isOk());
 
         Mockito.verify(coachBookingService).getMyQuotas(1);
+    }
+
+    // === GET /api/admin/members/{memberId}/group-class-bookings ====================
+
+    @Test
+    void 會員團課報名紀錄查詢_一般員工被方法層級擋下且Service未被呼叫() throws Exception {
+        mockMvc.perform(get("/api/admin/members/1/group-class-bookings")
+                        .header("Authorization", "Bearer " + employeeToken()))
+                .andExpect(status().isForbidden());
+
+        Mockito.verify(groupClassService, Mockito.never())
+                .getMemberBookingsForAdmin(Mockito.any(), Mockito.anyInt(), Mockito.anyInt(), Mockito.any(),
+                        Mockito.any(), Mockito.any(), Mockito.any());
+    }
+
+    @Test
+    void 會員團課報名紀錄查詢_管理者通過方法層級且Service被呼叫() throws Exception {
+        mockMvc.perform(get("/api/admin/members/1/group-class-bookings")
+                        .header("Authorization", "Bearer " + adminToken()))
+                .andExpect(status().isOk());
+
+        Mockito.verify(groupClassService).getMemberBookingsForAdmin(1, 0, 10, null, null, null, null);
+    }
+
+    // === GET /api/admin/members/{memberId}/coach-bookings ===========================
+
+    @Test
+    void 會員私教課預約歷史查詢_一般員工被方法層級擋下且Service未被呼叫() throws Exception {
+        mockMvc.perform(get("/api/admin/members/1/coach-bookings")
+                        .header("Authorization", "Bearer " + employeeToken()))
+                .andExpect(status().isForbidden());
+
+        Mockito.verify(coachBookingService, Mockito.never())
+                .getMyBookings(Mockito.any(), Mockito.anyInt(), Mockito.anyInt(), Mockito.any(), Mockito.any(),
+                        Mockito.any());
+    }
+
+    @Test
+    void 會員私教課預約歷史查詢_管理者通過方法層級且Service被呼叫() throws Exception {
+        mockMvc.perform(get("/api/admin/members/1/coach-bookings")
+                        .header("Authorization", "Bearer " + adminToken()))
+                .andExpect(status().isOk());
+
+        Mockito.verify(coachBookingService).getMyBookings(1, 0, 10, null, null, null);
     }
 }
