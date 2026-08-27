@@ -54,6 +54,7 @@
       links: [
         { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' },
         { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
+        { to: '/admin/trainer-schedules', label: '教練排課查詢', requires: 'ADMIN' },
         { to: '/admin/courses', label: '課程方案', requires: 'ADMIN' },
         { to: '/admin/coupons', label: '優惠券管理', requires: 'ADMIN' },
         { to: '/admin/group-classes', label: '團課場次', requires: 'ADMIN' },

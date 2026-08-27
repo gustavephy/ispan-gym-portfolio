@@ -811,6 +811,14 @@ class EndpointAuthorizationTest {
     }
 
     @Test
+    void 教練排課查詢僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/trainers/1/coach-slots"));
+        expectForbidden(get("/api/admin/trainers/1/coach-slots"), employeeToken());
+        expectForbidden(get("/api/admin/trainers/1/coach-slots"), trainerToken());
+        expectAuthorized(get("/api/admin/trainers/1/coach-slots"), adminToken());
+    }
+
+    @Test
     void 教練代改專業資料僅限管理者() throws Exception {
         expectForbidden(put("/api/admin/trainers/1"), trainerToken());
         expectAuthorized(put("/api/admin/trainers/1"), adminToken());
