@@ -65,6 +65,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 // 引入 API 實例：api 用於取得教練清單 (第 183 行)
 import api from '@/api/axios.instance.js'
+import { getMySubscription } from '@/api/subscription.js'
 // 引入會員狀態：用於確認登入 (第 110 行) 與檢查個人資料完整性 (第 117 行)
 import { useAuthStore } from '@/stores/auth.js'
 // 引入商品狀態：用於取得課程方案列表 (第 196 行)
@@ -156,21 +157,12 @@ onMounted(async () => {
     coursesLoading.value = false
     loadDbTrainers()
 
-    // 訂閱是會員域的功能，後端以 requireCurrentMemberId() 反查 member 列，純員工／
-    // 純管理員帳號（roles 只有 EMPLOYEE／ADMIN）沒有對應會員資料時會回 401——若只檢查
-    // isLoggedIn 就發這個請求，axios 攔截器看到 401 會直接登出，剛登入就被默默踢出去
-    // （寫法比照 stores/cart.js 的 loadCart()）。skipAuthRedirect 是defense-in-depth：
-    // 即使會員帳號的 token 因其他原因過期，這個非必要的訂閱查詢失敗也不該連帶登出。
-    if (auth.isMember) {
-      try {
-        const subRes = await api.get('/api/me/subscription', {
-          skipGlobalError: true,
-          skipAuthRedirect: true,
-        })
-        hasActiveSubscription.value = subRes.data?.isActive || false
-      } catch (e) {
-        // 忽略過期 Token 產生的錯誤，避免首頁強制跳轉或警告
-      }
+    // 身分判斷與 skipAuthRedirect 都收在 getMySubscription 內部，這裡不必再重複一次
+    try {
+      const subRes = await getMySubscription()
+      hasActiveSubscription.value = subRes.data?.isActive || false
+    } catch (e) {
+      // 沒有訂閱紀錄等情況維持 false
     }
   } catch (e) {
     coursesLoading.value = false

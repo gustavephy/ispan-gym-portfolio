@@ -25,7 +25,7 @@
 | 商品／分類 | `/api/products`、`/api/product-categories` | [3](#3-商品) |
 | 購物車 | `/api/cart` | [4](#4-購物車) |
 | 訂單 | `/api/orders`、`/api/admin/orders` | [5](#5-訂單) |
-| 金流 | `/api/payments` | [6](#6-金流ecpay) |
+| 金流 | `/api/payments`、`/api/admin/payments` | [6](#6-金流ecpay) |
 | 訂閱 | `/api/subscription-plans`、`/api/me/subscription` | [7](#7-訂閱) |
 | 教練時段／預約 | `/api/trainer`、`/api/member` | [8](#8-私教教練時段與預約) |
 | 教練檔案 | `/api/trainers`、`/api/employees/{id}/trainer`、`/api/trainer/profile`、`/api/admin/trainers` | [8.7](#87-教練檔案trainercontroller) |
@@ -257,7 +257,7 @@ Response `200` `LoginResponse`：
 |---|---|
 | 查無 email／帳號已軟刪／密碼錯 | 帳號或密碼錯誤 |
 | 無 ACTIVE 身分，員工為 PENDING_APPROVAL | 員工帳號尚待審核，請等候通知。 |
-| 無 ACTIVE 身分，員工為 REJECTED | 員工申請未通過，如需重新申請請使用重新申請功能。 |
+| 無 ACTIVE 身分，員工為 REJECTED | 員工申請未通過，如需重新申請請使用重新申請功能。（審核者填了拒絕原因時，改成「員工申請未通過，原因：{原因}。如需重新申請請使用重新申請功能。」，原因取自 `Employee.reviewNote`，僅在密碼驗證通過後才會回傳） |
 | 其他（含信箱未驗證的會員） | 此帳號目前沒有可用的身分，請聯繫管理員。 |
 
 > 密碼正確但無任何可用身分時**不簽發 token**，改回具體狀態訊息，避免前端拿到實際上什麼都做不了的 JWT。
@@ -660,7 +660,9 @@ Request：
 
 Response：
 - `CartResponse`：`items` `List<CartItemResponse>`、`totalAmount` BigDecimal
-- `CartItemResponse`：`cartItemId`、`productId`、`productName`、`imageUrl`、`unitPrice`、`quantity`、`subtotal`
+- `CartItemResponse`：`cartItemId`、`productId`、`productName`、`imageUrl`、`unitPrice`（**現價**）、`quantity`、`subtotal`（現價×數量）、`priceWhenAdded`（加入當下的價格快照）、`priceChanged`（現價≠加入價）、`available`（商品 ACTIVE 且庫存 ≥ 數量）、`stock`
+
+> 價格政策：結帳一律以商品**現價**計算；`priceWhenAdded`／`priceChanged` 僅供前端顯示「加入後已變價」提示，不擋結帳。`available=false` 的品項前端會在購物車／結帳頁標示並擋下結帳。
 
 錯誤：`400 INVALID_QUANTITY`；`404 PRODUCT_NOT_FOUND`／`CART_ITEM_NOT_FOUND`；`400 PRODUCT_UNAVAILABLE`；`409 INSUFFICIENT_STOCK`（以**累加後的總量**檢查）；`403 FORBIDDEN_CART_ACCESS`（操作他人項目）
 
@@ -685,10 +687,13 @@ Response：
 `OrderStatus`：`UNPAID`｜`PAID`｜`SHIPPED`｜`COMPLETED`｜`CANCELLED`｜`FAILED`｜`REFUNDED`
 
 **回應 DTO**
-- `OrderSummaryResponse`：`orderId` Long、`merchantTradeNo`、`totalAmount`、`status`、`createdAt`
-- `OrderDetailResponse`：上述欄位 + `items` `List<OrderItemResponse>`
-- `OrderItemResponse`：`orderItemId`、`productId`、`privateCourseId`、`productNameAtBuy`、`priceAtBuy`、`quantity`、`lineAmount`
-  （`productId` 與 `privateCourseId` **恰好一個非空**）
+- `OrderSummaryResponse`：`orderId` Long、`merchantTradeNo`、`title`、`totalAmount`、`status`、`createdAt`
+- `OrderDetailResponse`：上述欄位 + `items` `List<OrderItemResponse>`、`subscription` `OrderSubscriptionResponse`
+- `OrderItemResponse`：`orderItemId`、`productId`、`privateCourseId`、`productNameAtBuy`、`priceAtBuy`、`quantity`、`lineAmount`、`itemType`（`PRODUCT`｜`COURSE`）、`sessionPerUnit`、`totalSessions`、`trainerName`
+  （`productId` 與 `privateCourseId` **恰好一個非空**；`sessionPerUnit`／`totalSessions`／`trainerName` 僅私教課品項非空）
+- `OrderSubscriptionResponse`：`subscriptionPlanId`、`name`、`description`、`price`、`durationDays`（**僅訂閱訂單非空**，其餘為 `null`）
+- `title`：購買內容摘要，供「我的訂單」當卡片標題——訂閱訂單為方案名、單一品項為品項名、多品項為「第一項 等 N 項」；理論上不會發生的無品項無方案訂單為 `null`（前端退回顯示 `merchantTradeNo`）
+- 後台 `AdminOrderSummaryResponse` 同樣有 `title`，`AdminOrderDetailResponse` 同樣有 `title` 與 `subscription`（口徑一致），明細品項共用同一個 `OrderItemResponse`
 
 **Request DTO**
 - `CreateOrderRequest`（**body 可省略**）：`couponCode` `@Size(max=30)`、`receiverName` `@Size(max=50)`、`receiverPhone` `@Size(max=20)`、`receiverAddress` `@Size(max=200)`。收件人未填時自動沿用會員姓名／電話。
@@ -698,7 +703,7 @@ Response：
 
 `POST /api/orders/direct/subscription/checkout` 回 `SubscriptionCheckoutResponse`：`order`（`OrderDetailResponse`）、`ecpayForm`（`Map<String,String>`，見 [6.1](#61-建立綠界付款表單)）。前端拿到後直接組表單送出，不必再打一次 `/api/payments/ecpay/checkout/{orderId}`。
 
-> 訂閱訂單**沒有 order item**（方案記在 `order.subscriptionPlan`），所以 `items` 會是空陣列。
+> 訂閱訂單**沒有 order item**（方案記在 `order.subscriptionPlan`），所以 `items` 會是空陣列，購買的方案改由 `OrderDetailResponse.subscription` 帶出。
 
 **訂閱雙向管制**（兩個方向都在 `OrderService` 強制）：
 - 沒有有效訂閱 → 買私教課被擋：`403 SUBSCRIPTION_REQUIRED`「需先訂閱會員方案才能購買私教課程」
@@ -716,25 +721,40 @@ Response：
 | 優惠券問題 | `409` 優惠券已失效或不在使用期限內／此優惠券不適用於本次購買的品項類型／未達優惠券最低消費金額／尚未持有此優惠券或已使用過 |
 | 訂單不存在或非本人 | `404` 找不到訂單資料 |
 
-**取消的兩種行為**（`POST /{orderId}/cancel`）：
+**取消的兩種行為**（`POST /{orderId}/cancel`，body 可帶 `{ reason }` `@Size(max=500)`）：
 
 | 原狀態 | 行為 |
 |---|---|
 | `UNPAID` | 直接轉 `CANCELLED`，回補庫存、優惠券還原為 `UNUSED` |
-| `PAID` | 建立 `PENDING` 退款單，**訂單狀態維持 `PAID`**，待管理員完成退款 |
-| 其他 | `409` 只有未付款的訂單可以取消 |
+| `PAID`／`SHIPPED`／`COMPLETED` | 建立 `PENDING` 退款單（`reason` 帶進 `PaymentRefund.reason`，供後台審核），**訂單狀態維持原樣**，待管理員完成退款 |
+| 其他 | `409` |
+
+> **建單節流**：`POST /api/orders`、`/direct`、`/direct/subscription`(`/checkout`) 四個建單端點，同一會員每 `app.order.rate-limit.window`（預設 1 分鐘）最多 `app.order.rate-limit.max`（預設 10）筆，超過回 `429 ORDER_RATE_LIMITED`。重送去重仍由 `Idempotency-Key` 負責。
+>
+> **逾時未付款訂單自動取消**：`StaleOrderCleanupScheduler` 每 `app.order.cleanup-interval`（預設 5 分）掃一次，把超過 `app.order.unpaid-ttl`（預設 `PT30M`）仍 `UNPAID` 的訂單比照手動取消處理（還原庫存/優惠券、寫 source=`SYSTEM` 的 `CANCEL` 歷程）。
+>
+> **購物車結帳需收件地址**：`POST /api/orders` 的 `receiverAddress` 為空 → `409`「請填寫收件地址」（購物車只裝實體商品）。
 
 ### 5.2 管理端（`/api/admin/orders`，🛡️ ADMIN）
 
-| 方法 | 路徑 | 成功狀態 |
-|---|---|---|
-| GET | `/reports/overview?from=&to=` | 200 |
-| GET | `/refunds/pending` | 200 |
-| POST | `/refunds/{refundId}/complete` | **204** |
+| 方法 | 路徑 | 成功狀態 | 說明 |
+|---|---|---|---|
+| GET | `/api/admin/orders?status=&memberId=&createdFrom=&createdTo=&keyword=` | 200 | 訂單搜尋（分頁） |
+| GET | `/api/admin/orders/{orderId}` | 200 | 訂單詳情（`AdminOrderDetailResponse`，含 `title`、`subscription`） |
+| POST | `/api/admin/orders/{orderId}/ship` | 200 | 標記已出貨 |
+| POST | `/api/admin/orders/{orderId}/complete` | 200 | 標記完成 |
+| POST | `/api/admin/orders/{orderId}/simulate-payment` | 200 | **模擬付款成功**（見下） |
+| GET | `/reports/overview?from=&to=` | 200 | 訂單總覽 |
+| GET | `/refunds/pending` | 200 | 待處理退款 |
+| POST | `/refunds/{refundId}/complete` | **204** | 完成退款 |
+| POST | `/refunds/{refundId}/reject` | **204** | 駁回退款（body 可帶 `{ reason }`） |
 
 - `from`／`to` 為 `LocalDateTime`，ISO 格式（`2026-01-01T00:00:00`），**皆必填**
 - `OrderOverviewResponse`：`from`、`to`、`totalOrders` long、`totalRevenue`、`countByStatus` Map、`revenueByStatus` Map、`countByPaymentMethod` Map
 - `PendingRefundResponse`：`refundId`、`orderId`、`merchantTradeNo`、`refundNo`、`amount`、`reason`、`requestedAt`
+
+**`POST /api/admin/orders/{orderId}/simulate-payment`**：本機沒有對外 URL、綠界的 server-to-server 付款結果通知連不進來時，用這個把 `UNPAID` 訂單推進到已付款（後台「訂單管理」頁展開 UNPAID 訂單有「模擬付款成功」按鈕）。走與真實付款成功**完全相同**的 `markPaid + fulfillPaidOrder`（發放堂數／啟用訂閱），只是免簽章與通知；會留下一筆 `PaymentTransaction`（`provider=SIMULATE`）、一筆 `PaymentWebhook`、狀態歷程 note `SIMULATE_PAYMENT`。回 `AdminOrderDetailResponse`。
+受 `app.payment.simulate-enabled` 開關保護（**預設 `true`，正式環境務必設 `false`**）；關閉時回 `409`。只能對 `UNPAID` 訂單使用。
 
 完成退款會：退款單轉 `COMPLETED` → 回補庫存 → 優惠券還原 `UNUSED` → **若為訂閱訂單則將 `MemberSubscription` 轉 `CANCELLED`** → 訂單轉 `REFUNDED`。
 錯誤：`404` 找不到退款紀錄；`409` 此退款已處理過／只有已付款的訂單可以標記為已退款
@@ -766,10 +786,12 @@ Response `200` `Map<String,String>`：
 | `CheckMacValue` | 上述 11 欄的 SHA-256 檢查碼（大寫 hex） |
 | `ActionUrl` | 綠界結帳網址 |
 
-> 回的是 JSON map，**不是自動送出的 HTML 表單**，前端需自行組表單 POST 到 `ActionUrl`。
+> 回的是 JSON map，**不是自動送出的 HTML 表單**。前端（`utils/ecpay.js#submitEcpayForm`）拿到後組隱藏表單 POST 到 `ActionUrl`；購物車結帳與私教課直接購買共用這支。
 > `ActionUrl` 是在算完檢查碼之後才加入的，**不列入 `CheckMacValue` 計算**。
 
 錯誤：`404` 找不到訂單資料（不存在或非本人）
+
+> **前端「重新付款」**：`OrderListView` 對 `UNPAID` 訂單提供「前往付款」，直接重打這支端點（對自己的任何訂單都可用）；從綠界返回 `/orders` 後會輪詢該訂單的付款結果數次。
 
 ### 6.2 綠界回調
 
@@ -781,11 +803,27 @@ Response `200` `Map<String,String>`：
 
 實際使用的欄位：`CheckMacValue`（驗章）、`MerchantTradeNo`（對應訂單）、`TradeNo`、`RtnCode`（`1` 為成功）、`RtnMsg`、`PaymentType`。其餘欄位一併納入驗章與原始 payload 保存。
 
-處理流程：驗章 → **冪等檢查**（`MerchantTradeNo + "-" + RtnCode` 為 event key，重複通知直接略過，不會重複出貨）→ 寫 `PaymentWebhook` → 建立／更新 `PaymentTransaction` → `RtnCode=1` 時訂單轉 `PAID` 並執行 `fulfillPaidOrder`，否則轉 `FAILED`。
+處理流程：驗章 → **冪等檢查**（`MerchantTradeNo + "-" + RtnCode` 為 event key，重複通知直接略過，不會重複出貨）→ 寫 `PaymentWebhook` → 建立／更新 `PaymentTransaction` → `RtnCode=1` 時，先確認 **通知金額 == 訂單總額** 且 **訂單仍為 `UNPAID`**，兩者皆成立才轉 `PAID` 並執行 `fulfillPaidOrder`；不符則記 `PaymentWebhook.processingStatus=ERROR` + `log.error`、不履約。`RtnCode≠1` 轉 `FAILED`。
+
+> 「付款成功通知抵達時訂單已非 `UNPAID`」= 錢收了但訂單可能已被逾時排程取消，需人工確認退款；系統只記錄告警，不自動履約也不丟例外。
 
 > **履約時機在付款成功後，不在下單時**：私教堂數（`MemberCourseQuota`）與訂閱啟用（`MemberSubscription`）都在 `fulfillPaidOrder` 才發生；商品庫存則相反，是在建立訂單時就先扣。
 
 > 另無獨立的瀏覽器導回端點 —— `ClientBackURL` 直接指向前端 SPA。
+
+### 6.3 後台交易紀錄（`/api/admin/payments`，🛡️ ADMIN）
+
+| 方法 | 路徑 | 說明 |
+|---|---|---|
+| GET | `/api/admin/payments/transactions?status=&provider=&from=&to=&keyword=` | `PaymentTransaction` 清單（分頁） |
+| GET | `/api/admin/payments/refunds?status=&from=&to=&keyword=` | `PaymentRefund` 清單（分頁，**全部狀態**，非只待處理） |
+| GET | `/api/admin/payments/webhooks?processingStatus=&provider=&checkMacValid=&from=&to=&keyword=` | `PaymentWebhook` 回呼清單（分頁） |
+
+- 皆回 Spring `Page<...>`（`content`／`totalPages`／…）。`from`／`to` 為 ISO `LocalDateTime`。
+- `AdminPaymentTransactionResponse`：`id`、`orderId`、`orderNo`、`merchantTradeNo`、`tradeNo`、`provider`、`paymentMethod`、`amount`、`currency`、`status`、`rtnCode`、`rtnMsg`、`simulatePaid`、`paidAt`、`createdAt`
+- `AdminPaymentRefundResponse`：`refundId`、`orderId`、`merchantTradeNo`、`refundNo`、`amount`、`status`、`reason`、`requestedAt`、`completedAt`
+- `AdminPaymentWebhookResponse`：`id`、`provider`、`eventKey`、`merchantTradeNo`、`tradeNo`、`checkMacValid`、`processingStatus`、`errorMessage`、`payloadPreview`（截斷 500 字）、`receivedAt`、`processedAt`
+- 前端頁：`/admin/payments`（三個 Tab；Webhook Tab 對 `processingStatus=ERROR` 標示並可展開看 payload）
 
 ---
 
@@ -1291,6 +1329,7 @@ no-op，不重新檢查。
 | GET | `/api/admin/reports/stats` | 200 | 即時銷售統計（不落地） |
 | GET | `/api/admin/reports/{reportId}` | 200 | 報表明細 |
 | GET | `/api/admin/reports/{reportId}/pdf` | 200 | **報表匯出 PDF** |
+| GET | `/api/admin/reports/{reportId}/csv` | 200 | 品項排行匯出 CSV（`text/csv`，UTF-8 with BOM，`filename="operation-report-{id}-ranking.csv"`） |
 | POST | `/api/admin/reports` | **201** | 產生報表快照 |
 | DELETE | `/api/admin/reports/{reportId}` | **204** | 刪除快照（連同明細） |
 
@@ -1501,6 +1540,15 @@ CONNECT 失敗訊息：聊天室連線缺少 Authorization: Bearer \<token\>／�
 
 | 原問題 | 現況 |
 |---|---|
+| 未付款訂單無自動過期，庫存被卡住 | `StaleOrderCleanupScheduler` 定期取消逾時 `UNPAID` 訂單並還原庫存/優惠券（`app.order.unpaid-ttl`） |
+| 未付款訂單前端無「重新付款」入口 | `OrderListView` UNPAID 訂單提供「前往付款」，返回後輪詢付款結果 |
+| 綠界通知未核對金額、未處理遲到付款 | `handleNotify` 加金額比對 + 「訂單已非 UNPAID」告警分支 |
+| 本機收不到綠界通知、demo 無法完成付款 | 加 `POST /api/admin/orders/{id}/simulate-payment`（`app.payment.simulate-enabled`） |
+| 三個交易 Controller（Cart/Order/Payment）無 MVC 測試 | 已補 `CartControllerTest`／`OrderControllerTest`／`PaymentControllerTest`／`AdminOrderControllerTest` + `CheckoutMoneyPathTest` |
+| 後台無逐筆交易 / Webhook 檢視 | 加 `/api/admin/payments/*` + `/admin/payments` 前端頁 |
+| 建單無節流 | 四個建單端點加 `429 ORDER_RATE_LIMITED`（`app.order.rate-limit.*`） |
+| 報表無 CSV 匯出 | 加 `GET /api/admin/reports/{id}/csv` |
+| `ProductCard` 加購按鈕無 in-flight 防呆、`stores/courses.js` 重複的 ECPay 送出邏輯 | 已修 + 共用 `utils/ecpay.js#submitEcpayForm(fields, { target })` |
 | `GroupCourseController` 是空類別 | 已刪除，改由 `AdminGroupCourseController` 承擔（見 [10.1](#101-團課主檔apiadmingroup-courses-admin)） |
 | `spring.profiles.active=dev` 預設全放行 | 已改為預設註解掉，正式安全設定生效；要回到免登入模式取消註解即可 |
 | 教練時段與團課列表被擋成 401 | SecurityConfig 已補上對應 permitAll（逐條精確列出，見 [1.5](#15-路徑層級授權 securityconfig)） |

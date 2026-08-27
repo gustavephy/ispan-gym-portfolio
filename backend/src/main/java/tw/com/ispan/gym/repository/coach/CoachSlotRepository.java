@@ -89,5 +89,5 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
          * 不該繼續擋著停用，故額外疊加 endAt > now（見 trainer_management_next_phase 規格基準）。
          */
         @Query("SELECT COUNT(s) FROM CoachSlot s WHERE s.trainer.id = :trainerId AND s.status <> 'CANCELLED' AND s.endAt > :now")
-        long countOpenByTrainerId(@Param("trainerId") Integer trainerId, @Param("now") LocalDateTime now);
+        int countOpenByTrainerId(@Param("trainerId") Integer trainerId, @Param("now") LocalDateTime now);
 }

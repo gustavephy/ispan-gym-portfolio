@@ -40,3 +40,7 @@ export const deleteReport = (reportId) => api.delete(`/api/admin/reports/${repor
 /** 下載報表 PDF（回傳 blob，呼叫端自行轉成下載連結），需 ADMIN */
 export const downloadReportPdf = (reportId) =>
   api.get(`/api/admin/reports/${reportId}/pdf`, { responseType: 'blob' })
+
+/** 下載品項排行 CSV（回傳 blob），需 ADMIN */
+export const downloadReportCsv = (reportId) =>
+  api.get(`/api/admin/reports/${reportId}/csv`, { responseType: 'blob' })

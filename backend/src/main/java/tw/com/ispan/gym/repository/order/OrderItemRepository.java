@@ -14,6 +14,12 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Integer> {
     List<OrderItem> findAllByOrderIdOrderByIdAsc(Integer orderId);
 
     /**
+     * 一次撈多筆訂單的明細（「我的訂單」列表用，避免逐筆查的 N+1）。
+     * 呼叫端自行依 order id 分組；空集合直接回空 List。
+     */
+    List<OrderItem> findAllByOrderIdInOrderByOrderIdAscIdAsc(Collection<Integer> orderIds);
+
+    /**
      * 這筆訂單是否含實體商品（product_id 非空的明細列）。
      * 用於「完成訂單」前判斷該不該要求先出貨——私教課與訂閱方案沒有實體要寄，
      * 付款後即可直接完成；實體商品則必須經過出貨。

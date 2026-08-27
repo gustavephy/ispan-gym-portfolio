@@ -11,11 +11,13 @@ import {
   getReports,
   getReportDetail,
   downloadReportPdf,
+  downloadReportCsv,
   generateReport,
   deleteReport,
 } from '@/api/adminReport.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import { paymentMethodLabel } from '@/utils/paymentLabels.js'
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRenderer])
 
@@ -105,6 +107,7 @@ const rankingHeight = computed(() => {
 })
 const dailyTotals = computed(() => detail.value?.dailyTotals ?? [])
 const statusBreakdown = computed(() => detail.value?.statusBreakdown ?? [])
+const paymentBreakdown = computed(() => detail.value?.paymentBreakdown ?? [])
 
 // ── 圖表 ────────────────────────────────────────────────────
 const trendEl = ref(null)
@@ -351,15 +354,25 @@ watch(selectedReportId, (id) => fetchDetail(id))
 const downloadingPdf = ref(false)
 
 async function onDownloadPdf() {
+  await downloadBlob(() => downloadReportPdf(detail.value.id), 'application/pdf', 'pdf', (v) => (downloadingPdf.value = v))
+}
+
+const downloadingCsv = ref(false)
+async function onDownloadCsv() {
+  await downloadBlob(() => downloadReportCsv(detail.value.id), 'text/csv;charset=utf-8', 'csv',
+    (v) => (downloadingCsv.value = v))
+}
+
+async function downloadBlob(fetcher, mime, ext, setBusy) {
   const report = detail.value
   if (!report) return
-  downloadingPdf.value = true
+  setBusy(true)
   try {
-    const { data } = await downloadReportPdf(report.id)
-    const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }))
+    const { data } = await fetcher()
+    const url = URL.createObjectURL(new Blob([data], { type: mime }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `operation-report-${report.id}.pdf`
+    a.download = `operation-report-${report.id}${ext === 'csv' ? '-ranking' : ''}.${ext}`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -367,7 +380,7 @@ async function onDownloadPdf() {
   } catch (e) {
     notifyApiError(e)
   } finally {
-    downloadingPdf.value = false
+    setBusy(false)
   }
 }
 
@@ -470,6 +483,14 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
+            class="btn"
+            :disabled="!detail || downloadingCsv"
+            @click="onDownloadCsv"
+          >
+            {{ downloadingCsv ? '產生中…' : '排行 CSV' }}
+          </button>
+          <button
+            type="button"
             class="btn btn-danger-outline"
             :disabled="!detail || deleting"
             @click="handleDelete"
@@ -561,6 +582,27 @@ onBeforeUnmount(() => {
             <td class="col-num">
               {{ row.amount == null ? '—' : currency.format(Number(row.amount)) }}
             </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section v-if="paymentBreakdown.length > 0" class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">付款方式分佈</h2>
+        <span class="chart-card__sub">依所選報表快照</span>
+      </header>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>付款方式</th>
+            <th class="col-num">訂單數</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in paymentBreakdown" :key="row.itemKey">
+            <td>{{ paymentMethodLabel(row.itemKey) }}</td>
+            <td class="col-num">{{ number.format(Number(row.orderCount ?? 0)) }}</td>
           </tr>
         </tbody>
       </table>

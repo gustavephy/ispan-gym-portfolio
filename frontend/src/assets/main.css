@@ -427,6 +427,9 @@ textarea.form-input {
   letter-spacing: 0.03em;
   background-clip: padding-box;
   box-sizing: border-box !important;
+  /* 後台按鈕都是短標籤（前往補貨／完成退款…），height 被鎖成 38px，
+     欄寬不足時文字折行會撐破按鈕。統一不折行，寬度不夠交由外層表格橫向捲動 */
+  white-space: nowrap;
 }
 
 .btn-primary {

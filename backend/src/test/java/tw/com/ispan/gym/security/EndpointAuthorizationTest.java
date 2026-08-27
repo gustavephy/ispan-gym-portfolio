@@ -124,6 +124,7 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.order.OrderController.class,
         tw.com.ispan.gym.controller.order.AdminOrderController.class,
         tw.com.ispan.gym.controller.payment.PaymentController.class,
+        tw.com.ispan.gym.controller.payment.AdminPaymentController.class,
         tw.com.ispan.gym.controller.report.OperationReportController.class,
         tw.com.ispan.gym.controller.account.PasswordController.class,
         tw.com.ispan.gym.controller.account.PasswordResetController.class,
@@ -247,6 +248,12 @@ class EndpointAuthorizationTest {
         // 分支寫這支測試時還沒有這個 service，合併後要一併補上才組得起 context
         @Bean @Primary ReportPdfService reportPdfService() {
             return Mockito.mock(ReportPdfService.class);
+        }
+        @Bean @Primary tw.com.ispan.gym.service.report.ReportCsvService reportCsvService() {
+            return Mockito.mock(tw.com.ispan.gym.service.report.ReportCsvService.class);
+        }
+        @Bean @Primary tw.com.ispan.gym.service.payment.AdminPaymentQueryService adminPaymentQueryService() {
+            return Mockito.mock(tw.com.ispan.gym.service.payment.AdminPaymentQueryService.class);
         }
         @Bean @Primary OrderRepository orderRepository() {
             return Mockito.mock(OrderRepository.class);
@@ -936,6 +943,22 @@ class EndpointAuthorizationTest {
         expectForbidden(get("/api/admin/reports"), memberToken());
         expectForbidden(get("/api/admin/reports"), employeeToken());
         expectAuthorized(get("/api/admin/reports"), adminToken());
+    }
+
+    @Test
+    void 後台金流交易紀錄僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/payments/transactions"));
+        expectForbidden(get("/api/admin/payments/transactions"), memberToken());
+        expectForbidden(get("/api/admin/payments/webhooks"), employeeToken());
+        expectAuthorized(get("/api/admin/payments/transactions"), adminToken());
+    }
+
+    @Test
+    void 模擬付款端點僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/admin/orders/1/simulate-payment"));
+        expectForbidden(post("/api/admin/orders/1/simulate-payment"), memberToken());
+        expectForbidden(post("/api/admin/orders/1/simulate-payment"), employeeToken());
+        expectAuthorized(post("/api/admin/orders/1/simulate-payment"), adminToken());
     }
 
     // === 密碼管理 ================================================================

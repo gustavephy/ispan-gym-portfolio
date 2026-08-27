@@ -60,6 +60,7 @@
         { to: '/admin/inventory', label: '庫存管理', requires: 'ADMIN' },
         { to: '/admin/orders', label: '訂單管理', requires: 'ADMIN' },
         { to: '/admin/refunds', label: '退款處理', requires: 'ADMIN' },
+        { to: '/admin/payments', label: '交易紀錄', requires: 'ADMIN' },
         { to: '/admin/employee-reviews', label: '員工審核' },
       ],
     },
@@ -257,7 +258,7 @@
         >
           登入
         </RouterLink>
-        <RouterLink class="nav-auth__button" to="/register">
+        <RouterLink class="nav-auth__button" to="/member-register">
           註冊
         </RouterLink>
       </div>
@@ -515,6 +516,7 @@
        改橫向並排——同時涵蓋已登入（角色徽章＋登出）與訪客（登入＋註冊）兩種狀態 */
     .nav-auth__panel {
       flex-direction: row;
+      align-items: center;
       gap: 0.5rem;
     }
     .nav-auth__button {

@@ -1,6 +1,7 @@
 package tw.com.ispan.gym.service.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -60,6 +61,15 @@ class EcpayServiceTest {
             "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5",
             "https://example.com/api/payments/ecpay/notify",
             "https://example.com/order-done",
+            true,
+            orders, orderItems, orderStatusHistories, paymentTransactions, paymentWebhooks, orderService);
+
+    /** simulate-enabled=false 的另一個實例，測開關關閉時的行為 */
+    private final EcpayService simulateDisabledService = new EcpayService(MERCHANT_ID, HASH_KEY, HASH_IV,
+            "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5",
+            "https://example.com/api/payments/ecpay/notify",
+            "https://example.com/order-done",
+            false,
             orders, orderItems, orderStatusHistories, paymentTransactions, paymentWebhooks, orderService);
 
     // === 共用測試資料 ========================================================
@@ -334,5 +344,88 @@ class EcpayServiceTest {
         // 解析失敗記為 null，流程照走完並視為付款失敗
         assertThat(payment.getRtnCode()).isNull();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.FAILED);
+    }
+
+    // === handleNotify()：金額核對與遲到付款 ====================================
+
+    @Test
+    void 付款成功但通知金額與訂單不符時只記錄不履約() {
+        stubWebhookSaveReturnsArgument();
+        Order order = order("1000");
+        PaymentTransaction payment = payment(order);
+        when(orders.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(payment));
+        Map<String, String> params = notifyParams("1");
+        params.put("TradeAmt", "1"); // 通知金額被改小；簽章重算，過得了驗簽
+        params.put("CheckMacValue", signatureOf(withoutMac(params)));
+
+        service.handleNotify(params);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.UNPAID);
+        verify(orderService, never()).fulfillPaidOrder(any());
+        verify(paymentWebhooks).save(org.mockito.ArgumentMatchers.argThat(
+                (PaymentWebhook w) -> "ERROR".equals(w.getProcessingStatus())
+                        && w.getErrorMessage().contains("金額")));
+    }
+
+    @Test
+    void 付款成功通知抵達時訂單已非未付款只記錄ERROR不丟例外() {
+        stubWebhookSaveReturnsArgument();
+        Order order = order("1000");
+        order.cancel("逾時未付款，系統自動取消"); // 訂單已被逾時排程取消
+        PaymentTransaction payment = payment(order);
+        when(orders.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(payment));
+
+        service.handleNotify(notifyParams("1")); // 不應丟例外
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(orderService, never()).fulfillPaidOrder(any());
+        verify(paymentWebhooks).save(org.mockito.ArgumentMatchers.argThat(
+                (PaymentWebhook w) -> "ERROR".equals(w.getProcessingStatus())
+                        && w.getErrorMessage().contains("CANCELLED")));
+    }
+
+    // === simulatePaymentSuccess() ============================================
+
+    @Test
+    void 模擬付款成功走與真實付款相同的履約路徑() {
+        Order order = order("1000");
+        when(orders.findById(900)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(payment(order)));
+        when(paymentWebhooks.existsByProviderAndEventKey(any(), any())).thenReturn(false);
+        stubWebhookSaveReturnsArgument();
+
+        service.simulatePaymentSuccess(900);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        verify(orderService).fulfillPaidOrder(order);
+        verify(orderStatusHistories).save(org.mockito.ArgumentMatchers.argThat(
+                (tw.com.ispan.gym.entity.order.OrderStatusHistory h) -> "SIMULATE_PAYMENT".equals(h.getNote())));
+    }
+
+    @Test
+    void 模擬付款只能對未付款訂單使用() {
+        Order order = order("1000");
+        order.markPaid("Credit", "T1");
+        when(orders.findById(900)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.simulatePaymentSuccess(900))
+                .isInstanceOf(tw.com.ispan.gym.exception.BusinessRuleException.class);
+        verify(orderService, never()).fulfillPaidOrder(any());
+    }
+
+    @Test
+    void 開關關閉時模擬付款直接擋下() {
+        assertThatThrownBy(() -> simulateDisabledService.simulatePaymentSuccess(900))
+                .isInstanceOf(tw.com.ispan.gym.exception.BusinessRuleException.class);
+        verify(orders, never()).findById(any());
+    }
+
+    /** 借 notifyParams 之外的路徑重算簽章時，先把 CheckMacValue 拿掉 */
+    private Map<String, String> withoutMac(Map<String, String> params) {
+        Map<String, String> copy = new LinkedHashMap<>(params);
+        copy.remove("CheckMacValue");
+        return copy;
     }
 }

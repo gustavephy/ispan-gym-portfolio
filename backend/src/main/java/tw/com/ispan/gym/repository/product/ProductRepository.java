@@ -26,8 +26,12 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
 
     List<Product> findByStatus(ProductStatus status);
 
+    /**
+     * 商品多條件查詢。{@code status} 傳 null 代表不限狀態——後台商品管理要同時看得到
+     * 上架中與已下架的商品，前台則固定傳 ACTIVE。
+     */
     @Query("SELECT p FROM Product p " +
-           "WHERE p.status = :status " +
+           "WHERE (:status IS NULL OR p.status = :status) " +
            "AND (:categoryId IS NULL OR p.productCategory.productCategoryId = :categoryId) " +
            "AND (:keyword IS NULL OR p.name LIKE %:keyword% OR p.description LIKE %:keyword% OR p.brand LIKE %:keyword%) " +
            "AND (:brand IS NULL OR p.brand = :brand) " +

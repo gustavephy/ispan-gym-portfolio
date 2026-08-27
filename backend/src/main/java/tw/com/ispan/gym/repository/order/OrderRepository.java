@@ -20,6 +20,11 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     Optional<Order> findByIdAndMemberId(Integer id, Integer memberId);
     Optional<Order> findByMerchantTradeNo(String merchantTradeNo);
     Optional<Order> findByTradeNo(String tradeNo);
+    boolean existsByMerchantTradeNo(String merchantTradeNo);
+    boolean existsByOrderNo(String orderNo);
+
+    /** 逾時未付款訂單清理用：撈出指定狀態、且早於 cutoff 建立的訂單 */
+    List<Order> findAllByStatusAndCreatedAtBefore(OrderStatus status, LocalDateTime cutoff);
 
     /**
      * 報表區間總計。時間軸用 paidAt（營收歸屬付款日，非下單日）；

@@ -10,16 +10,20 @@ import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
 import tw.com.ispan.gym.dto.order.SubscriptionCheckoutRequest;
 import tw.com.ispan.gym.dto.order.SubscriptionCheckoutResponse;
 import tw.com.ispan.gym.entity.order.Order;
+import tw.com.ispan.gym.exception.OrderRateLimitedException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.order.OrderRepository;
+import tw.com.ispan.gym.security.InMemoryRateLimiter;
 import tw.com.ispan.gym.service.idempotency.IdempotencyService;
 import tw.com.ispan.gym.service.order.OrderQueryService;
 import tw.com.ispan.gym.service.order.OrderService;
 import tw.com.ispan.gym.service.payment.EcpayService;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import jakarta.validation.Valid;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -37,16 +41,31 @@ public class OrderController {
     private final OrderRepository orders;
     private final CurrentUserProvider currentUser;
     private final IdempotencyService idempotency;
+    private final InMemoryRateLimiter rateLimiter;
+    private final int rateLimitMax;
+    private final Duration rateLimitWindow;
 
     public OrderController(OrderQueryService orderQueryService, OrderService orderService,
             EcpayService ecpayService, OrderRepository orders, CurrentUserProvider currentUser,
-            IdempotencyService idempotency) {
+            IdempotencyService idempotency, InMemoryRateLimiter rateLimiter,
+            @Value("${app.order.rate-limit.max:10}") int rateLimitMax,
+            @Value("${app.order.rate-limit.window:PT1M}") Duration rateLimitWindow) {
         this.orderQueryService = orderQueryService;
         this.orderService = orderService;
         this.ecpayService = ecpayService;
         this.orders = orders;
         this.currentUser = currentUser;
         this.idempotency = idempotency;
+        this.rateLimiter = rateLimiter;
+        this.rateLimitMax = rateLimitMax;
+        this.rateLimitWindow = rateLimitWindow;
+    }
+
+    /** 建單前的節流：擋「不同內容的訂單短時間狂建」，重送由 Idempotency-Key 另外處理 */
+    private void guardOrderRateLimit(Integer memberId) {
+        if (!rateLimiter.tryAcquire("order-create:" + memberId, rateLimitMax, rateLimitWindow)) {
+            throw new OrderRateLimitedException();
+        }
     }
 
     @GetMapping
@@ -70,6 +89,7 @@ public class OrderController {
     public OrderDetailResponse checkoutFromCart(@Valid @RequestBody(required = false) CreateOrderRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         Integer memberId = currentUser.requireCurrentMemberId();
+        guardOrderRateLimit(memberId);
         Integer orderId = idempotency.resolve(memberId, "CHECKOUT_CART", idempotencyKey, request,
                 () -> orderService.createOrderFromCart(memberId, request).orderId());
         return orderQueryService.findMineById(memberId, orderId);
@@ -83,6 +103,7 @@ public class OrderController {
     public OrderDetailResponse checkoutDirect(@Valid @RequestBody DirectCheckoutRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         Integer memberId = currentUser.requireCurrentMemberId();
+        guardOrderRateLimit(memberId);
         Integer orderId = idempotency.resolve(memberId, "CHECKOUT_DIRECT_COURSE", idempotencyKey, request,
                 () -> orderService.createDirectOrder(memberId, request).orderId());
         return orderQueryService.findMineById(memberId, orderId);
@@ -96,6 +117,7 @@ public class OrderController {
     public OrderDetailResponse checkoutDirectSubscription(@Valid @RequestBody SubscriptionCheckoutRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         Integer memberId = currentUser.requireCurrentMemberId();
+        guardOrderRateLimit(memberId);
         Integer orderId = idempotency.resolve(memberId, "CHECKOUT_SUBSCRIPTION", idempotencyKey, request,
                 () -> orderService.createSubscriptionOrder(memberId, request).orderId());
         return orderQueryService.findMineById(memberId, orderId);
@@ -112,6 +134,7 @@ public class OrderController {
             @Valid @RequestBody SubscriptionCheckoutRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         Integer memberId = currentUser.requireCurrentMemberId();
+        guardOrderRateLimit(memberId);
         Integer orderId = idempotency.resolve(memberId, "CHECKOUT_SUBSCRIPTION_ECPAY", idempotencyKey, request,
                 () -> orderService.createSubscriptionOrder(memberId, request).orderId());
         OrderDetailResponse detail = orderQueryService.findMineById(memberId, orderId);

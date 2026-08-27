@@ -28,6 +28,7 @@ import tw.com.ispan.gym.entity.order.Order;
 import tw.com.ispan.gym.entity.order.OrderItem;
 import tw.com.ispan.gym.entity.order.OrderStatusHistory;
 import tw.com.ispan.gym.entity.product.Product;
+import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
@@ -101,6 +102,24 @@ class AdminOrderQueryServiceTest {
         assertThat(summary.status()).isEqualTo(OrderStatus.UNPAID);
     }
 
+    @Test
+    void 搜尋摘要帶出購買內容標題() {
+        Order productOrder = order();
+        Product product = new Product();
+        product.setProductId(10);
+        product.setName("測試商品");
+        product.setPrice(new BigDecimal("500"));
+        OrderItem item = new OrderItem(productOrder, product, "測試商品", new BigDecimal("500"), 1);
+        ReflectionTestUtils.setField(item, "id", 1);
+        when(orders.search(any(), any(), any(), any(), any(), any())).thenReturn(new PageImpl<>(List.of(productOrder)));
+        when(orderItems.findAllByOrderIdInOrderByOrderIdAscIdAsc(any())).thenReturn(List.of(item));
+
+        AdminOrderSummaryResponse summary =
+                service.search(null, null, null, null, null, PageRequest.of(0, 20)).getContent().get(0);
+
+        assertThat(summary.title()).isEqualTo("測試商品");
+    }
+
     // === findById() =============================================================
 
     @Test
@@ -130,6 +149,30 @@ class AdminOrderQueryServiceTest {
         assertThat(detail.items().get(0).productId()).isEqualTo(10);
         assertThat(detail.history()).hasSize(2);
         assertThat(detail.history().get(1).note()).isEqualTo("ECPAY_NOTIFY");
+    }
+
+    @Test
+    void 訂閱訂單詳情帶出方案快照與標題() {
+        Order order = order();
+        SubscriptionPlan plan = new SubscriptionPlan();
+        plan.setSubscriptionPlanId(3);
+        plan.setName("年費方案");
+        plan.setDescription("最超值方案");
+        plan.setPrice(new BigDecimal("15000"));
+        plan.setDurationDays(365);
+        order.setSubscriptionPlan(plan);
+
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(orderItems.findAllByOrderIdOrderByIdAsc(ORDER_ID)).thenReturn(List.of());
+        when(orderStatusHistories.findAllByOrderIdOrderByChangedAtAsc(ORDER_ID)).thenReturn(List.of());
+
+        AdminOrderDetailResponse detail = service.findById(ORDER_ID);
+
+        assertThat(detail.items()).isEmpty();
+        assertThat(detail.title()).isEqualTo("年費方案");
+        assertThat(detail.subscription()).isNotNull();
+        assertThat(detail.subscription().durationDays()).isEqualTo(365);
+        assertThat(detail.subscription().price()).isEqualByComparingTo("15000");
     }
 
     @Test

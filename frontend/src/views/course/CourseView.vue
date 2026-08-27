@@ -9,6 +9,7 @@ import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 import CourseCard from '@/components/CourseCard.vue'
 import CourseSearchBar from '@/components/CourseSearchBar.vue'
+import { getMySubscription } from '@/api/subscription.js'
 
 const coursesStore = useCoursesStore()
 const cartStore = useCartStore()
@@ -91,21 +92,18 @@ async function handleAddToCart(course) {
 // 體驗會籍狀態
 const hasActiveSubscription = ref(false)
 
-// 載入會籍狀態
 async function checkMemberSubscription() {
-  if (!authStore.isLoggedIn) {
-    hasActiveSubscription.value = false
-    return
-  }
+  // 非會員與未登入者由 getMySubscription 內部擋下並回 { data: null }，這裡不必再判斷身分
   try {
-    const api = (await import('@/api/axios.instance.js')).default
-    const res = await api.get('/api/me/subscription')
+    const res = await getMySubscription()
     if (res.data) {
       // 判斷是否為 ACTIVE 且未過期
       hasActiveSubscription.value = res.data.isActive === true || res.data.status === 'ACTIVE'
+    } else {
+      hasActiveSubscription.value = false
     }
   } catch (err) {
-    // 404 或其他錯誤代表沒有訂閱紀錄
+    // 沒有訂閱紀錄等情況維持 false，不阻斷整頁載入
     hasActiveSubscription.value = false
   }
 }

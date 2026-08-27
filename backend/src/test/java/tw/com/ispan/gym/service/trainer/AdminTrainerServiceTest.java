@@ -87,11 +87,11 @@ class AdminTrainerServiceTest {
 
     /** 全部無阻塞：四支 Repository 都回 0，供只想測試「放行」路徑的案例重用 */
     private void stubNoBlockers() {
-        when(coachSlots.countOpenByTrainerId(eq(TRAINER_ID), any())).thenReturn(0L);
-        when(coachBookings.countByTrainerIdAndStatus(TRAINER_ID, CoachBookingStatus.PENDING)).thenReturn(0L);
-        when(privateCourses.countByTrainerIdAndStatus(TRAINER_ID, CourseStatus.ACTIVE)).thenReturn(0L);
+        when(coachSlots.countOpenByTrainerId(eq(TRAINER_ID), any())).thenReturn(0);
+        when(coachBookings.countByTrainerIdAndStatus(TRAINER_ID, CoachBookingStatus.PENDING)).thenReturn(0);
+        when(privateCourses.countByTrainerIdAndStatus(TRAINER_ID, CourseStatus.ACTIVE)).thenReturn(0);
         when(groupClassSessions.countByTrainerIdAndStatusAndEndAtAfter(eq(TRAINER_ID),
-                eq(GroupClassSessionStatus.SCHEDULED), any())).thenReturn(0L);
+                eq(GroupClassSessionStatus.SCHEDULED), any())).thenReturn(0);
     }
 
     // === list() ==================================================================
@@ -318,12 +318,12 @@ class AdminTrainerServiceTest {
         Trainer trainer = trainerOf(employeeOf(EmployeeStatus.ACTIVE), TrainerStatus.ACTIVE);
         when(trainers.findById(TRAINER_ID)).thenReturn(Optional.of(trainer));
         stubNoBlockers();
-        when(coachBookings.countByTrainerIdAndStatus(TRAINER_ID, CoachBookingStatus.PENDING)).thenReturn(1L);
+        when(coachBookings.countByTrainerIdAndStatus(TRAINER_ID, CoachBookingStatus.PENDING)).thenReturn(1);
 
         TrainerSuspensionCheckResponse response = service.suspensionCheck(TRAINER_ID);
 
         assertThat(response.canSuspend()).isFalse();
-        assertThat(response.blockers().activeBookings()).isEqualTo(1L);
+        assertThat(response.blockers().activeBookings()).isEqualTo(1);
     }
 
     @Test
@@ -354,7 +354,7 @@ class AdminTrainerServiceTest {
         Trainer trainer = trainerOf(employeeOf(EmployeeStatus.ACTIVE), TrainerStatus.ACTIVE);
         when(trainers.findByIdForUpdate(TRAINER_ID)).thenReturn(Optional.of(trainer));
         stubNoBlockers();
-        when(coachSlots.countOpenByTrainerId(eq(TRAINER_ID), any())).thenReturn(2L);
+        when(coachSlots.countOpenByTrainerId(eq(TRAINER_ID), any())).thenReturn(2);
 
         assertThatThrownBy(() -> service.suspend(TRAINER_ID))
                 .isInstanceOf(BusinessRuleException.class)
@@ -367,7 +367,7 @@ class AdminTrainerServiceTest {
         Trainer trainer = trainerOf(employeeOf(EmployeeStatus.ACTIVE), TrainerStatus.ACTIVE);
         when(trainers.findByIdForUpdate(TRAINER_ID)).thenReturn(Optional.of(trainer));
         stubNoBlockers();
-        when(privateCourses.countByTrainerIdAndStatus(TRAINER_ID, CourseStatus.ACTIVE)).thenReturn(1L);
+        when(privateCourses.countByTrainerIdAndStatus(TRAINER_ID, CourseStatus.ACTIVE)).thenReturn(1);
 
         assertThatThrownBy(() -> service.suspend(TRAINER_ID))
                 .isInstanceOf(BusinessRuleException.class);
@@ -380,7 +380,7 @@ class AdminTrainerServiceTest {
         when(trainers.findByIdForUpdate(TRAINER_ID)).thenReturn(Optional.of(trainer));
         stubNoBlockers();
         when(groupClassSessions.countByTrainerIdAndStatusAndEndAtAfter(eq(TRAINER_ID),
-                eq(GroupClassSessionStatus.SCHEDULED), any())).thenReturn(3L);
+                eq(GroupClassSessionStatus.SCHEDULED), any())).thenReturn(3);
 
         assertThatThrownBy(() -> service.suspend(TRAINER_ID))
                 .isInstanceOf(BusinessRuleException.class);
