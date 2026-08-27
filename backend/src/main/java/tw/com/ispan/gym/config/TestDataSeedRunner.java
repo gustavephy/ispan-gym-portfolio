@@ -57,15 +57,6 @@ import tw.com.ispan.gym.repository.course.PrivateCourseRepository;
 import tw.com.ispan.gym.entity.coach.GroupClassSession;
 import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
-import tw.com.ispan.gym.service.coach.CoachSlotService;
-import tw.com.ispan.gym.service.coach.CoachBookingService;
-import tw.com.ispan.gym.service.coach.GroupClassService;
-import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
-import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
-import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
-import tw.com.ispan.gym.dto.coach.CreateGroupClassSessionRequest;
-import tw.com.ispan.gym.dto.coach.GroupClassSessionResponse;
-import tw.com.ispan.gym.dto.coach.GroupClassBookingResponse;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -130,9 +121,6 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
-    private final CoachSlotService coachSlotService;
-    private final CoachBookingService coachBookingService;
-    private final GroupClassService groupClassService;
 
     TestDataSeedRunner(
             AccountRepository accounts,
@@ -154,10 +142,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             CouponRepository couponRepository,
             JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
-            @Value("${app.seed.test-data-enabled:false}") boolean enabled,
-            CoachSlotService coachSlotService,
-            CoachBookingService coachBookingService,
-            GroupClassService groupClassService) {
+            @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
         this.accounts = accounts;
         this.members = members;
         this.employees = employees;
@@ -178,9 +163,6 @@ public class TestDataSeedRunner implements CommandLineRunner {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
-        this.coachSlotService = coachSlotService;
-        this.coachBookingService = coachBookingService;
-        this.groupClassService = groupClassService;
     }
 
     @Override
@@ -236,11 +218,6 @@ public class TestDataSeedRunner implements CommandLineRunner {
         // 這兩樣是「wendy 這個帳號的個人狀態」，語意不同。
         ensureActiveSubscription(wendyMember);
         ensureCourseQuota(wendyMember, seededTrainers.get(0));
-
-        // 「查看紀錄」視窗的展示資料：私教課預約歷史（額度/上課紀錄/堂數異動紀錄）、
-        // 團課報名歷史。都是獨立的展示情境，各自冪等，放在個人狀態就緒之後。
-        ensureCoachBookingHistorySamples(wendyMember);
-        ensureGroupClassBookingHistorySamples(wendyMember);
 
         // 樣本訂單（含上面的訂閱訂單）都是直接建單、沒走 OrderService，補上狀態時間軸
         ensureSampleOrderHistory();
@@ -454,148 +431,6 @@ public class TestDataSeedRunner implements CommandLineRunner {
         memberCourseQuotas.save(quota);
         log.info("已為測試會員 {} 播種私教堂數 10 堂（教練 id={}）",
                 member.getAccount().getEmail(), trainer.getId());
-    }
-
-    // ─────────────── 「查看紀錄」展示資料：私教課／團課的預約歷史 ───────────────
-
-    /** 用來辨識這批展示額度的專屬課程名稱；同時作為 {@link #ensureCoachBookingHistorySamples} 的冪等標記 */
-    private static final String SEED_COACH_HISTORY_COURSE_NAME = "SEED-COACH-預約歷史展示方案";
-
-    /**
-     * 幫 wendy 播種私教課預約歷史的完整展示情境（PENDING/COMPLETED/CANCELLED 各種樣態），
-     * 讓「查看紀錄」視窗的「上課紀錄」「堂數異動紀錄」表格有豐富內容可看。
-     *
-     * <p>刻意不沿用 run() 裡 seededTrainers 名單中的任何一位教練，另建一個專屬教練：
-     * {@link MemberCourseQuotaRepository#findEligibleQuota} 依到期日排序、NULL 到期日在
-     * SQL Server 的 ASC 排序裡永遠排最前面，只要 wendy 對名單裡某位教練已經有任何一筆
-     * 到期日為 NULL 的既有額度（本機手動測試很常見），createBooking() 就會優先扣那筆，
-     * 等於間接動了別人手動測試留下的資料。改成建立一個這批展示資料專屬、
-     * 保證乾淨的教練身分，徹底避開這個風險，也讓這個方法在任何人的資料庫上都能安全冪等執行。
-     *
-     * <p>全程只呼叫既有 Service 方法（createSlot/createBooking/checkIn/cancelBooking），
-     * 不用 Repository.save() 直接兜 CoachBooking——quota 的三個計數器、checkInKey、
-     * SessionDeductionLog 稽核紀錄都要靠真正的業務邏輯產生，才會跟真實資料一樣一致。
-     * CoachSlotService/CoachBookingService 未加 {@code @Validated}，
-     * 直接呼叫 Service（而非透過 Controller）不會觸發 DTO 上的 {@code @Future}，
-     * 所以下面可以放心用過去時間點做出「已完成」的展示紀錄。
-     */
-    private void ensureCoachBookingHistorySamples(Member wendyMember) {
-        boolean alreadySeeded = memberCourseQuotas.findByMemberId(wendyMember.getId()).stream()
-                .anyMatch(q -> SEED_COACH_HISTORY_COURSE_NAME.equals(q.getCourseName()));
-        if (alreadySeeded) {
-            return;
-        }
-
-        Account seedCoachAccount = ensureAccount("seed-coach-history@local.test", AccountType.EMPLOYEE);
-        Employee seedCoachEmployee = ensureEmployee(seedCoachAccount, "示範", "教練", "0955555555",
-                EmployeeRole.EMPLOYEE);
-        Trainer seedCoachTrainer = ensureTrainer(seedCoachEmployee, "展示用預約歷史教練");
-        Integer trainerAccountId = seedCoachAccount.getId();
-        Integer memberId = wendyMember.getId();
-
-        // 下面依序做 5 筆訂課，最深同時佔用（PENDING x2 + 尚未退還的取消單）約 4 堂，
-        // 給 6 堂留點餘裕，不必精算到剛好卡邊界。
-        MemberCourseQuota quota = new MemberCourseQuota();
-        quota.setMember(wendyMember);
-        quota.setTrainer(seedCoachTrainer);
-        quota.setCourseName(SEED_COACH_HISTORY_COURSE_NAME);
-        quota.setRemainingCourse(6);
-        quota.setReservedCourse(0);
-        quota.setUsedCourse(0);
-        quota.setExpiryDate(LocalDateTime.now().plusMonths(6));
-        memberCourseQuotas.save(quota);
-
-        LocalDateTime now = LocalDateTime.now();
-
-        // 待上課 x2
-        createSeedCoachBooking(trainerAccountId, memberId, now.plusDays(3));
-        createSeedCoachBooking(trainerAccountId, memberId, now.plusDays(7));
-
-        // 已完成：課程時段設在過去，訂課後立刻核銷
-        CoachBookingResponse completed = createSeedCoachBooking(trainerAccountId, memberId, now.minusDays(5));
-        coachBookingService.checkIn(trainerAccountId, completed.getId(), completed.getCheckInKey());
-
-        // 已取消－準時退還（>=72 小時前取消，不需要 acknowledgeConsumption）
-        CoachBookingResponse refunded = createSeedCoachBooking(trainerAccountId, memberId, now.plusDays(10));
-        coachBookingService.cancelBooking(memberId, refunded.getId(), false);
-
-        // 已取消－遲取消扣抵（<72 小時，需要 acknowledgeConsumption=true 否則會丟 ConfirmationRequiredException）
-        CoachBookingResponse consumed = createSeedCoachBooking(trainerAccountId, memberId, now.plusDays(1));
-        coachBookingService.cancelBooking(memberId, consumed.getId(), true);
-
-        log.info("已為測試會員 {} 播種私教課預約歷史展示資料（PENDING x2、COMPLETED x1、CANCELLED x2，"
-                + "展示用教練帳號 seed-coach-history@local.test）",
-                wendyMember.getAccount().getEmail());
-    }
-
-    /** 建一個 1 小時的私教課時段並立刻訂課，回傳訂課結果供呼叫端後續核銷／取消 */
-    private CoachBookingResponse createSeedCoachBooking(Integer trainerAccountId, Integer memberId,
-            LocalDateTime startAt) {
-        CreateCoachSlotRequest slotRequest = new CreateCoachSlotRequest();
-        slotRequest.setStartAt(startAt);
-        slotRequest.setEndAt(startAt.plusHours(1));
-        CoachSlotResponse slot = coachSlotService.createSlot(trainerAccountId, slotRequest);
-        return coachBookingService.createBooking(memberId, slot.getId());
-    }
-
-    /**
-     * 用來辨識這批展示場次的專屬人數上限；{@link GroupClassSession} 沒有自由文字欄位可放標記，
-     * 借用一個真實資料不會用到的 capacity 值（2 人的團課場次在正常營運下不合理）當冪等依據。
-     */
-    private static final int SEED_GROUP_CLASS_MARKER_CAPACITY = 2;
-
-    /**
-     * 幫 wendy 播種團課報名歷史的展示情境，讓「查看紀錄」視窗的「團課報名紀錄」表格有東西可看。
-     *
-     * <p>只做「已報名（未來場次）」與「已取消（取消當下場次仍未開始，取消後場次時間仍在未來）」
-     * 兩種情境：{@link GroupClassService#cancelBooking} 會擋已開始的場次，
-     * 若要湊出「過去式的已取消」勢必得繞過那個規則檢查，不划算也不是這次的目的。
-     *
-     * <p>重用既有的 GroupCourse（不新建課程主檔），只新建 2 個場次，全程走
-     * createSession/bookSession/cancelBooking，不直接寫 Repository。
-     */
-    private void ensureGroupClassBookingHistorySamples(Member wendyMember) {
-        GroupCourse course = groupCourses.findAll().stream()
-                .filter(c -> c.getStatus() == CourseStatus.ACTIVE)
-                .findFirst()
-                .orElse(null);
-        if (course == null) {
-            log.warn("找不到可用的團課主檔（無 ACTIVE 課程），略過團課報名歷史展示資料播種");
-            return;
-        }
-
-        boolean alreadySeeded = groupClassSessions.findAll().stream()
-                .anyMatch(s -> course.getId().equals(s.getCourse().getId())
-                        && Integer.valueOf(SEED_GROUP_CLASS_MARKER_CAPACITY).equals(s.getCapacity()));
-        if (alreadySeeded) {
-            return;
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime bookedStart = now.plusDays(2).withHour(20).withMinute(0).withSecond(0).withNano(0);
-        LocalDateTime cancelledStart = now.plusDays(4).withHour(20).withMinute(0).withSecond(0).withNano(0);
-
-        GroupClassSessionResponse bookedSession = createSeedGroupClassSession(course.getId(), bookedStart);
-        groupClassService.bookSession(wendyMember.getId(), bookedSession.getId());
-
-        GroupClassSessionResponse cancelledSession = createSeedGroupClassSession(course.getId(), cancelledStart);
-        GroupClassBookingResponse cancelledBooking = groupClassService.bookSession(wendyMember.getId(),
-                cancelledSession.getId());
-        groupClassService.cancelBooking(wendyMember.getId(), cancelledBooking.getId());
-
-        log.info("已為測試會員 {} 播種團課報名歷史展示資料（已報名 x1、已取消 x1，課程：{}）",
-                wendyMember.getAccount().getEmail(), course.getName());
-    }
-
-    /** 建一個 1 小時、瑜珈教室的展示用團課場次（capacity 固定為冪等標記值） */
-    private GroupClassSessionResponse createSeedGroupClassSession(Integer groupCourseId, LocalDateTime startAt) {
-        CreateGroupClassSessionRequest request = new CreateGroupClassSessionRequest();
-        request.setGroupCourseId(groupCourseId);
-        request.setRoomName(ClassRoom.YOGA_ROOM);
-        request.setStartAt(startAt);
-        request.setEndAt(startAt.plusHours(1));
-        request.setCapacity(SEED_GROUP_CLASS_MARKER_CAPACITY);
-        return groupClassService.createSession(request);
     }
 
     // ─────────────── 目錄資料：讓前端頁面有東西可顯示 ───────────────
