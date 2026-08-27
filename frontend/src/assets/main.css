@@ -315,6 +315,33 @@ button {
   }
 }
 
+/* 骨架載入：灰底 + 微光掃過，載入時取代整頁 spinner，減少內容跳版 */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-soft);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 使用者若在系統層關閉了動態效果，骨架就只留灰底、不掃光 */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+
 /* ===== 後台管理共用樣式規範 (Admin UI Spec) ===== */
 
 /* 1. 表格樣式 (Data Table) */

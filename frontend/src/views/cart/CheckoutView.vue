@@ -10,6 +10,8 @@ import { submitEcpayForm } from '@/utils/ecpay.js'
 import { useFeedback } from '@/composables/useFeedback.js'
 import { taiwanDistricts } from '@/data/taiwanDistricts.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import OrderSummaryCard from '@/components/OrderSummaryCard.vue'
 
 const cart = useCartStore()
 const { items, totalAmount, loading } = storeToRefs(cart)
@@ -63,7 +65,9 @@ const cityOptions = Object.keys(taiwanDistricts)
 const receiverCity = ref('')
 const receiverDistrict = ref('')
 const receiverAddressDetail = ref('')
-const districtOptions = computed(() => (receiverCity.value ? taiwanDistricts[receiverCity.value] ?? [] : []))
+const districtOptions = computed(() =>
+  receiverCity.value ? (taiwanDistricts[receiverCity.value] ?? []) : [],
+)
 
 // 換縣市時，原本選的行政區不一定屬於新縣市，直接清空避免留著兜不起來的組合
 watch(receiverCity, () => {
@@ -82,15 +86,21 @@ const memberProfile = ref(null)
 const receiverMode = ref('custom') // 'profile' | 'custom'
 
 const hasProfileAddress = computed(() =>
-  Boolean(memberProfile.value?.city || memberProfile.value?.district || memberProfile.value?.address),
+  Boolean(
+    memberProfile.value?.city || memberProfile.value?.district || memberProfile.value?.address,
+  ),
 )
 const profileName = computed(() =>
-  memberProfile.value ? `${memberProfile.value.firstName ?? ''}${memberProfile.value.lastName ?? ''}`.trim() : '',
+  memberProfile.value
+    ? `${memberProfile.value.firstName ?? ''}${memberProfile.value.lastName ?? ''}`.trim()
+    : '',
 )
 const profilePhone = computed(() => memberProfile.value?.phone ?? '')
 const profileAddress = computed(() =>
   memberProfile.value
-    ? [memberProfile.value.city, memberProfile.value.district, memberProfile.value.address].filter(Boolean).join('')
+    ? [memberProfile.value.city, memberProfile.value.district, memberProfile.value.address]
+        .filter(Boolean)
+        .join('')
     : '',
 )
 
@@ -139,12 +149,15 @@ async function handleCheckout() {
   submitting.value = true
   try {
     const receiver = effectiveReceiver.value
-    const orderRes = await checkoutFromCart({
-      couponCode: couponCode.value.trim() || null,
-      receiverName: receiver.name || null,
-      receiverPhone: receiver.phone || null,
-      receiverAddress: receiver.address || null,
-    }, idempotencyKey)
+    const orderRes = await checkoutFromCart(
+      {
+        couponCode: couponCode.value.trim() || null,
+        receiverName: receiver.name || null,
+        receiverPhone: receiver.phone || null,
+        receiverAddress: receiver.address || null,
+      },
+      idempotencyKey,
+    )
     const orderId = orderRes.data.orderId
     cart.reset() // 訂單一旦建立後端就已清空購物車，本地狀態在這裡就同步清空即可，不必等組表單成功
 
@@ -177,10 +190,16 @@ onMounted(() => {
 
     <div v-if="loading" class="spinner"></div>
 
-    <div v-else-if="items.length === 0" class="empty-state">
-      <p>購物車是空的，無法結帳</p>
-      <RouterLink to="/products" class="btn btn-accent">去逛逛</RouterLink>
-    </div>
+    <EmptyState
+      v-else-if="items.length === 0"
+      icon="cart"
+      title="購物車是空的，無法結帳"
+      description="先去挑幾件商品，再回來完成結帳"
+    >
+      <template #action>
+        <RouterLink to="/products" class="btn btn-accent">去逛逛</RouterLink>
+      </template>
+    </EmptyState>
 
     <div v-else class="checkout-layout">
       <div class="checkout-form">
@@ -189,7 +208,9 @@ onMounted(() => {
           <div v-for="item in items" :key="item.cartItemId" class="order-item-row">
             <span class="order-item-name">
               {{ item.productName }} × {{ item.quantity }}
-              <span v-if="item.available === false" class="item-flag danger">已下架 / 庫存不足</span>
+              <span v-if="item.available === false" class="item-flag danger"
+                >已下架 / 庫存不足</span
+              >
               <span v-else-if="item.priceChanged" class="item-flag warn">
                 價格已變動（加入時 NT$ {{ Number(item.priceWhenAdded).toLocaleString() }}）
               </span>
@@ -206,7 +227,12 @@ onMounted(() => {
         <div class="form-card">
           <h3>收件資訊<span class="req">＊</span></h3>
 
-          <div v-if="hasProfileAddress" class="receiver-mode-select" role="group" aria-label="收件資訊來源">
+          <div
+            v-if="hasProfileAddress"
+            class="receiver-mode-select"
+            role="group"
+            aria-label="收件資訊來源"
+          >
             <button
               type="button"
               class="receiver-mode-option"
@@ -246,7 +272,11 @@ onMounted(() => {
                   <option value="">縣市</option>
                   <option v-for="city in cityOptions" :key="city" :value="city">{{ city }}</option>
                 </select>
-                <select v-model="receiverDistrict" class="form-input region-select" :disabled="!receiverCity">
+                <select
+                  v-model="receiverDistrict"
+                  class="form-input region-select"
+                  :disabled="!receiverCity"
+                >
                   <option value="">行政區</option>
                   <option v-for="d in districtOptions" :key="d" :value="d">{{ d }}</option>
                 </select>
@@ -288,18 +318,13 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="checkout-summary">
-        <h3 class="summary-title">付款金額</h3>
-        <div class="summary-row">
-          <span>商品小計</span>
-          <span>NT$ {{ Number(totalAmount).toLocaleString() }}</span>
-        </div>
-        <div class="summary-divider"></div>
-        <div class="summary-row total-row">
-          <span>應付金額</span>
-          <span class="total-price">NT$ {{ Number(totalAmount).toLocaleString() }}</span>
-        </div>
-
+      <OrderSummaryCard
+        title="付款金額"
+        :rows="[{ label: '商品小計', value: Number(totalAmount) }]"
+        total-label="應付金額"
+        :total-value="Number(totalAmount)"
+        sticky
+      >
         <div class="payment-method-row">
           <span class="payment-method-label">付款方式</span>
           <span class="payment-method-value">{{ paymentMethodLabel }}（綠界 ECPay）</span>
@@ -309,11 +334,17 @@ onMounted(() => {
           class="btn btn-accent submit-btn"
           :disabled="submitting || hasUnavailableItem"
           @click="openConfirm"
-        >確認結帳並前往付款</button>
-      </div>
+        >
+          確認結帳並前往付款
+        </button>
+      </OrderSummaryCard>
     </div>
 
-    <div v-if="showConfirm" class="modal-overlay" @click.self="!submitting && (showConfirm = false)">
+    <div
+      v-if="showConfirm"
+      class="modal-overlay"
+      @click.self="!submitting && (showConfirm = false)"
+    >
       <div class="modal-content">
         <h3 class="modal-title">確認訂單內容</h3>
 
@@ -327,7 +358,9 @@ onMounted(() => {
 
         <div class="confirm-section">
           <h4 class="confirm-section-title">收件資訊</h4>
-          <p class="confirm-text">{{ effectiveReceiver.name || '未填寫' }}　{{ effectiveReceiver.phone }}</p>
+          <p class="confirm-text">
+            {{ effectiveReceiver.name || '未填寫' }}　{{ effectiveReceiver.phone }}
+          </p>
           <p class="confirm-text">{{ effectiveReceiver.address || '未填寫地址' }}</p>
         </div>
 
@@ -348,10 +381,20 @@ onMounted(() => {
         <p class="ecpay-note">{{ paymentMethodConfirmNote }}</p>
 
         <div class="modal-actions">
-          <button class="btn btn-accent" type="button" :disabled="submitting" @click="handleCheckout">
+          <button
+            class="btn btn-accent"
+            type="button"
+            :disabled="submitting"
+            @click="handleCheckout"
+          >
             {{ submitting ? '處理中...' : '確認送出，前往付款' }}
           </button>
-          <button class="btn btn-outline" type="button" :disabled="submitting" @click="showConfirm = false">
+          <button
+            class="btn btn-outline"
+            type="button"
+            :disabled="submitting"
+            @click="showConfirm = false"
+          >
             返回修改
           </button>
         </div>
@@ -369,15 +412,6 @@ onMounted(() => {
   gap: 1.5rem;
   align-items: start;
   margin-top: 2rem;
-}
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  color: var(--text-muted);
 }
 .checkout-form {
   display: flex;
@@ -408,14 +442,23 @@ onMounted(() => {
   font-weight: 600;
   vertical-align: middle;
 }
-.item-flag.danger { background: #fde2e2; color: #c92a2a; }
-.item-flag.warn { background: #fff3cd; color: #a06400; }
+.item-flag.danger {
+  background: #fde2e2;
+  color: #c92a2a;
+}
+.item-flag.warn {
+  background: #fff3cd;
+  color: #a06400;
+}
 .checkout-blocker {
   margin-top: 0.75rem;
   font-size: 0.82rem;
   color: #c92a2a;
 }
-.checkout-blocker a { color: var(--accent-hover); font-weight: 600; }
+.checkout-blocker a {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
 .order-item-row {
   display: flex;
   justify-content: space-between;
@@ -441,7 +484,9 @@ onMounted(() => {
   cursor: pointer;
   transition: var(--transition);
 }
-.receiver-mode-option:hover { border-color: var(--accent); }
+.receiver-mode-option:hover {
+  border-color: var(--accent);
+}
 .receiver-mode-option.active {
   border-color: var(--accent);
   background: var(--bg-soft);
@@ -451,7 +496,9 @@ onMounted(() => {
   font-weight: 700;
   color: var(--text-primary);
 }
-.receiver-mode-option.active .receiver-mode-label { color: var(--accent-hover); }
+.receiver-mode-option.active .receiver-mode-label {
+  color: var(--accent-hover);
+}
 .receiver-mode-preview {
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -468,7 +515,9 @@ onMounted(() => {
   gap: 0.35rem;
   margin-bottom: 0.9rem;
 }
-.field-group:last-child { margin-bottom: 0; }
+.field-group:last-child {
+  margin-bottom: 0;
+}
 .field-group label {
   font-size: 0.82rem;
   color: var(--text-secondary);
@@ -512,7 +561,9 @@ onMounted(() => {
   transition: var(--transition);
   font-family: inherit;
 }
-.payment-method-option:hover:not(:disabled) { border-color: var(--accent); }
+.payment-method-option:hover:not(:disabled) {
+  border-color: var(--accent);
+}
 .payment-method-option.active {
   border-color: var(--accent);
   background: var(--bg-soft);
@@ -526,7 +577,9 @@ onMounted(() => {
   font-weight: 700;
   color: var(--text-primary);
 }
-.payment-method-option.active .payment-method-option-label { color: var(--accent-hover); }
+.payment-method-option.active .payment-method-option-label {
+  color: var(--accent-hover);
+}
 .payment-method-option-desc {
   font-size: 0.76rem;
   color: var(--text-muted);
@@ -537,25 +590,11 @@ onMounted(() => {
   color: #a06400;
 }
 
-.checkout-summary {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-section);
-  padding: 1.5rem;
-  position: sticky;
-  top: 1.5rem;
+/* modal 內的應付金額沿用這個色與字級（摘要卡的合計已由 OrderSummaryCard 處理） */
+.total-price {
+  color: var(--accent-hover);
+  font-size: 1.2rem;
 }
-.summary-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 1.2rem; }
-.summary-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.9rem;
-  margin-bottom: 0.75rem;
-  color: var(--text-secondary);
-}
-.summary-divider { height: 1px; background: var(--border); margin: 1rem 0; }
-.total-row { color: var(--text-primary); font-weight: 700; font-size: 1rem; }
-.total-price { color: var(--accent-hover); font-size: 1.2rem; }
 .payment-method-row {
   display: flex;
   justify-content: space-between;
@@ -567,20 +606,35 @@ onMounted(() => {
   background: var(--bg-soft);
   font-size: 0.85rem;
 }
-.payment-method-label { color: var(--text-secondary); }
-.payment-method-value { font-weight: 700; color: var(--text-primary); }
+.payment-method-label {
+  color: var(--text-secondary);
+}
+.payment-method-value {
+  font-weight: 700;
+  color: var(--text-primary);
+}
 .ecpay-note {
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 0.75rem;
   text-align: center;
 }
-.submit-btn { width: 100%; margin-top: 0.75rem; padding: 0.8rem; }
+.submit-btn {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.8rem;
+}
 
 @media (max-width: 768px) {
-  .checkout-layout { grid-template-columns: 1fr; }
-  .receiver-mode-select { grid-template-columns: 1fr; }
-  .payment-method-select { grid-template-columns: 1fr; }
+  .checkout-layout {
+    grid-template-columns: 1fr;
+  }
+  .receiver-mode-select {
+    grid-template-columns: 1fr;
+  }
+  .payment-method-select {
+    grid-template-columns: 1fr;
+  }
 }
 
 .modal-overlay {
