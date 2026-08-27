@@ -51,7 +51,8 @@ class EcpayServiceTest {
     private static final String MERCHANT_ID = "2000132";
     private static final String HASH_KEY = "5294y06JbISpM5x9";
     private static final String HASH_IV = "v77hoKGq4kWxNNIS";
-    private static final String TRADE_NO = "GYM20260816120000001";
+    /** 建單產生的基底編號固定 18 碼（GYM + yyMMddHHmmss + 3 碼亂數），末端 2 碼留給重試後綴 */
+    private static final String TRADE_NO = "GYM260816120000001";
 
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderItemRepository orderItems = mock(OrderItemRepository.class);
@@ -113,9 +114,14 @@ class EcpayServiceTest {
 
     /** 綠界通知的最小 payload，簽章由自家演算法補上（等同綠界用同一組金鑰簽出來的結果） */
     private Map<String, String> notifyParams(String rtnCode) {
+        return notifyParams(rtnCode, TRADE_NO);
+    }
+
+    /** 指定 MerchantTradeNo 的版本；驗證換號後舊編號的遲到通知時要用 */
+    private Map<String, String> notifyParams(String rtnCode, String merchantTradeNo) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("MerchantID", MERCHANT_ID);
-        params.put("MerchantTradeNo", TRADE_NO);
+        params.put("MerchantTradeNo", merchantTradeNo);
         params.put("TradeNo", "2604161200001234");
         params.put("RtnCode", rtnCode);
         params.put("RtnMsg", "1".equals(rtnCode) ? "Succeeded" : "Failed");
@@ -146,7 +152,65 @@ class EcpayServiceTest {
         assertThat(form).containsKeys("MerchantID", "MerchantTradeNo", "MerchantTradeDate", "PaymentType",
                 "TotalAmount", "TradeDesc", "ItemName", "ReturnURL", "ChoosePayment", "CheckMacValue");
         assertThat(form.get("MerchantID")).isEqualTo(MERCHANT_ID);
-        assertThat(form.get("MerchantTradeNo")).isEqualTo(TRADE_NO);
+        // 每次結帳都會換號，第一次送出就帶 R1 後綴（見 Order#renewMerchantTradeNo）
+        assertThat(form.get("MerchantTradeNo")).isEqualTo(TRADE_NO + "R1");
+    }
+
+    /**
+     * 綠界要求 MerchantTradeNo 每次送出都是全新的，沿用同一組會被回「訂單編號重覆」。
+     * 使用者在付款頁中途離開後回來重新付款就是這個情境。
+     */
+    @Test
+    void 同一筆訂單重新結帳會換一組新的交易編號() {
+        Order order = order("1000");
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
+
+        String first = service.buildCheckoutForm(order).get("MerchantTradeNo");
+        String second = service.buildCheckoutForm(order).get("MerchantTradeNo");
+
+        assertThat(first).isEqualTo(TRADE_NO + "R1");
+        assertThat(second).isEqualTo(TRADE_NO + "R2");
+        assertThat(second).isNotEqualTo(first);
+        // 換號後仍在綠界的 20 碼上限內（超過會被回訊息代碼 1000500 而交易失敗），且保有共同前綴可回推訂單
+        assertThat(second.length()).isLessThanOrEqualTo(20);
+        assertThat(second).startsWith(TRADE_NO);
+    }
+
+    /**
+     * 舊格式（14 碼完整年份）的編號本身就用滿 20 碼，接後綴會超過綠界上限。
+     * 這些訂單在改版前就已建立且尚未付款，重新結帳時必須仍送得出去。
+     */
+    @Test
+    void 舊格式的滿版編號換號後仍在綠界長度上限內() {
+        Order order = order("1000");
+        ReflectionTestUtils.setField(order, "merchantTradeNo", "GYM20260816120000001"); // 20 碼
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
+
+        String renewed = service.buildCheckoutForm(order).get("MerchantTradeNo");
+
+        assertThat(renewed).hasSize(20);
+        assertThat(renewed).isEqualTo("GYM202608161200000R1");
+    }
+
+    /** 舊編號的遲到通知要能靠共同前綴回推到訂單，否則會變成「找不到對應的訂單」而靜默漏帳 */
+    @Test
+    void 換號後舊編號的付款通知仍能對應回原訂單() {
+        stubWebhookSaveReturnsArgument();
+        Order order = order("1000");
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
+        service.buildCheckoutForm(order); // R1
+        service.buildCheckoutForm(order); // R2，此時訂單上的編號已是 R2
+
+        // 通知帶的是使用者放棄的那一次（R1），精準比對查不到，只能靠前綴回推
+        String abandoned = TRADE_NO + "R1";
+        PaymentTransaction payment = payment(order);
+        when(orders.findByMerchantTradeNo(abandoned)).thenReturn(Optional.empty());
+        when(orders.findByMerchantTradeNoStartingWith(TRADE_NO)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByMerchantTradeNo(abandoned)).thenReturn(Optional.of(payment));
+
+        service.handleNotify(notifyParams("1", abandoned));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
     }
 
     @Test

@@ -146,6 +146,9 @@ class CheckoutMoneyPathTest {
         Order order = savedOrder.getValue();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.UNPAID);
         assertThat(order.getMerchantTradeNo()).startsWith("GYM");
+        // 綠界上限 20 碼，基底編號留 2 碼給重試後綴（見 Order#renewMerchantTradeNo）；
+        // 產生規則一旦變長，重新結帳時就會超過上限被綠界擋下（訊息代碼 1000500）
+        assertThat(order.getMerchantTradeNo()).hasSize(18);
         assertThat(product.getStock()).isEqualTo(8); // 10 - 2
         verify(cartItems).deleteAllByMemberId(MEMBER_ID);
 

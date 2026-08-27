@@ -44,8 +44,19 @@ public class Order extends TaipeiTimestampEntity {
      */
     @Column(name = "intended_payment_method", length = 20)
     private String intendedPaymentMethod;
-    @Column(name = "merchant_trade_no", nullable = false, length = 20)
+    /** 綠界對 MerchantTradeNo 的長度上限；超過會直接交易失敗（訊息代碼 1000500） */
+    public static final int MAX_MERCHANT_TRADE_NO_LENGTH = 20;
+
+    /**
+     * 送給綠界的交易編號，長度受 {@link #MAX_MERCHANT_TRADE_NO_LENGTH} 限制。
+     * 建單時的基底編號固定 18 碼，末端 2 碼留給重試後綴，見 {@link #renewMerchantTradeNo}。
+     */
+    @Column(name = "merchant_trade_no", nullable = false, length = MAX_MERCHANT_TRADE_NO_LENGTH)
     private String merchantTradeNo;
+
+    /** 已送出過幾次綠界結帳表單；每次換號時遞增，用來組出不重複的後綴 */
+    @Column(name = "checkout_attempt", nullable = false)
+    private Integer checkoutAttempt = 0;
     @Column(name = "trade_no", length = 20)
     private String tradeNo;
     @Enumerated(EnumType.STRING)
@@ -142,6 +153,49 @@ public class Order extends TaipeiTimestampEntity {
         if (status == OrderStatus.UNPAID) {
             this.intendedPaymentMethod = method;
         }
+    }
+
+    /**
+     * 換一組新的綠界交易編號。
+     *
+     * <p>綠界要求 MerchantTradeNo 每次送出結帳都必須是全新的，同一組送第二次會被回
+     * 「訂單編號重覆」。使用者在綠界付款頁中途離開後回來重新付款，就是同一筆訂單要
+     * 再次送出，因此每次組表單前都得換號（見 EcpayService#buildCheckoutForm）。
+     *
+     * <p>後綴而不是整組重產，是為了讓綠界對舊編號送來的遲到通知仍能經由
+     * {@code LIKE 原編號%} 追溯回這筆訂單，也方便一眼看出是第幾次嘗試。
+     *
+     * <p>只有 UNPAID 能換號：已付款的訂單換掉編號會讓既有的付款紀錄對不回來。
+     *
+     * <p>第一次送出（attempt 0 → 1）就會加上 {@code R1} 後綴，不保留無後綴的原編號——
+     * 這樣「原編號」永遠只是共同前綴、不會有任何一次結帳真的用它，避免第二次換號時
+     * 撞回第一次用過的編號。
+     *
+     * <p>後綴固定 2 碼（{@code R} + 36 進位的一碼），因為綠界的 20 碼上限只讓基底編號留下這麼多空間。
+     * 第 36 次以後會繞回 {@code R0}，實務上同一筆訂單不會重試這麼多次；真的繞回也只是撞到
+     * 很久以前那次已被放棄的編號，不影響當下這次結帳。
+     *
+     * <p>基底一律先裁到 18 碼再接後綴：舊格式（14 碼完整年份）產生的編號本身就用滿 20 碼，
+     * 直接接後綴會超過上限而寫不進資料庫。裁切只影響這些還沒付款的舊訂單，且裁掉的是亂數尾段，
+     * 換號後仍由唯一約束把關不重複。
+     */
+    public void renewMerchantTradeNo() {
+        if (status != OrderStatus.UNPAID) {
+            return;
+        }
+        this.checkoutAttempt = (checkoutAttempt == null ? 0 : checkoutAttempt) + 1;
+        String base = baseMerchantTradeNo();
+        if (base.length() > MAX_MERCHANT_TRADE_NO_LENGTH - 2) {
+            base = base.substring(0, MAX_MERCHANT_TRADE_NO_LENGTH - 2);
+        }
+        this.merchantTradeNo = base
+                + "R" + Character.toUpperCase(Character.forDigit(checkoutAttempt % 36, 36));
+    }
+
+    /** 去掉重試後綴的原始編號；綠界遲到通知要靠它追溯回這筆訂單 */
+    public String baseMerchantTradeNo() {
+        int marker = merchantTradeNo.lastIndexOf('R');
+        return marker < 0 ? merchantTradeNo : merchantTradeNo.substring(0, marker);
     }
 
     /** ECPay 通知付款成功：UNPAID → PAID。paymentStatus 維持既有值不動，理由同 {@link #cancel} */

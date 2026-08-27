@@ -23,6 +23,15 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
         Optional<Order> findByMerchantTradeNo(String merchantTradeNo);
 
+        /**
+         * 依重試後綴前的原始編號找訂單。
+         *
+         * <p>每次重新結帳都會換一組新的 MerchantTradeNo（見 Order#renewMerchantTradeNo），
+         * 綠界若對「使用者先前放棄的那一次」送來遲到通知，帶的會是舊編號，
+         * 直接用 findByMerchantTradeNo 會查不到。改以共同前綴回推同一筆訂單。
+         */
+        Optional<Order> findByMerchantTradeNoStartingWith(String prefix);
+
         Optional<Order> findByTradeNo(String tradeNo);
 
         boolean existsByMerchantTradeNo(String merchantTradeNo);

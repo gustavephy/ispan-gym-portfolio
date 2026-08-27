@@ -154,6 +154,9 @@ public class EcpayService {
         }
         // 記下使用者這次選的付款方式，供後台「模擬付款成功」判斷是否要擋下 ATM/CVS（見 simulatePaymentSuccess）
         order.recordIntendedPaymentMethod(choosePayment);
+        // 綠界的 MerchantTradeNo 每次送出結帳都必須是全新的，沿用同一組會被回「訂單編號重覆」。
+        // 使用者在付款頁中途離開後回來重新付款就是這個情形，因此每次組表單前都換一組新號。
+        order.renewMerchantTradeNo();
 
         String itemName = orderItems.findAllByOrderIdOrderByIdAsc(order.getOrderId()).stream()
                 .map(OrderItem::getProductNameAtBuy)
@@ -232,7 +235,7 @@ public class EcpayService {
             return;
         }
 
-        Order order = orders.findByMerchantTradeNo(merchantTradeNo).orElse(null);
+        Order order = resolveOrder(merchantTradeNo);
         if (order == null) {
             markWebhookError(webhook, "找不到對應的訂單：" + merchantTradeNo);
             log.warn("ECPay 通知找不到對應訂單：{}", merchantTradeNo);
@@ -306,7 +309,7 @@ public class EcpayService {
             return;
         }
 
-        Order order = orders.findByMerchantTradeNo(merchantTradeNo).orElse(null);
+        Order order = resolveOrder(merchantTradeNo);
         if (order == null) {
             markWebhookError(webhook, "找不到對應的訂單：" + merchantTradeNo);
             log.warn("ECPay 取號通知找不到對應訂單：{}", merchantTradeNo);
@@ -328,6 +331,25 @@ public class EcpayService {
 
         webhook.setProcessingStatus("PROCESSED");
         webhook.setProcessedAt(LocalDateTime.now(TAIPEI));
+    }
+
+    /**
+     * 由通知帶回的 MerchantTradeNo 找出訂單。
+     *
+     * <p>先精準比對；查不到再去掉重試後綴用前綴找一次——使用者中途放棄付款後重新結帳會換號
+     * （見 {@link Order#renewMerchantTradeNo}），綠界對舊編號送來的遲到通知只能靠前綴回推。
+     * 前綴本身是建單時產生、有唯一約束把關的 20 碼編號，不會誤中其他訂單。
+     */
+    private Order resolveOrder(String merchantTradeNo) {
+        Order exact = orders.findByMerchantTradeNo(merchantTradeNo).orElse(null);
+        if (exact != null) {
+            return exact;
+        }
+        int marker = merchantTradeNo.lastIndexOf('R');
+        if (marker < 0) {
+            return null;
+        }
+        return orders.findByMerchantTradeNoStartingWith(merchantTradeNo.substring(0, marker)).orElse(null);
     }
 
     /** 綠界的 ExpireDate 格式跟 MerchantTradeDate 相同（yyyy/MM/dd HH:mm:ss），解析失敗就不顯示期限，不擋主流程 */
