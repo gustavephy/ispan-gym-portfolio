@@ -14,13 +14,18 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+
 import jakarta.validation.Valid;
+import tw.com.ispan.gym.dto.coach.AdminCoachSlotResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.trainer.AdminTrainerResponse;
 import tw.com.ispan.gym.dto.trainer.AdminTrainerStatusUpdateRequest;
 import tw.com.ispan.gym.dto.trainer.AdminTrainerSummaryResponse;
 import tw.com.ispan.gym.dto.trainer.AdminTrainerUpdateRequest;
 import tw.com.ispan.gym.dto.trainer.TrainerSuspensionCheckResponse;
 import tw.com.ispan.gym.enums.trainer.TrainerStatus;
+import tw.com.ispan.gym.service.coach.CoachSlotService;
 import tw.com.ispan.gym.service.trainer.AdminTrainerService;
 
 /**
@@ -37,9 +42,11 @@ import tw.com.ispan.gym.service.trainer.AdminTrainerService;
 public class AdminTrainerController {
 
     private final AdminTrainerService adminTrainerService;
+    private final CoachSlotService coachSlotService;
 
-    public AdminTrainerController(AdminTrainerService adminTrainerService) {
+    public AdminTrainerController(AdminTrainerService adminTrainerService, CoachSlotService coachSlotService) {
         this.adminTrainerService = adminTrainerService;
+        this.coachSlotService = coachSlotService;
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -79,6 +86,23 @@ public class AdminTrainerController {
     @GetMapping("/{trainerId}/suspension-check")
     public TrainerSuspensionCheckResponse suspensionCheck(@PathVariable Integer trainerId) {
         return adminTrainerService.suspensionCheck(trainerId);
+    }
+
+    /**
+     * 查詢指定教練的排課情況（唯讀），供管理端「教練排課查詢」頁面使用。
+     * status／dateFrom／dateTo 篩選語意與教練自助端 {@code /api/trainer/schedules} 相同，
+     * 見 {@link CoachSlotService#getSlotsForAdmin} 的說明。
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{trainerId}/coach-slots")
+    public ResponseEntity<PageResponse<AdminCoachSlotResponse>> getCoachSlots(
+            @PathVariable Integer trainerId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo) {
+        return ResponseEntity.ok(coachSlotService.getSlotsForAdmin(trainerId, page, size, status, dateFrom, dateTo));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

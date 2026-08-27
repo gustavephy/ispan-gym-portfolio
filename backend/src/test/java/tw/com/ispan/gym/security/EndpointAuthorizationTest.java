@@ -735,6 +735,14 @@ class EndpointAuthorizationTest {
         expectAuthorized(get("/api/admin/members/1/coach-bookings"), adminToken());
     }
 
+    @Test
+    void 查詢指定會員堂數異動稽核紀錄僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/members/1/deduction-logs"));
+        expectForbidden(get("/api/admin/members/1/deduction-logs"), memberToken());
+        expectForbidden(get("/api/admin/members/1/deduction-logs"), employeeToken());
+        expectAuthorized(get("/api/admin/members/1/deduction-logs"), adminToken());
+    }
+
     // === MEMBER：私教課額度查詢 ================================================
     //
     // memberId 一律由 CurrentUserProvider 從 token 反查（controller 不收參數），
@@ -800,6 +808,14 @@ class EndpointAuthorizationTest {
 
         expectForbidden(get("/api/admin/trainers/1"), trainerToken());
         expectAuthorized(get("/api/admin/trainers/1"), adminToken());
+    }
+
+    @Test
+    void 教練排課查詢僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/trainers/1/coach-slots"));
+        expectForbidden(get("/api/admin/trainers/1/coach-slots"), employeeToken());
+        expectForbidden(get("/api/admin/trainers/1/coach-slots"), trainerToken());
+        expectAuthorized(get("/api/admin/trainers/1/coach-slots"), adminToken());
     }
 
     @Test

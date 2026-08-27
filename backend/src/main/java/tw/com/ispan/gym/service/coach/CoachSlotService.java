@@ -14,11 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
+import tw.com.ispan.gym.dto.coach.AdminCoachSlotResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.coach.CreateCoachSlotRequest;
 import tw.com.ispan.gym.dto.coach.UpdateCoachSlotRequest;
 import tw.com.ispan.gym.entity.coach.CoachBooking;
 import tw.com.ispan.gym.entity.coach.CoachSlot;
+import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
 import tw.com.ispan.gym.enums.coach.SlotStatus;
@@ -215,6 +217,43 @@ public class CoachSlotService {
                                         slot.getTrainer().getId(), slot.getStartAt(), slot.getEndAt(), slot.getStatus(),
                                         activeBooking != null ? activeBooking.getId() : null,
                                         activeBooking != null ? activeBooking.getStatus() : null);
+                }).toList();
+
+                return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
+        }
+
+        /**
+         * 管理端查詢「指定教練」的排課情況，唯讀。與 {@link #getMySlots} 的差異只在身分解析：
+         * 這裡的 trainerId 是管理員在畫面上指定的任意教練，不是「目前登入者自己」，
+         * 因此不經過 {@link #requireTrainerByAccount}，改直接查 trainerRepository 確認教練存在
+         * （查無此教練丟 404，比照 {@code AdminTrainerService} 既有寫法）。
+         * page／size／status／dateFrom／dateTo 的篩選語意與 {@link #getMySlots} 完全相同。
+         */
+        @Transactional(readOnly = true)
+        public PageResponse<AdminCoachSlotResponse> getSlotsForAdmin(Integer trainerId, int page, int size,
+                        String status, LocalDate dateFrom, LocalDate dateTo) {
+                if (!trainerRepository.existsById(trainerId)) {
+                        throw new ResourceNotFoundException("找不到此教練");
+                }
+
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+                Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "startAt"));
+
+                LocalDateTime startAtFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
+                LocalDateTime startAtTo = dateTo == null ? null : dateTo.plusDays(1).atStartOfDay();
+
+                Page<CoachSlot> result = coachSlotRepository.searchMySlots(trainerId, status, startAtFrom,
+                                startAtTo, pageable);
+                List<AdminCoachSlotResponse> items = result.getContent().stream().map(slot -> {
+                        CoachBooking activeBooking = findActiveBooking(slot.getId());
+                        Member bookingMember = activeBooking == null ? null : activeBooking.getMember();
+                        return new AdminCoachSlotResponse(slot.getId(),
+                                        slot.getTrainer().getId(), slot.getStartAt(), slot.getEndAt(), slot.getStatus(),
+                                        activeBooking != null ? activeBooking.getId() : null,
+                                        activeBooking != null ? activeBooking.getStatus() : null,
+                                        bookingMember != null ? bookingMember.getId() : null,
+                                        bookingMember != null ? bookingMember.getLastName() + bookingMember.getFirstName() : null);
                 }).toList();
 
                 return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());

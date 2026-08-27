@@ -378,4 +378,26 @@ class AdminMemberMethodSecurityTest {
 
         Mockito.verify(coachBookingService).getMyBookings(1, 0, 10, null, null, null);
     }
+
+    // === GET /api/admin/members/{memberId}/deduction-logs ===========================
+
+    @Test
+    void 會員堂數異動稽核紀錄查詢_一般員工被方法層級擋下且Service未被呼叫() throws Exception {
+        mockMvc.perform(get("/api/admin/members/1/deduction-logs")
+                        .header("Authorization", "Bearer " + employeeToken()))
+                .andExpect(status().isForbidden());
+
+        Mockito.verify(coachBookingService, Mockito.never())
+                .getMyDeductionLogs(Mockito.any(), Mockito.anyInt(), Mockito.anyInt(), Mockito.any(), Mockito.any(),
+                        Mockito.any());
+    }
+
+    @Test
+    void 會員堂數異動稽核紀錄查詢_管理者通過方法層級且Service被呼叫() throws Exception {
+        mockMvc.perform(get("/api/admin/members/1/deduction-logs")
+                        .header("Authorization", "Bearer " + adminToken()))
+                .andExpect(status().isOk());
+
+        Mockito.verify(coachBookingService).getMyDeductionLogs(1, 0, 10, null, null, null);
+    }
 }

@@ -10,6 +10,7 @@ import {
 import { getMemberQuotas } from '@/api/memberCourseQuota.js'
 import { getMemberGroupClassBookings } from '@/api/adminGroupClassBooking.js'
 import { getMemberCoachBookings } from '@/api/adminCoachBooking.js'
+import { getMemberDeductionLogs } from '@/api/adminSessionDeductionLog.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import { useFeedback } from '@/composables/useFeedback.js'
@@ -46,6 +47,16 @@ const COACH_BOOKING_STATUS_MAP = {
   PENDING: { label: '待上課', className: 'status-coach-pending' },
   COMPLETED: { label: '已完成', className: 'status-completed' },
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
+}
+
+// 堂數異動事件；對應後端 SessionDeductionLog.eventType，純文字對照，不用色塊——
+// 這是稽核明細不是狀態，不需要用顏色強調
+const DEDUCTION_EVENT_MAP = {
+  BOOK: '訂課',
+  CHECKIN: '核銷',
+  CANCEL_REFUND: '取消退還',
+  CANCEL_CONSUME: '取消扣抵',
+  CREDIT: '發放額度',
 }
 
 const members = ref([])
@@ -89,6 +100,13 @@ const coachBookingsSize = ref(10)
 const coachBookingsTotalItems = ref(0)
 const coachBookingsTotalPages = ref(0)
 
+const deductionLogs = ref([])
+const deductionLogsLoading = ref(false)
+const deductionLogsPage = ref(0)
+const deductionLogsSize = ref(10)
+const deductionLogsTotalItems = ref(0)
+const deductionLogsTotalPages = ref(0)
+
 const bookings = ref([])
 const bookingsLoading = ref(false)
 const bookingsPage = ref(0)
@@ -114,6 +132,10 @@ function bookingStatusInfo(status) {
 
 function coachBookingStatusInfo(status) {
   return COACH_BOOKING_STATUS_MAP[status] ?? { label: status, className: '' }
+}
+
+function deductionEventLabel(eventType) {
+  return DEDUCTION_EVENT_MAP[eventType] ?? eventType
 }
 
 function formatDateTime(value) {
@@ -216,6 +238,7 @@ async function openView(member) {
   groupClassTabLoaded.value = false
   bookingsPage.value = 0
   coachBookingsPage.value = 0
+  deductionLogsPage.value = 0
   await loadActiveTab()
 }
 
@@ -229,7 +252,7 @@ function switchTab(tab) {
 async function loadActiveTab() {
   if (recordsTab.value === 'coach' && !coachTabLoaded.value) {
     coachTabLoaded.value = true
-    await Promise.all([fetchMemberQuotas(), fetchMemberCoachBookings()])
+    await Promise.all([fetchMemberQuotas(), fetchMemberCoachBookings(), fetchMemberDeductionLogs()])
   } else if (recordsTab.value === 'groupClass' && !groupClassTabLoaded.value) {
     groupClassTabLoaded.value = true
     await fetchMemberBookings()
@@ -283,6 +306,37 @@ function handleCoachBookingsSizeChange(newSize) {
   fetchMemberCoachBookings()
 }
 
+async function fetchMemberDeductionLogs() {
+  if (!viewing.value) return
+  deductionLogsLoading.value = true
+  try {
+    const { data } = await getMemberDeductionLogs(viewing.value.memberId, {
+      page: deductionLogsPage.value,
+      size: deductionLogsSize.value,
+    })
+    deductionLogs.value = data.items
+    deductionLogsTotalItems.value = data.totalItems
+    deductionLogsTotalPages.value = data.totalPages
+  } catch (e) {
+    // 跟額度查詢同一套原則：失敗只記錄，不影響面板其餘內容
+    console.error('查詢會員堂數異動紀錄失敗', e)
+    deductionLogs.value = []
+  } finally {
+    deductionLogsLoading.value = false
+  }
+}
+
+function handleDeductionLogsPageChange(newPage) {
+  deductionLogsPage.value = newPage
+  fetchMemberDeductionLogs()
+}
+
+function handleDeductionLogsSizeChange(newSize) {
+  deductionLogsSize.value = newSize
+  deductionLogsPage.value = 0
+  fetchMemberDeductionLogs()
+}
+
 async function fetchMemberBookings() {
   if (!viewing.value) return
   bookingsLoading.value = true
@@ -321,6 +375,10 @@ function closeView() {
   coachBookingsPage.value = 0
   coachBookingsTotalItems.value = 0
   coachBookingsTotalPages.value = 0
+  deductionLogs.value = []
+  deductionLogsPage.value = 0
+  deductionLogsTotalItems.value = 0
+  deductionLogsTotalPages.value = 0
   bookings.value = []
   bookingsPage.value = 0
   bookingsTotalItems.value = 0
@@ -684,6 +742,45 @@ onMounted(fetchMembers)
                 :total-pages="coachBookingsTotalPages"
                 @update:page="handleCoachBookingsPageChange"
                 @update:size="handleCoachBookingsSizeChange"
+              />
+            </template>
+          </section>
+
+          <section class="quota-section">
+            <h3>堂數異動紀錄</h3>
+            <div v-if="deductionLogsLoading" class="spinner"></div>
+            <p v-else-if="deductionLogs.length === 0" class="quota-empty">
+              此會員目前沒有任何堂數異動紀錄
+            </p>
+            <template v-else>
+              <table class="quota-table">
+                <thead>
+                  <tr>
+                    <th>時間</th>
+                    <th>事件</th>
+                    <th>課程</th>
+                    <th>操作教練</th>
+                    <th>異動後剩餘</th>
+                    <th>備註</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="l in deductionLogs" :key="l.id">
+                    <td>{{ formatDateTime(l.createdAt) }}</td>
+                    <td>{{ deductionEventLabel(l.eventType) }}</td>
+                    <td>{{ l.courseName }}</td>
+                    <td>{{ l.operatorTrainerName ?? '—' }}</td>
+                    <td>{{ l.afterRemaining }}</td>
+                    <td>{{ l.remark }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <Pagination
+                :page="deductionLogsPage"
+                :size="deductionLogsSize"
+                :total-pages="deductionLogsTotalPages"
+                @update:page="handleDeductionLogsPageChange"
+                @update:size="handleDeductionLogsSizeChange"
               />
             </template>
           </section>

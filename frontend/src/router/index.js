@@ -96,6 +96,11 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
+          path: 'admin/trainer-schedules',
+          component: () => import('@/views/admin/AdminTrainerScheduleView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
           path: 'admin/reports',
           component: () => import('@/views/admin/AdminReportView.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
