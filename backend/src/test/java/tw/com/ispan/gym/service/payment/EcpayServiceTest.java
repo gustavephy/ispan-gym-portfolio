@@ -83,7 +83,7 @@ class EcpayServiceTest {
         Order order = new Order(member, TRADE_NO, "ORD20260816120000001", new BigDecimal(total),
                 BigDecimal.ZERO, new BigDecimal(total), new BigDecimal(total), null, "王小明",
                 "0912345678", null, "buyer@example.com");
-        ReflectionTestUtils.setField(order, "id", 900);
+        ReflectionTestUtils.setField(order, "orderId", 900);
         return order;
     }
 

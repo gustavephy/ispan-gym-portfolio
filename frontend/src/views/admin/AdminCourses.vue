@@ -153,7 +153,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="c in groupCoursesList" :key="c.id">
+              <tr v-for="c in rawGroupCourses" :key="c.id">
                 <td>#{{ c.id }}</td>
                 <td>
                   <img :src="c.imageUrl ? formatImageUrl(c.imageUrl) : 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=400&auto=format&fit=crop&q=60'" class="product-thumb" alt="Course Image" />
@@ -190,7 +190,7 @@
                   </div>
                 </td>
               </tr>
-              <tr v-if="groupCoursesList.length === 0">
+              <tr v-if="rawGroupCourses.length === 0">
                 <td colspan="9" style="text-align: center; padding: 3rem; color: #94a3b8;">
                   查無任何團體課程項目。
                 </td>
@@ -465,6 +465,8 @@ const uploadingFile = ref(false)
 
 const gcCurrentPage = ref(1)
 const gcItemsPerPage = ref(10)
+const gcTotalItems = ref(0)
+const gcTotalPages = ref(1)
 
 const gcFilterParams = ref({
   keyword: '',
@@ -529,50 +531,10 @@ watch(currentTab, () => {
   }
 })
 
-// --- 團體課程過濾與計算屬性 ---
-const filteredGroupCourses = computed(() => {
-  let list = rawGroupCourses.value
-
-  // 1. 快速狀態篩選 (ALL, ACTIVE, INACTIVE)
-  if (gcActiveFilter.value !== 'ALL') {
-    list = list.filter(c => c.status === gcActiveFilter.value)
-  }
-
-  // 2. 關鍵字篩選 (課程名稱、指導教練姓名)
-  if (gcFilterParams.value.keyword.trim()) {
-    const kw = gcFilterParams.value.keyword.trim().toLowerCase()
-    list = list.filter(c =>
-      c.name?.toLowerCase().includes(kw) ||
-      c.trainer?.name?.toLowerCase().includes(kw) ||
-      c.trainer?.displayName?.toLowerCase().includes(kw)
-    )
-  }
-
-  // 3. 上架日期篩選
-  if (gcFilterParams.value.startDate) {
-    const sDate = new Date(gcFilterParams.value.startDate + 'T00:00:00')
-    list = list.filter(c => !c.createdAt || new Date(c.createdAt) >= sDate)
-  }
-  if (gcFilterParams.value.endDate) {
-    const eDate = new Date(gcFilterParams.value.endDate + 'T23:59:59')
-    list = list.filter(c => !c.createdAt || new Date(c.createdAt) <= eDate)
-  }
-
-  return list
-})
-
-const gcTotalItems = computed(() => filteredGroupCourses.value.length)
-const gcTotalPages = computed(() => Math.ceil(gcTotalItems.value / gcItemsPerPage.value) || 1)
-
-const groupCoursesList = computed(() => {
-  const start = (gcCurrentPage.value - 1) * gcItemsPerPage.value
-  const end = start + gcItemsPerPage.value
-  return filteredGroupCourses.value.slice(start, end)
-})
-
-// --- 團體課程過濾監聽 ---
-watch([gcActiveFilter, () => gcFilterParams.value.startDate, () => gcFilterParams.value.endDate], () => {
-  gcCurrentPage.value = 1
+// 團體課程後端已處理過濾，前端直接取得結果
+// --- 團體課程後端分頁監聽 ---
+watch([gcActiveFilter, gcCurrentPage, gcItemsPerPage], () => {
+  loadGroupCourses()
 })
 
 let gcSearchTimer = null
@@ -580,6 +542,7 @@ watch(() => gcFilterParams.value.keyword, () => {
   clearTimeout(gcSearchTimer)
   gcSearchTimer = setTimeout(() => {
     gcCurrentPage.value = 1
+    loadGroupCourses()
   }, 400)
 })
 
@@ -676,17 +639,24 @@ async function uploadFile(event, mode) {
   }
 }
 
-// --- 團體課程 API 串接 ---
+// --- 團體課程 API 串接（後端分頁） ---
 async function loadGroupCourses() {
   try {
-    const res = await api.get('/api/admin/group-courses', {
-      params: {
-        page: 0,
-        size: 1000
-      }
-    })
+    const params = {
+      page: gcCurrentPage.value - 1,   // 後端 0-indexed
+      size: gcItemsPerPage.value
+    }
+    if (gcFilterParams.value.keyword.trim()) {
+      params.search = gcFilterParams.value.keyword.trim()
+    }
+    if (gcActiveFilter.value !== 'ALL') {
+      params.status = gcActiveFilter.value
+    }
+    const res = await api.get('/api/admin/group-courses', { params })
     const data = res.data
-    rawGroupCourses.value = data.items || data.content || []
+    rawGroupCourses.value = data.items || []
+    gcTotalItems.value = data.totalItems ?? rawGroupCourses.value.length
+    gcTotalPages.value = data.totalPages ?? 1
   } catch (err) {
     console.error('Failed to load group courses:', err)
   }
@@ -800,8 +770,10 @@ async function activateGroupCourse(id) {
 // --- 私教課程 API 串接 ---
 async function loadPrivateCourses() {
   try {
-    const res = await api.get('/api/private-courses')
-    rawPrivateCourses.value = res.data || []
+    const res = await api.get('/api/admin/private-courses/paged', {
+      params: { page: 0, size: 1000 }
+    })
+    rawPrivateCourses.value = res.data?.items || []
   } catch (err) {
     console.error('Failed to load private courses:', err)
   }

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia';
 import api from '@/api/axios.instance.js'
 import { useCoursesStore } from '@/stores/courses';
@@ -37,6 +37,14 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    categories: {
+        type: Array,
+        default: null,
+    },
+    trainers: {
+        type: Array,
+        default: null,
+    },
     modelValue: {
         type: Object,
         default: () => ({}),
@@ -54,7 +62,19 @@ const typeOptions = [
 
 const coursesStore = useCoursesStore()
 const { categories: categoryOptions } = storeToRefs(coursesStore)
+
+const displayCategories = computed(() => {
+    if (props.categories) return props.categories
+    return categoryOptions.value
+})
 const trainerOptions = ref([])
+const displayTrainers = computed(() => {
+    const raw = props.trainers || trainerOptions.value || []
+    return raw.map(t => ({
+        id: t.id ?? t.trainerId,
+        name: t.name ?? t.displayName ?? (t.lastName + t.firstName)
+    }))
+})
 const local = ref({
     keyword: '',
     date: '',
@@ -135,7 +155,7 @@ onMounted(()=>{
             <label class="csb-label">課程種類</label>
             <select v-model="local.categoryId" class="csb-select" @change="emitSearch">
                 <option value="">全部種類</option>
-                <option v-for="c in categoryOptions" :key="c.id" :value="c.id">
+                <option v-for="c in displayCategories" :key="c.id" :value="c.id">
                     {{ c.name }}
                 </option>
             </select>
@@ -146,8 +166,8 @@ onMounted(()=>{
             <label class="csb-label">指導教練</label>
             <select v-model="local.trainerId" class="csb-select" @change="emitSearch">
                 <option value="">全部教練</option>
-                <option v-for="t in trainerOptions" :key="t.trainerId" :value="t.trainerId">
-                    {{ t.displayName }}
+                <option v-for="t in displayTrainers" :key="t.id" :value="t.id">
+                    {{ t.name }}
                 </option>
             </select>
         </div>

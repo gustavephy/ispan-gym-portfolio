@@ -178,7 +178,7 @@ public class OrderService {
         PrivateCourse course = courses.findById(request.privateCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到私教課：" + request.privateCourseId()));
         if (!CourseStatus.ACTIVE.equals(course.getStatus())) {
-            throw new DirectCheckoutNotAllowedException(course.getId());
+            throw new DirectCheckoutNotAllowedException(course.getPrivateCourseId());
         }
         requireActiveSubscription(memberId);
 
@@ -276,7 +276,7 @@ public class OrderService {
      */
     @Transactional
     public void fulfillPaidOrder(Order order) {
-        for (OrderItem item : orderItems.findAllByOrderIdOrderByIdAsc(order.getId())) {
+        for (OrderItem item : orderItems.findAllByOrderIdOrderByIdAsc(order.getOrderId())) {
             if (item.isCourseItem()) {
                 grantCourseQuota(order, item);
             }
@@ -365,7 +365,7 @@ public class OrderService {
 
     private void requestRefund(Order order, String reason) {
         order.assertRefundable();
-        PaymentTransaction payment = paymentTransactions.findByOrderId(order.getId())
+        PaymentTransaction payment = paymentTransactions.findByOrderId(order.getOrderId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到這筆訂單的付款紀錄"));
         // assertRefundable 只看訂單狀態（PAID），沒擋「同一筆訂單已經有退款申請在跑」——
         // 使用者重複按申請退款會疊出好幾筆 PENDING PaymentRefund，這裡補上防呆
@@ -413,7 +413,7 @@ public class OrderService {
 
         // 同步事件、同一交易：下游（如報表標記快照過時）與退款原子成敗
         if (order.getPaidAt() != null) {
-            events.publishEvent(new RefundCompletedEvent(order.getId(), order.getPaidAt().toLocalDate()));
+            events.publishEvent(new RefundCompletedEvent(order.getOrderId(), order.getPaidAt().toLocalDate()));
         }
     }
 
@@ -476,7 +476,7 @@ public class OrderService {
      * 兩者邏輯上互斥。只看 PENDING——已經完成或被判定多餘（CANCELLED）的退款不影響。
      */
     private void assertNoPendingRefund(Order order) {
-        if (paymentRefunds.existsByPaymentOrderIdAndStatus(order.getId(), "PENDING")) {
+        if (paymentRefunds.existsByPaymentOrderIdAndStatus(order.getOrderId(), "PENDING")) {
             throw new BusinessRuleException("這筆訂單有退款申請正在處理中，請先處理完退款再繼續出貨/完成");
         }
     }
@@ -484,7 +484,7 @@ public class OrderService {
     /** 後台待處理退款清單，供人工執行退款前查看 */
     public List<PendingRefundResponse> listPendingRefunds() {
         return paymentRefunds.findByStatusOrderByRequestedAtAsc("PENDING").stream()
-                .map(r -> new PendingRefundResponse(r.getId(), r.getPayment().getOrder().getId(),
+                .map(r -> new PendingRefundResponse(r.getId(), r.getPayment().getOrder().getOrderId(),
                         r.getPayment().getOrder().getMerchantTradeNo(), r.getRefundNo(), r.getAmount(),
                         r.getReason(), r.getRequestedAt()))
                 .toList();
@@ -498,7 +498,7 @@ public class OrderService {
      * 不是遺漏；真要嚴謹處理需要另外一段「確認收到退貨」的人工步驟，目前規模不需要。
      */
     private void restoreStock(Order order) {
-        List<OrderItem> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
+        List<OrderItem> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getOrderId()).stream()
                 .filter(item -> !item.isCourseItem())
                 .sorted(Comparator.comparing(item -> item.getProduct().getProductId()))
                 .toList();
@@ -526,7 +526,7 @@ public class OrderService {
         if (order.getSubscriptionPlan() == null) {
             return;
         }
-        subscriptions.findByOrderId(order.getId())
+        subscriptions.findByOrderId(order.getOrderId())
                 .ifPresent(subscription -> subscription.setStatus(SubscriptionStatus.CANCELLED));
     }
 
@@ -656,12 +656,12 @@ public class OrderService {
     }
 
     private OrderDetailResponse toDetailResponse(Order order) {
-        List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getId()).stream()
-                .sorted(Comparator.comparing(OrderItem::getId))
+        List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(order.getOrderId()).stream()
+                .sorted(Comparator.comparing(OrderItem::getOrderItemId))
                 .map(OrderItemResponse::from)
                 .toList();
         OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
-        return new OrderDetailResponse(order.getId(), order.getMerchantTradeNo(),
+        return new OrderDetailResponse(order.getOrderId(), order.getMerchantTradeNo(),
                 OrderDetailResponse.title(subscription, items), order.getTotalAmount(),
                 order.getStatus(), order.getCreatedAt(), items, subscription);
     }

@@ -24,7 +24,7 @@ public record AdminPaymentTransactionResponse(
         LocalDateTime createdAt) {
 
     public static AdminPaymentTransactionResponse from(PaymentTransaction t) {
-        return new AdminPaymentTransactionResponse(t.getId(), t.getOrder().getId(), t.getOrder().getOrderNo(),
+        return new AdminPaymentTransactionResponse(t.getId(), t.getOrder().getOrderId(), t.getOrder().getOrderNo(),
                 t.getMerchantTradeNo(), t.getTradeNo(), t.getProvider(), t.getPaymentMethod(), t.getAmount(),
                 t.getCurrency(), t.getStatus(), t.getRtnCode(), t.getRtnMsg(), t.getSimulatePaid(),
                 t.getPaidAt(), t.getCreatedAt());

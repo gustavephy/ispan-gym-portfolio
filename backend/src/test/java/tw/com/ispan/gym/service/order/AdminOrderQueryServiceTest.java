@@ -60,7 +60,7 @@ class AdminOrderQueryServiceTest {
         Order order = new Order(member, "GYM1", "ORD1", new BigDecimal("1000"), BigDecimal.ZERO,
                 new BigDecimal("1000"), new BigDecimal("1000"), null, "王小明", "0912345678", "地址",
                 "buyer@example.com");
-        ReflectionTestUtils.setField(order, "id", ORDER_ID);
+        ReflectionTestUtils.setField(order, "orderId", ORDER_ID);
         return order;
     }
 

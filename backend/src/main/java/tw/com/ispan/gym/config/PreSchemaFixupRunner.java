@@ -95,7 +95,19 @@ public class PreSchemaFixupRunner {
     //   - member_course_quota.order_item_id 可為 NULL，只清空這個欄位
     //   - inventory_log.ref_order_id 可為 NULL，同樣只清空欄位（目前沒有資料，防禦性處理）
     private void migrateOrderPaymentIdsToInt(JdbcTemplate jdbc) {
-        if (!tableExists(jdbc, "orders") || !columnIsBigint(jdbc, "orders", "id")) {
+        if (tableExists(jdbc, "order")) {
+            dropForeignKeysReferencing(jdbc, "order");
+            jdbc.execute("DROP TABLE [order]");
+            log.info("已移除舊的 order 表及其相關外鍵（解決 FK_orders_subscription_plan 重複衝突）");
+        }
+
+        if (tableExists(jdbc, "member_course_quota") && columnExists(jdbc, "member_course_quota", "id")) {
+            dropForeignKeysReferencing(jdbc, "member_course_quota");
+            jdbc.execute("DROP TABLE member_course_quota");
+            log.info("已移除舊 id 的 member_course_quota 表，由 ddl-auto 重建");
+        }
+
+        if (!tableExists(jdbc, "orders") || !columnExists(jdbc, "orders", "id")) {
             return;
         }
         jdbc.execute("DELETE FROM member_subscription WHERE order_id IS NOT NULL");
@@ -128,7 +140,14 @@ public class PreSchemaFixupRunner {
             dropForeignKeysReferencing(jdbc, table);
             jdbc.execute("DROP TABLE " + table);
         }
-        log.info("已移除訂單／付款／報表子表的舊 bigint id 表，int 新表由 ddl-auto 重建（本機測試資料，不遷移）");
+        log.info("已移除訂單／付款／報表子表的舊 id 表，新表由 ddl-auto 重建");
+    }
+
+    private boolean columnExists(JdbcTemplate jdbc, String table, String column) {
+        Integer found = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(?) AND name = ?",
+                Integer.class, table, column);
+        return found != null && found > 0;
     }
 
     private boolean tableExists(JdbcTemplate jdbc, String table) {
@@ -168,6 +187,7 @@ public class PreSchemaFixupRunner {
             log.info("已移除 {}.{} 上的外鍵 {}（ALTER COLUMN 前必須先拆）", table, column, row.get("name"));
         }
     }
+
 
     private void dropForeignKeysReferencing(JdbcTemplate jdbc, String table) {
         var fks = jdbc.queryForList("""

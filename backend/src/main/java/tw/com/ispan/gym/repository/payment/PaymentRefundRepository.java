@@ -14,7 +14,8 @@ public interface PaymentRefundRepository extends JpaRepository<PaymentRefund, In
     List<PaymentRefund> findByPaymentId(Integer paymentId);
     List<PaymentRefund> findByStatusOrderByRequestedAtAsc(String status);
     boolean existsByPaymentIdAndStatus(Integer paymentId, String status);
-    boolean existsByPaymentOrderIdAndStatus(Integer orderId, String status);
+    @Query("SELECT COUNT(r) > 0 FROM PaymentRefund r WHERE r.payment.order.orderId = :orderId AND r.status = :status")
+    boolean existsByPaymentOrderIdAndStatus(@Param("orderId") Integer orderId, @Param("status") String status);
 
     /**
      * 後台退款紀錄搜尋（分頁，全部狀態），條件皆選填。

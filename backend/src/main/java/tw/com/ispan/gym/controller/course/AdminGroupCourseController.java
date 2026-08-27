@@ -19,6 +19,7 @@ import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.course.GroupCourseRequest;
 import tw.com.ispan.gym.dto.course.GroupCourseResponse;
 import tw.com.ispan.gym.dto.course.UpdateGroupCourseRequest;
+import tw.com.ispan.gym.enums.course.CourseStatus;
 import tw.com.ispan.gym.service.course.GroupCourseService;
 
 /**
@@ -46,8 +47,9 @@ public class AdminGroupCourseController {
     public ResponseEntity<PageResponse<GroupCourseResponse>> getAllCourses(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) CourseStatus status,
             @RequestParam(required = false) String search) {
-        PageResponse<GroupCourseResponse> resp = groupCourseService.getAllCourses(page, size, search);
+        PageResponse<GroupCourseResponse> resp = groupCourseService.getAllCourses(page, size, status, search);
         return ResponseEntity.status(HttpStatus.OK).body(resp);
     }
 
