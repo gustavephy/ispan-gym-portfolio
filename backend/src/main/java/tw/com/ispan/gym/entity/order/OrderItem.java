@@ -13,7 +13,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 /**
  * 訂單明細——全系統唯一的雙 FK 多型點。
  *
- * <p>product_id 與 private_course_id 恰好一個非空，履約流程據此分流：
+ * <p>
+ * product_id 與 private_course_id 恰好一個非空，履約流程據此分流：
  * 商品扣庫存、課程發放堂數額度。互斥性由 DB CHECK 約束把關
  * （CK_oi_exactly_one_ref，見 SchemaFixupRunner），JPA 無法表達。
  */
@@ -23,8 +24,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 public class OrderItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id", nullable = false)
-    private Integer id;
+    @Column(name = "order_item_id", nullable = false)
+    private Integer orderItemId;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "order_id", nullable = false, foreignKey = @ForeignKey(name = "FK_oi_order"))
     private Order order;
@@ -48,7 +49,8 @@ public class OrderItem {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    protected OrderItem() {}
+    protected OrderItem() {
+    }
 
     /** 商品明細 */
     public OrderItem(Order order, Product product, String productNameAtBuy, BigDecimal priceAtBuy, Integer quantity) {
@@ -60,7 +62,8 @@ public class OrderItem {
     }
 
     /** 私教課明細 */
-    public OrderItem(Order order, PrivateCourse course, String courseNameAtBuy, BigDecimal priceAtBuy, Integer quantity) {
+    public OrderItem(Order order, PrivateCourse course, String courseNameAtBuy, BigDecimal priceAtBuy,
+            Integer quantity) {
         this.order = order;
         this.course = course;
         this.productNameAtBuy = courseNameAtBuy;
@@ -68,14 +71,36 @@ public class OrderItem {
         this.quantity = quantity;
     }
 
-    public Integer getId() { return id; }
-    public Order getOrder() { return order; }
-    public Product getProduct() { return product; }
-    public PrivateCourse getCourse() { return course; }
-    public String getProductNameAtBuy() { return productNameAtBuy; }
-    public BigDecimal getPriceAtBuy() { return priceAtBuy; }
-    public Integer getQuantity() { return quantity; }
+    public Integer getOrderItemId() {
+        return orderItemId;
+    }
+
+    public Order getOrder() {
+        return order;
+    }
+
+    public Product getProduct() {
+        return product;
+    }
+
+    public PrivateCourse getCourse() {
+        return course;
+    }
+
+    public String getProductNameAtBuy() {
+        return productNameAtBuy;
+    }
+
+    public BigDecimal getPriceAtBuy() {
+        return priceAtBuy;
+    }
+
+    public Integer getQuantity() {
+        return quantity;
+    }
 
     /** 本筆明細是否為課程（決定履約走發放額度而非扣庫存） */
-    public boolean isCourseItem() { return course != null; }
+    public boolean isCourseItem() {
+        return course != null;
+    }
 }

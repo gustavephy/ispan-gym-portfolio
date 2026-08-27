@@ -58,13 +58,16 @@ function writeCache(cache) {
 async function fetchSession(account) {
   const cache = readCache()
   if (cache[account.email]) {
-    // token 仍有效就直接用；過期或帳號被停用時後端會回 401，這時重新登入
+    // token 仍有效就直接用；過期或帳號被停用時後端會回 401，這時重新登入。
+    //
+    // 探測必須打「需要驗證」的端點：公開端點（如 /api/products）對無效 token 一樣回 200，
+    // 會讓快取裡的死 token 一路矇混過關，直到頁面實際載入才失敗。
     const ctx = await playwrightRequest.newContext()
-    const probe = await ctx.get(`${API}/api/products?page=0&size=1`, {
+    const probe = await ctx.get(`${API}/api/account/me`, {
       headers: { Authorization: `Bearer ${cache[account.email].accessToken}` },
     })
     await ctx.dispose()
-    if (probe.status() !== 401) return cache[account.email]
+    if (probe.ok()) return cache[account.email]
   }
 
   const ctx = await playwrightRequest.newContext()

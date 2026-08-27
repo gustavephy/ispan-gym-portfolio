@@ -65,7 +65,7 @@ class PrivateCourseServiceTest {
 
     private PrivateCourse course(CourseStatus status) {
         PrivateCourse course = new PrivateCourse();
-        course.setId(COURSE_ID);
+        course.setPrivateCourseId(COURSE_ID);
         course.setName("重量訓練體驗課");
         course.setTrainer(trainer());
         course.setStatus(status);
@@ -110,13 +110,13 @@ class PrivateCourseServiceTest {
         when(trainerService.lockAndAssertAvailableForNewBusiness(TRAINER_ID)).thenReturn(trainer);
         when(courses.save(any(PrivateCourse.class))).thenAnswer(inv -> {
             PrivateCourse c = inv.getArgument(0);
-            c.setId(COURSE_ID);
+            c.setPrivateCourseId(COURSE_ID);
             return c;
         });
 
         PrivateCourseResponse response = service.createCourse(request(), TRAINER_ID);
 
-        assertThat(response.id()).isEqualTo(COURSE_ID);
+        assertThat(response.privateCourseId()).isEqualTo(COURSE_ID);
         verify(trainerService).lockAndAssertAvailableForNewBusiness(TRAINER_ID);
     }
 

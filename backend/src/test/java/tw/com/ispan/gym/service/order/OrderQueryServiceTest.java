@@ -64,7 +64,7 @@ class OrderQueryServiceTest {
     private Order order(int id) {
         Order order = new Order(member(), "GYM" + id, "ORD" + id, new BigDecimal("1000"), BigDecimal.ZERO,
                 new BigDecimal("1000"), new BigDecimal("1000"), null, "王小明", "0912345678", null, "buyer@example.com");
-        ReflectionTestUtils.setField(order, "id", id);
+        ReflectionTestUtils.setField(order, "orderId", id);
         return order;
     }
 
@@ -81,7 +81,7 @@ class OrderQueryServiceTest {
         trainer.setFirstName("阿肌");
         trainer.setLastName("陳");
         PrivateCourse course = new PrivateCourse();
-        course.setId(7);
+        course.setPrivateCourseId(7);
         course.setName("一對一重訓入門（5堂）");
         course.setPrice(new BigDecimal("6500"));
         course.setSessionPerUnit(5);
@@ -103,13 +103,13 @@ class OrderQueryServiceTest {
 
     private OrderItem productItem(Order order, int itemId, Product product, int qty) {
         OrderItem item = new OrderItem(order, product, product.getName(), product.getPrice(), qty);
-        ReflectionTestUtils.setField(item, "id", itemId);
+        ReflectionTestUtils.setField(item, "orderItemId", itemId);
         return item;
     }
 
     private OrderItem courseItem(Order order, int itemId, PrivateCourse course, int qty) {
         OrderItem item = new OrderItem(order, course, course.getName(), course.getPrice(), qty);
-        ReflectionTestUtils.setField(item, "id", itemId);
+        ReflectionTestUtils.setField(item, "orderItemId", itemId);
         return item;
     }
 

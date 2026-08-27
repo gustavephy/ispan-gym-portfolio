@@ -47,7 +47,7 @@ public class PrivateCourse {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "private_course_id")
-	private Integer id;
+	private Integer privateCourseId;
 
 	@Column(nullable = false, length = 100, columnDefinition = "NVARCHAR(100)")
 	private String name;

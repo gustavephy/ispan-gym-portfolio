@@ -4,6 +4,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -34,12 +37,13 @@ public class AdminCouponController {
 
 	// 查詢所有優惠券(管理員)
 	@GetMapping
-	public ResponseEntity<List<CouponResponse>> getAllCoupons(@RequestParam(required = false) String keyword,
+	public ResponseEntity<Page<CouponResponse>> getAllCoupons(@RequestParam(required = false) String keyword,
 			@RequestParam(required = false) String status, @RequestParam(required = false) LocalDate startDate,
-			@RequestParam(required = false) LocalDate endDate) {
-		log.info("Request to get all coupons: keyword={}, status={}, startDate={}, endDate={}", keyword, status,
-				startDate, endDate);
-		return ResponseEntity.ok(couponService.getAllCoupons(keyword, status, startDate, endDate));
+			@RequestParam(required = false) LocalDate endDate,
+			@PageableDefault(size = 10, page = 0) Pageable pageable) {
+		log.info("Request to get all coupons: keyword={}, status={}, startDate={}, endDate={}, pageable={}", keyword, status,
+				startDate, endDate, pageable);
+		return ResponseEntity.ok(couponService.getAllCoupons(keyword, status, startDate, endDate, pageable));
 	}
 
 	// 取得優惠券統計數據(管理員)

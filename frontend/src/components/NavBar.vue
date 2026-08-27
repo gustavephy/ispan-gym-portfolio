@@ -1,5 +1,5 @@
 <script setup>
-  import { computed, nextTick, onMounted, ref, watch } from 'vue'
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import { RouterLink, useRoute, useRouter } from 'vue-router'
   import { useAuthStore } from '@/stores/auth.js'
   import { useCartStore } from '@/stores/cart.js'
@@ -31,6 +31,7 @@
         { to: '/subscription', label: '會籍方案' },
         { to: '/orders', label: '我的訂單', requires: 'MEMBER' },
         { to: '/member/courses', label: '我的課程', requires: 'MEMBER' },
+        { to: '/member/profile', label: '會員資料', requires: 'MEMBER' },
         { to: '/coupons', label: '優惠券', requires: 'MEMBER' },
         { to: '/health', label: 'AI健康管理', requires: 'MEMBER' },
       ],
@@ -163,27 +164,67 @@
     ),
   )
 
-  // roles 是疊加式清單（如 ["MEMBER","EMPLOYEE","ADMIN"]），全列出來很吵——
-  // 徽章只顯示化簡後的「對外身分」：ADMIN/TRAINER 蘊含 EMPLOYEE（基底角色）故不重複列；
-  // 有員工側身分時不再列「會員」。完整清單保留在 title 提示，授權判斷不受影響（store 未動）。
+  // 下拉選單切換的是既有 workspace，不修改 auth.roles。admin workspace 同時承接一般員工
+  // 與管理員功能，因此只有 ADMIN 時顯示「管理」，其餘 EMPLOYEE 顯示「員工」。
   const ROLE_LABELS = { MEMBER: '會員', EMPLOYEE: '員工', ADMIN: '管理員', TRAINER: '教練' }
-  const KNOWN_ROLES = Object.keys(ROLE_LABELS)
-  const roleLabels = computed(() => {
-    const roles = new Set(auth.roles)
-    const labels = []
-    if (roles.has('ADMIN')) labels.push('管理員')
-    if (roles.has('TRAINER')) labels.push('教練')
-    if (labels.length === 0 && roles.has('EMPLOYEE')) labels.push('員工')
-    if (labels.length === 0 && roles.has('MEMBER')) labels.push('會員')
-    // 未知角色照樣顯示，之後後端新增角色不會無聲消失
-    for (const role of roles) {
-      if (!KNOWN_ROLES.includes(role)) labels.push(role)
-    }
-    return labels
-  })
   const fullRoleList = computed(() => auth.roles.map((role) => ROLE_LABELS[role] ?? role).join('、'))
+  const workspaceOptions = computed(() =>
+    availableWorkspaces.value.map((workspace) => ({
+      key: workspace.key,
+      label: workspace.key === 'admin' ? (auth.isAdmin ? '管理' : '員工') : workspace.label,
+    })),
+  )
+  const currentWorkspaceLabel = computed(
+    () => workspaceOptions.value.find((workspace) => workspace.key === currentWorkspace.value?.key)?.label ?? '身分',
+  )
+
+  const identityMenuOpen = ref(false)
+  const accountMenuOpen = ref(false)
+  const identityDropdown = ref(null)
+  const accountDropdown = ref(null)
+
+  function closeMenus() {
+    identityMenuOpen.value = false
+    accountMenuOpen.value = false
+  }
+
+  function toggleIdentityMenu() {
+    if (workspaceOptions.value.length <= 1) return
+    identityMenuOpen.value = !identityMenuOpen.value
+    accountMenuOpen.value = false
+  }
+
+  function toggleAccountMenu() {
+    accountMenuOpen.value = !accountMenuOpen.value
+    identityMenuOpen.value = false
+  }
+
+  function selectWorkspace(key) {
+    activeKey.value = key
+    closeMenus()
+  }
+
+  function onDocumentPointerDown(event) {
+    if (identityDropdown.value?.contains(event.target) || accountDropdown.value?.contains(event.target)) return
+    closeMenus()
+  }
+
+  function onDocumentKeydown(event) {
+    if (event.key === 'Escape') closeMenus()
+  }
+
+  onMounted(() => {
+    document.addEventListener('pointerdown', onDocumentPointerDown)
+    document.addEventListener('keydown', onDocumentKeydown)
+  })
+
+  onBeforeUnmount(() => {
+    document.removeEventListener('pointerdown', onDocumentPointerDown)
+    document.removeEventListener('keydown', onDocumentKeydown)
+  })
 
   function onLogout() {
+    closeMenus()
     auth.logout()
     // 目前所有頁面皆可匿名瀏覽，登出後留在原頁即可；回首頁讓狀態變化更明顯
     router.push('/')
@@ -196,22 +237,6 @@
       <span class="brand-mark">威力</span>
       <span class="brand-sub">健身房管理系統</span>
     </RouterLink>
-
-    <!-- 兩個以上工作區才顯示切換器；只有會員身分的人看不到多餘的 UI -->
-    <div v-if="availableWorkspaces.length > 1" class="ws-switch" role="tablist" aria-label="工作區">
-      <button
-        v-for="ws in availableWorkspaces"
-        :key="ws.key"
-        type="button"
-        role="tab"
-        class="ws-tab"
-        :class="{ 'ws-tab--active': ws.key === currentWorkspace?.key }"
-        :aria-selected="ws.key === currentWorkspace?.key"
-        @click="activeKey = ws.key"
-      >
-        {{ ws.label }}
-      </button>
-    </div>
 
     <nav class="nav-links">
       <RouterLink
@@ -246,10 +271,62 @@
       <Transition name="auth" mode="out-in">
       <div v-if="auth.isLoggedIn" key="in" class="nav-auth__panel">
         <span class="nav-auth__email" :title="auth.email">{{ auth.email }}</span>
-        <ul class="nav-auth__roles" aria-label="目前身分" :title="`完整身分：${fullRoleList}`">
-          <li v-for="label in roleLabels" :key="label" class="nav-auth__role">{{ label }}</li>
-        </ul>
-        <button type="button" class="nav-auth__button" @click="onLogout">登出</button>
+        <div ref="identityDropdown" class="nav-auth__dropdown nav-auth__dropdown--identity">
+          <button
+            v-if="workspaceOptions.length > 1"
+            type="button"
+            class="nav-auth__role nav-auth__role--button"
+            aria-haspopup="menu"
+            :aria-expanded="identityMenuOpen"
+            :title="`完整身分：${fullRoleList}`"
+            @click="toggleIdentityMenu"
+          >
+            {{ currentWorkspaceLabel }}
+          </button>
+          <span v-else class="nav-auth__role" :title="`完整身分：${fullRoleList}`">
+            {{ currentWorkspaceLabel }}
+          </span>
+          <div v-if="identityMenuOpen" class="nav-auth__menu" role="menu" aria-label="切換身分">
+            <button
+              v-for="workspace in workspaceOptions"
+              :key="workspace.key"
+              type="button"
+              role="menuitemradio"
+              class="nav-auth__menu-item nav-auth__menu-item--identity"
+              :class="{ 'nav-auth__menu-item--active': workspace.key === currentWorkspace?.key }"
+              :aria-checked="workspace.key === currentWorkspace?.key"
+              @click="selectWorkspace(workspace.key)"
+            >
+              {{ workspace.label }}
+            </button>
+          </div>
+        </div>
+        <div ref="accountDropdown" class="nav-auth__dropdown nav-auth__dropdown--account">
+          <button
+            type="button"
+            class="nav-auth__button nav-auth__button--account"
+            :class="{ 'nav-link--active': isLinkActive('/account/security') }"
+            aria-haspopup="menu"
+            :aria-expanded="accountMenuOpen"
+            @click="toggleAccountMenu"
+          >
+            帳號
+          </button>
+          <div v-if="accountMenuOpen" class="nav-auth__menu" role="menu" aria-label="帳號功能">
+            <RouterLink
+              to="/account/security"
+              role="menuitem"
+              class="nav-auth__menu-item"
+              :class="{ 'nav-auth__menu-item--active': isLinkActive('/account/security') }"
+              @click="closeMenus"
+            >
+              帳號設定
+            </RouterLink>
+            <button type="button" role="menuitem" class="nav-auth__menu-item nav-auth__menu-item--logout" @click="onLogout">
+              登出
+            </button>
+          </div>
+        </div>
       </div>
       <div v-else key="out" class="nav-auth__panel">
         <RouterLink
@@ -283,6 +360,9 @@
     border-right: 2px solid #d5c2ab;
     box-shadow: 6px 0 22px rgba(60, 48, 43, 0.22);
     z-index: 100;
+    /* 側欄是 fixed 且上下撐滿，內容超過視窗高度時預設會被裁掉又無法捲動——
+       多重身分帳號的工作區連結較多，1280x720 這類矮視窗下底部的帳號區塊會完全點不到 */
+    overflow-y: auto;
   }
 
   .brand {
@@ -301,35 +381,6 @@
     font-size: 0.78rem;
     letter-spacing: 0.15em;
     color: var(--text-muted);
-  }
-
-  .ws-switch {
-    display: flex;
-    gap: 0.25rem;
-    padding: 0.25rem;
-    margin-bottom: 1rem;
-    border-radius: var(--radius-sm);
-    background: #e6d8c6;
-  }
-  .ws-tab {
-    flex: 1;
-    padding: 0.4rem 0.2rem;
-    border: none;
-    border-radius: calc(var(--radius-sm) - 2px);
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: var(--transition);
-  }
-  .ws-tab:hover {
-    color: var(--primary-dark);
-  }
-  .ws-tab--active {
-    background: #f2e8dc;
-    color: var(--primary-dark);
-    box-shadow: 0 1px 3px rgba(60, 48, 43, 0.15);
   }
 
   .nav-links {
@@ -424,22 +475,91 @@
     white-space: nowrap;
     text-align: center;
   }
-  .nav-auth__roles {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.3rem;
-  }
   .nav-auth__role {
+    display: block;
+    width: fit-content;
+    margin: 0 auto;
     padding: 0.1rem 0.55rem;
     border: 1px solid var(--accent);
     border-radius: 999px;
-    font-size: 0.72rem;
+    background: transparent;
+    /* 跟登入／註冊／帳號共用的 .nav-auth__button 字級對齊，三者不再各自一套大小 */
+    font-size: 0.82rem;
     font-weight: 600;
     color: var(--accent);
+  }
+  .nav-auth__role--button {
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .nav-auth__role--button:hover,
+  .nav-auth__role--button[aria-expanded='true'] {
+    background: rgba(176, 132, 79, 0.12);
+  }
+  .nav-auth__dropdown {
+    position: relative;
+  }
+  .nav-auth__dropdown--account,
+  .nav-auth__button--account {
+    width: 100%;
+  }
+  .nav-auth__menu {
+    position: absolute;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    bottom: calc(100% + 0.4rem);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    /* 寬度貼合內容——原本寫死 9rem，比「會員」「登出」這類兩三個字的項目寬了三倍以上 */
+    width: fit-content;
+    padding: 0.35rem;
+    border: 1px solid #d5c2ab;
+    border-radius: var(--radius-sm);
+    background: #f8f1e8;
+    box-shadow: 0 8px 24px rgba(60, 48, 43, 0.2);
+  }
+  .nav-auth__menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
+    min-height: 2.25rem;
+    padding: 0.4rem 0.55rem;
+    border: none;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-align: center;
+    justify-content: center;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .nav-auth__menu-item:hover,
+  .nav-auth__menu-item--active {
+    background: #e6d8c6;
+    color: var(--primary-dark);
+  }
+  .nav-auth__menu-item:hover {
+    transform: scale(1.08);
+  }
+  /* 拿掉勾勾符號，改用文字顏色本身標示目前選到哪一個——沿用原本勾勾的顏色。
+     :not(:hover) 讓滑鼠移過去時仍走上面 :hover 那條的 primary-dark，不會被這裡蓋掉 */
+  .nav-auth__menu-item--identity.nav-auth__menu-item--active:not(:hover) {
+    color: var(--accent);
+  }
+  .nav-auth__menu-item--logout {
+    color: #9b4338;
+  }
+  /* 放大只是 hover 的位移效果，登出本來的紅色文字不該被上面的 :hover 覆蓋掉 */
+  .nav-auth__menu-item--logout:hover {
+    color: #9b4338;
   }
   .nav-auth__button {
     padding: 0.5rem 0.9rem;
@@ -508,12 +628,10 @@
       margin-left: auto;
       flex-shrink: 0;
     }
-    /* 頂欄寬度有限：隱藏 email，保留較有資訊量的角色徽章與登出鈕 */
+    /* 頂欄寬度有限：隱藏 email，保留身分與帳號兩個精簡選單 */
     .nav-auth__email { display: none; }
-    .nav-auth__roles { flex-wrap: nowrap; }
     .nav-auth__role { white-space: nowrap; }
-    /* nav-auth__panel 桌面版是直向堆疊（側邊欄夠高），手機版橫向的 60px 頂欄放不下，
-       改橫向並排——同時涵蓋已登入（角色徽章＋登出）與訪客（登入＋註冊）兩種狀態 */
+    /* nav-auth__panel 桌面版是直向堆疊，手機版改成橫向並排。 */
     .nav-auth__panel {
       flex-direction: row;
       align-items: center;
@@ -523,6 +641,17 @@
       padding: 0.35rem 0.7rem;
       font-size: 0.82rem;
       white-space: nowrap;
+    }
+    .nav-auth__button--account {
+      width: auto;
+    }
+    .nav-auth__menu {
+      top: calc(100% + 0.4rem);
+      right: 0;
+      bottom: auto;
+      left: auto;
+      width: fit-content;
+      transform: none;
     }
   }
 </style>

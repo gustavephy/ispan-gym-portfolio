@@ -9,7 +9,7 @@ import tw.com.ispan.gym.entity.course.PrivateCourse;
 import tw.com.ispan.gym.enums.course.CourseStatus;
 
 public record PrivateCourseResponse(
-        Integer id,
+        Integer privateCourseId,
         String name,
         Integer maxCapacity,
         Integer sessionPerUnit,
@@ -23,8 +23,7 @@ public record PrivateCourseResponse(
         String courseCategoryName,
         TrainerDto trainer,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
-) {
+        LocalDateTime updatedAt) {
     public static PrivateCourseResponse from(PrivateCourse course) {
         if (course == null) {
             return null;
@@ -32,7 +31,7 @@ public record PrivateCourseResponse(
 
         var category = course.getCategory();
         return new PrivateCourseResponse(
-                course.getId(),
+                course.getPrivateCourseId(),
                 course.getName(),
                 course.getMaxCapacity(),
                 course.getSessionPerUnit(),
@@ -45,7 +44,6 @@ public record PrivateCourseResponse(
                 category != null ? category.getName() : null,
                 TrainerDto.from(course.getTrainer()),
                 course.getCreatedAt(),
-                course.getUpdatedAt()
-        );
+                course.getUpdatedAt());
     }
 }

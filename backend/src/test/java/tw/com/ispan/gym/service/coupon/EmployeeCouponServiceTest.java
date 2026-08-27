@@ -13,6 +13,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 
 import org.junit.jupiter.api.Test;
 
@@ -178,7 +180,7 @@ class EmployeeCouponServiceTest {
         unrelated.setName("夏季優惠");
         when(coupons.findAll()).thenReturn(List.of(byCode, byName, unrelated));
 
-        List<CouponResponse> result = service.getAllCoupons("spring", null, null, null);
+        List<CouponResponse> result = service.getAllCoupons("spring", null, null, null, PageRequest.of(0, 10)).getContent();
 
         assertThat(result).extracting(CouponResponse::getCouponId).containsExactly(1, 2);
     }
@@ -188,8 +190,8 @@ class EmployeeCouponServiceTest {
         when(coupons.findAll()).thenReturn(List.of(
                 coupon(1, "A", CouponStatus.ACTIVE), coupon(2, "B", CouponStatus.ACTIVE)));
 
-        assertThat(service.getAllCoupons(null, null, null, null)).hasSize(2);
-        assertThat(service.getAllCoupons("   ", null, null, null)).hasSize(2);
+        assertThat(service.getAllCoupons(null, null, null, null, PageRequest.of(0, 10)).getContent()).hasSize(2);
+        assertThat(service.getAllCoupons("   ", null, null, null, PageRequest.of(0, 10)).getContent()).hasSize(2);
     }
 
     @Test
@@ -200,7 +202,7 @@ class EmployeeCouponServiceTest {
         late.setStartDate(LocalDate.now().plusDays(10));
         when(coupons.findAll()).thenReturn(List.of(early, late));
 
-        List<CouponResponse> result = service.getAllCoupons(null, null, LocalDate.now(), null);
+        List<CouponResponse> result = service.getAllCoupons(null, null, LocalDate.now(), null, PageRequest.of(0, 10)).getContent();
 
         assertThat(result).extracting(CouponResponse::getCouponId).containsExactly(2);
     }
@@ -214,11 +216,11 @@ class EmployeeCouponServiceTest {
         expired.setEndDate(LocalDate.now().minusDays(1));
         when(coupons.findAll()).thenReturn(List.of(ongoing, upcoming, expired));
 
-        assertThat(service.getAllCoupons(null, "ONGOING", null, null))
+        assertThat(service.getAllCoupons(null, "ONGOING", null, null, PageRequest.of(0, 10)).getContent())
                 .extracting(CouponResponse::getCouponId).containsExactly(1);
-        assertThat(service.getAllCoupons(null, "upcoming", null, null))
+        assertThat(service.getAllCoupons(null, "upcoming", null, null, PageRequest.of(0, 10)).getContent())
                 .extracting(CouponResponse::getCouponId).containsExactly(2);
-        assertThat(service.getAllCoupons(null, "EXPIRED", null, null))
+        assertThat(service.getAllCoupons(null, "EXPIRED", null, null, PageRequest.of(0, 10)).getContent())
                 .extracting(CouponResponse::getCouponId).containsExactly(3);
     }
 
@@ -227,7 +229,7 @@ class EmployeeCouponServiceTest {
         when(coupons.findAll()).thenReturn(List.of(
                 coupon(1, "A", CouponStatus.ACTIVE), coupon(2, "B", CouponStatus.INACTIVE)));
 
-        assertThat(service.getAllCoupons(null, "NOT_A_STATUS", null, null)).hasSize(2);
+        assertThat(service.getAllCoupons(null, "NOT_A_STATUS", null, null, PageRequest.of(0, 10)).getContent()).hasSize(2);
     }
 
     // === getCouponStats() ====================================================

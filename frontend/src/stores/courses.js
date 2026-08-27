@@ -38,7 +38,7 @@ export const useCoursesStore = defineStore('courses', () => {
           ? groupCourses.value.content
           : [])
     return [
-      ...privates.map(c => ({ ...c, id: c.id || c.courseId, isPrivate: true })),
+      ...privates.map(c => ({ ...c, id: c.id || c.privateCourseId || c.courseId, isPrivate: true })),
       ...groups.map(c => ({ ...c, id: c.id || c.courseId || c.groupCourseId, isPrivate: false }))
     ]
   })
@@ -105,15 +105,14 @@ export const useCoursesStore = defineStore('courses', () => {
     selectedTrainerId.value = params.trainerId || null
     searchQuery.value = params.keyword || ''
 
-    if (privateCourses.value.length === 0 || groupCourses.value.length === 0) {
-      loading.value = true
-      try {
-        const [privateRes, groupRes] = await Promise.all([
-          getPrivateCoursesPublic(),
-          getGroupCoursesPublic()
-        ])
+    loading.value = true
+    try {
+      const [privateRes, groupRes] = await Promise.all([
+        getPrivateCoursesPublic(),
+        getGroupCoursesPublic()
+      ])
 
-        const rawGroup = groupRes.data
+      const rawGroup = groupRes.data
         privateCourses.value = Array.isArray(privateRes.data) ? privateRes.data : (privateRes.data?.content || [])
         // 團課走後端共用的 PageResponse，分頁清單放在 items（不是 Spring Page 的 content）；
         // content 保留當備援，避免之後有端點改回 Page 直接序列化
@@ -127,7 +126,6 @@ export const useCoursesStore = defineStore('courses', () => {
       } finally {
         loading.value = false
       }
-    }
   }
 
   // 統一前置驗證：依序檢查登入狀態與會員個人資料完整度
@@ -135,7 +133,7 @@ export const useCoursesStore = defineStore('courses', () => {
     // 1. 檢查是否登入
     if (!authStore.isLoggedIn) {
       showToast('請先登入會員以進行課程購買', 'info')
-      window.location.href = '/login?redirect=/products'
+      window.location.href = '/login?redirect=/courses'
       return false
     }
 

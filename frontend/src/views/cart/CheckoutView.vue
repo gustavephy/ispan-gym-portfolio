@@ -241,7 +241,7 @@ onMounted(() => {
           <span class="payment-method-label">付款方式</span>
           <span class="payment-method-value">信用卡（綠界 ECPay）</span>
         </div>
-        <p class="ecpay-note">目前僅支援信用卡付款，送出後將導向綠界測試付款頁輸入卡號完成付款</p>
+        <p class="ecpay-note">目前僅支援信用卡付款，送出後將導向綠界安全金流支付頁輸入卡號完成付款</p>
         <button
           class="btn btn-accent submit-btn"
           :disabled="submitting || hasUnavailableItem"
@@ -277,7 +277,7 @@ onMounted(() => {
           <span>應付金額</span>
           <span class="total-price">NT$ {{ Number(totalAmount).toLocaleString() }}</span>
         </div>
-        <p class="ecpay-note">確認無誤後將導向綠界測試付款頁，僅支援信用卡付款</p>
+        <p class="ecpay-note">確認無誤後將導向綠界安全金流支付頁，僅支援信用卡付款</p>
 
         <div class="modal-actions">
           <button class="btn btn-accent" type="button" :disabled="submitting" @click="handleCheckout">

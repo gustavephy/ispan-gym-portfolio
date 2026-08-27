@@ -46,16 +46,16 @@ public class AdminOrderQueryService {
         Page<Order> page = orders.search(status, memberId, from, to, likeKeyword, pageable);
         // 這一頁的訂單明細一次撈齊再依 order id 分組，算購買內容標題時不逐筆查
         Map<Integer, List<OrderItem>> itemsByOrder = orderItems.findAllByOrderIdInOrderByOrderIdAscIdAsc(
-                page.getContent().stream().map(Order::getId).toList()).stream()
-                .collect(Collectors.groupingBy(item -> item.getOrder().getId()));
-        return page.map(order -> summary(order, itemsByOrder.getOrDefault(order.getId(), List.of())));
+                page.getContent().stream().map(Order::getOrderId).toList()).stream()
+                .collect(Collectors.groupingBy(item -> item.getOrder().getOrderId()));
+        return page.map(order -> summary(order, itemsByOrder.getOrDefault(order.getOrderId(), List.of())));
     }
 
     public AdminOrderDetailResponse findById(Integer orderId) {
         Order order = orders.findById(orderId).orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
 
         List<OrderItemResponse> items = orderItems.findAllByOrderIdOrderByIdAsc(orderId).stream()
-                .sorted(Comparator.comparing(item -> item.getId()))
+                .sorted(Comparator.comparing(item -> item.getOrderItemId()))
                 .map(OrderItemResponse::from)
                 .toList();
 
@@ -67,7 +67,7 @@ public class AdminOrderQueryService {
 
         OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
 
-        return new AdminOrderDetailResponse(order.getId(), order.getOrderNo(), order.getMerchantTradeNo(),
+        return new AdminOrderDetailResponse(order.getOrderId(), order.getOrderNo(), order.getMerchantTradeNo(),
                 order.getTradeNo(), OrderDetailResponse.title(subscription, items), order.getMember().getId(),
                 memberName(order), order.getMember().getAccount().getEmail(),
                 order.getSubtotalAmount(), order.getDiscountAmount(), order.getTotalAmount(), order.getStatus(),
@@ -79,7 +79,7 @@ public class AdminOrderQueryService {
     private AdminOrderSummaryResponse summary(Order order, List<OrderItem> items) {
         OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
         String title = OrderDetailResponse.title(subscription, items.stream().map(OrderItemResponse::from).toList());
-        return new AdminOrderSummaryResponse(order.getId(), order.getOrderNo(), order.getMerchantTradeNo(), title,
+        return new AdminOrderSummaryResponse(order.getOrderId(), order.getOrderNo(), order.getMerchantTradeNo(), title,
                 order.getMember().getId(), memberName(order), order.getMember().getAccount().getEmail(),
                 order.getTotalAmount(), order.getStatus(), order.getPaymentMethod(), order.getCreatedAt(),
                 order.getPaidAt());

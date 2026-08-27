@@ -35,9 +35,9 @@ public class OrderQueryService {
         List<Order> mine = orders.findAllByMemberIdOrderByCreatedAtDesc(memberId);
         // 一次撈齊所有訂單的明細再依 order id 分組，避免逐筆查明細算標題的 N+1
         Map<Integer, List<OrderItem>> itemsByOrder = orderItems.findAllByOrderIdInOrderByOrderIdAscIdAsc(
-                mine.stream().map(Order::getId).toList()).stream()
-                .collect(Collectors.groupingBy(item -> item.getOrder().getId()));
-        return mine.stream().map(order -> summary(order, itemsByOrder.getOrDefault(order.getId(), List.of()))).toList();
+                mine.stream().map(Order::getOrderId).toList()).stream()
+                .collect(Collectors.groupingBy(item -> item.getOrder().getOrderId()));
+        return mine.stream().map(order -> summary(order, itemsByOrder.getOrDefault(order.getOrderId(), List.of()))).toList();
     }
 
     public OrderDetailResponse findMineById(Integer memberId, Integer orderId) {
@@ -47,7 +47,7 @@ public class OrderQueryService {
                 .map(OrderItemResponse::from)
                 .toList();
         OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
-        return new OrderDetailResponse(order.getId(), order.getMerchantTradeNo(),
+        return new OrderDetailResponse(order.getOrderId(), order.getMerchantTradeNo(),
                 OrderDetailResponse.title(subscription, items), order.getTotalAmount(),
                 order.getStatus(), order.getCreatedAt(), items, subscription);
     }
@@ -64,7 +64,7 @@ public class OrderQueryService {
     private OrderSummaryResponse summary(Order order, List<OrderItem> items) {
         OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
         String title = OrderDetailResponse.title(subscription, items.stream().map(OrderItemResponse::from).toList());
-        return new OrderSummaryResponse(order.getId(), order.getMerchantTradeNo(), title, order.getTotalAmount(),
+        return new OrderSummaryResponse(order.getOrderId(), order.getMerchantTradeNo(), title, order.getTotalAmount(),
                 order.getStatus(), order.getCreatedAt());
     }
 }

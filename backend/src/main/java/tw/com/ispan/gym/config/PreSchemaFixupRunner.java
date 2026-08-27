@@ -95,11 +95,38 @@ public class PreSchemaFixupRunner {
     //   - member_course_quota.order_item_id 可為 NULL，只清空這個欄位
     //   - inventory_log.ref_order_id 可為 NULL，同樣只清空欄位（目前沒有資料，防禦性處理）
     private void migrateOrderPaymentIdsToInt(JdbcTemplate jdbc) {
-        if (!tableExists(jdbc, "orders") || !columnIsBigint(jdbc, "orders", "id")) {
+        if (tableExists(jdbc, "order")) {
+            dropForeignKeysReferencing(jdbc, "order");
+            jdbc.execute("DROP TABLE [order]");
+            log.info("已移除舊的 order 表及其相關外鍵（解決 FK_orders_subscription_plan 重複衝突）");
+        }
+
+        if (tableExists(jdbc, "member_course_quota") && columnExists(jdbc, "member_course_quota", "id")) {
+            dropForeignKeysReferencing(jdbc, "member_course_quota");
+            jdbc.execute("DROP TABLE member_course_quota");
+            log.info("已移除舊 id 的 member_course_quota 表，由 ddl-auto 重建");
+        }
+
+        // password_reset_token 的主鍵同樣從 id 改名為 password_reset_token_id。ddl-auto=update
+        // 不會改名欄位，只會在既有 IDENTITY 欄位旁再加一個，SQL Server 不允許一表兩個
+        // IDENTITY，整個啟動會失敗。這張表只存有時效的重設密碼 token，砍掉不影響任何帳號。
+        if (tableExists(jdbc, "password_reset_token") && columnExists(jdbc, "password_reset_token", "id")) {
+            dropForeignKeysReferencing(jdbc, "password_reset_token");
+            jdbc.execute("DROP TABLE password_reset_token");
+            log.info("已移除舊 id 的 password_reset_token 表，由 ddl-auto 重建");
+        }
+
+        if (!tableExists(jdbc, "orders") || !columnExists(jdbc, "orders", "id")) {
             return;
         }
+        // member_course_quota 可能已在上面被整張砍掉（舊 id 欄位的情況），此時後面這些
+        // 針對它的清理與 ALTER 都要跳過——對不存在的表下語句會讓整個 context 起不來。
+        boolean quotaTableExists = tableExists(jdbc, "member_course_quota");
+
         jdbc.execute("DELETE FROM member_subscription WHERE order_id IS NOT NULL");
-        jdbc.execute("UPDATE member_course_quota SET order_item_id = NULL WHERE order_item_id IS NOT NULL");
+        if (quotaTableExists) {
+            jdbc.execute("UPDATE member_course_quota SET order_item_id = NULL WHERE order_item_id IS NOT NULL");
+        }
         jdbc.execute("UPDATE inventory_log SET ref_order_id = NULL WHERE ref_order_id IS NOT NULL");
 
         // 光清空孤兒資料不會改變欄位型別，這三個欄位本身也要從 bigint 改 int，
@@ -111,11 +138,15 @@ public class PreSchemaFixupRunner {
         // 拆掉後不必自己補回來——這三個欄位指向的 orders／order_item 等表待會就整張重建，
         // ddl-auto 會依 entity 的 @JoinColumn 重新建立外鍵。
         dropForeignKeysOnColumn(jdbc, "member_subscription", "order_id");
-        dropForeignKeysOnColumn(jdbc, "member_course_quota", "order_item_id");
+        if (quotaTableExists) {
+            dropForeignKeysOnColumn(jdbc, "member_course_quota", "order_item_id");
+        }
         dropForeignKeysOnColumn(jdbc, "inventory_log", "ref_order_id");
 
         jdbc.execute("ALTER TABLE member_subscription ALTER COLUMN order_id int NOT NULL");
-        jdbc.execute("ALTER TABLE member_course_quota ALTER COLUMN order_item_id int NULL");
+        if (quotaTableExists) {
+            jdbc.execute("ALTER TABLE member_course_quota ALTER COLUMN order_item_id int NULL");
+        }
         jdbc.execute("ALTER TABLE inventory_log ALTER COLUMN ref_order_id int NULL");
 
         for (String table : new String[] {
@@ -128,7 +159,14 @@ public class PreSchemaFixupRunner {
             dropForeignKeysReferencing(jdbc, table);
             jdbc.execute("DROP TABLE " + table);
         }
-        log.info("已移除訂單／付款／報表子表的舊 bigint id 表，int 新表由 ddl-auto 重建（本機測試資料，不遷移）");
+        log.info("已移除訂單／付款／報表子表的舊 id 表，新表由 ddl-auto 重建");
+    }
+
+    private boolean columnExists(JdbcTemplate jdbc, String table, String column) {
+        Integer found = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(?) AND name = ?",
+                Integer.class, table, column);
+        return found != null && found > 0;
     }
 
     private boolean tableExists(JdbcTemplate jdbc, String table) {
@@ -168,6 +206,7 @@ public class PreSchemaFixupRunner {
             log.info("已移除 {}.{} 上的外鍵 {}（ALTER COLUMN 前必須先拆）", table, column, row.get("name"));
         }
     }
+
 
     private void dropForeignKeysReferencing(JdbcTemplate jdbc, String table) {
         var fks = jdbc.queryForList("""

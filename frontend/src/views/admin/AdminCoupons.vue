@@ -130,7 +130,7 @@
       <!-- 控制列 -->
       <div class="list-control-header bg-none" style="margin: 1rem 1rem 1.5rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
-          <span class="total-count-text">共 {{ coupons.length }} 筆優惠券</span>
+          <span class="total-count-text">共 {{ totalElements }} 筆優惠券</span>
           <div class="page-size-selector">
             <label>顯示數量：</label>
             <select v-model.number="itemsPerPage" class="select-sm">
@@ -434,15 +434,13 @@ const currentPage = ref(1)
 // [響應式狀態] itemsPerPage (itemsperpage)
 // 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const itemsPerPage = ref(10)
+const totalElements = ref(0)
 // [計算屬性] totalPages (totalpages)
 // 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const totalPages = computed(() => Math.ceil(coupons.value.length / itemsPerPage.value) || 1)
+const totalPages = computed(() => Math.ceil(totalElements.value / itemsPerPage.value) || 1)
 // [計算屬性] paginatedCoupons (paginatedcoupons)
 // 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const paginatedCoupons = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value
-  return coupons.value.slice(start, start + itemsPerPage.value)
-})
+const paginatedCoupons = computed(() => coupons.value)
 // [計算屬性] visiblePages (visiblepages)
 // 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const visiblePages = computed(() => {
@@ -466,6 +464,10 @@ const visiblePages = computed(() => {
 watch(() => filterParams.value.status, () => {
   currentPage.value = 1
   handleSearch()
+})
+
+watch([currentPage, itemsPerPage], () => {
+  loadCoupons()
 })
 
 // [響應式狀態] couponForm (couponform)
@@ -507,14 +509,18 @@ async function loadStats() {
 // 為什麼要這麼做：向後端 API 請求最新數據，確保頁面載入或重新整理時，使用者能看到最即時且正確的資料。
 async function loadCoupons() {
   try {
-    const params = {}
+    const params = {
+      page: currentPage.value - 1,
+      size: itemsPerPage.value
+    }
     if (filterParams.value.keyword) params.keyword = filterParams.value.keyword
     if (filterParams.value.status) params.status = filterParams.value.status
     if (filterParams.value.startDate) params.startDate = filterParams.value.startDate
     if (filterParams.value.endDate) params.endDate = filterParams.value.endDate
 
     const res = await api.get('/api/admin/coupons', { params })
-    coupons.value = res.data || []
+    coupons.value = res.data?.content || []
+    totalElements.value = res.data?.totalElements || 0
   } catch (e) {
     console.error('Failed to load coupons', e)
   }

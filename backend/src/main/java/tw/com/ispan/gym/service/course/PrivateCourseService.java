@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.course.PrivateCourseRequest;
 import tw.com.ispan.gym.dto.course.PrivateCourseResponse;
 import tw.com.ispan.gym.dto.course.UpdatePrivateCourseRequest;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.course.CourseCategory;
 import tw.com.ispan.gym.entity.course.PrivateCourse;
 import tw.com.ispan.gym.entity.trainer.Trainer;
@@ -35,6 +36,20 @@ public class PrivateCourseService {
                 return courses.stream()
                                 .map(PrivateCourseResponse::from)
                                 .collect(Collectors.toList());
+        }
+
+        public PageResponse<PrivateCourseResponse> searchPrivateCoursesPaged(int page, int size, CourseStatus status, Integer categoryId, Integer trainerId, String search) {
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+
+                org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(safePage, safeSize, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+                org.springframework.data.domain.Page<PrivateCourse> result = privateCourseRepository.searchPrivateCourses(status, categoryId, trainerId, search, pageable);
+
+                List<PrivateCourseResponse> items = result.getContent().stream()
+                                .map(PrivateCourseResponse::from)
+                                .collect(Collectors.toList());
+
+                return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
         }
 
         // 取得教練名下的課程
@@ -69,7 +84,7 @@ public class PrivateCourseService {
                 PrivateCourse saved = privateCourseRepository.save(course);
                 log.info("Trainer (ID: {}) successfully created private course (ID: {}, name: {})",
                                 trainer.getId(),
-                                saved.getId(), saved.getName());
+                                saved.getPrivateCourseId(), saved.getName());
                 return PrivateCourseResponse.from(saved);
         }
 
@@ -90,7 +105,7 @@ public class PrivateCourseService {
                                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
                 if (!privateCourse.getTrainer().getId().equals(trainerId)) {
                         log.warn("Trainer (ID: {}) attempted to update unauthorized private course (ID: {})",
-                                        trainerId, privateCourse.getId());
+                                        trainerId, privateCourse.getPrivateCourseId());
                         throw new ForbiddenAccessException("您無權修改此課程");
                 }
                 applyUpdateRequest(privateCourse, request);
@@ -101,7 +116,7 @@ public class PrivateCourseService {
                 }
                 PrivateCourse saved = privateCourseRepository.save(privateCourse);
                 log.info("Trainer (ID: {}) successfully updated private course (ID: {})", trainerId,
-                                saved.getId());
+                                saved.getPrivateCourseId());
                 return PrivateCourseResponse.from(saved);
         }
 
@@ -112,13 +127,13 @@ public class PrivateCourseService {
                                 .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
                 if (!privateCourse.getTrainer().getId().equals(trainerId)) {
                         log.warn("Trainer (ID: {}) attempted to delete unauthorized private course (ID: {})",
-                                        trainerId, privateCourse.getId());
+                                        trainerId, privateCourse.getPrivateCourseId());
                         throw new ForbiddenAccessException("您無權刪除此課程");
                 }
                 privateCourse.setStatus(CourseStatus.INACTIVE);
                 privateCourseRepository.save(privateCourse);
                 log.info("Trainer (ID: {}) successfully deleted private course (ID: {})", trainerId,
-                                privateCourse.getId());
+                                privateCourse.getPrivateCourseId());
         }
 
         /**

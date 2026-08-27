@@ -31,6 +31,6 @@ public record TrainerDto(
                 trainer.getSpecialty(),
                 trainer.getBio(),
                 trainer.getExperience(),
-                null);
+                trainer.getProfileImageUrl());
     }
 }

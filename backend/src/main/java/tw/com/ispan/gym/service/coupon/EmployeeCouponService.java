@@ -2,7 +2,12 @@ package tw.com.ispan.gym.service.coupon;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import org.springframework.stereotype.Service;
 
@@ -75,12 +80,12 @@ public class EmployeeCouponService {
 		return CouponResponse.from(saved);
 	}
 
-	/** 管理員：查詢所有優惠券（帶關鍵字／狀態／起始日篩選） */
-	public List<CouponResponse> getAllCoupons(String keyword, String status, LocalDate startDate, LocalDate endDate) {
+	/** 管理員：查詢所有優惠券（帶關鍵字／狀態／起始日篩選，分頁） */
+	public Page<CouponResponse> getAllCoupons(String keyword, String status, LocalDate startDate, LocalDate endDate, Pageable pageable) {
 		List<Coupon> coupons = couponRepository.findAll();
 		LocalDate today = LocalDate.now();
 
-		return coupons.stream()
+		List<CouponResponse> filteredList = coupons.stream()
 				.filter(c -> {
 					if (keyword != null && !keyword.isBlank()) {
 						String kw = keyword.toLowerCase().trim();
@@ -107,6 +112,17 @@ public class EmployeeCouponService {
 				})
 				.map(CouponResponse::from)
 				.collect(Collectors.toList());
+
+		int total = filteredList.size();
+		int start = (int) pageable.getOffset();
+		int end = Math.min((start + pageable.getPageSize()), total);
+
+		List<CouponResponse> pageContent = new ArrayList<>();
+		if (start <= total) {
+			pageContent = filteredList.subList(start, end);
+		}
+
+		return new PageImpl<>(pageContent, pageable, total);
 	}
 
 	/** 取得優惠券統計數據 */

@@ -82,16 +82,16 @@ public class GroupCourseService {
      * （理由見 {@link tw.com.ispan.gym.repository.course.GroupCourseRepository#searchCourses}）。
      */
     @Transactional(readOnly = true)
-    public PageResponse<GroupCourseResponse> getAllCourses(int page, int size, String search) {
+    public PageResponse<GroupCourseResponse> getAllCourses(int page, int size, CourseStatus status, String search) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
 
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<GroupCourse> result = groupCourseRepository.searchCourses(search, pageable);
+        Page<GroupCourse> result = groupCourseRepository.searchCourses(status, search, pageable);
 
         List<GroupCourseResponse> items = result.getContent().stream()
-                .map(this::toResponse)
-                .toList();
+                 .map(this::toResponse)
+                 .toList();
 
         return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
     }
@@ -180,12 +180,12 @@ public class GroupCourseService {
      * size/page 安全防呆與排序邏輯同 {@link #getAllCourses}。
      */
     @Transactional(readOnly = true)
-    public PageResponse<GroupCourseResponse> getActiveCoursesPaged(int page, int size, String search) {
+    public PageResponse<GroupCourseResponse> getActiveCoursesPaged(int page, int size, Integer categoryId, Integer trainerId, String search) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
 
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<GroupCourse> result = groupCourseRepository.searchActiveCourses(CourseStatus.ACTIVE, search, pageable);
+        Page<GroupCourse> result = groupCourseRepository.searchActiveCourses(CourseStatus.ACTIVE, categoryId, trainerId, search, pageable);
 
         List<GroupCourseResponse> items = result.getContent().stream()
                 .map(this::toResponse)

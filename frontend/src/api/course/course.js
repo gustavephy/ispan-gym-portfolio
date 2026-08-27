@@ -8,3 +8,6 @@ export const getGroupCoursesPublic = (params) => api.get('/api/group-courses', {
 
 // 取得公開的私人教練課程列表 (方案購買展示用)
 export const getPrivateCoursesPublic = (params) => api.get('/api/private-courses', { params })
+
+// 分頁取得公開的私人教練課程列表
+export const getPrivateCoursesPublicPaged = (params) => api.get('/api/private-courses/paged', { params })

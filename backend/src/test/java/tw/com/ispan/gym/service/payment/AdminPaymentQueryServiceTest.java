@@ -38,7 +38,7 @@ class AdminPaymentQueryServiceTest {
     private PaymentTransaction transaction() {
         Order order = new Order(null, "GYM1", "ORD1", new BigDecimal("1000"), BigDecimal.ZERO,
                 new BigDecimal("1000"), new BigDecimal("1000"), null, "王小明", "0912345678", null, null);
-        ReflectionTestUtils.setField(order, "id", 900);
+        ReflectionTestUtils.setField(order, "orderId", 900);
         PaymentTransaction t = new PaymentTransaction(order, "ECPAY", "GYM1", new BigDecimal("1000"), "TWD");
         ReflectionTestUtils.setField(t, "id", 1);
         return t;

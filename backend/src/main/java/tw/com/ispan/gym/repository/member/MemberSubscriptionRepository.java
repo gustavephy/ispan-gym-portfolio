@@ -27,8 +27,8 @@ public interface MemberSubscriptionRepository extends JpaRepository<MemberSubscr
 	Optional<MemberSubscription> findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(Integer memberId,
 			LocalDateTime now, SubscriptionStatus status);
 
-	/** 退款時反查該筆訂閱訂單建立的那期訂閱，見 OrderService#completeRefund */
-	Optional<MemberSubscription> findByOrderId(Integer orderId);
+	@Query("SELECT ms FROM MemberSubscription ms WHERE ms.order.orderId = :orderId")
+	Optional<MemberSubscription> findByOrderId(@Param("orderId") Integer orderId);
 
 	/** 期間新生效訂閱數（報表用）；半開區間 [from, to)。訂閱於付款履約時建立，createdAt＝生效日 */
 	@Query("SELECT COUNT(ms) FROM MemberSubscription ms WHERE ms.createdAt >= :from AND ms.createdAt < :to")
