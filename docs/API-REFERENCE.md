@@ -22,6 +22,7 @@
 | 員工資料（自助） | `/api/employee/profile` | [2.8](#28-employeeprofilecontrollerapiemployeeprofile) |
 | 員工管理（後台） | `/api/admin/employees` | [2.9](#29-adminemployeecontrollerapiadminemployees-admin) |
 | 密碼管理 | `/api/account/me/change-password`、`/api/auth/forgot-password`、`/api/auth/reset-password` | [2.10](#210-passwordcontrollerpasswordresetcontroller2026-08-24-補先前遺漏) |
+| 帳號身份／全裝置登出 | `/api/account/me`、`/api/account/me/logout-all` | [2.11](#211-accountcontroller) |
 | 商品／分類 | `/api/products`、`/api/product-categories` | [3](#3-商品) |
 | 購物車 | `/api/cart` | [4](#4-購物車) |
 | 訂單 | `/api/orders`、`/api/admin/orders` | [5](#5-訂單) |
@@ -563,6 +564,33 @@ Response **`204`**（無 body，不核發 JWT——視為救援可能已外流�
 #### 密碼規則（`@ValidPassword`，適用 `newPassword`，不適用 `currentPassword`／登入密碼）
 
 8～72 字元、須含大小寫英文字母與數字、不可包含任何空白字元，且 UTF-8 編碼後不得超過 72 bytes（BCrypt 以 byte 計算有效輸入長度，多位元字元湊到 72 字元時可能已超過 72 bytes 而被靜默截斷）。與會員／員工註冊的密碼規則完全相同，同一個密碼在任一個「建立密碼」端點都會有一致的驗證結果。
+
+---
+
+### 2.11 AccountController（`/api/account/me`）
+
+帳號層級的自助操作，不屬於密碼管理（2.10）也不屬於 Google 綁定：身份快照查詢、全裝置登出。
+
+| 方法 | 路徑 | 權限 | 成功狀態 | 說明 |
+|---|---|---|---|---|
+| GET | `/api/account/me` | 🔒 需登入 | 200 | 查自己的帳號身份快照 |
+| POST | `/api/account/me/logout-all` | 🔒 需登入 | 204 | 全裝置登出 |
+
+> 都沒有方法層級 `@PreAuthorize`，跟密碼是 Account 層級概念一樣，任何已登入帳號都能用，不分角色。
+
+`AccountMeResponse`：`accountId`、`email`、`roles`（即時計算，見下方說明）、`createdAt`
+
+> `roles` 每次呼叫都用 `AccountAuthorityResolver` 重新計算，不是登入當下存好的快照——
+> 帳號被停權／復權、身分被調整後，這支端點回的一定是查詢當下的最新狀態，跟登入回應／JWT
+> 裡可能已經過期的 `roles` 不同。**故意不含 `hasPassword`**：登入方式狀態已有
+> `GET /api/account/me/oauth-connections` 的 `OAuthConnectionsResponse.hasPassword`
+> 作為單一來源，這裡不重複一份可能不同步的狀態。
+
+`POST /api/account/me/logout-all`：無 request body，成功回 `204`（無 body）。**不核發新 token**——
+語意是連呼叫者自己這次請求所用的 token 也一併失效（`credentialsVersion` 遞增），跟修改密碼
+故意保留目前裝置登入不同；前端收到成功後應自行清除本機登入狀態並導去登入頁。
+
+主要錯誤：`404` 帳號不存在（理論上不會發生，JWT 能通過驗證代表帳號當下存在）
 
 ---
 
