@@ -1,7 +1,8 @@
 // 動態組出綠界要求的隱藏表單並送出，瀏覽器會被導到綠界付款頁。
 // ActionUrl 是後端額外附加的目的地資訊，不屬於要送給綠界的欄位，簽章也沒算進去，這裡要排除。
 //
-// options.target：預設在同一分頁導向綠界；傳 '_blank' 則開新分頁（課程直接購買用）。
+// options.target：預設在同一分頁導向綠界。不要用 '_blank'——綠界的「返回商店」會停在新分頁，
+// 原本的頁面不會重新載入 /orders，付款結果就不會被查詢（見 OrderListView#syncPendingPayment）。
 export function submitEcpayForm(fields, options = {}) {
   const { ActionUrl, ...formFields } = fields
   const form = document.createElement('form')

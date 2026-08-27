@@ -163,11 +163,16 @@ export const useCoursesStore = defineStore('courses', () => {
 
       showToast('課程訂單已建立，引導至付款頁面...', 'success')
 
-      // 2. 獲取綠界金流表單欄位，組成隱藏表單在新分頁送出（與購物車結帳共用 utils/ecpay.js）
+      // 2. 獲取綠界金流表單欄位，組成隱藏表單送出（與購物車結帳共用 utils/ecpay.js）
       const ecpayRes = await api.post(`/api/payments/ecpay/checkout/${orderData.orderId}`)
       if (ecpayRes.data) {
-        submitEcpayForm(ecpayRes.data, { target: '_blank' })
-        showToast('已在新分頁開啟支付頁面！', 'success')
+        // 記下這筆訂單，讓使用者從綠界返回 /orders 時主動查一次付款結果
+        // （本機收不到綠界的 server-to-server 通知，見 OrderListView#syncPendingPayment）。
+        // 課程走的是信用卡即時付款，跟購物車的 Credit 分支同樣需要這個標記。
+        sessionStorage.setItem('pendingPaymentOrderId', String(orderData.orderId))
+        // 同分頁導向：開新分頁的話綠界「返回商店」會停在新分頁，原本的頁面不會重新載入
+        // /orders，上面那個標記就永遠不會被消化，訂單看起來就一直是未付款
+        submitEcpayForm(ecpayRes.data)
       }
     } catch (err) {
       showToast(err.message || err.response?.data?.message || '購買失敗，請重試', 'error')
