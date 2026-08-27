@@ -109,8 +109,10 @@ test.describe('B3 會員預約私教課', () => {
     await loginAs(page, ACCOUNTS.member)
     await page.goto('/reservation')
 
-    // 選教練後才會列出他的可預約時段
+    // 點教練卡會「導向」該教練的獨立時段頁 /reservation/trainer/:id
+    //（原本是同頁內嵌時段列表，重構後拆頁,見 TrainerSlotsView.vue）
     await page.locator('.trainer-card').first().click()
+    await page.waitForURL(/\/reservation\/trainer\/\d+/)
 
     // 這個列表沒有日期篩選也有分頁，剛建立的時段不一定在第一頁；
     // 改成預約「畫面上第一個可預約時段」，重點在額度扣減與紀錄產生，不在特定那一筆
@@ -132,7 +134,8 @@ test.describe('B3 會員預約私教課', () => {
     // 額度扣掉一堂
     expect(await remainingQuota(request)).toBe(before - 1)
 
-    // 「我的預約」看得到這筆
+    // 「我的預約」頁籤在 /reservation 主頁上,預約發生在獨立的時段頁,要先導回去
+    await page.goto('/reservation')
     await page.getByRole('tab', { name: '我的預約' }).click()
     await expect(page.locator('tbody tr').filter({ hasText: rowText }).first()).toBeVisible()
 
