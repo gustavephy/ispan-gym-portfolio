@@ -49,6 +49,18 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresRole: 'MEMBER' },
         },
         {
+          path: 'member/profile',
+          component: () => import('@/views/member/MemberProfileView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
+        },
+        {
+          // 帳號設定：只要求已登入，不限角色——純 Employee/Admin/Trainer 帳號也要用得到，
+          // 不能只放在會員工作區底下（見 NavBar.vue 的入口位置）
+          path: 'account/security',
+          component: () => import('@/views/account/AccountSecurityView.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
           path: 'trainer/schedules',
           component: () => import('@/views/trainer/TrainerScheduleView.vue'),
           meta: { requiresAuth: true, requiresRole: 'TRAINER' },

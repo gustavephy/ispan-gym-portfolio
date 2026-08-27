@@ -32,8 +32,28 @@ const TEST_ACCOUNTS = [
   // 純管理員（無會員身分），登入後只會看到管理工作區；
   // emp-admin 另外帶會員身分，要展示角色疊加時才用
   { label: '管理員', email: 'admin-only@local.test', password: 'Admin@12345' },
-  { label: '管理員（種子）', email: 'admin@wpgym.local', password: 'Admin@12345' },
+  // label 裡的換行字元靠 .test-accounts__role 的 white-space: pre-line 生效，
+  // 讓「(種子)」固定斷成自己一行，不受欄寬影響自然換行斷在奇怪的位置。
+  // 括號刻意用半形：全形括號「（」自帶左側留白，換行後變成該行開頭字元時
+  // 那段留白會被看成多一個空格，換成半形括號沒有這個問題。
+  { label: '管理員\n(種子)', email: 'admin@wpgym.local', password: 'Admin@12345' },
 ]
+
+/**
+ * 測試帳號面板的 email 太長、欄寬不夠時需要換行，但瀏覽器預設會把「-」當成
+ * 斷行機會點，斷出「wendy-」／「test@local.test」這種不好看的位置。
+ * 用兩個零寬字元取代：
+ *   - 連字號後插入「word joiner」（U+2060）：等同宣告這裡「禁止斷行」，
+ *     蓋掉瀏覽器對連字號的預設斷行機會。
+ *   - @ 前插入「zero-width space」（U+200B）：唯一保留的斷行機會點。
+ * 兩者都是零寬度字元，不影響實際顯示內容，只影響換行規則。
+ */
+const WORD_JOINER = '⁠' // 禁止斷行控制字元，蓋掉連字號後面的預設斷行機會
+const ZERO_WIDTH_SPACE = '​' // 唯一保留的斷行機會點
+
+function wrapEmailAtAt(email) {
+  return email.replace(/-/g, `-${WORD_JOINER}`).replace('@', `${ZERO_WIDTH_SPACE}@`)
+}
 
 function fillAccount(account) {
   email.value = account.email
@@ -113,7 +133,7 @@ async function onSubmit() {
         <li v-for="account in TEST_ACCOUNTS" :key="account.email">
           <button type="button" class="test-accounts__item" @click="fillAccount(account)">
             <span class="test-accounts__role">{{ account.label }}</span>
-            <span class="test-accounts__email">{{ account.email }}</span>
+            <span class="test-accounts__email">{{ wrapEmailAtAt(account.email) }}</span>
             <span class="test-accounts__password">
               {{ account.password ?? '（密碼請自行輸入）' }}
             </span>
@@ -168,7 +188,7 @@ async function onSubmit() {
 
 .test-accounts__item {
   display: grid;
-  grid-template-columns: 6.5rem 1fr;
+  grid-template-columns: 4.33rem 1fr; /* 原本 6.5rem 的 2/3 */
   gap: 0 0.5rem;
   width: 100%;
   padding: 0.5rem 0.65rem;
@@ -189,8 +209,10 @@ async function onSubmit() {
 .test-accounts__role {
   grid-row: span 2;
   align-self: center;
+  text-align: center;
   font-weight: 600;
   color: var(--primary-dark);
+  white-space: pre-line;
 }
 
 .test-accounts__email {
