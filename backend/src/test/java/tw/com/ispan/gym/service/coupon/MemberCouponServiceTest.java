@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
@@ -104,33 +105,40 @@ class MemberCouponServiceTest {
         Coupon alreadyClaimed = coupon();
         alreadyClaimed.setCouponId(54);
 
-        when(coupons.findAll()).thenReturn(List.of(ok, disabled, expired, soldOut, alreadyClaimed));
+        // 因為 Service 會向 findByStatus 查詢 ACTIVE 的券，因此 Mock 回傳只應包含 ACTIVE 的券 (ok, expired, soldOut, alreadyClaimed)
+        org.springframework.data.domain.Page<Coupon> page = new org.springframework.data.domain.PageImpl<>(
+                List.of(ok, expired, soldOut, alreadyClaimed));
+        when(coupons.findByStatus(CouponStatus.ACTIVE, org.springframework.data.domain.Pageable.unpaged())).thenReturn(page);
         // 其餘 couponId 沿用 Mockito 對 boolean 的預設值 false（沒領過）
         when(memberCoupons.existsByMemberIdAndCouponId(MEMBER_ID, 54)).thenReturn(true);
 
-        List<CouponResponse> result = service.getAvailableCouponsForClaim(MEMBER_ID);
+        org.springframework.data.domain.Page<CouponResponse> result = service.getAvailableCouponsForClaim(MEMBER_ID, org.springframework.data.domain.Pageable.unpaged());
 
-        assertThat(result).extracting(CouponResponse::getCouponId).containsExactly(COUPON_ID);
+        assertThat(result.getContent()).extracting(CouponResponse::getCouponId).containsExactly(COUPON_ID);
     }
 
     @Test
     void 無到期日的券視為永久有效可領() {
         Coupon noEndDate = coupon();
         noEndDate.setEndDate(null);
-        when(coupons.findAll()).thenReturn(List.of(noEndDate));
+        org.springframework.data.domain.Page<Coupon> page = new org.springframework.data.domain.PageImpl<>(List.of(noEndDate));
+        when(coupons.findByStatus(CouponStatus.ACTIVE, org.springframework.data.domain.Pageable.unpaged())).thenReturn(page);
         when(memberCoupons.existsByMemberIdAndCouponId(MEMBER_ID, COUPON_ID)).thenReturn(false);
 
-        assertThat(service.getAvailableCouponsForClaim(MEMBER_ID)).hasSize(1);
+        org.springframework.data.domain.Page<CouponResponse> result = service.getAvailableCouponsForClaim(MEMBER_ID, org.springframework.data.domain.Pageable.unpaged());
+        assertThat(result.getContent()).hasSize(1);
     }
 
     @Test
     void 到期日為今天仍可領隔天才失效() {
         Coupon endsToday = coupon();
         endsToday.setEndDate(LocalDate.now());
-        when(coupons.findAll()).thenReturn(List.of(endsToday));
+        org.springframework.data.domain.Page<Coupon> page = new org.springframework.data.domain.PageImpl<>(List.of(endsToday));
+        when(coupons.findByStatus(CouponStatus.ACTIVE, org.springframework.data.domain.Pageable.unpaged())).thenReturn(page);
         when(memberCoupons.existsByMemberIdAndCouponId(MEMBER_ID, COUPON_ID)).thenReturn(false);
 
-        assertThat(service.getAvailableCouponsForClaim(MEMBER_ID)).hasSize(1);
+        org.springframework.data.domain.Page<CouponResponse> result = service.getAvailableCouponsForClaim(MEMBER_ID, org.springframework.data.domain.Pageable.unpaged());
+        assertThat(result.getContent()).hasSize(1);
     }
 
     // === claimCoupon()：成功路徑 ==============================================
@@ -253,12 +261,13 @@ class MemberCouponServiceTest {
     void 我的券清單原樣回傳不做過濾() {
         Coupon expired = coupon();
         expired.setEndDate(LocalDate.now().minusDays(30));
-        when(memberCoupons.findByMemberId(MEMBER_ID)).thenReturn(List.of(
+        org.springframework.data.domain.Page<MemberCoupon> page = new org.springframework.data.domain.PageImpl<>(List.of(
                 memberCoupon(coupon(), MemberCouponStatus.UNUSED),
                 memberCoupon(expired, MemberCouponStatus.USED)));
+        when(memberCoupons.findByMemberId(MEMBER_ID, org.springframework.data.domain.Pageable.unpaged())).thenReturn(page);
 
         // 歷史紀錄要看得到已使用與過期的券，這裡刻意不過濾
-        assertThat(service.getMyCoupons(MEMBER_ID)).hasSize(2);
+        assertThat(service.getMyCoupons(MEMBER_ID, null, org.springframework.data.domain.Pageable.unpaged()).getContent()).hasSize(2);
     }
 
     @Test
@@ -273,11 +282,12 @@ class MemberCouponServiceTest {
         expired.setCouponId(52);
         expired.setEndDate(LocalDate.now().minusDays(1));
 
-        // 查詢時已用 status=UNUSED 篩過，剩下要濾的是券本身的狀態與到期
-        when(memberCoupons.findByMemberIdAndStatus(MEMBER_ID, MemberCouponStatus.UNUSED)).thenReturn(List.of(
+        org.springframework.data.domain.Page<MemberCoupon> page = new org.springframework.data.domain.PageImpl<>(List.of(
                 memberCoupon(usable, MemberCouponStatus.UNUSED),
                 memberCoupon(disabled, MemberCouponStatus.UNUSED),
                 memberCoupon(expired, MemberCouponStatus.UNUSED)));
+        // 查詢時已用 status=UNUSED 篩過，剩下要濾的是券本身的狀態與到期
+        when(memberCoupons.findByMemberIdAndStatus(MEMBER_ID, MemberCouponStatus.UNUSED, org.springframework.data.domain.Pageable.unpaged())).thenReturn(page);
 
         List<MemberCouponResponse> result = service.getMyUnusedCoupons(MEMBER_ID);
 
@@ -287,11 +297,12 @@ class MemberCouponServiceTest {
 
     @Test
     void 可套用清單只查UNUSED的券() {
-        when(memberCoupons.findByMemberIdAndStatus(MEMBER_ID, MemberCouponStatus.UNUSED)).thenReturn(List.of());
+        org.springframework.data.domain.Page<MemberCoupon> emptyPage = org.springframework.data.domain.Page.empty();
+        when(memberCoupons.findByMemberIdAndStatus(MEMBER_ID, MemberCouponStatus.UNUSED, org.springframework.data.domain.Pageable.unpaged())).thenReturn(emptyPage);
 
         assertThat(service.getMyUnusedCoupons(MEMBER_ID)).isEmpty();
 
         // 確認是用 UNUSED 條件下查，而不是全查回來再自己濾
-        verify(memberCoupons).findByMemberIdAndStatus(MEMBER_ID, MemberCouponStatus.UNUSED);
+        verify(memberCoupons).findByMemberIdAndStatus(MEMBER_ID, MemberCouponStatus.UNUSED, org.springframework.data.domain.Pageable.unpaged());
     }
 }

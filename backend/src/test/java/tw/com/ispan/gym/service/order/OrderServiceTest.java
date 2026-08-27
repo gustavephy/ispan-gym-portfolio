@@ -193,13 +193,13 @@ class OrderServiceTest {
 
     private OrderItem productItem(Order order, Product product, int quantity, Integer id) {
         OrderItem item = new OrderItem(order, product, product.getName(), product.getPrice(), quantity);
-        ReflectionTestUtils.setField(item, "id", id);
+        ReflectionTestUtils.setField(item, "orderItemId", id);
         return item;
     }
 
     private OrderItem courseItem(Order order, PrivateCourse course, int quantity, Integer id) {
         OrderItem item = new OrderItem(order, course, course.getName(), course.getPrice(), quantity);
-        ReflectionTestUtils.setField(item, "id", id);
+        ReflectionTestUtils.setField(item, "orderItemId", id);
         return item;
     }
 

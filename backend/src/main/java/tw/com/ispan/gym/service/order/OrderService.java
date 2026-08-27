@@ -1,7 +1,5 @@
 package tw.com.ispan.gym.service.order;
 
-
-
 import tw.com.ispan.gym.dto.order.CancelOrderRequest;
 import tw.com.ispan.gym.dto.order.CreateOrderRequest;
 import tw.com.ispan.gym.dto.order.DirectCheckoutRequest;
@@ -85,7 +83,8 @@ import tw.com.ispan.gym.event.order.RefundCompletedEvent;
  * {@link #rejectRefund} 駁回。課程/訂閱的履約（發放堂數額度、啟用訂閱）
  * 由 {@link #fulfillPaidOrder} 在金流付款成功後觸發，見 EcpayService。訂閱不允許提前續約，
  * 名下有未到期的有效訂閱時 {@link #createSubscriptionOrder} 會直接擋下結帳請求；反過來，
- * 名下沒有有效訂閱時 {@link #createDirectOrder} 也會擋下私教課購買，見 {@link #requireActiveSubscription}。
+ * 名下沒有有效訂閱時 {@link #createDirectOrder} 也會擋下私教課購買，見
+ * {@link #requireActiveSubscription}。
  */
 @Service
 @Transactional(readOnly = true)
@@ -93,8 +92,8 @@ public class OrderService {
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
     private static final DateTimeFormatter TRADE_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     /** 可以申請退款（含出貨後退貨）的訂單狀態；已付款、已出貨、已完成都算，見 {@link Order#assertRefundable} */
-    private static final Set<OrderStatus> REFUND_ELIGIBLE_STATUSES =
-            Set.of(OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.COMPLETED);
+    private static final Set<OrderStatus> REFUND_ELIGIBLE_STATUSES = Set.of(OrderStatus.PAID, OrderStatus.SHIPPED,
+            OrderStatus.COMPLETED);
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final CartItemRepository cartItems;
@@ -560,7 +559,8 @@ public class OrderService {
         String finalReceiverPhone = valueOr(receiverPhone, member.getPhone());
 
         Order order = new Order(member, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount, subtotal,
-                total, memberCoupon, finalReceiverName, finalReceiverPhone, receiverAddress, member.getAccount().getEmail());
+                total, memberCoupon, finalReceiverName, finalReceiverPhone, receiverAddress,
+                member.getAccount().getEmail());
         order = orders.save(order);
 
         for (OrderLine line : lines) {
@@ -588,21 +588,25 @@ public class OrderService {
         }
     }
 
-    private MemberCoupon redeemCoupon(Member member, Coupon coupon, BigDecimal subtotal, CouponApplicableType lineType) {
+    private MemberCoupon redeemCoupon(Member member, Coupon coupon, BigDecimal subtotal,
+            CouponApplicableType lineType) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         if (!CouponStatus.ACTIVE.equals(coupon.getStatus())
                 || now.toLocalDate().isBefore(coupon.getStartDate())
                 || now.toLocalDate().isAfter(coupon.getEndDate())) {
             throw new BusinessRuleException("優惠券已失效或不在使用期限內");
         }
-        if (!CouponApplicableType.ALL.equals(coupon.getApplicableType()) && !lineType.equals(coupon.getApplicableType())) {
+        if (!CouponApplicableType.ALL.equals(coupon.getApplicableType())
+                && !lineType.equals(coupon.getApplicableType())) {
             throw new BusinessRuleException("此優惠券不適用於本次購買的品項類型");
         }
         if (subtotal.compareTo(coupon.getMinSpend()) < 0) {
             throw new BusinessRuleException("未達優惠券最低消費金額");
         }
-        MemberCoupon memberCoupon = memberCoupons.findByMemberIdAndCouponCouponIdAndStatus(member.getId(), coupon.getCouponId(),
-                MemberCouponStatus.UNUSED).orElseThrow(() -> new BusinessRuleException("尚未持有此優惠券或已使用過"));
+        MemberCoupon memberCoupon = memberCoupons
+                .findByMemberIdAndCouponCouponIdAndStatus(member.getId(), coupon.getCouponId(),
+                        MemberCouponStatus.UNUSED)
+                .orElseThrow(() -> new BusinessRuleException("尚未持有此優惠券或已使用過"));
         memberCoupon.setStatus(MemberCouponStatus.USED);
         memberCoupon.setUsedAt(now);
         return memberCoupon;
@@ -666,7 +670,9 @@ public class OrderService {
                 order.getStatus(), order.getCreatedAt(), items, subscription);
     }
 
-    private record OrderLine(Product product, int quantity) {}
+    private record OrderLine(Product product, int quantity) {
+    }
 
-    private record ProductQuantity(Product product, int quantity) {}
+    private record ProductQuantity(Product product, int quantity) {
+    }
 }

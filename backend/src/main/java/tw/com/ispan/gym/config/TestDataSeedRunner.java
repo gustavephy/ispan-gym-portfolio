@@ -299,9 +299,16 @@ public class TestDataSeedRunner implements CommandLineRunner {
             employee.setRole(role);
             changed = true;
         }
+        // 導正姓名（修正舊資料殘留的「測試教練」等無效名稱）
+        if (!firstName.equals(employee.getFirstName()) || !lastName.equals(employee.getLastName())) {
+            employee.setFirstName(firstName);
+            employee.setLastName(lastName);
+            log.info("已導正測試員工 {} 姓名 → {}{}", account.getEmail(), lastName, firstName);
+            changed = true;
+        }
         if (changed) {
             employee = employees.save(employee);
-            log.info("已將測試員工 {} 導正為 ACTIVE／{}", account.getEmail(), role);
+            log.info("已將測試員工 {} 導正", account.getEmail());
         }
         return employee;
     }
@@ -323,16 +330,28 @@ public class TestDataSeedRunner implements CommandLineRunner {
             log.info("已建立專業教練（employee={}）", employee.getId());
             return trainers.save(trainer);
         }
+        boolean changed = false;
+        // 導正姓名（修正舊資料殘留的「測試教練」等無效名稱）
+        if (!employee.getFirstName().equals(trainer.getFirstName())
+                || !employee.getLastName().equals(trainer.getLastName())) {
+            trainer.setFirstName(employee.getFirstName());
+            trainer.setLastName(employee.getLastName());
+            log.info("已導正教練姓名 → {}{}", employee.getLastName(), employee.getFirstName());
+            changed = true;
+        }
         if (!specialty.equals(trainer.getSpecialty())) {
             trainer.setSpecialty(specialty);
             trainer.setBio("專注於" + specialty + "，致力於以科學且安全的方式帶領學員達到心目中的理想體態。");
-            trainer = trainers.save(trainer);
             log.info("已更新測試教練 {} 的專長為 {}", employee.getLastName() + employee.getFirstName(), specialty);
+            changed = true;
         }
         if (trainer.getDeletedAt() != null) {
             trainer.setDeletedAt(null);
-            trainer = trainers.save(trainer);
             log.info("已將測試教練（employee={}）導正為未刪除", employee.getId());
+            changed = true;
+        }
+        if (changed) {
+            trainer = trainers.save(trainer);
         }
         return trainer;
     }

@@ -125,7 +125,7 @@ class CheckoutMoneyPathTest {
         ArgumentCaptor<Order> savedOrder = ArgumentCaptor.forClass(Order.class);
         when(orders.save(savedOrder.capture())).thenAnswer(inv -> {
             Order o = inv.getArgument(0);
-            ReflectionTestUtils.setField(o, "id", 900);
+            ReflectionTestUtils.setField(o, "orderId", 900);
             return o;
         });
         ArgumentCaptor<OrderItem> savedItem = ArgumentCaptor.forClass(OrderItem.class);

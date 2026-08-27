@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.coupon.CouponRequest;
 import tw.com.ispan.gym.dto.coupon.CouponResponse;
+import tw.com.ispan.gym.dto.coupon.CouponStatsResponse;
 import tw.com.ispan.gym.service.coupon.EmployeeCouponService;
 
 @RestController
@@ -37,18 +38,21 @@ public class AdminCouponController {
 
 	// 查詢所有優惠券(管理員)
 	@GetMapping
-	public ResponseEntity<Page<CouponResponse>> getAllCoupons(@RequestParam(required = false) String keyword,
-			@RequestParam(required = false) String status, @RequestParam(required = false) LocalDate startDate,
+	public ResponseEntity<Page<CouponResponse>> getAllCoupons(
+			@RequestParam(required = false) String keyword,
+			@RequestParam(required = false) String status,
+			@RequestParam(required = false) LocalDate startDate,
 			@RequestParam(required = false) LocalDate endDate,
 			@PageableDefault(size = 10, page = 0) Pageable pageable) {
-		log.info("Request to get all coupons: keyword={}, status={}, startDate={}, endDate={}, pageable={}", keyword, status,
-				startDate, endDate, pageable);
+		log.info(
+				"Request to get all coupons: keyword={}, status={}, startDate={}, endDate={}, pageable={}",
+				keyword, status, startDate, endDate, pageable);
 		return ResponseEntity.ok(couponService.getAllCoupons(keyword, status, startDate, endDate, pageable));
 	}
 
 	// 取得優惠券統計數據(管理員)
 	@GetMapping("/stats")
-	public ResponseEntity<tw.com.ispan.gym.dto.coupon.CouponStatsResponse> getCouponStats() {
+	public ResponseEntity<CouponStatsResponse> getCouponStats() {
 		log.info("Request to get coupon stats");
 		return ResponseEntity.ok(couponService.getCouponStats());
 	}
@@ -62,7 +66,8 @@ public class AdminCouponController {
 
 	// 更新優惠券(管理員)
 	@PutMapping("/{couponId}")
-	public ResponseEntity<CouponResponse> updateCoupon(@PathVariable Integer couponId,
+	public ResponseEntity<CouponResponse> updateCoupon(
+			@PathVariable Integer couponId,
 			@Valid @RequestBody CouponRequest couponRequest) {
 		log.info("Employee request to update coupon: {}", couponId);
 		return ResponseEntity.ok(couponService.updateCoupon(couponId, couponRequest));
@@ -70,7 +75,8 @@ public class AdminCouponController {
 
 	// 下架優惠券(管理員)
 	@DeleteMapping("/{couponId}")
-	public ResponseEntity<String> deleteCoupon(@PathVariable Integer couponId) {
+	public ResponseEntity<String> deleteCoupon(
+			@PathVariable Integer couponId) {
 		log.info("Employee request to delete/deactivate coupon: {}", couponId);
 		couponService.deleteCoupon(couponId);
 		return ResponseEntity.ok("優惠券已下架");
@@ -78,7 +84,8 @@ public class AdminCouponController {
 
 	// 群發優惠券(管理員)
 	@PostMapping("/{couponId}/distribute-all")
-	public ResponseEntity<Map<String, Object>> distributeToAll(@PathVariable Integer couponId) {
+	public ResponseEntity<Map<String, Object>> distributeToAll(
+			@PathVariable Integer couponId) {
 		log.info("Employee request to distribute coupon {} to all active members: {}", couponId);
 		int count = couponService.distributeCouponToAllMembers(couponId);
 		return ResponseEntity
@@ -87,11 +94,12 @@ public class AdminCouponController {
 	}
 
 	// 發給指定會員
-	@PostMapping("/{id}/distribute")
-	public ResponseEntity<Map<String, Object>> distributeToMembers(@PathVariable Integer id,
+	@PostMapping("/{couponId}/distribute")
+	public ResponseEntity<Map<String, Object>> distributeToMembers(
+			@PathVariable Integer couponId,
 			@RequestBody List<Integer> memberIds) {
-		log.info("Employee request to distribute coupon {} to member list: {}", id, memberIds);
-		int count = couponService.distributeToMembers(id, memberIds);
+		log.info("Employee request to distribute coupon {} to member list: {}", couponId, memberIds);
+		int count = couponService.distributeToMembers(couponId, memberIds);
 		return ResponseEntity
 				.ok(Map.of("success", true, "distributedCount", count, "message", "成功發放給 " + count + " 位會員"));
 	}

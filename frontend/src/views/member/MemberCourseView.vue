@@ -95,6 +95,11 @@ function getQuotaCourse(quota) {
 // [功能方法] getQuotaTrainerName (取得quotatrainername)
 // 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
 function getQuotaTrainerName(quota) {
+  // 後端 MemberCourseQuotaResponse 直接帶 trainer 欄位，優先使用
+  if (quota.trainer) {
+    return `${quota.trainer.lastName || ''}${quota.trainer.firstName || ''}`
+  }
+  // fallback：從 allCourses 查（通常不會進到這裡）
   const m = getQuotaCourse(quota)
   return m?.trainer ? `${m.trainer.lastName || ''}${m.trainer.firstName || ''}` : ''
 }
@@ -157,13 +162,11 @@ function clearFilters() {
 const ownedTrainers = computed(() => {
   const map = new Map()
   quotas.value.forEach(q => {
-    const m = getQuotaCourse(q)
-    const isPrivate = m ? isCoursePrivate(m) : true
-    if (!isPrivate) return
-    if (m?.trainer?.id) {
-      map.set(m.trainer.id, {
-        id: m.trainer.id,
-        name: `${m.trainer.lastName || ''}${m.trainer.firstName || ''}`
+    // 後端直接帶 trainer 欄位，直接使用，不需繞遠路查 allCourses
+    if (q.trainer?.id) {
+      map.set(q.trainer.id, {
+        id: q.trainer.id,
+        name: `${q.trainer.lastName || ''}${q.trainer.firstName || ''}`
       })
     }
   })
@@ -185,9 +188,11 @@ const filteredQuotas = computed(() => quotas.value.filter(q => {
     if (!m?.trainer || m.trainer.id !== Number(selectedTrainerId.value)) return false
   }
   if (expiryBefore.value) {
-    // 永久有效（null）不在篩選範圍內，效期早於截止日才顯示
-    if (!q.expiryDate) return false
-    if (new Date(q.expiryDate) > new Date(expiryBefore.value)) return false
+    // 永久有效（null）無到期日，一律顯示
+    if (!q.expiryDate) return true
+    // 課程效期早於（已過）選取日才過濾掉；有效的（效期在選取日之後）才顯示
+    const deadline = new Date(expiryBefore.value + 'T23:59:59')
+    if (new Date(q.expiryDate) < deadline) return false
   }
   return true
 }))
@@ -246,10 +251,6 @@ onMounted(async () => {
       <!-- ======================== Tab 1: 課程方案額度 ======================== -->
       <div v-if="activeTab === 'quotas'">
         <div v-if="quotas.length === 0" class="empty-state card">
-          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-          </svg>
           <h3>目前尚無任何課程方案額度</h3>
           <p>前往課程方案商城選購專屬的一對一教練課或團體課吧！</p>
           <RouterLink to="/courses" class="btn btn-primary">瀏覽課程方案</RouterLink>
@@ -261,6 +262,7 @@ onMounted(async () => {
             v-model="searchParams"
             :show-keyword="true"
             :show-trainer="true"
+            :trainers="ownedTrainers"
             :show-category="false"
             :show-type="false"
             :show-expiry-before="true"
