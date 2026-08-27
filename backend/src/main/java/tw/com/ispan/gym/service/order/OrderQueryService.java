@@ -8,14 +8,17 @@ import org.springframework.transaction.annotation.Transactional;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.OrderItemResponse;
+import tw.com.ispan.gym.dto.order.OrderPaymentInfoResponse;
 import tw.com.ispan.gym.dto.order.OrderStatusHistoryResponse;
 import tw.com.ispan.gym.dto.order.OrderSubscriptionResponse;
 import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
 import tw.com.ispan.gym.entity.order.Order;
 import tw.com.ispan.gym.entity.order.OrderItem;
+import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
 import tw.com.ispan.gym.repository.order.OrderStatusHistoryRepository;
+import tw.com.ispan.gym.repository.payment.PaymentTransactionRepository;
 
 @Service
 @Transactional(readOnly = true)
@@ -23,12 +26,14 @@ public class OrderQueryService {
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
     private final OrderStatusHistoryRepository orderStatusHistories;
+    private final PaymentTransactionRepository paymentTransactions;
 
     public OrderQueryService(OrderRepository orders, OrderItemRepository orderItems,
-            OrderStatusHistoryRepository orderStatusHistories) {
+            OrderStatusHistoryRepository orderStatusHistories, PaymentTransactionRepository paymentTransactions) {
         this.orders = orders;
         this.orderItems = orderItems;
         this.orderStatusHistories = orderStatusHistories;
+        this.paymentTransactions = paymentTransactions;
     }
 
     public List<OrderSummaryResponse> findMine(Integer memberId) {
@@ -47,9 +52,14 @@ public class OrderQueryService {
                 .map(OrderItemResponse::from)
                 .toList();
         OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
+        // 只有還沒真的入帳（UNPAID）才需要顯示 ATM／CVS 繳費資訊；已付款/取消的訂單這段資訊沒有意義
+        OrderPaymentInfoResponse paymentInfo = order.getStatus() == OrderStatus.UNPAID
+                ? paymentTransactions.findByMerchantTradeNo(order.getMerchantTradeNo())
+                        .map(OrderPaymentInfoResponse::from).orElse(null)
+                : null;
         return new OrderDetailResponse(order.getOrderId(), order.getMerchantTradeNo(),
                 OrderDetailResponse.title(subscription, items), order.getTotalAmount(),
-                order.getStatus(), order.getCreatedAt(), items, subscription);
+                order.getStatus(), order.getCreatedAt(), items, subscription, paymentInfo);
     }
 
     /** 訂單狀態時間軸，僅限本人訂單 */

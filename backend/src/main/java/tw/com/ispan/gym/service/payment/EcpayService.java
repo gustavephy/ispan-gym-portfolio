@@ -17,10 +17,12 @@ import tw.com.ispan.gym.service.order.OrderService;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -31,8 +33,16 @@ import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 /**
  * 綠界 ECPay 全方位金流串接。
@@ -55,11 +65,23 @@ public class EcpayService {
     private static final String PROVIDER = "ECPAY";
     private static final String PROVIDER_SIMULATE = "SIMULATE";
 
+    /** 支援的付款方式；購物車一般商品結帳可三選一，訂閱／私教課直接結帳固定用 Credit（見 OrderController） */
+    private static final java.util.Set<String> SUPPORTED_PAYMENT_METHODS = java.util.Set.of("Credit", "ATM", "CVS");
+    /** ATM 虛擬帳號有效期限（天），綠界允許 1-60 天，此處用官方文件建議的預設值 */
+    private static final String ATM_EXPIRE_DAYS = "3";
+    /** 超商代碼有效期限（分鐘），綠界預設 10080 分鐘＝7 天 */
+    private static final String CVS_STORE_EXPIRE_MINUTES = "10080";
+    /** 超商代碼繳費金額限制（含手續費），低於/高於此範圍綠界會直接拒絕 AioCheckOut 請求 */
+    private static final BigDecimal CVS_MIN_AMOUNT = BigDecimal.valueOf(27);
+    private static final BigDecimal CVS_MAX_AMOUNT = BigDecimal.valueOf(20000);
+
     private final String merchantId;
     private final String hashKey;
     private final String hashIv;
     private final String actionUrl;
     private final String returnUrl;
+    private final String paymentInfoUrl;
+    private final String queryTradeInfoUrl;
     private final String clientBackUrl;
     private final boolean simulateEnabled;
 
@@ -69,6 +91,7 @@ public class EcpayService {
     private final PaymentTransactionRepository paymentTransactions;
     private final PaymentWebhookRepository paymentWebhooks;
     private final OrderService orderService;
+    private final RestTemplate restTemplate;
 
     public EcpayService(
             @Value("${app.ecpay.merchant-id}") String merchantId,
@@ -76,17 +99,21 @@ public class EcpayService {
             @Value("${app.ecpay.hash-iv}") String hashIv,
             @Value("${app.ecpay.action-url}") String actionUrl,
             @Value("${app.ecpay.return-url}") String returnUrl,
+            @Value("${app.ecpay.payment-info-url}") String paymentInfoUrl,
+            @Value("${app.ecpay.query-trade-info-url}") String queryTradeInfoUrl,
             @Value("${app.ecpay.client-back-url}") String clientBackUrl,
             @Value("${app.payment.simulate-enabled:true}") boolean simulateEnabled,
             OrderRepository orders, OrderItemRepository orderItems,
             OrderStatusHistoryRepository orderStatusHistories,
             PaymentTransactionRepository paymentTransactions, PaymentWebhookRepository paymentWebhooks,
-            OrderService orderService) {
+            OrderService orderService, RestTemplate restTemplate) {
         this.merchantId = merchantId;
         this.hashKey = hashKey;
         this.hashIv = hashIv;
         this.actionUrl = actionUrl;
         this.returnUrl = returnUrl;
+        this.paymentInfoUrl = paymentInfoUrl;
+        this.queryTradeInfoUrl = queryTradeInfoUrl;
         this.clientBackUrl = clientBackUrl;
         this.simulateEnabled = simulateEnabled;
         this.orders = orders;
@@ -95,10 +122,39 @@ public class EcpayService {
         this.paymentTransactions = paymentTransactions;
         this.paymentWebhooks = paymentWebhooks;
         this.orderService = orderService;
+        this.restTemplate = restTemplate;
     }
 
-    /** 組出 AioCheckOut/V2 表單欄位（含 CheckMacValue）；ActionUrl 是額外附加的目的地資訊，簽章算完才加，不影響 CheckMacValue */
+    /** 購物車一般商品結帳三選一；訂閱／私教課直接結帳固定用 Credit，見 {@link #buildCheckoutForm(Order)} */
     public Map<String, String> buildCheckoutForm(Order order) {
+        return buildCheckoutForm(order, "Credit");
+    }
+
+    /**
+     * 組出 AioCheckOut/V2 表單欄位（含 CheckMacValue）；ActionUrl 是額外附加的目的地資訊，簽章算完才加，不影響 CheckMacValue。
+     *
+     * <p>ATM／CVS 是「非即時」付款：消費者送出表單後，綠界先回一次取號通知到 {@link #paymentInfoUrl}
+     * （見 {@link #handlePaymentInfo}，帶回虛擬帳號／超商代碼），消費者實際完成轉帳/繳費後才會再有一次
+     * 付款結果通知打到 {@link #returnUrl}（{@link #handleNotify}，RtnCode=1 才算入帳）——兩者是不同的
+     * callback URL，跟 Credit 只有一次 {@link #returnUrl} 通知不同，{@link #handleNotify} 不需要因此改動。
+     *
+     * @param choosePayment {@code Credit}／{@code ATM}／{@code CVS}，見 {@link #SUPPORTED_PAYMENT_METHODS}
+     */
+    @Transactional
+    public Map<String, String> buildCheckoutForm(Order order, String choosePayment) {
+        if (!SUPPORTED_PAYMENT_METHODS.contains(choosePayment)) {
+            throw new BusinessRuleException("不支援的付款方式：" + choosePayment);
+        }
+        if ("CVS".equals(choosePayment)) {
+            BigDecimal amount = order.getTotalAmount();
+            if (amount.compareTo(CVS_MIN_AMOUNT) < 0 || amount.compareTo(CVS_MAX_AMOUNT) > 0) {
+                throw new BusinessRuleException("超商代碼繳費金額須介於 NT$" + CVS_MIN_AMOUNT
+                        + " 至 NT$" + CVS_MAX_AMOUNT + " 之間，請改用其他付款方式");
+            }
+        }
+        // 記下使用者這次選的付款方式，供後台「模擬付款成功」判斷是否要擋下 ATM/CVS（見 simulatePaymentSuccess）
+        order.recordIntendedPaymentMethod(choosePayment);
+
         String itemName = orderItems.findAllByOrderIdOrderByIdAsc(order.getOrderId()).stream()
                 .map(OrderItem::getProductNameAtBuy)
                 .reduce((a, b) -> a + "#" + b)
@@ -115,8 +171,15 @@ public class EcpayService {
         params.put("ItemName", itemName);
         params.put("ReturnURL", returnUrl);
         params.put("ClientBackURL", clientBackUrl);
-        params.put("ChoosePayment", "Credit");
+        params.put("ChoosePayment", choosePayment);
         params.put("EncryptType", "1");
+        if ("ATM".equals(choosePayment)) {
+            params.put("ExpireDate", ATM_EXPIRE_DAYS);
+            params.put("PaymentInfoURL", paymentInfoUrl);
+        } else if ("CVS".equals(choosePayment)) {
+            params.put("StoreExpireDate", CVS_STORE_EXPIRE_MINUTES);
+            params.put("PaymentInfoURL", paymentInfoUrl);
+        }
 
         params.put("CheckMacValue", generateCheckMacValue(params));
         params.put("ActionUrl", actionUrl);
@@ -215,6 +278,165 @@ public class EcpayService {
     }
 
     /**
+     * ATM／CVS 取號結果通知：綠界產生虛擬帳號／超商代碼後打到 {@link #paymentInfoUrl}，
+     * 跟最終付款結果通知（{@link #handleNotify} 打到 {@link #returnUrl}）是不同的 callback，
+     * 不會互相影響——這裡只負責把帳號/代碼記下來給前端顯示，訂單狀態仍維持 UNPAID，
+     * 真正入帳要等 {@link #handleNotify} 收到 RtnCode=1。
+     *
+     * <p>eventKey 用 "-INFO" 字尾跟 {@link #handleNotify} 的 "mtn-rtnCode" 區隔，避免同一筆訂單的
+     * 取號通知跟付款結果通知被誤判成重複而互相蓋掉。
+     */
+    @Transactional
+    public void handlePaymentInfo(Map<String, String> params) {
+        boolean valid = verifyCheckMacValue(params);
+        String merchantTradeNo = params.get("MerchantTradeNo");
+        String eventKey = merchantTradeNo + "-INFO";
+
+        if (paymentWebhooks.existsByProviderAndEventKey(PROVIDER, eventKey)) {
+            log.info("重複的 ECPay 取號通知，略過：{}", eventKey);
+            return;
+        }
+
+        PaymentWebhook webhook = paymentWebhooks.save(new PaymentWebhook(
+                PROVIDER, eventKey, merchantTradeNo, params.get("TradeNo"), params.toString(), valid));
+
+        if (!valid) {
+            markWebhookError(webhook, "CheckMacValue 驗證失敗");
+            log.warn("ECPay 取號通知簽章驗證失敗：{}", merchantTradeNo);
+            return;
+        }
+
+        Order order = orders.findByMerchantTradeNo(merchantTradeNo).orElse(null);
+        if (order == null) {
+            markWebhookError(webhook, "找不到對應的訂單：" + merchantTradeNo);
+            log.warn("ECPay 取號通知找不到對應訂單：{}", merchantTradeNo);
+            return;
+        }
+
+        PaymentTransaction payment = paymentTransactions.findByMerchantTradeNo(merchantTradeNo)
+                .orElseGet(() -> paymentTransactions.save(new PaymentTransaction(
+                        order, PROVIDER, merchantTradeNo, order.getTotalAmount(), order.getCurrency())));
+        String paymentType = params.get("PaymentType");
+        payment.setPaymentType(paymentType);
+        payment.setPaymentExpireAt(parseExpireDateOrNull(params.get("ExpireDate")));
+        if (paymentType != null && paymentType.startsWith("ATM_")) {
+            payment.setBankCode(params.get("BankCode"));
+            payment.setVAccount(params.get("vAccount"));
+        } else if (paymentType != null && paymentType.startsWith("CVS_")) {
+            payment.setPaymentNo(params.get("PaymentNo"));
+        }
+
+        webhook.setProcessingStatus("PROCESSED");
+        webhook.setProcessedAt(LocalDateTime.now(TAIPEI));
+    }
+
+    /** 綠界的 ExpireDate 格式跟 MerchantTradeDate 相同（yyyy/MM/dd HH:mm:ss），解析失敗就不顯示期限，不擋主流程 */
+    private LocalDateTime parseExpireDateOrNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(value, TRADE_DATE_FORMAT);
+        } catch (java.time.format.DateTimeParseException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 主動向綠界查詢這筆訂單的真實付款結果（QueryTradeInfo/V5），取代等待 {@link #handleNotify}／
+     * {@link #handlePaymentInfo} 主動通知——本機沒有對外 URL 收不到綠界的呼叫，改成我方主動打這支
+     * 官方查詢 API 問結果，不需要任何對外網址。查到「已付款」時走跟 {@link #handleNotify} 相同的
+     * {@link #applyPaymentSuccess} 履約路徑。
+     *
+     * <p>綠界官方文件明講這支查詢 API 有頻率限制、不建議拿來做輪詢，只建議在使用者主動觸發時
+     * （例如剛從綠界頁面返回、或在「我的訂單」按查詢按鈕）呼叫一次，見 OrderController 的
+     * rate limit 防護，不會自動重試。
+     *
+     * <p>只有回傳 {@code TradeStatus=1} 才視為付款成功；其餘值（含「0」未付款）一律當作
+     * 「還沒有確定結果」而不動訂單狀態——主動查詢查到未付款不代表交易失敗，很可能只是使用者
+     * 還沒完成 ATM/超商繳費，若比照 {@link #handleNotify} 把它標記失敗，會讓使用者之後繳了費
+     * 也無法再走正常流程。
+     *
+     * @return 查詢後的訂單狀態（可能跟呼叫前相同，代表沒有查到新結果）
+     */
+    @Transactional
+    public OrderStatus syncPaymentStatus(Order order) {
+        if (order.getStatus() != OrderStatus.UNPAID) {
+            return order.getStatus(); // 已經有結果（先前的通知或模擬付款已經推進過），不必再查
+        }
+
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("MerchantID", merchantId);
+        query.put("MerchantTradeNo", order.getMerchantTradeNo());
+        query.put("TimeStamp", String.valueOf(Instant.now().getEpochSecond()));
+        query.put("CheckMacValue", generateCheckMacValue(query));
+
+        Map<String, String> result = callQueryTradeInfo(query);
+        if (result == null) {
+            return order.getStatus(); // 查詢本身失敗（網路/逾時/綠界端錯誤），維持原狀態，前端可再試一次
+        }
+        // 只有回應真的帶簽章時才驗證；綠界文件沒有明確保證這支查詢 API 一定回簽章欄位，
+        // 缺席時退而求其次僅靠下面的金額比對做最後防線，避免因為不確定的協定細節讓功能整個失效
+        if (result.containsKey("CheckMacValue") && !verifyCheckMacValue(result)) {
+            log.warn("QueryTradeInfo 回應簽章驗證失敗，略過此次查詢結果：mtn={}", order.getMerchantTradeNo());
+            return order.getStatus();
+        }
+        if (!"1".equals(result.get("TradeStatus"))) {
+            return order.getStatus(); // 尚未查到付款成功，可能還沒付或還在處理中，不視為失敗
+        }
+
+        BigDecimal queriedAmount = parseAmountOrNull(result);
+        if (queriedAmount == null || queriedAmount.compareTo(orderAmountAsInteger(order)) != 0) {
+            log.error("QueryTradeInfo 金額與訂單不符，未履約：mtn={} 查詢={} 訂單={}",
+                    order.getMerchantTradeNo(), queriedAmount, orderAmountAsInteger(order));
+            return order.getStatus();
+        }
+
+        PaymentTransaction payment = paymentTransactions.findByMerchantTradeNo(order.getMerchantTradeNo())
+                .orElseGet(() -> paymentTransactions.save(new PaymentTransaction(
+                        order, PROVIDER, order.getMerchantTradeNo(), order.getTotalAmount(), order.getCurrency())));
+        String fromStatus = order.getStatus().name();
+        applyPaymentSuccess(order, payment, result.get("PaymentType"), result.get("TradeNo"));
+        orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(),
+                order.getMember(), "SYSTEM", "QUERY_TRADE_INFO"));
+        return order.getStatus();
+    }
+
+    /** 呼叫綠界查詢 API；網路/逾時等例外一律吞掉回 null，查詢失敗不該讓使用者的請求整個炸掉 */
+    private Map<String, String> callQueryTradeInfo(Map<String, String> params) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        params.forEach(body::add);
+        try {
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    queryTradeInfoUrl, new HttpEntity<>(body, headers), String.class);
+            return parseFormEncoded(response.getBody());
+        } catch (RestClientException ex) {
+            log.warn("查詢 ECPay 訂單狀態失敗（網路或逾時）：mtn={}", params.get("MerchantTradeNo"), ex);
+            return null;
+        }
+    }
+
+    /** 綠界查詢 API 回應是 URL-encoded 字串（key1=value1&key2=value2...），不是 JSON，需自行解析 */
+    private Map<String, String> parseFormEncoded(String body) {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (body == null || body.isBlank()) {
+            return result;
+        }
+        for (String pair : body.split("&")) {
+            int idx = pair.indexOf('=');
+            if (idx < 0) {
+                continue;
+            }
+            String key = URLDecoder.decode(pair.substring(0, idx), StandardCharsets.UTF_8);
+            String value = URLDecoder.decode(pair.substring(idx + 1), StandardCharsets.UTF_8);
+            result.put(key, value);
+        }
+        return result;
+    }
+
+    /**
      * ADMIN 專用的「模擬付款成功」：走與 {@link #handleNotify} 成功分支完全相同的
      * {@link #applyPaymentSuccess}（{@code markPaid} + {@link OrderService#fulfillPaidOrder}），
      * 只是免去綠界的簽章與 server-to-server 通知。本機沒有對外 URL、綠界連不進來時，
@@ -222,6 +444,10 @@ public class EcpayService {
      *
      * <p>受 {@code app.payment.simulate-enabled} 開關保護（預設開，正式環境務必設 false），
      * 端點本身也落在 {@code /api/admin/**} → 需 ADMIN。只能對 UNPAID 訂單使用。
+     *
+     * <p>ATM／超商代碼訂單不提供模擬付款——這兩種是使用者要離開瀏覽器另外完成的非即時付款，
+     * 「模擬」它們完成沒有實際展示意義，且會跟前台真正的 {@link #syncPaymentStatus} 查詢流程
+     * 混淆；信用卡才是本機沒有對外 URL 時真正需要這個後門展示履約流程的情境。
      */
     @Transactional
     public void simulatePaymentSuccess(Integer orderId) {
@@ -232,6 +458,9 @@ public class EcpayService {
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         if (order.getStatus() != OrderStatus.UNPAID) {
             throw new BusinessRuleException("只有未付款的訂單可以模擬付款");
+        }
+        if ("ATM".equals(order.getIntendedPaymentMethod()) || "CVS".equals(order.getIntendedPaymentMethod())) {
+            throw new BusinessRuleException("此訂單選擇 ATM／超商代碼繳費，不提供模擬付款，請等待實際繳費或使用查詢付款結果功能");
         }
 
         String fromStatus = order.getStatus().name();

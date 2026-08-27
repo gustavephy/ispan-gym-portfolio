@@ -76,7 +76,11 @@ onMounted(() => {
 
 <template>
   <div class="page-container">
-    <h1 class="section-title">我的購物車</h1>
+    <div class="section-header">
+      <span class="section-tag">CART</span>
+      <h1 class="section-title">我的購物車</h1>
+      <p class="section-desc">確認購物車內的商品與數量，確認無誤後即可前往結帳。</p>
+    </div>
 
     <div v-if="loading" class="spinner"></div>
 
@@ -172,7 +176,6 @@ onMounted(() => {
   grid-template-columns: 1fr 320px;
   gap: 1.5rem;
   align-items: start;
-  margin-top: 2rem;
 }
 .empty-state {
   text-align: center;

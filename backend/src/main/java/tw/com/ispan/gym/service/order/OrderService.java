@@ -661,9 +661,11 @@ public class OrderService {
                 .map(OrderItemResponse::from)
                 .toList();
         OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
+        // 這裡回應的都是建單/取消/出貨/完成當下的結果，ECPay 的 ATM/CVS 取號通知只會在使用者
+        // 之後前往綠界付款頁才會送達，此時必定還沒有，固定回 null；真正顯示繳費資訊看 OrderQueryService
         return new OrderDetailResponse(order.getOrderId(), order.getMerchantTradeNo(),
                 OrderDetailResponse.title(subscription, items), order.getTotalAmount(),
-                order.getStatus(), order.getCreatedAt(), items, subscription);
+                order.getStatus(), order.getCreatedAt(), items, subscription, null);
     }
 
     private record OrderLine(Product product, int quantity) {}
