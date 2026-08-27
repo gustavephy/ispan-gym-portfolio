@@ -39,8 +39,11 @@ const BOOKING_STATUS_MAP = {
 }
 
 // 私教課上課紀錄狀態；對應後端 CoachBookingStatus，寫法比照 TrainerScheduleView 的 STATUS_MAP
+// PENDING 特意不跟 STATUS_MAP（會員帳號狀態）共用 status-pending 這個 class：
+// 兩者語意完全不同（會員待驗證 vs 私教課待上課），共用同一個 class 名稱會導致以後
+// 只要有人為了會員狀態改樣式，這裡的顏色被無聲一起改掉
 const COACH_BOOKING_STATUS_MAP = {
-  PENDING: { label: '待上課', className: 'status-pending' },
+  PENDING: { label: '待上課', className: 'status-coach-pending' },
   COMPLETED: { label: '已完成', className: 'status-completed' },
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
 }
@@ -871,6 +874,13 @@ onMounted(fetchMembers)
 }
 
 .status-pending {
+  background: #fbf1d9;
+  color: #8a6410;
+}
+
+/* 私教課「待上課」跟會員狀態的 status-pending 顏色刻意保持一致（視覺不變），
+   但獨立成自己的規則、不共用同一個 class，避免以後改會員狀態樣式時被無聲牽連 */
+.status-coach-pending {
   background: #fbf1d9;
   color: #8a6410;
 }
