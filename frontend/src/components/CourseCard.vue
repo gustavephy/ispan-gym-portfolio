@@ -3,7 +3,7 @@
     import { computed, inject } from 'vue'
     import { useRouter } from 'vue-router'
     import { useAuthStore } from '@/stores/auth.js'
-    import { formatImageUrl } from '@/utils/image.js'
+    import { formatImageUrl, useFallbackImage, DEFAULT_COURSE_IMAGE } from '@/utils/image.js'
     import { useCoursesStore } from '@/stores/courses.js'
 
     // 接收父組件傳入的資料
@@ -63,7 +63,8 @@
 <template>
     <div class="item-card" @click="handleCardClick">
         <div class="item-cover" :style="!course.imageUrl ?  {background : coverBg } : {}">
-            <img v-if="course.imageUrl" :src="formatImageUrl(course.imageUrl)" class="cover-image" alt="課程封面">
+            <img v-if="course.imageUrl" :src="formatImageUrl(course.imageUrl)" class="cover-image" alt="課程封面"
+                 @error="useFallbackImage($event, DEFAULT_COURSE_IMAGE)">
             <span class="type-badge" :class="isPrivate ? 'badge-private' : 'badge-group'">
                 {{ isPrivate ? '私教課' : '團課' }}
             </span>
