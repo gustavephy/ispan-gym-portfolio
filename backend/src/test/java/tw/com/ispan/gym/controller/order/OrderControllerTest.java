@@ -54,7 +54,7 @@ class OrderControllerTest {
 
     private OrderDetailResponse detail(int id) {
         return new OrderDetailResponse(id, "GYM1", "乳清蛋白", new BigDecimal("1000"), OrderStatus.UNPAID,
-                LocalDateTime.now(), List.of(), null);
+                LocalDateTime.now(), List.of(), null, null);
     }
 
     private void loggedInAndNotRateLimited() {

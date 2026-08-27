@@ -20,6 +20,7 @@ public record AdminOrderDetailResponse(
         BigDecimal totalAmount,
         OrderStatus status,
         String paymentMethod,
+        String intendedPaymentMethod,
         LocalDateTime paidAt,
         LocalDateTime cancelledAt,
         String cancelReason,

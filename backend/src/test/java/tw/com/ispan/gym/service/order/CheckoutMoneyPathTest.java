@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestTemplate;
 
 import tw.com.ispan.gym.dto.order.CreateOrderRequest;
 import tw.com.ispan.gym.entity.account.Account;
@@ -83,10 +84,16 @@ class CheckoutMoneyPathTest {
             memberCoupons, orders, orderItems, orderStatusHistories, subscriptionPlans, subscriptions, courseQuotas,
             paymentTransactions, paymentRefunds, events);
 
+    private final RestTemplate restTemplate = mock(RestTemplate.class);
+
     private final EcpayService ecpayService = new EcpayService("2000132", HASH_KEY, HASH_IV,
             "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5",
-            "https://example.com/api/payments/ecpay/notify", "https://example.com/order-done", true,
-            orders, orderItems, orderStatusHistories, paymentTransactions, paymentWebhooks, orderService);
+            "https://example.com/api/payments/ecpay/notify",
+            "https://example.com/api/payments/ecpay/payment-info",
+            "https://payment-stage.ecpay.com.tw/Cashier/QueryTradeInfo/V5",
+            "https://example.com/order-done", true,
+            orders, orderItems, orderStatusHistories, paymentTransactions, paymentWebhooks, orderService,
+            restTemplate);
 
     private Member member() {
         Account account = new Account();

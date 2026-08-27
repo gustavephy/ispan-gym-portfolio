@@ -42,11 +42,29 @@ class PaymentControllerTest {
     void 結帳表單_本人訂單回200與表單欄位() throws Exception {
         when(currentUser.requireCurrentMemberId()).thenReturn(1);
         when(orders.findByIdAndMemberId(5, 1)).thenReturn(Optional.of(mock(Order.class)));
-        when(ecpayService.buildCheckoutForm(any())).thenReturn(Map.of("MerchantID", "2000132", "CheckMacValue", "ABC"));
+        when(ecpayService.buildCheckoutForm(any(), any()))
+                .thenReturn(Map.of("MerchantID", "2000132", "CheckMacValue", "ABC"));
 
         mockMvc.perform(post("/api/payments/ecpay/checkout/5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.MerchantID").value("2000132"));
+
+        // 沒帶 method 時預設走信用卡
+        verify(ecpayService).buildCheckoutForm(any(), org.mockito.ArgumentMatchers.eq("Credit"));
+    }
+
+    @Test
+    void 結帳表單_可指定ATM或超商代碼付款方式() throws Exception {
+        when(currentUser.requireCurrentMemberId()).thenReturn(1);
+        when(orders.findByIdAndMemberId(5, 1)).thenReturn(Optional.of(mock(Order.class)));
+        when(ecpayService.buildCheckoutForm(any(), any()))
+                .thenReturn(Map.of("MerchantID", "2000132", "ChoosePayment", "CVS"));
+
+        mockMvc.perform(post("/api/payments/ecpay/checkout/5").param("method", "CVS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ChoosePayment").value("CVS"));
+
+        verify(ecpayService).buildCheckoutForm(any(), org.mockito.ArgumentMatchers.eq("CVS"));
     }
 
     @Test
@@ -72,6 +90,26 @@ class PaymentControllerTest {
         doThrow(new RuntimeException("boom")).when(ecpayService).handleNotify(any());
 
         mockMvc.perform(post("/api/payments/ecpay/notify").param("MerchantTradeNo", "GYM1").param("RtnCode", "1"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("1|OK"));
+    }
+
+    @Test
+    void 取號通知_處理成功回1OK() throws Exception {
+        mockMvc.perform(post("/api/payments/ecpay/payment-info")
+                        .param("MerchantTradeNo", "GYM1").param("PaymentType", "ATM_TAISHIN"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("1|OK"));
+
+        verify(ecpayService).handlePaymentInfo(any());
+    }
+
+    @Test
+    void 取號通知_handlePaymentInfo丟例外仍回1OK() throws Exception {
+        doThrow(new RuntimeException("boom")).when(ecpayService).handlePaymentInfo(any());
+
+        mockMvc.perform(post("/api/payments/ecpay/payment-info")
+                        .param("MerchantTradeNo", "GYM1").param("PaymentType", "CVS_CVS"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("1|OK"));
     }

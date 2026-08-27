@@ -135,6 +135,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/subscription-plans").permitAll()
                         // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）
                         .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
+                        // ATM／CVS 取號結果通知，跟上面 notify 是不同的 callback URL（PaymentController#paymentInfo）
+                        .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/payment-info").permitAll()
                         // 注意：POST /api/auth/oauth/exchange 與
                         // /api/auth/oauth/google/registration/complete 不需要在這裡另外列——
                         // 已經落在上面 "/api/auth/**" permitAll 規則裡；安全性不是靠端點層級

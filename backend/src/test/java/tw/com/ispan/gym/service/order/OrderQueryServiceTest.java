@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -21,6 +23,7 @@ import tw.com.ispan.gym.entity.course.PrivateCourse;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.entity.order.Order;
 import tw.com.ispan.gym.entity.order.OrderItem;
+import tw.com.ispan.gym.entity.payment.PaymentTransaction;
 import tw.com.ispan.gym.entity.product.Product;
 import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 import tw.com.ispan.gym.entity.trainer.Trainer;
@@ -29,6 +32,7 @@ import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
 import tw.com.ispan.gym.repository.order.OrderStatusHistoryRepository;
+import tw.com.ispan.gym.repository.payment.PaymentTransactionRepository;
 
 /**
  * 純 Mockito 單元測試（專案無內嵌測試資料庫，不用 @SpringBootTest）。
@@ -44,8 +48,10 @@ class OrderQueryServiceTest {
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderItemRepository orderItems = mock(OrderItemRepository.class);
     private final OrderStatusHistoryRepository orderStatusHistories = mock(OrderStatusHistoryRepository.class);
+    private final PaymentTransactionRepository paymentTransactions = mock(PaymentTransactionRepository.class);
 
-    private final OrderQueryService service = new OrderQueryService(orders, orderItems, orderStatusHistories);
+    private final OrderQueryService service =
+            new OrderQueryService(orders, orderItems, orderStatusHistories, paymentTransactions);
 
     // === 測試資料 ============================================================
 
@@ -207,5 +213,51 @@ class OrderQueryServiceTest {
 
         assertThatThrownBy(() -> service.findMineById(MEMBER_ID, 99))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // === findMineById：ATM／CVS 繳費資訊 =====================================
+
+    @Test
+    void 明細_未付款訂單有ATM取號資訊時回傳繳費帳號() {
+        Order order = order(1); // merchantTradeNo = "GYM1"，order() 建構出的訂單預設就是 UNPAID
+        when(orders.findByIdAndMemberId(1, MEMBER_ID)).thenReturn(Optional.of(order));
+        when(orderItems.findAllByOrderIdOrderByIdAsc(1)).thenReturn(List.of());
+        PaymentTransaction payment = new PaymentTransaction(order, "ECPAY", "GYM1", new BigDecimal("1000"), "TWD");
+        payment.setPaymentType("ATM_TAISHIN");
+        payment.setBankCode("812");
+        payment.setVAccount("3556789012345");
+        when(paymentTransactions.findByMerchantTradeNo("GYM1")).thenReturn(Optional.of(payment));
+
+        OrderDetailResponse detail = service.findMineById(MEMBER_ID, 1);
+
+        assertThat(detail.paymentInfo()).isNotNull();
+        assertThat(detail.paymentInfo().choosePayment()).isEqualTo("ATM");
+        assertThat(detail.paymentInfo().bankCode()).isEqualTo("812");
+        assertThat(detail.paymentInfo().vAccount()).isEqualTo("3556789012345");
+    }
+
+    @Test
+    void 明細_已付款訂單不查也不回傳繳費資訊() {
+        Order order = order(1);
+        order.markPaid("ATM_TAISHIN", "T1");
+        when(orders.findByIdAndMemberId(1, MEMBER_ID)).thenReturn(Optional.of(order));
+        when(orderItems.findAllByOrderIdOrderByIdAsc(1)).thenReturn(List.of());
+
+        OrderDetailResponse detail = service.findMineById(MEMBER_ID, 1);
+
+        assertThat(detail.paymentInfo()).isNull();
+        verify(paymentTransactions, never()).findByMerchantTradeNo(any());
+    }
+
+    @Test
+    void 明細_信用卡付款沒有取號紀錄時不回傳繳費資訊() {
+        Order order = order(1);
+        when(orders.findByIdAndMemberId(1, MEMBER_ID)).thenReturn(Optional.of(order));
+        when(orderItems.findAllByOrderIdOrderByIdAsc(1)).thenReturn(List.of());
+        when(paymentTransactions.findByMerchantTradeNo("GYM1")).thenReturn(Optional.empty());
+
+        OrderDetailResponse detail = service.findMineById(MEMBER_ID, 1);
+
+        assertThat(detail.paymentInfo()).isNull();
     }
 }

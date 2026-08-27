@@ -16,7 +16,10 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.member.Member;
@@ -56,21 +59,28 @@ class EcpayServiceTest {
     private final PaymentTransactionRepository paymentTransactions = mock(PaymentTransactionRepository.class);
     private final PaymentWebhookRepository paymentWebhooks = mock(PaymentWebhookRepository.class);
     private final OrderService orderService = mock(OrderService.class);
+    private final RestTemplate restTemplate = mock(RestTemplate.class);
 
     private final EcpayService service = new EcpayService(MERCHANT_ID, HASH_KEY, HASH_IV,
             "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5",
             "https://example.com/api/payments/ecpay/notify",
+            "https://example.com/api/payments/ecpay/payment-info",
+            "https://payment-stage.ecpay.com.tw/Cashier/QueryTradeInfo/V5",
             "https://example.com/order-done",
             true,
-            orders, orderItems, orderStatusHistories, paymentTransactions, paymentWebhooks, orderService);
+            orders, orderItems, orderStatusHistories, paymentTransactions, paymentWebhooks, orderService,
+            restTemplate);
 
     /** simulate-enabled=false 的另一個實例，測開關關閉時的行為 */
     private final EcpayService simulateDisabledService = new EcpayService(MERCHANT_ID, HASH_KEY, HASH_IV,
             "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5",
             "https://example.com/api/payments/ecpay/notify",
+            "https://example.com/api/payments/ecpay/payment-info",
+            "https://payment-stage.ecpay.com.tw/Cashier/QueryTradeInfo/V5",
             "https://example.com/order-done",
             false,
-            orders, orderItems, orderStatusHistories, paymentTransactions, paymentWebhooks, orderService);
+            orders, orderItems, orderStatusHistories, paymentTransactions, paymentWebhooks, orderService,
+            restTemplate);
 
     // === 共用測試資料 ========================================================
 
@@ -168,6 +178,95 @@ class EcpayServiceTest {
         Map<String, String> form = service.buildCheckoutForm(order);
 
         assertThat(form.get("ItemName")).isEqualTo("訂單ORD20260816120000001");
+    }
+
+    // === buildCheckoutForm()：ATM／CVS ========================================
+
+    @Test
+    void 信用卡結帳表單不帶取號通知網址() {
+        Order order = order("1000");
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
+
+        Map<String, String> form = service.buildCheckoutForm(order, "Credit");
+
+        assertThat(form).doesNotContainKeys("PaymentInfoURL", "ExpireDate", "StoreExpireDate");
+    }
+
+    @Test
+    void ATM結帳表單帶取號通知網址與繳費期限() {
+        Order order = order("1000");
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
+
+        Map<String, String> form = service.buildCheckoutForm(order, "ATM");
+
+        assertThat(form.get("ChoosePayment")).isEqualTo("ATM");
+        assertThat(form.get("ExpireDate")).isEqualTo("3");
+        assertThat(form.get("PaymentInfoURL")).isEqualTo("https://example.com/api/payments/ecpay/payment-info");
+    }
+
+    @Test
+    void ATM沒有金額上限限制() {
+        Order order = order("50000");
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
+
+        Map<String, String> form = service.buildCheckoutForm(order, "ATM");
+
+        assertThat(form.get("ChoosePayment")).isEqualTo("ATM");
+    }
+
+    @Test
+    void 超商代碼結帳表單帶取號通知網址與有效期限() {
+        Order order = order("1000");
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
+
+        Map<String, String> form = service.buildCheckoutForm(order, "CVS");
+
+        assertThat(form.get("ChoosePayment")).isEqualTo("CVS");
+        assertThat(form.get("StoreExpireDate")).isEqualTo("10080");
+        assertThat(form.get("PaymentInfoURL")).isEqualTo("https://example.com/api/payments/ecpay/payment-info");
+    }
+
+    @Test
+    void 超商代碼金額低於下限直接擋下() {
+        Order order = order("20"); // 低於 27 元下限
+
+        assertThatThrownBy(() -> service.buildCheckoutForm(order, "CVS"))
+                .isInstanceOf(tw.com.ispan.gym.exception.BusinessRuleException.class);
+    }
+
+    @Test
+    void 超商代碼金額超過上限直接擋下() {
+        Order order = order("20001"); // 超過 20000 元上限
+
+        assertThatThrownBy(() -> service.buildCheckoutForm(order, "CVS"))
+                .isInstanceOf(tw.com.ispan.gym.exception.BusinessRuleException.class);
+    }
+
+    @Test
+    void 不支援的付款方式直接擋下() {
+        Order order = order("1000");
+
+        assertThatThrownBy(() -> service.buildCheckoutForm(order, "WeChatPay"))
+                .isInstanceOf(tw.com.ispan.gym.exception.BusinessRuleException.class);
+    }
+
+    @Test
+    void 組表單時記錄使用者選擇的付款方式供後台判斷是否可模擬付款() {
+        Order order = order("1000");
+        when(orderItems.findAllByOrderIdOrderByIdAsc(900)).thenReturn(List.of());
+
+        service.buildCheckoutForm(order, "ATM");
+
+        assertThat(order.getIntendedPaymentMethod()).isEqualTo("ATM");
+    }
+
+    @Test
+    void 不支援的付款方式不會留下錯誤的意向紀錄() {
+        Order order = order("1000");
+
+        assertThatThrownBy(() -> service.buildCheckoutForm(order, "WeChatPay"))
+                .isInstanceOf(tw.com.ispan.gym.exception.BusinessRuleException.class);
+        assertThat(order.getIntendedPaymentMethod()).isNull();
     }
 
     @Test
@@ -386,6 +485,201 @@ class EcpayServiceTest {
                         && w.getErrorMessage().contains("CANCELLED")));
     }
 
+    // === handlePaymentInfo()：ATM／CVS 取號通知 ================================
+
+    /** ATM 取號通知的最小 payload；BankCode/vAccount/ExpireDate 是綠界文件記載的實際回傳欄位 */
+    private Map<String, String> atmPaymentInfoParams() {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("MerchantID", MERCHANT_ID);
+        params.put("MerchantTradeNo", TRADE_NO);
+        params.put("TradeNo", "2604161200001234");
+        params.put("RtnCode", "2");
+        params.put("RtnMsg", "取號成功");
+        params.put("PaymentType", "ATM_TAISHIN");
+        params.put("TradeAmt", "1000");
+        params.put("BankCode", "812");
+        params.put("vAccount", "3556789012345");
+        params.put("ExpireDate", "2026/08/30 23:59:59");
+        params.put("CheckMacValue", signatureOf(params));
+        return params;
+    }
+
+    /** 超商代碼取號通知的最小 payload；PaymentNo 是綠界回傳的 14 碼繳費代碼 */
+    private Map<String, String> cvsPaymentInfoParams() {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("MerchantID", MERCHANT_ID);
+        params.put("MerchantTradeNo", TRADE_NO);
+        params.put("TradeNo", "2604161200001234");
+        params.put("RtnCode", "2");
+        params.put("RtnMsg", "取號成功");
+        params.put("PaymentType", "CVS_CVS");
+        params.put("TradeAmt", "1000");
+        params.put("PaymentNo", "12345678901234");
+        params.put("ExpireDate", "2026/09/02 23:59:59");
+        params.put("CheckMacValue", signatureOf(params));
+        return params;
+    }
+
+    @Test
+    void ATM取號通知記錄銀行代碼與虛擬帳號且訂單維持未付款() {
+        stubWebhookSaveReturnsArgument();
+        Order order = order("1000");
+        when(orders.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.empty());
+        when(paymentTransactions.save(any(PaymentTransaction.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.handlePaymentInfo(atmPaymentInfoParams());
+
+        verify(paymentTransactions).save(org.mockito.ArgumentMatchers.argThat(
+                (PaymentTransaction p) -> "812".equals(p.getBankCode())
+                        && "3556789012345".equals(p.getVAccount())
+                        && p.getPaymentExpireAt() != null));
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.UNPAID);
+        verify(orderService, never()).fulfillPaidOrder(any());
+    }
+
+    @Test
+    void 超商代碼取號通知記錄繳費代碼且不動信用卡的欄位() {
+        stubWebhookSaveReturnsArgument();
+        Order order = order("1000");
+        PaymentTransaction payment = payment(order);
+        when(orders.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(payment));
+
+        service.handlePaymentInfo(cvsPaymentInfoParams());
+
+        assertThat(payment.getPaymentNo()).isEqualTo("12345678901234");
+        assertThat(payment.getBankCode()).isNull();
+        assertThat(payment.getVAccount()).isNull();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.UNPAID);
+    }
+
+    @Test
+    void 取號通知跟付款結果通知用不同的冪等key互不影響() {
+        stubWebhookSaveReturnsArgument();
+        Order order = order("1000");
+        when(orders.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(payment(order)));
+
+        service.handlePaymentInfo(atmPaymentInfoParams());
+        service.handleNotify(notifyParams("1"));
+
+        verify(paymentWebhooks).save(org.mockito.ArgumentMatchers.argThat(
+                (PaymentWebhook w) -> (TRADE_NO + "-INFO").equals(w.getEventKey())));
+        verify(paymentWebhooks).save(org.mockito.ArgumentMatchers.argThat(
+                (PaymentWebhook w) -> (TRADE_NO + "-1").equals(w.getEventKey())));
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+    }
+
+    @Test
+    void 重複的取號通知直接略過() {
+        when(paymentWebhooks.existsByProviderAndEventKey("ECPAY", TRADE_NO + "-INFO")).thenReturn(true);
+
+        service.handlePaymentInfo(atmPaymentInfoParams());
+
+        verify(paymentWebhooks, never()).save(any());
+        verify(orders, never()).findByMerchantTradeNo(any());
+    }
+
+    @Test
+    void 取號通知驗簽失敗只記錄錯誤不查訂單() {
+        stubWebhookSaveReturnsArgument();
+        Map<String, String> tampered = atmPaymentInfoParams();
+        tampered.put("vAccount", "0000000000000"); // 竄改內容但簽章沒跟著改，驗簽會失敗
+
+        service.handlePaymentInfo(tampered);
+
+        verify(paymentWebhooks).save(org.mockito.ArgumentMatchers.argThat(
+                (PaymentWebhook w) -> "ERROR".equals(w.getProcessingStatus())));
+        verify(orders, never()).findByMerchantTradeNo(any());
+    }
+
+    @Test
+    void 取號通知查無對應訂單只記錄錯誤() {
+        stubWebhookSaveReturnsArgument();
+        when(orders.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.empty());
+
+        service.handlePaymentInfo(atmPaymentInfoParams());
+
+        verify(paymentWebhooks).save(org.mockito.ArgumentMatchers.argThat(
+                (PaymentWebhook w) -> "ERROR".equals(w.getProcessingStatus()) && w.getErrorMessage().contains(TRADE_NO)));
+        verify(paymentTransactions, never()).save(any());
+    }
+
+    // === syncPaymentStatus()：主動查詢（QueryTradeInfo）取代等待通知 ===========
+
+    /** 模擬綠界 QueryTradeInfo 的回應：URL-encoded 字串，不是 JSON */
+    private void stubQueryResponse(String tradeStatus, String tradeAmt) {
+        String body = "MerchantID=" + MERCHANT_ID + "&MerchantTradeNo=" + TRADE_NO
+                + "&TradeNo=2604161200001234&TradeStatus=" + tradeStatus
+                + "&TradeAmt=" + tradeAmt + "&PaymentType=Credit_CreditCard";
+        when(restTemplate.postForEntity(org.mockito.ArgumentMatchers.eq(
+                        "https://payment-stage.ecpay.com.tw/Cashier/QueryTradeInfo/V5"),
+                any(org.springframework.http.HttpEntity.class), org.mockito.ArgumentMatchers.eq(String.class)))
+                .thenReturn(ResponseEntity.ok(body));
+    }
+
+    @Test
+    void 查詢到已付款時轉為已付款並觸發履約() {
+        stubWebhookSaveReturnsArgument();
+        Order order = order("1000");
+        PaymentTransaction payment = payment(order);
+        when(paymentTransactions.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(payment));
+        stubQueryResponse("1", "1000");
+
+        OrderStatus result = service.syncPaymentStatus(order);
+
+        assertThat(result).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        verify(orderService).fulfillPaidOrder(order);
+    }
+
+    @Test
+    void 查詢到未付款時不動訂單狀態也不視為失敗() {
+        Order order = order("1000");
+        stubQueryResponse("0", "1000");
+
+        OrderStatus result = service.syncPaymentStatus(order);
+
+        assertThat(result).isEqualTo(OrderStatus.UNPAID);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.UNPAID); // 沒有被標記 FAILED
+        verify(orderService, never()).fulfillPaidOrder(any());
+    }
+
+    @Test
+    void 查詢金額與訂單不符時不履約() {
+        Order order = order("1000");
+        stubQueryResponse("1", "1"); // 查到的金額被動過手腳
+
+        OrderStatus result = service.syncPaymentStatus(order);
+
+        assertThat(result).isEqualTo(OrderStatus.UNPAID);
+        verify(orderService, never()).fulfillPaidOrder(any());
+    }
+
+    @Test
+    void 訂單已經有結果時不再重新查詢() {
+        Order order = order("1000");
+        order.markPaid("Credit", "T1");
+
+        OrderStatus result = service.syncPaymentStatus(order);
+
+        assertThat(result).isEqualTo(OrderStatus.PAID);
+        verify(restTemplate, never()).postForEntity(any(String.class), any(), org.mockito.ArgumentMatchers.eq(String.class));
+    }
+
+    @Test
+    void 查詢時網路例外不會讓呼叫端跟著炸掉() {
+        Order order = order("1000");
+        when(restTemplate.postForEntity(any(String.class), any(), org.mockito.ArgumentMatchers.eq(String.class)))
+                .thenThrow(new RestClientException("timeout"));
+
+        OrderStatus result = service.syncPaymentStatus(order);
+
+        assertThat(result).isEqualTo(OrderStatus.UNPAID);
+        verify(orderService, never()).fulfillPaidOrder(any());
+    }
+
     // === simulatePaymentSuccess() ============================================
 
     @Test
@@ -420,6 +714,55 @@ class EcpayServiceTest {
         assertThatThrownBy(() -> simulateDisabledService.simulatePaymentSuccess(900))
                 .isInstanceOf(tw.com.ispan.gym.exception.BusinessRuleException.class);
         verify(orders, never()).findById(any());
+    }
+
+    @Test
+    void ATM訂單不提供模擬付款() {
+        Order order = order("1000");
+        order.recordIntendedPaymentMethod("ATM");
+        when(orders.findById(900)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.simulatePaymentSuccess(900))
+                .isInstanceOf(tw.com.ispan.gym.exception.BusinessRuleException.class);
+        verify(orderService, never()).fulfillPaidOrder(any());
+    }
+
+    @Test
+    void 超商代碼訂單不提供模擬付款() {
+        Order order = order("1000");
+        order.recordIntendedPaymentMethod("CVS");
+        when(orders.findById(900)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.simulatePaymentSuccess(900))
+                .isInstanceOf(tw.com.ispan.gym.exception.BusinessRuleException.class);
+        verify(orderService, never()).fulfillPaidOrder(any());
+    }
+
+    @Test
+    void 信用卡訂單仍可模擬付款() {
+        Order order = order("1000");
+        order.recordIntendedPaymentMethod("Credit");
+        when(orders.findById(900)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(payment(order)));
+        stubWebhookSaveReturnsArgument();
+
+        service.simulatePaymentSuccess(900);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        verify(orderService).fulfillPaidOrder(order);
+    }
+
+    @Test
+    void 沒有選過付款方式的訂單仍可模擬付款() {
+        // 舊資料／直接呼叫測試工具的情境：intendedPaymentMethod 為 null 時比照信用卡放行
+        Order order = order("1000");
+        when(orders.findById(900)).thenReturn(Optional.of(order));
+        when(paymentTransactions.findByMerchantTradeNo(TRADE_NO)).thenReturn(Optional.of(payment(order)));
+        stubWebhookSaveReturnsArgument();
+
+        service.simulatePaymentSuccess(900);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
     }
 
     /** 借 notifyParams 之外的路徑重算簽章時，先把 CheckMacValue 拿掉 */

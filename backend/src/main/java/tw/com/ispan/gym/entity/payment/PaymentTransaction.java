@@ -33,6 +33,12 @@ public class PaymentTransaction {
     @Nationalized @Column(name = "rtn_msg", length = 500) private String rtnMsg;
     @Column(name = "payment_type", length = 50) private String paymentType;
     @Column(name = "charge_fee", precision = 10, scale = 2) private BigDecimal chargeFee;
+    // ATM／超商代碼取號通知（EcpayService#handlePaymentInfo）帶回的繳費資訊，
+    // 訂單付款完成後仍保留不清空，供事後查對這筆訂單當初是用哪組帳號/代碼繳費
+    @Column(name = "bank_code", length = 10) private String bankCode;
+    @Column(name = "v_account", length = 20) private String vAccount;
+    @Column(name = "payment_no", length = 20) private String paymentNo;
+    @Column(name = "payment_expire_at") private LocalDateTime paymentExpireAt;
     @Column(name = "simulate_paid", nullable = false) private Boolean simulatePaid;
     @Nationalized @Lob @Column(name = "request_payload") private String requestPayload;
     @Nationalized @Lob @Column(name = "response_payload") private String responsePayload;

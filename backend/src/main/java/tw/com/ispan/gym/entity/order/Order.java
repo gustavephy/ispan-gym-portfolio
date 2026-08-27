@@ -32,6 +32,13 @@ public class Order extends TaipeiTimestampEntity {
     private BigDecimal totalAmount;
     @Column(name = "payment_method", length = 20)
     private String paymentMethod;
+    /**
+     * 結帳當下使用者選擇的付款方式（Credit／ATM／CVS），跟 {@link #paymentMethod} 分開存放——
+     * 後者要留給「金流分布報表」（見 OrderRepository#aggregateByPaymentMethod）只統計真正走過
+     * 付款流程的訂單；若拿「當初選了什麼」去覆蓋，會讓還沒真正付款的訂單也被算進報表裡失真。
+     */
+    @Column(name = "intended_payment_method", length = 20)
+    private String intendedPaymentMethod;
     @Column(name = "merchant_trade_no", nullable = false, length = 20)
     private String merchantTradeNo;
     @Column(name = "trade_no", length = 20)
@@ -122,6 +129,16 @@ public class Order extends TaipeiTimestampEntity {
         this.cancelReason = reason;
     }
 
+    /**
+     * 結帳當下記錄使用者選擇的付款方式，只在 UNPAID 時才有意義（付款完成後應以
+     * {@link #paymentMethod} 上綠界回傳的實際值為準，不該再被這裡覆蓋）。
+     */
+    public void recordIntendedPaymentMethod(String method) {
+        if (status == OrderStatus.UNPAID) {
+            this.intendedPaymentMethod = method;
+        }
+    }
+
     /** ECPay 通知付款成功：UNPAID → PAID。paymentStatus 維持既有值不動，理由同 {@link #cancel} */
     public void markPaid(String paymentMethod, String tradeNo) {
         if (status != OrderStatus.UNPAID) {
@@ -202,6 +219,10 @@ public class Order extends TaipeiTimestampEntity {
 
     public String getPaymentMethod() {
         return paymentMethod;
+    }
+
+    public String getIntendedPaymentMethod() {
+        return intendedPaymentMethod;
     }
 
     public String getMerchantTradeNo() {
