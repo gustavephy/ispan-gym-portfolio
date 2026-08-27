@@ -110,7 +110,7 @@ class AdminOrderQueryServiceTest {
         product.setName("測試商品");
         product.setPrice(new BigDecimal("500"));
         OrderItem item = new OrderItem(productOrder, product, "測試商品", new BigDecimal("500"), 1);
-        ReflectionTestUtils.setField(item, "id", 1);
+        ReflectionTestUtils.setField(item, "orderItemId", 1);
         when(orders.search(any(), any(), any(), any(), any(), any())).thenReturn(new PageImpl<>(List.of(productOrder)));
         when(orderItems.findAllByOrderIdInOrderByOrderIdAscIdAsc(any())).thenReturn(List.of(item));
 
@@ -130,7 +130,7 @@ class AdminOrderQueryServiceTest {
         product.setName("測試商品");
         product.setPrice(new BigDecimal("500"));
         OrderItem item = new OrderItem(order, product, "測試商品", new BigDecimal("500"), 2);
-        ReflectionTestUtils.setField(item, "id", 1);
+        ReflectionTestUtils.setField(item, "orderItemId", 1);
 
         OrderStatusHistory checkout =
                 new OrderStatusHistory(order, null, "UNPAID", order.getMember(), "USER", "CHECKOUT");

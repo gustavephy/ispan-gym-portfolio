@@ -38,7 +38,7 @@ export const useCoursesStore = defineStore('courses', () => {
           ? groupCourses.value.content
           : [])
     return [
-      ...privates.map(c => ({ ...c, id: c.id || c.courseId, isPrivate: true })),
+      ...privates.map(c => ({ ...c, id: c.id || c.privateCourseId || c.courseId, isPrivate: true })),
       ...groups.map(c => ({ ...c, id: c.id || c.courseId || c.groupCourseId, isPrivate: false }))
     ]
   })

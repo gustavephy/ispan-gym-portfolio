@@ -93,7 +93,7 @@ class EcpayServiceTest {
         product.setName(name);
         product.setPrice(new BigDecimal(price));
         OrderItem item = new OrderItem(order, product, name, new BigDecimal(price), 1);
-        ReflectionTestUtils.setField(item, "id", 1);
+        ReflectionTestUtils.setField(item, "orderItemId", 1);
         return item;
     }
 

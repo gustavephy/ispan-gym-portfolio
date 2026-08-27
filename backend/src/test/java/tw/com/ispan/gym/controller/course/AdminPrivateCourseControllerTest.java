@@ -47,7 +47,7 @@ class AdminPrivateCourseControllerTest {
 
         mockMvc.perform(get("/api/admin/private-courses").param("trainerId", "7"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(30));
+                .andExpect(jsonPath("$[0].privateCourseId").value(30));
     }
 
     @Test
