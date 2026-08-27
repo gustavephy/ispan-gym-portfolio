@@ -106,8 +106,7 @@ function getQuotaCourse(quota) {
 // [功能方法] getQuotaTrainerName (取得quotatrainername)
 // 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
 function getQuotaTrainerName(quota) {
-  const m = getQuotaCourse(quota)
-  return m?.trainer ? `${m.trainer.lastName || ''}${m.trainer.firstName || ''}` : ''
+  return quota.trainer ? `${quota.trainer.lastName || ''}${quota.trainer.firstName || ''}` : ''
 }
 
 // [功能方法] getQuotaTypeLabel (取得quotatypelabel)
@@ -144,13 +143,14 @@ function handleBookCourse(quota) {
   if (quota.courseName) {
     showToast(`正在前往課表預約 ${quota.courseName}`, 'success')
     const isPrivate = getQuotaTypeLabel(quota) === '私教課'
-    router.push({
-      path: '/reservation',
-      query: {
-        keyword: quota.courseName,
-        type: isPrivate ? 'PRIVATE' : 'GROUP'
-      }
-    })
+    if (isPrivate && quota.trainer?.id) {
+      router.push(`/reservation/trainer/${quota.trainer.id}`)
+    } else {
+      router.push({
+        path: '/reservation',
+        query: { keyword: quota.courseName, type: isPrivate ? 'PRIVATE' : 'GROUP' }
+      })
+    }
   } else {
     router.push('/reservation')
   }

@@ -1,9 +1,8 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   getTrainers,
-  getTrainerSchedules,
-  createBooking,
   getMyBookings,
   cancelBooking,
 } from '@/api/coachBooking.js'
@@ -19,6 +18,8 @@ const BOOKING_STATUS_MAP = {
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
 }
 
+const router = useRouter()
+
 const trainers = ref([])
 const trainersLoading = ref(true)
 
@@ -27,14 +28,7 @@ const trainersLoading = ref(true)
 // 不需要像 GroupClassView 那樣額外判斷 auth.isMember 才顯示切換器。
 const viewMode = ref('trainers')
 
-const selectedTrainerId = ref(null)
-const slots = ref([])
-const slotsLoading = ref(false)
-
-// 正在送出預約的時段 id；用來讓「預約」按鈕在等待回應期間顯示 loading、避免重複點擊
-const bookingSlotId = ref(null)
-
-// 我的預約列表，跟教練清單、時段列表的 loading 各自獨立、互不影響
+// 我的預約列表，跟教練清單的 loading 各自獨立、互不影響
 const myBookings = ref([])
 const myBookingsLoading = ref(true)
 
@@ -52,16 +46,6 @@ const statusFilter = ref('')
 // 上課日期區間篩選（yyyy-MM-dd），任一為空代表不限制該端
 const dateFrom = ref('')
 const dateTo = ref('')
-
-// 依開始時間排序，未來時段在前（跟 TrainerScheduleView 的 sortedSlots 同樣的排序邏輯）
-const sortedSlots = computed(() =>
-  [...slots.value].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)),
-)
-
-// confirm() 訊息要帶教練姓名，從目前選中的教練 id 反查清單裡的資料
-const selectedTrainer = computed(
-  () => trainers.value.find((t) => t.trainerId === selectedTrainerId.value) ?? null,
-)
 
 // 我的預約列表也依開始時間排序
 const sortedBookings = computed(() =>
@@ -91,12 +75,6 @@ function formatDateTime(value) {
   })
 }
 
-// 只取時間部分（HH:mm），給 confirm() 訊息裡的結束時間用，不用重複顯示日期
-function timeOnly(iso) {
-  const [, timePart] = iso.split('T')
-  return (timePart || '').slice(0, 5)
-}
-
 async function fetchTrainers() {
   trainersLoading.value = true
   try {
@@ -105,17 +83,6 @@ async function fetchTrainers() {
     trainers.value = res.data.filter((trainer) => trainer.status === 'ACTIVE')
   } finally {
     trainersLoading.value = false
-  }
-}
-
-async function fetchTrainerSchedules(trainerId) {
-  slotsLoading.value = true
-  try {
-    const res = await getTrainerSchedules(trainerId)
-    // 這個頁面只做瀏覽可預約時段，BOOKED／CANCELLED 的時段不在會員視角顯示
-    slots.value = res.data.filter((slot) => slot.status === 'AVAILABLE')
-  } finally {
-    slotsLoading.value = false
   }
 }
 
@@ -172,16 +139,12 @@ async function submitCancelBooking(bookingId, acknowledgeConsumption = false) {
   }
 }
 
-// 點擊「取消」：取消成功後刷新我的預約列表；若被取消的預約剛好是目前選中教練的，
-// 該時段有機會變回可預約狀態，一併刷新時段列表
+// 點擊「取消」：取消成功後刷新我的預約列表
 async function handleCancelBooking(booking) {
   bookingActionMessage.value = ''
   try {
     await submitCancelBooking(booking.id)
     await fetchMyBookings()
-    if (selectedTrainerId.value === booking.trainerId) {
-      await fetchTrainerSchedules(selectedTrainerId.value)
-    }
   } catch (err) {
     const apiError = err
     if (isInlineError(apiError)) {
@@ -192,44 +155,9 @@ async function handleCancelBooking(booking) {
   }
 }
 
-// 點選教練：切換選取狀態、清掉前一位教練的時段列表，再重新抓這位教練的時段
-function selectTrainer(trainer) {
-  selectedTrainerId.value = trainer.trainerId
-  slots.value = []
-  fetchTrainerSchedules(trainer.trainerId)
-}
-
-// 點擊「預約」：先用瀏覽器原生 confirm() 做二次確認，讓使用者看清楚自己在約什麼堂課，
-// 確定才送出請求；成功後把核銷碼顯示給使用者，並刷新列表讓已被約走的時段消失，
-// 失敗則顯示錯誤訊息、維持列表原狀，讓使用者可以再試一次或選別的時段
-async function handleBook(slot) {
-  const trainerLabel = selectedTrainer.value?.displayName ?? ''
-  const confirmed = window.confirm(
-    `確定要預約 ${trainerLabel} ${formatDateTime(slot.startAt)}~${timeOnly(slot.endAt)} 這堂課嗎？`,
-  )
-  if (!confirmed) return
-
-  bookingActionMessage.value = ''
-  bookingSlotId.value = slot.id
-  try {
-    const res = await createBooking(slot.id)
-    // 這裡刻意用 alert 而非 toast：核銷碼是使用者必須記下來的資訊，
-    // 自動消失的 toast 有錯過的風險，阻斷式對話框逼使用者確實看過才繼續。
-    // 其他「操作已完成」的提示仍用 toast（見 GroupClassView／TrainerScheduleView）
-    alert(`預約成功！核銷碼：${res.data.checkInKey}，上課時請出示給教練核銷`)
-    // 時段列表要讓已被約走的時段消失，「我的預約」要出現這筆新紀錄——兩邊都得重抓。
-    // 只抓其中一邊會讓使用者以為預約沒成功（同 handleCancelBooking 的處理）
-    await Promise.all([fetchTrainerSchedules(selectedTrainerId.value), fetchMyBookings()])
-  } catch (err) {
-    const apiError = err
-    if (isInlineError(apiError)) {
-      bookingActionMessage.value = apiError.message
-    } else {
-      notifyApiError(apiError)
-    }
-  } finally {
-    bookingSlotId.value = null
-  }
+// 點選教練：導到該教練的可預約時段獨立頁面
+function goToTrainerSlots(trainer) {
+  router.push(`/reservation/trainer/${trainer.trainerId}`)
 }
 
 onMounted(() => {
@@ -279,8 +207,7 @@ onMounted(() => {
             :key="trainer.trainerId"
             type="button"
             class="trainer-card"
-            :class="{ 'trainer-card-selected': trainer.trainerId === selectedTrainerId }"
-            @click="selectTrainer(trainer)"
+            @click="goToTrainerSlots(trainer)"
           >
             <h3 class="trainer-name">{{ trainer.displayName }}</h3>
             <p class="trainer-specialty">{{ trainer.specialty }}</p>
@@ -288,42 +215,6 @@ onMounted(() => {
           </button>
         </div>
       </template>
-
-      <div v-if="selectedTrainerId" class="schedule-section">
-        <h3 class="schedule-title">可預約時段</h3>
-
-        <div v-if="slotsLoading" class="spinner"></div>
-
-        <template v-else>
-          <p v-if="sortedSlots.length === 0" class="empty-state">這位教練目前沒有可預約的時段</p>
-
-          <table v-else class="slot-table">
-            <thead>
-              <tr>
-                <th>開始時間</th>
-                <th>結束時間</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="slot in sortedSlots" :key="slot.id">
-                <td>{{ formatDateTime(slot.startAt) }}</td>
-                <td>{{ formatDateTime(slot.endAt) }}</td>
-                <td>
-                  <button
-                    class="btn btn-accent"
-                    type="button"
-                    :disabled="bookingSlotId === slot.id"
-                    @click="handleBook(slot)"
-                  >
-                    {{ bookingSlotId === slot.id ? '預約中…' : '預約' }}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </template>
-      </div>
     </template>
 
     <div v-if="viewMode === 'bookings'" class="my-bookings-section">
@@ -468,12 +359,6 @@ onMounted(() => {
   border-color: var(--accent);
 }
 
-.trainer-card-selected {
-  border-color: var(--accent);
-  background: var(--bg-soft);
-  box-shadow: var(--shadow-hover);
-}
-
 .trainer-name {
   margin: 0 0 0.5rem;
   font-size: 1.05rem;
@@ -491,10 +376,6 @@ onMounted(() => {
   margin: 0;
   font-size: 0.85rem;
   color: var(--text-secondary);
-}
-
-.schedule-section {
-  margin-top: 1rem;
 }
 
 .my-bookings-section {

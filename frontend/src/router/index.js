@@ -16,6 +16,11 @@ const router = createRouter({
           component: () => import('@/views/reservation/ReservationView.vue'),
           meta: { requiresAuth: true },
         },
+        {
+          path: 'reservation/trainer/:trainerId',
+          component: () => import('@/views/reservation/TrainerSlotsView.vue'),
+          meta: { requiresAuth: true },
+        },
         { path: 'group-classes', component: () => import('@/views/reservation/GroupClassView.vue') },
         { path: 'products', component: () => import('@/views/product/ProductView.vue') },
         { path: 'products/:id', component: () => import('@/views/product/ProductDetail.vue') },
