@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
@@ -22,14 +23,6 @@ import tw.com.ispan.gym.service.coupon.MemberCouponService;
 @Slf4j
 public class MemberCouponController {
 
-    // 【合併時的修改說明】原本寫的 AuthUtils 在專案裡不存在（分支上也沒有這個類別，
-    // 無法編譯），dev 上取得登入者 id 的統一慣例是 CurrentUserProvider
-    // （教練排班、AI 健康等 controller 都用它），這裡跟著改用同一套；
-    // @AuthenticationPrincipal UserDetails 參數因此不再需要。
-    // 另外移除了誤匯入主程式的 MockMvcResultHandlers.log（測試專用），log 走 @Slf4j。
-    // 取 id 用 requireCurrentMemberId()（member 表主鍵）而非 requireCurrentUserId()（account id）：
-    // 兩者是各自獨立的流水號，優惠券的 member_coupon.member_id 外鍵掛的是 member id，
-    // 與購物車／訂單等會員域 controller 同一套用法。
     private final MemberCouponService memberCouponService;
     private final CurrentUserProvider currentUserProvider;
 
@@ -38,10 +31,11 @@ public class MemberCouponController {
      * 篩選出有效期限內且當前會員尚未領取過的優惠券，供前台「領取中心」顯示。
      */
     @GetMapping("/available")
-    public ResponseEntity<List<CouponResponse>> getAvailableCoupons() {
+    public ResponseEntity<org.springframework.data.domain.Page<CouponResponse>> getAvailableCoupons(
+            @org.springframework.data.web.PageableDefault(size = 10, page = 0) org.springframework.data.domain.Pageable pageable) {
         Integer memberId = currentUserProvider.requireCurrentMemberId();
-        log.info("Member {} request to get available coupons for claim", memberId);
-        return ResponseEntity.ok(memberCouponService.getAvailableCouponsForClaim(memberId));
+        log.info("Member {} request to get available coupons for claim with pageable: {}", memberId, pageable);
+        return ResponseEntity.ok(memberCouponService.getAvailableCouponsForClaim(memberId, pageable));
     }
 
     /**
@@ -61,10 +55,12 @@ public class MemberCouponController {
      * 包含已使用、未使用、已過期的歷史清單。
      */
     @GetMapping("/my")
-    public ResponseEntity<List<MemberCouponResponse>> getMyCoupons() {
+    public ResponseEntity<org.springframework.data.domain.Page<MemberCouponResponse>> getMyCoupons(
+            @RequestParam(required = false) tw.com.ispan.gym.enums.member.MemberCouponStatus status,
+            @org.springframework.data.web.PageableDefault(size = 10, page = 0) org.springframework.data.domain.Pageable pageable) {
         Integer memberId = currentUserProvider.requireCurrentMemberId();
-        log.info("Member {} request to get own coupons list", memberId);
-        return ResponseEntity.ok(memberCouponService.getMyCoupons(memberId));
+        log.info("Member {} request to get own coupons list with status: {}, pageable: {}", memberId, status, pageable);
+        return ResponseEntity.ok(memberCouponService.getMyCoupons(memberId, status, pageable));
     }
 
     /**

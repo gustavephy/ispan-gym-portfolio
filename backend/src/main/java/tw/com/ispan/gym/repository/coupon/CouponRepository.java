@@ -17,7 +17,7 @@ public interface CouponRepository extends JpaRepository<Coupon, Integer> {
 	Optional<Coupon> findByCode(String code);
 	
 	//用於前台展示可領取的優惠券
-	List<Coupon> findByStatus(CouponStatus status);
+	org.springframework.data.domain.Page<Coupon> findByStatus(CouponStatus status, org.springframework.data.domain.Pageable pageable);
 	
 	//悲觀鎖，用於使用者搶購優惠券時，確保高併發的情況下，防止超賣
 	@Lock(LockModeType.PESSIMISTIC_WRITE)

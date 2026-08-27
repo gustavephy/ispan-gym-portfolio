@@ -4,6 +4,8 @@ import { storeToRefs } from 'pinia';
 import api from '@/api/axios.instance.js'
 import { useCoursesStore } from '@/stores/courses';
 
+// 丟 prop 決定要顯示哪些搜尋條件，預設全部顯示
+// 丟給 member 搜尋課程
 const props = defineProps({
     showKeyword: {
         type: Boolean,
@@ -69,8 +71,10 @@ const displayCategories = computed(() => {
 })
 const trainerOptions = ref([])
 const displayTrainers = computed(() => {
-    const raw = props.trainers || trainerOptions.value || []
-    return raw.map(t => ({
+    // props.trainers !== null 代表外部明確傳入清單（可能為空陣列），優先使用
+    // props.trainers === null 代表未傳，才改用 API 撈的所有教練
+    const raw = props.trainers !== null ? props.trainers : trainerOptions.value
+    return (raw || []).map(t => ({
         id: t.id ?? t.trainerId,
         name: t.name ?? t.displayName ?? (t.lastName + t.firstName)
     }))
@@ -115,7 +119,8 @@ watch(() => props.modelValue, (v) => {
 
 onMounted(()=>{
   if(props.showCategory) loadCategories()
-  if(props.showTrainer) loadTrainers()
+  // 只有外部沒傳 trainers 時才打 API 撈全部教練
+  if(props.showTrainer && props.trainers === null) loadTrainers()
 })
 
 </script>
