@@ -91,7 +91,10 @@ import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 @Transactional(readOnly = true)
 public class OrderService {
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
-    private static final DateTimeFormatter TRADE_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    /** 綠界交易編號用；壓到 12 碼是為了在 20 碼上限內留出重試後綴的空間，見 {@link #generateMerchantTradeNo} */
+    private static final DateTimeFormatter TRADE_NO_FORMAT = DateTimeFormatter.ofPattern("yyMMddHHmmss");
+    /** 自家訂單編號用；沒有外部長度限制，維持完整年份不受綠界那邊的壓縮影響 */
+    private static final DateTimeFormatter ORDER_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     /** 可以申請退款（含出貨後退貨）的訂單狀態；已付款、已出貨、已完成都算，見 {@link Order#assertRefundable} */
     private static final Set<OrderStatus> REFUND_ELIGIBLE_STATUSES =
             Set.of(OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.COMPLETED);
@@ -616,9 +619,14 @@ public class OrderService {
     }
 
     /**
-     * merchant_trade_no 欄位長度上限 20，"GYM" + 14 碼時間戳只剩 3 碼給亂數，同一秒內有 1/1000
-     * 撞號機率。這裡先查存在性、撞到就重產（最多 5 次），正常路徑不會拋例外汙染交易；
-     * 連 5 次都撞（實務上不會發生）才交給 UQ_orders_mtn 唯一約束當最後防線（會回可重試的 409）。
+     * merchant_trade_no 上限 20 碼是綠界的協定限制（超過會被回「[特店交易編號]長度限制20字元」而交易失敗），
+     * 不是資料庫欄位寬度能放寬的。"GYM" + 12 碼時間戳 + 3 碼亂數 = 18 碼，末端刻意留 2 碼給重試後綴
+     *（見 Order#renewMerchantTradeNo）——同一筆訂單重新結帳必須換號，沒有這個預留空間就換不了。
+     *
+     * <p>時間戳用 yyMMddHHmmss 而非 yyyyMMddHHmmss：省下的 2 碼正是後綴要用的，而世紀對編號唯一性
+     * 沒有貢獻（同一秒才可能撞號，跨世紀的同秒訂單不存在）。同一秒內仍有 1/1000 撞號機率，
+     * 先查存在性、撞到就重產（最多 5 次），正常路徑不會拋例外汙染交易；連 5 次都撞（實務上不會發生）
+     * 才交給 UQ_orders_mtn 唯一約束當最後防線（會回可重試的 409）。
      */
     private String generateMerchantTradeNo() {
         for (int i = 0; i < 5; i++) {
@@ -635,13 +643,13 @@ public class OrderService {
     /** order_no 欄位長度上限 30，亂數放到 6 碼；比照 merchant_trade_no 先查存在性再重產 */
     private String generateOrderNo() {
         for (int i = 0; i < 5; i++) {
-            String candidate = "ORD" + LocalDateTime.now(TAIPEI).format(TRADE_NO_FORMAT)
+            String candidate = "ORD" + LocalDateTime.now(TAIPEI).format(ORDER_NO_FORMAT)
                     + String.format("%06d", RANDOM.nextInt(1_000_000));
             if (!orders.existsByOrderNo(candidate)) {
                 return candidate;
             }
         }
-        return "ORD" + LocalDateTime.now(TAIPEI).format(TRADE_NO_FORMAT)
+        return "ORD" + LocalDateTime.now(TAIPEI).format(ORDER_NO_FORMAT)
                 + String.format("%06d", RANDOM.nextInt(1_000_000));
     }
 
@@ -661,9 +669,11 @@ public class OrderService {
                 .map(OrderItemResponse::from)
                 .toList();
         OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
+        // 這裡回應的都是建單/取消/出貨/完成當下的結果，ECPay 的 ATM/CVS 取號通知只會在使用者
+        // 之後前往綠界付款頁才會送達，此時必定還沒有，固定回 null；真正顯示繳費資訊看 OrderQueryService
         return new OrderDetailResponse(order.getOrderId(), order.getMerchantTradeNo(),
                 OrderDetailResponse.title(subscription, items), order.getTotalAmount(),
-                order.getStatus(), order.getCreatedAt(), items, subscription);
+                order.getStatus(), order.getCreatedAt(), items, subscription, null);
     }
 
     private record OrderLine(Product product, int quantity) {}

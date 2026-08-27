@@ -39,7 +39,7 @@ class AdminOrderControllerTest {
 
     private AdminOrderDetailResponse detail() {
         return new AdminOrderDetailResponse(9, "ORD9", "GYM9", "TRADE9", "乳清蛋白", 1, "王小明", "a@b.c",
-                new BigDecimal("1000"), BigDecimal.ZERO, new BigDecimal("1000"), OrderStatus.PAID, "Simulated",
+                new BigDecimal("1000"), BigDecimal.ZERO, new BigDecimal("1000"), OrderStatus.PAID, "Simulated", null,
                 LocalDateTime.now(), null, null, "王小明", "0912345678", "地址", "a@b.c", LocalDateTime.now(),
                 List.of(), null, List.of());
     }

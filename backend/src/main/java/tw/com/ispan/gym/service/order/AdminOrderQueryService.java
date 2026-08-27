@@ -71,9 +71,9 @@ public class AdminOrderQueryService {
                 order.getTradeNo(), OrderDetailResponse.title(subscription, items), order.getMember().getId(),
                 memberName(order), order.getMember().getAccount().getEmail(),
                 order.getSubtotalAmount(), order.getDiscountAmount(), order.getTotalAmount(), order.getStatus(),
-                order.getPaymentMethod(), order.getPaidAt(), order.getCancelledAt(), order.getCancelReason(),
-                order.getReceiverName(), order.getReceiverPhone(), order.getReceiverAddress(), order.getReceiverEmail(),
-                order.getCreatedAt(), items, subscription, history);
+                order.getPaymentMethod(), order.getIntendedPaymentMethod(), order.getPaidAt(), order.getCancelledAt(),
+                order.getCancelReason(), order.getReceiverName(), order.getReceiverPhone(), order.getReceiverAddress(),
+                order.getReceiverEmail(), order.getCreatedAt(), items, subscription, history);
     }
 
     private AdminOrderSummaryResponse summary(Order order, List<OrderItem> items) {

@@ -68,6 +68,16 @@ public class OrderController {
         }
     }
 
+    /**
+     * 查詢付款結果前的節流：沿用跟建單相同的額度，擋使用者連續點擊查詢按鈕——
+     * 綠界的 QueryTradeInfo 本身也有頻率限制，這裡先擋一層避免我方帳號被對方判定濫用。
+     */
+    private void guardSyncPaymentRateLimit(Integer memberId) {
+        if (!rateLimiter.tryAcquire("sync-payment:" + memberId, rateLimitMax, rateLimitWindow)) {
+            throw new OrderRateLimitedException();
+        }
+    }
+
     @GetMapping
     public List<OrderSummaryResponse> findMine() {
         return orderQueryService.findMine(currentUser.requireCurrentMemberId());
@@ -157,6 +167,22 @@ public class OrderController {
         Integer resolvedOrderId = idempotency.resolve(memberId, "CANCEL_ORDER:" + orderId, idempotencyKey, request,
                 () -> orderService.cancelOrder(memberId, orderId, request).orderId());
         return orderQueryService.findMineById(memberId, resolvedOrderId);
+    }
+
+    /**
+     * 主動向綠界查詢這筆訂單的真實付款結果，取代等待 webhook 主動通知——本機沒有對外 URL
+     * 收不到 return-url／payment-info-url 的呼叫時，改用這支端點讓前端在使用者從綠界返回、
+     * 或按下「查詢付款結果」按鈕時觸發一次，見 {@link EcpayService#syncPaymentStatus}。
+     * 只有本人的訂單能查；已經有結果（非 UNPAID）的訂單直接回目前狀態，不重複查詢。
+     */
+    @PostMapping("/{orderId}/sync-payment")
+    public OrderDetailResponse syncPayment(@PathVariable Integer orderId) {
+        Integer memberId = currentUser.requireCurrentMemberId();
+        guardSyncPaymentRateLimit(memberId);
+        Order order = orders.findByIdAndMemberId(orderId, memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
+        ecpayService.syncPaymentStatus(order);
+        return orderQueryService.findMineById(memberId, orderId);
     }
 }
 

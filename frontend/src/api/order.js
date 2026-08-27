@@ -33,3 +33,7 @@ export const getOrderHistory = (orderId) => api.get(`/api/orders/${orderId}/hist
 // 取消未付款訂單，或對已付款訂單建立一筆待處理退款：payload 可省略或帶 { reason }
 export const cancelOrder = (orderId, payload, idempotencyKey) =>
   api.post(`/api/orders/${orderId}/cancel`, payload, idempotentConfig(idempotencyKey))
+
+// 主動向綠界查詢這筆訂單的真實付款結果，取代等待 webhook 通知——本機沒有對外 URL 收不到
+// 綠界的呼叫時用這個，改由我方主動問一次；有頻率限制，不要拿來做自動輪詢
+export const syncOrderPayment = (orderId) => api.post(`/api/orders/${orderId}/sync-payment`)

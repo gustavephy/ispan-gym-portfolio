@@ -20,6 +20,44 @@ const receiverPhone = ref('')
 const submitting = ref(false)
 const showConfirm = ref(false)
 
+// 付款方式：Credit（信用卡，即時）／ATM（虛擬帳號轉帳）／CVS（超商代碼繳費）——
+// 後兩者不是即時付款，綠界會先給一組帳號/代碼，消費者之後自行完成繳費
+const paymentMethod = ref('Credit')
+const paymentMethodOptions = [
+  { value: 'Credit', label: '信用卡', desc: '導向綠界頁面輸入卡號，即時完成付款' },
+  { value: 'ATM', label: 'ATM 轉帳', desc: '取得虛擬帳號，請於期限內完成轉帳' },
+  { value: 'CVS', label: '超商代碼', desc: '取得繳費代碼，請至超商完成繳費' },
+]
+const paymentMethodLabel = computed(
+  () => paymentMethodOptions.find((o) => o.value === paymentMethod.value)?.label ?? '',
+)
+
+// 超商代碼繳費金額限制（含手續費），跟後端 EcpayService 的檢查一致
+const CVS_MIN_AMOUNT = 27
+const CVS_MAX_AMOUNT = 20000
+const isCvsAllowed = computed(
+  () => Number(totalAmount.value) >= CVS_MIN_AMOUNT && Number(totalAmount.value) <= CVS_MAX_AMOUNT,
+)
+// 訂單金額變動（例如優惠券折抵後）導致超商代碼不再適用時，自動退回信用卡，避免送出後被後端擋下
+watch(isCvsAllowed, (allowed) => {
+  if (!allowed && paymentMethod.value === 'CVS') paymentMethod.value = 'Credit'
+})
+
+const paymentMethodNote = computed(() => {
+  if (paymentMethod.value === 'ATM') {
+    return '送出後將導向綠界測試環境取得轉帳虛擬帳號，請於期限內完成轉帳；付款結果需要一些時間才會更新，可至「我的訂單」查詢繳費資訊'
+  }
+  if (paymentMethod.value === 'CVS') {
+    return '送出後將導向綠界測試環境取得超商代碼，請至超商完成繳費；付款結果需要一些時間才會更新，可至「我的訂單」查詢繳費資訊'
+  }
+  return '目前僅支援信用卡付款，送出後將導向綠界測試付款頁輸入卡號完成付款'
+})
+const paymentMethodConfirmNote = computed(() => {
+  if (paymentMethod.value === 'ATM') return '確認無誤後將導向綠界頁面取得轉帳用虛擬帳號'
+  if (paymentMethod.value === 'CVS') return '確認無誤後將導向綠界頁面取得超商繳費代碼'
+  return '確認無誤後將導向綠界測試付款頁，僅支援信用卡付款'
+})
+
 // 收件地址拆成縣市/行政區下拉 + 詳細地址（路名、巷弄、門牌）自由輸入
 const cityOptions = Object.keys(taiwanDistricts)
 const receiverCity = ref('')
@@ -108,12 +146,15 @@ async function handleCheckout() {
       receiverAddress: receiver.address || null,
     }, idempotencyKey)
     const orderId = orderRes.data.orderId
+    cart.reset() // 訂單一旦建立後端就已清空購物車，本地狀態在這裡就同步清空即可，不必等組表單成功
 
-    const formRes = await getEcpayCheckoutForm(orderId)
-    cart.reset() // 訂單建立後後端已清空購物車，本地狀態跟著清空即可，不必再打一次 API
+    const formRes = await getEcpayCheckoutForm(orderId, paymentMethod.value)
 
-    // 從綠界返回 /orders 後，OrderListView 會輪詢這筆訂單的付款結果
-    sessionStorage.setItem('pendingPaymentOrderId', String(orderId))
+    // 只有信用卡是「幾乎即時」的付款體驗，回 /orders 後才需要 OrderListView 短輪詢確認付款結果；
+    // ATM／超商代碼要等消費者之後自行完成繳費，短輪詢不會有結果，改由 OrderListView 顯示待繳費資訊
+    if (paymentMethod.value === 'Credit') {
+      sessionStorage.setItem('pendingPaymentOrderId', String(orderId))
+    }
     submitEcpayForm(formRes.data)
     // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 submitting，避免使用者在轉導期間重複點擊
   } catch (err) {
@@ -220,6 +261,28 @@ onMounted(() => {
         </div>
 
         <div class="form-card">
+          <h3>付款方式</h3>
+          <div class="payment-method-select" role="group" aria-label="付款方式">
+            <button
+              v-for="opt in paymentMethodOptions"
+              :key="opt.value"
+              type="button"
+              class="payment-method-option"
+              :class="{ active: paymentMethod === opt.value }"
+              :disabled="opt.value === 'CVS' && !isCvsAllowed"
+              :aria-pressed="paymentMethod === opt.value"
+              @click="paymentMethod = opt.value"
+            >
+              <span class="payment-method-option-label">{{ opt.label }}</span>
+              <span class="payment-method-option-desc">{{ opt.desc }}</span>
+            </button>
+          </div>
+          <p v-if="!isCvsAllowed" class="payment-method-hint">
+            超商代碼僅支援 NT$27～NT$20,000 的訂單金額，本筆訂單金額不符，已停用此選項
+          </p>
+        </div>
+
+        <div class="form-card">
           <h3>優惠券（選填）</h3>
           <input v-model="couponCode" class="form-input" placeholder="輸入優惠券代碼" />
         </div>
@@ -239,9 +302,9 @@ onMounted(() => {
 
         <div class="payment-method-row">
           <span class="payment-method-label">付款方式</span>
-          <span class="payment-method-value">信用卡（綠界 ECPay）</span>
+          <span class="payment-method-value">{{ paymentMethodLabel }}（綠界 ECPay）</span>
         </div>
-        <p class="ecpay-note">目前僅支援信用卡付款，送出後將導向綠界安全金流支付頁輸入卡號完成付款</p>
+        <p class="ecpay-note">{{ paymentMethodNote }}</p>
         <button
           class="btn btn-accent submit-btn"
           :disabled="submitting || hasUnavailableItem"
@@ -273,11 +336,16 @@ onMounted(() => {
           <p class="confirm-text">{{ couponCode.trim() }}（實際折扣將於送出後計算）</p>
         </div>
 
+        <div class="confirm-section">
+          <h4 class="confirm-section-title">付款方式</h4>
+          <p class="confirm-text">{{ paymentMethodLabel }}</p>
+        </div>
+
         <div class="confirm-total-row">
           <span>應付金額</span>
           <span class="total-price">NT$ {{ Number(totalAmount).toLocaleString() }}</span>
         </div>
-        <p class="ecpay-note">確認無誤後將導向綠界安全金流支付頁，僅支援信用卡付款</p>
+        <p class="ecpay-note">{{ paymentMethodConfirmNote }}</p>
 
         <div class="modal-actions">
           <button class="btn btn-accent" type="button" :disabled="submitting" @click="handleCheckout">
@@ -426,6 +494,49 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
+.payment-method-select {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+.payment-method-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-section);
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+}
+.payment-method-option:hover:not(:disabled) { border-color: var(--accent); }
+.payment-method-option.active {
+  border-color: var(--accent);
+  background: var(--bg-soft);
+}
+.payment-method-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.payment-method-option-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.payment-method-option.active .payment-method-option-label { color: var(--accent-hover); }
+.payment-method-option-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+.payment-method-hint {
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: #a06400;
+}
+
 .checkout-summary {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -469,6 +580,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .checkout-layout { grid-template-columns: 1fr; }
   .receiver-mode-select { grid-template-columns: 1fr; }
+  .payment-method-select { grid-template-columns: 1fr; }
 }
 
 .modal-overlay {

@@ -324,12 +324,18 @@ onMounted(async () => {
 
               <div class="detail-actions">
                 <button
-                  v-if="detail[order.orderId].status === 'UNPAID'"
+                  v-if="detail[order.orderId].status === 'UNPAID'
+                    && !['ATM', 'CVS'].includes(detail[order.orderId].intendedPaymentMethod)"
                   class="btn btn-accent"
                   :disabled="actingId === order.orderId"
                   title="本機沒有對外 URL、綠界通知連不進來時，用這個把訂單推進到已付款"
                   @click="handleSimulatePayment(order)"
                 >{{ actingId === order.orderId ? '處理中…' : '模擬付款成功' }}</button>
+                <p
+                  v-else-if="detail[order.orderId].status === 'UNPAID'"
+                  class="sim-blocked-note"
+                >此訂單選擇 {{ detail[order.orderId].intendedPaymentMethod === 'ATM' ? 'ATM 轉帳' : '超商代碼' }}
+                  繳費，不提供模擬付款，請等待實際繳費或請會員於「我的訂單」查詢付款結果。</p>
                 <button
                   v-if="detail[order.orderId].status === 'PAID'"
                   class="btn btn-outline"
@@ -541,10 +547,16 @@ onMounted(async () => {
 }
 .detail-actions {
   display: flex;
+  align-items: center;
   gap: 0.6rem;
   margin: 1rem 0;
   padding-top: 0.75rem;
   border-top: 1px dashed var(--border);
+}
+.sim-blocked-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 .refund-callout {
   margin-top: 1rem;

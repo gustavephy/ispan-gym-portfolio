@@ -1,7 +1,13 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
-import { getMyOrders, getOrderById, getOrderHistory, cancelOrder as apiCancelOrder } from '@/api/order.js'
+import {
+  getMyOrders,
+  getOrderById,
+  getOrderHistory,
+  cancelOrder as apiCancelOrder,
+  syncOrderPayment,
+} from '@/api/order.js'
 import { getEcpayCheckoutForm } from '@/api/payment.js'
 import { submitEcpayForm } from '@/utils/ecpay.js'
 import { useCartStore } from '@/stores/cart.js'
@@ -40,6 +46,7 @@ const historyNoteMeta = {
   REFUND_REJECT: '退款申請遭駁回',
   SHIP: '出貨',
   COMPLETE: '訂單完成',
+  QUERY_TRADE_INFO: '付款結果',
 }
 
 // 可以申請退款（含出貨後退貨）的訂單狀態，跟後端 OrderService 的 REFUND_ELIGIBLE_STATUSES 對齊
@@ -117,7 +124,7 @@ async function payForOrder(order) {
   payingId.value = order.orderId
   try {
     const res = await getEcpayCheckoutForm(order.orderId)
-    // 記下這筆待確認的訂單，從綠界返回 /orders 後輪詢它的付款結果（見 pollPendingPayment）
+    // 記下這筆待確認的訂單，從綠界返回 /orders 後主動查詢一次它的付款結果（見 syncPendingPayment）
     sessionStorage.setItem('pendingPaymentOrderId', String(order.orderId))
     submitEcpayForm(res.data)
     // 送出表單後瀏覽器即將導向綠界，故意不重設 payingId
@@ -127,38 +134,73 @@ async function payForOrder(order) {
   }
 }
 
-// ── 從綠界返回後的付款結果回饋 ──────────────────────────────────────────
-// 綠界的 server-to-server 付款結果通知本機可能收不到（見後端 EcpayService），
-// 這裡靠輪詢補一個「確認中…」的過場，讓使用者不會落在一個看起來還沒付款的列表上。
+// ── 從綠界返回後：主動查詢一次真實付款結果 ──────────────────────────────
+// 本機沒有對外 URL，綠界的 server-to-server 付款結果通知打不進來（見後端 EcpayService#handleNotify）；
+// 改成使用者從綠界返回這個「剛好回到網站」的時機，呼叫 QueryTradeInfo 查一次真實結果
+// （見 EcpayService#syncPaymentStatus）。綠界文件明講查詢 API 有頻率限制、不建議做輪詢，
+// 所以這裡只查一次，不重試——查不到就交給使用者自己在訂單明細按「查詢付款結果」手動再查。
 const pendingPaymentOrderId = ref(null)
-let pollTimer = null
 
-function stopPolling() {
-  if (pollTimer) {
-    clearTimeout(pollTimer)
-    pollTimer = null
-  }
+function clearPendingPayment() {
   pendingPaymentOrderId.value = null
   sessionStorage.removeItem('pendingPaymentOrderId')
 }
 
-async function pollPendingPayment(attemptsLeft) {
+async function syncPendingPayment() {
   const targetId = pendingPaymentOrderId.value
   if (!targetId) return
-  await loadOrders({ silent: true })
-  const order = orders.value.find((o) => o.orderId === targetId)
-  if (!order || order.status !== 'UNPAID') {
-    if (order && (order.status === 'PAID' || order.status === 'COMPLETED' || order.status === 'SHIPPED')) {
-      showFeedback('付款成功，訂單已更新')
+  try {
+    const res = await syncOrderPayment(targetId)
+    const order = orders.value.find((o) => o.orderId === targetId)
+    if (order) {
+      order.status = res.data.status
+      order.totalAmount = res.data.totalAmount
     }
-    stopPolling()
-    return
+    if (
+      res.data.status === 'PAID' ||
+      res.data.status === 'COMPLETED' ||
+      res.data.status === 'SHIPPED'
+    ) {
+      showFeedback('付款成功，訂單已更新')
+    } else {
+      showFeedback(
+        '尚未查到付款成功的結果，若已完成付款請稍後在訂單明細按「查詢付款結果」再查一次',
+        'error',
+      )
+    }
+  } catch (err) {
+    showFeedback(err.message || '查詢付款結果失敗，請稍後在訂單明細內手動查詢', 'error')
+  } finally {
+    clearPendingPayment()
   }
-  if (attemptsLeft <= 1) {
-    stopPolling()
-    return
+}
+
+// ── 訂單明細內手動「查詢付款結果」：信用卡查詢失敗時重試，或 ATM/超商代碼繳費完成後主動查一次 ──
+const syncingId = ref(null)
+
+async function syncPayment(order) {
+  syncingId.value = order.orderId
+  try {
+    const res = await syncOrderPayment(order.orderId)
+    order.status = res.data.status
+    order.totalAmount = res.data.totalAmount
+    if (orderDetails[order.orderId]) orderDetails[order.orderId] = res.data
+    if (
+      res.data.status === 'PAID' ||
+      res.data.status === 'COMPLETED' ||
+      res.data.status === 'SHIPPED'
+    ) {
+      showFeedback('查詢成功，付款已確認')
+      const historyRes = await getOrderHistory(order.orderId)
+      orderHistory[order.orderId] = historyRes.data
+    } else {
+      showFeedback('目前查詢不到付款成功的結果，若已完成繳費請稍後再查詢一次', 'error')
+    }
+  } catch (err) {
+    showFeedback(err.message || '查詢失敗，請稍後再試', 'error')
+  } finally {
+    syncingId.value = null
   }
-  pollTimer = setTimeout(() => pollPendingPayment(attemptsLeft - 1), 3000)
 }
 
 async function toggleExpand(order) {
@@ -294,7 +336,7 @@ async function handleReorder(order) {
     showFeedback(
       skippedCount > 0
         ? `已將 ${productItems.length} 項商品加入購物車（課程品項需另外預約，不支援加入購物車）`
-        : '已將商品加入購物車'
+        : '已將商品加入購物車',
     )
     router.push('/cart')
   } finally {
@@ -315,28 +357,28 @@ onMounted(async () => {
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
-  // 從綠界返回：若有待確認付款的訂單，輪詢它的付款結果
+  // 從綠界返回：若有待確認付款的訂單，主動查詢一次真實付款結果
   const pending = sessionStorage.getItem('pendingPaymentOrderId')
   if (pending) {
     const pendingId = Number(pending)
     const order = orders.value.find((o) => o.orderId === pendingId)
     if (order && order.status === 'UNPAID') {
       pendingPaymentOrderId.value = pendingId
-      pollTimer = setTimeout(() => pollPendingPayment(3), 2000)
+      await syncPendingPayment()
     } else {
       sessionStorage.removeItem('pendingPaymentOrderId')
     }
   }
 })
-
-onUnmounted(() => {
-  if (pollTimer) clearTimeout(pollTimer)
-})
 </script>
 
 <template>
   <div class="page-container">
-    <h1 class="section-title">我的訂單</h1>
+    <div class="section-header">
+      <span class="section-tag">MY ORDERS</span>
+      <h1 class="section-title">我的訂單</h1>
+      <p class="section-desc">查看歷史訂單狀態與明細，可於此付款、取消訂單或申請退款/退貨。</p>
+    </div>
 
     <div v-if="pendingPaymentOrderId" class="payment-checking">
       <span class="spinner-inline"></span>
@@ -409,14 +451,20 @@ onUnmounted(() => {
 
                 <div v-if="orderDetails[order.orderId].subscription" class="detail-item-row">
                   <div class="detail-item-info">
-                    <span class="detail-item-name">{{ orderDetails[order.orderId].subscription.name }}</span>
+                    <span class="detail-item-name">{{
+                      orderDetails[order.orderId].subscription.name
+                    }}</span>
                     <span class="detail-item-meta">
-                      會員訂閱方案・{{ orderDetails[order.orderId].subscription.durationDays }} 天使用期
+                      會員訂閱方案・{{
+                        orderDetails[order.orderId].subscription.durationDays
+                      }}
+                      天使用期
                     </span>
                     <span
                       v-if="orderDetails[order.orderId].subscription.description"
                       class="detail-item-desc"
-                    >{{ orderDetails[order.orderId].subscription.description }}</span>
+                      >{{ orderDetails[order.orderId].subscription.description }}</span
+                    >
                   </div>
                   <span class="detail-item-amount">
                     {{ formatMoney(orderDetails[order.orderId].subscription.price) }}
@@ -430,10 +478,13 @@ onUnmounted(() => {
                 >
                   <div class="detail-item-info">
                     <span class="detail-item-name">
-                      {{ item.productNameAtBuy }}<span class="detail-item-qty">× {{ item.quantity }}</span>
+                      {{ item.productNameAtBuy
+                      }}<span class="detail-item-qty">× {{ item.quantity }}</span>
                     </span>
                     <span v-if="item.itemType === 'COURSE'" class="detail-item-meta">
-                      私教課程<template v-if="courseItemMeta(item)">・{{ courseItemMeta(item) }}</template>
+                      私教課程<template v-if="courseItemMeta(item)"
+                        >・{{ courseItemMeta(item) }}</template
+                      >
                     </span>
                     <span v-if="item.quantity > 1" class="detail-item-meta">
                       單價 {{ formatMoney(item.priceAtBuy) }}
@@ -448,16 +499,67 @@ onUnmounted(() => {
                 </div>
               </div>
 
+              <div v-if="orderDetails[order.orderId].paymentInfo" class="payment-info-box">
+                <h4 class="detail-heading">
+                  {{
+                    orderDetails[order.orderId].paymentInfo.choosePayment === 'ATM'
+                      ? '轉帳繳費資訊'
+                      : '超商代碼繳費資訊'
+                  }}
+                </h4>
+                <template v-if="orderDetails[order.orderId].paymentInfo.choosePayment === 'ATM'">
+                  <p class="payment-info-row">
+                    <span>銀行代碼</span>
+                    <strong>{{ orderDetails[order.orderId].paymentInfo.bankCode }}</strong>
+                  </p>
+                  <p class="payment-info-row">
+                    <span>轉帳帳號</span>
+                    <strong>{{ orderDetails[order.orderId].paymentInfo.vAccount }}</strong>
+                  </p>
+                </template>
+                <p v-else class="payment-info-row">
+                  <span>超商代碼</span>
+                  <strong>{{ orderDetails[order.orderId].paymentInfo.paymentNo }}</strong>
+                </p>
+                <p
+                  v-if="orderDetails[order.orderId].paymentInfo.expireAt"
+                  class="payment-info-expire"
+                >
+                  請於
+                  {{
+                    formatDate(orderDetails[order.orderId].paymentInfo.expireAt)
+                  }}
+                  前完成繳費，逾期系統將自動取消訂單
+                </p>
+                <p class="payment-info-note">
+                  完成繳費後，請稍後點擊下方「查詢付款結果」確認是否已入帳
+                </p>
+              </div>
+
               <div
                 class="detail-actions"
-                v-if="hasReorderableItems(order) || order.status === 'UNPAID' || REFUND_ELIGIBLE_STATUSES.includes(order.status)"
+                v-if="
+                  hasReorderableItems(order) ||
+                  order.status === 'UNPAID' ||
+                  REFUND_ELIGIBLE_STATUSES.includes(order.status)
+                "
               >
                 <button
                   v-if="order.status === 'UNPAID'"
                   class="btn btn-accent pay-btn"
                   :disabled="payingId === order.orderId"
                   @click="payForOrder(order)"
-                >{{ payingId === order.orderId ? '前往付款中…' : '前往付款' }}</button>
+                >
+                  {{ payingId === order.orderId ? '前往付款中…' : '前往付款' }}
+                </button>
+                <button
+                  v-if="order.status === 'UNPAID'"
+                  class="btn btn-outline sync-btn"
+                  :disabled="syncingId === order.orderId"
+                  @click="syncPayment(order)"
+                >
+                  {{ syncingId === order.orderId ? '查詢中…' : '查詢付款結果' }}
+                </button>
                 <button
                   v-if="hasReorderableItems(order)"
                   class="btn btn-outline reorder-btn"
@@ -473,7 +575,9 @@ onUnmounted(() => {
                   }}
                 </button>
                 <button
-                  v-if="order.status === 'UNPAID' || REFUND_ELIGIBLE_STATUSES.includes(order.status)"
+                  v-if="
+                    order.status === 'UNPAID' || REFUND_ELIGIBLE_STATUSES.includes(order.status)
+                  "
                   class="btn btn-outline cancel-btn"
                   @click="handleCancelOrRefund(order)"
                 >
@@ -484,12 +588,24 @@ onUnmounted(() => {
               <div class="order-timeline" v-if="orderHistory[order.orderId]?.length">
                 <h4 class="timeline-title">訂單狀態時間軸</h4>
                 <ul class="timeline-list">
-                  <li v-for="(event, idx) in orderHistory[order.orderId]" :key="idx" class="timeline-item">
-                    <span class="timeline-dot" :class="statusMeta[event.toStatus]?.className"></span>
+                  <li
+                    v-for="(event, idx) in orderHistory[order.orderId]"
+                    :key="idx"
+                    class="timeline-item"
+                  >
+                    <span
+                      class="timeline-dot"
+                      :class="statusMeta[event.toStatus]?.className"
+                    ></span>
                     <div class="timeline-body">
                       <div class="timeline-row">
-                        <span class="timeline-note">{{ historyNoteMeta[event.note] || event.note }}</span>
-                        <span class="status-badge timeline-badge" :class="statusMeta[event.toStatus]?.className">
+                        <span class="timeline-note">{{
+                          historyNoteMeta[event.note] || event.note
+                        }}</span>
+                        <span
+                          class="status-badge timeline-badge"
+                          :class="statusMeta[event.toStatus]?.className"
+                        >
                           {{ statusMeta[event.toStatus]?.label || event.toStatus }}
                         </span>
                       </div>
@@ -505,11 +621,7 @@ onUnmounted(() => {
       </div>
     </template>
 
-    <div
-      v-if="refundModal.open"
-      class="modal-overlay"
-      @click.self="closeRefundModal"
-    >
+    <div v-if="refundModal.open" class="modal-overlay" @click.self="closeRefundModal">
       <div class="modal-content">
         <h3 class="modal-title">申請退款/退貨</h3>
         <p class="modal-desc">
@@ -520,7 +632,11 @@ onUnmounted(() => {
 
         <div class="modal-field">
           <label for="refund-category">原因類型</label>
-          <select id="refund-category" v-model="refundModal.category" :disabled="refundModal.submitting">
+          <select
+            id="refund-category"
+            v-model="refundModal.category"
+            :disabled="refundModal.submitting"
+          >
             <option v-for="c in refundReasonCategories" :key="c" :value="c">{{ c }}</option>
           </select>
         </div>
@@ -546,13 +662,17 @@ onUnmounted(() => {
             type="button"
             :disabled="refundModal.submitting"
             @click="submitRefundRequest"
-          >{{ refundModal.submitting ? '送出中…' : '送出申請' }}</button>
+          >
+            {{ refundModal.submitting ? '送出中…' : '送出申請' }}
+          </button>
           <button
             class="btn btn-outline"
             type="button"
             :disabled="refundModal.submitting"
             @click="closeRefundModal"
-          >返回</button>
+          >
+            返回
+          </button>
         </div>
       </div>
     </div>
@@ -577,7 +697,6 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  margin-top: 2rem;
   border-bottom: 1px solid var(--border);
 }
 .order-tabs {
@@ -673,11 +792,26 @@ onUnmounted(() => {
   font-size: 0.78rem;
   font-weight: 700;
 }
-.status-badge.warning { background: #fff3cd; color: #a06400; }
-.status-badge.info { background: #dbeafe; color: #1d4ed8; }
-.status-badge.success { background: #d4f4dd; color: #157347; }
-.status-badge.danger { background: #fde2e2; color: #c92a2a; }
-.status-badge.muted { background: var(--bg-soft); color: var(--text-muted); }
+.status-badge.warning {
+  background: #fff3cd;
+  color: #a06400;
+}
+.status-badge.info {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.status-badge.success {
+  background: #d4f4dd;
+  color: #157347;
+}
+.status-badge.danger {
+  background: #fde2e2;
+  color: #c92a2a;
+}
+.status-badge.muted {
+  background: var(--bg-soft);
+  color: var(--text-muted);
+}
 .order-amount {
   font-weight: 700;
   color: var(--accent-hover);
@@ -752,6 +886,38 @@ onUnmounted(() => {
   font-weight: 700;
   color: var(--text-primary);
 }
+.payment-info-box {
+  margin-top: 0.75rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff8e6;
+}
+.payment-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0.3rem 0;
+}
+.payment-info-row strong {
+  font-family: 'Courier New', monospace;
+  font-size: 1rem;
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
+}
+.payment-info-expire {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #a06400;
+}
+.payment-info-note {
+  margin-top: 0.3rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
 .detail-actions {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
@@ -762,7 +928,8 @@ onUnmounted(() => {
 }
 .cancel-btn,
 .reorder-btn,
-.pay-btn {
+.pay-btn,
+.sync-btn {
   font-size: 0.85rem;
   padding: 0.45rem 1.1rem;
 }
@@ -788,7 +955,9 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 @keyframes spin-inline {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .order-timeline {
   margin-top: 1rem;
@@ -829,10 +998,18 @@ onUnmounted(() => {
   border-radius: 50%;
   background: var(--text-muted);
 }
-.timeline-dot.warning { background: #a06400; }
-.timeline-dot.info { background: #1d4ed8; }
-.timeline-dot.success { background: #157347; }
-.timeline-dot.danger { background: #c92a2a; }
+.timeline-dot.warning {
+  background: #a06400;
+}
+.timeline-dot.info {
+  background: #1d4ed8;
+}
+.timeline-dot.success {
+  background: #157347;
+}
+.timeline-dot.danger {
+  background: #c92a2a;
+}
 .timeline-body {
   display: flex;
   flex-direction: column;
@@ -856,10 +1033,22 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 @media (max-width: 640px) {
-  .order-header { flex-direction: column; align-items: flex-start; }
-  .order-header-side { width: 100%; justify-content: space-between; }
-  .order-toolbar { flex-direction: column; align-items: stretch; }
-  .order-search { max-width: none; margin: 0.75rem 0; }
+  .order-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .order-header-side {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .order-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .order-search {
+    max-width: none;
+    margin: 0.75rem 0;
+  }
 }
 
 .modal-overlay {
