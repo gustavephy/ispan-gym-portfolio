@@ -10,11 +10,11 @@ import { test, expect, ACCOUNTS, loginAs } from './fixtures.js'
  * 購物車的按鈕都有帶商品名的 aria-label，那是最穩的定位點。
  */
 
-/** 播種商品，名稱由 TestDataSeedRunner 寫死；不在預設畫面上，需搜尋才看得到 */
-const PRODUCT = '乳清蛋白 1kg'
+/** 播種商品，名稱由 TestDataSeedRunner 寫死（46 筆版種子）；不在預設畫面上，需搜尋才看得到 */
+const PRODUCT = '分離乳清蛋白-香草'
 
-/** 預設畫面上就看得到的商品（運動補給分類的前幾項） */
-const VISIBLE_PRODUCT = '運動毛巾'
+/** 預設畫面（未搜尋、未選分類）上就看得到的商品；換種子時要對照 /products 首屏重新挑 */
+const VISIBLE_PRODUCT = '防滑瑜珈鋪巾'
 
 function productCard(page, name) {
   return page.locator('.item-card').filter({ hasText: name }).first()
@@ -22,8 +22,11 @@ function productCard(page, name) {
 
 /** 搜尋並等結果穩定；關鍵字是即時篩選，不需要按鈕 */
 async function searchProduct(page, keyword) {
-  await page.getByPlaceholder('搜尋商品名稱...').fill(keyword)
+  // 先等預設商品清單渲染完再輸入：頁面初始載入期間搜尋框會被重新渲染，
+  // 太早輸入會被清掉或篩選沒觸發（實測 goto 後立刻輸入三次有兩次失敗）
   await expect(page.locator('.item-card').first()).toBeVisible()
+  await page.getByPlaceholder('搜尋商品名稱...').fill(keyword)
+  await expect(page.locator('.item-card').filter({ hasText: keyword }).first()).toBeVisible()
 }
 
 test.describe('A3 商品瀏覽', () => {

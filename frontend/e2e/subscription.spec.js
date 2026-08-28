@@ -76,7 +76,10 @@ test.describe('B2 會籍訂閱', () => {
     await page.goto('/subscription')
 
     await expect(page.getByText('目前使用會籍')).toBeVisible()
-    await expect(page.getByRole('button', { name: '您已是訂閱會員' })).toBeDisabled()
+    // 每張方案卡各有一顆「您已是訂閱會員」，用 first() 避開 strict mode；三張都該是 disabled
+    const disabledButtons = page.getByRole('button', { name: '您已是訂閱會員' })
+    await expect(disabledButtons.first()).toBeDisabled()
+    await expect(disabledButtons).toHaveCount(await page.locator('.plan-card').count())
   })
 
   test('未登入者看得到方案，點訂閱被導向登入頁', async ({ page, context }) => {
@@ -167,6 +170,9 @@ test.describe('B2 會籍訂閱', () => {
     // 履約結果：回到會籍頁應該看得到生效中的會籍
     await page.goto('/subscription')
     await expect(page.getByText('目前使用會籍')).toBeVisible()
-    await expect(page.getByRole('button', { name: '您已是訂閱會員' })).toBeDisabled()
+    // 每張方案卡各有一顆「您已是訂閱會員」，用 first() 避開 strict mode；三張都該是 disabled
+    const disabledButtons = page.getByRole('button', { name: '您已是訂閱會員' })
+    await expect(disabledButtons.first()).toBeDisabled()
+    await expect(disabledButtons).toHaveCount(await page.locator('.plan-card').count())
   })
 })
