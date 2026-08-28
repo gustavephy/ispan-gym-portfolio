@@ -72,6 +72,7 @@ public class EmployeeCouponService {
 		coupon.setTotalQuantity(request.getTotalQuantity());
 		coupon.setStartDate(request.getStartDate());
 		coupon.setEndDate(request.getEndDate());
+		coupon.setDescription(request.getDescription());
 		coupon.setApplicableType(
 				request.getApplicableType() != null ? request.getApplicableType() : CouponApplicableType.ALL);
 
@@ -175,6 +176,7 @@ public class EmployeeCouponService {
 		coupon.setTotalQuantity(request.getTotalQuantity());
 		coupon.setStartDate(request.getStartDate());
 		coupon.setEndDate(request.getEndDate());
+		coupon.setDescription(request.getDescription());
 		if (request.getApplicableType() != null) {
 			coupon.setApplicableType(request.getApplicableType());
 		}

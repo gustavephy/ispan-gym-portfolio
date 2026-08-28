@@ -1,7 +1,5 @@
 package tw.com.ispan.gym.controller.member;
 
-import tw.com.ispan.gym.entity.member.Member;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;

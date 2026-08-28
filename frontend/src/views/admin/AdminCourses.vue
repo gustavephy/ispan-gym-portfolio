@@ -33,11 +33,13 @@
           helper="*請確實填寫指導教練與課程資訊"
           @submit="createGroupCourse"
         >
-          <div class="form-group">
+          <!-- 課程名稱跳滿 3 欄 -->
+          <div class="form-group" style="grid-column: 1 / -1;">
             <label class="form-label">課程名稱</label>
             <input v-model="groupCourseForm.name" class="form-input" placeholder="例如: 燃脂有氧、基礎空中瑜珈" required />
           </div>
-          <div class="form-group">
+          <!-- 指導教練占 2 欄，上限人數占 1 欄 -->
+          <div class="form-group" style="grid-column: span 2;">
             <label class="form-label">指導教練</label>
             <select v-model="groupCourseForm.trainerId" class="form-input" required>
               <option :value="null" disabled>請選擇指導教練</option>
@@ -47,24 +49,25 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">每班上限人數</label>
+            <label class="form-label">上限人數</label>
             <input v-model.number="groupCourseForm.maxCapacity" type="number" class="form-input" min="1" max="100" required />
           </div>
-          <div class="form-group">
+          <!-- 課程分類 + 免費體驗 占 3 欄 -->
+          <div class="form-group" style="grid-column: 1 / -1;">
             <label class="form-label">課程分類</label>
-            <select v-model="groupCourseForm.categoryId" class="form-input" required>
-              <option :value="null" disabled>請選擇分類</option>
-              <option v-for="cat in courseCategories" :key="cat.id" :value="cat.id">
-                {{ cat.name }}
-              </option>
-            </select>
-          </div>
-          <div class="form-group checkbox-group" style="display:flex; align-items:center; min-height: 38px;">
-            <label class="checkbox-container">
-              <input v-model="groupCourseForm.isTrial" type="checkbox" class="custom-checkbox" />
-              <span class="checkmark"></span>
-              <span class="checkbox-label-text">開放免費體驗</span>
-            </label>
+            <div style="display:flex; align-items:center; gap: 0.75rem;">
+              <select v-model="groupCourseForm.categoryId" class="form-input" required style="flex:1; max-width: 240px;">
+                <option :value="null" disabled>請選擇分類</option>
+                <option v-for="cat in courseCategories" :key="cat.id" :value="cat.id">
+                  {{ cat.name }}
+                </option>
+              </select>
+              <label class="checkbox-container" style="white-space:nowrap; flex-shrink:0;">
+                <input v-model="groupCourseForm.isTrial" type="checkbox" class="custom-checkbox" />
+                <span class="checkmark"></span>
+                <span class="checkbox-label-text">免費體驗</span>
+              </label>
+            </div>
           </div>
 
           <template #extra>
@@ -83,7 +86,7 @@
             </div>
             <div class="form-group" style="margin-top: 1rem; width: 100%;">
               <label class="form-label">詳細說明介紹</label>
-              <textarea v-model="groupCourseForm.description" class="form-input" rows="3" placeholder="請填寫課程特色、難易度、注意事項..."></textarea>
+              <textarea v-model="groupCourseForm.description" class="form-input" rows="4" placeholder="請填寫課程特色、難易度、注意事項..." style="width: 100%;"></textarea>
             </div>
           </template>
 
@@ -145,8 +148,7 @@
                 <th style="width: 100px;">圖片</th>
                 <th style="width: 300px;">課程名稱 &amp; 說明</th>
                 <th style="width: 150px;">指導教練</th>
-                <th style="width: 100px;">人數上限</th>
-                <th style="width: 120px;">課程分類</th>
+                <th style="width: 160px;">分類 & 人數</th>
                 <th style="width: 100px;">免費體驗</th>
                 <th style="width: 100px;">狀態</th>
                 <th style="width: 150px;">操作</th>
@@ -166,9 +168,9 @@
                 <td class="trainer-cell">
                   <div style="font-weight: 600; color: var(--primary-dark);">{{ c.trainerName || '未分配' }}</div>
                 </td>
-                <td style="font-weight: 600;">{{ c.maxCapacity }} 人</td>
-                <td>
-                  <span class="badge badge-primary">{{ c.courseCategoryName || '未分類' }}</span>
+                <td style="font-weight: 600;">
+                  <span class="badge badge-primary" style="display:block; margin-bottom:4px;">{{ c.courseCategoryName || '未分類' }}</span>
+                  <span style="font-size:0.82rem; color: var(--text-muted);">上限 {{ c.maxCapacity }} 人</span>
                 </td>
                 <td>
                   <span :class="['badge', c.isTrial ? 'badge-success' : 'badge-danger']">
@@ -192,7 +194,7 @@
                 </td>
               </tr>
               <tr v-if="rawGroupCourses.length === 0">
-                <td colspan="9" style="text-align: center; padding: 3rem; color: #94a3b8;">
+                <td colspan="8" style="text-align: center; padding: 3rem; color: #94a3b8;">
                   查無任何團體課程項目。
                 </td>
               </tr>
@@ -216,6 +218,91 @@
 
     <!-- TAB 2: 私教課程管理 (唯讀 / 下架) -->
     <div v-else-if="currentTab === 'privateCourses'">
+      <div class="page-header-row" style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+        <button class="btn btn-primary btn-sm" @click="showAddPrivateCourse = !showAddPrivateCourse">
+          <span>{{ showAddPrivateCourse ? '✕ 取消新增' : '＋ 新增私教課程' }}</span>
+        </button>
+      </div>
+
+      <!-- 新增私教課程表單 -->
+      <Transition name="slide">
+        <AdminFormCard
+          v-if="showAddPrivateCourse"
+          title="新增私教課程資料"
+          helper="*請確實填寫指導教練與課程資訊"
+          @submit="createPrivateCourse"
+        >
+          <!-- 課程名稱跳滿 3 欄 -->
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label class="form-label">課程名稱</label>
+            <input v-model="privateCourseForm.name" class="form-input" placeholder="例如: 1對1私人教練體驗課" required />
+          </div>
+          <!-- 指導教練跳滿 3 欄 -->
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label class="form-label">指導教練</label>
+            <select v-model="privateCourseForm.trainerId" class="form-input" required>
+              <option :value="null" disabled>請選擇指導教練</option>
+              <option v-for="t in trainersList" :key="t.trainerId" :value="t.trainerId">
+                {{ t.displayName }} ({{ t.specialty }})
+              </option>
+            </select>
+          </div>
+          <!-- 堂數 / 售價 / 上限 各占 1 欄，一排三格 -->
+          <div class="form-group">
+            <label class="form-label">課程堂數</label>
+            <input v-model.number="privateCourseForm.sessionPerUnit" type="number" class="form-input" min="1" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">課程售價</label>
+            <input v-model.number="privateCourseForm.price" type="number" class="form-input" min="0" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">上限人數</label>
+            <input v-model.number="privateCourseForm.maxCapacity" type="number" class="form-input" min="1" required />
+          </div>
+          <!-- 課程分類 + 免費體驗 占滿 3 欄 -->
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label class="form-label">課程分類</label>
+            <div style="display:flex; align-items:center; gap: 0.75rem;">
+              <select v-model="privateCourseForm.courseCategoryId" class="form-input" required style="flex:1; max-width: 240px;">
+                <option :value="null" disabled>請選擇分類</option>
+                <option v-for="cat in privateCourseCategories" :key="cat.id" :value="cat.id">
+                  {{ cat.name }}
+                </option>
+              </select>
+              <label class="checkbox-container" style="white-space:nowrap; flex-shrink:0;">
+                <input v-model="privateCourseForm.isTrial" type="checkbox" class="custom-checkbox" />
+                <span class="checkmark"></span>
+                <span class="checkbox-label-text">免費體驗</span>
+              </label>
+            </div>
+          </div>
+
+          <template #extra>
+            <div class="form-group file-upload-group" style="margin-top: 1rem; width: 100%;">
+              <label class="form-label">課程照片</label>
+              <div class="file-upload-wrapper">
+                <label class="custom-file-btn">
+                  上傳照片
+                  <input type="file" @change="e => uploadFile(e, 'addPrivateCourse')" accept="image/*" class="hidden-file-input" />
+                </label>
+                <span v-if="uploadingFile" class="loading-spinner-inline"></span>
+                <img v-if="privateCourseForm.imageUrl" :src="formatImageUrl(privateCourseForm.imageUrl)" class="form-preview-thumb" alt="Preview" />
+              </div>
+              <input v-model="privateCourseForm.imageUrl" class="form-input url-input" placeholder="圖片位址 URL" />
+            </div>
+            <div class="form-group" style="margin-top: 1rem; width: 100%;">
+              <label class="form-label">詳細說明</label>
+              <textarea v-model="privateCourseForm.description" class="form-input" rows="4" placeholder="填寫課程特色、適合對象等說明" style="width: 100%;"></textarea>
+            </div>
+          </template>
+
+          <template #actions>
+            <button type="submit" class="btn btn-primary" :disabled="saving">確認新增上傳</button>
+          </template>
+        </AdminFormCard>
+      </Transition>
+
       <!-- 統一搜尋與篩選列 -->
       <SearchFilter
         v-model="pcFilterParams"
@@ -261,7 +348,7 @@
                 <th style="width: 100px;">圖片</th>
                 <th style="width: 300px;">課程名稱 &amp; 說明</th>
                 <th style="width: 150px;">指導教練</th>
-                <th style="width: 120px;">包含堂數</th>
+                <th style="width: 120px;">堂數 & 人數</th>
                 <th style="width: 120px;">定價金額</th>
                 <th style="width: 100px;">狀態</th>
                 <th style="width: 150px;">操作</th>
@@ -282,7 +369,8 @@
                   <div style="font-weight: 600; color: var(--primary-dark);">{{ c.trainerName || c.trainer?.name || '專屬教練' }}</div>
                 </td>
                 <td>
-                  <span>{{ c.sessionPerUnit || c.sessionsPerUnit || 1 }} 堂</span>
+                  <span style="font-weight: 600;">{{ c.sessionPerUnit || c.sessionsPerUnit || 1 }} 堂</span><br>
+                  <span style="font-size:0.82rem; color: var(--text-muted);">上限 {{ c.maxCapacity || 1 }} 人</span>
                 </td>
                 <td style="font-weight: 700; color: var(--accent);">NT$ {{ Number(c.price || 0).toLocaleString() }}</td>
                 <td>
@@ -295,6 +383,7 @@
                 </td>
                 <td>
                   <div class="action-buttons-wrap">
+                    <button class="btn btn-edit edit-btn-style btn-sm" @click="openEditPrivateCourseModal(c)">編輯</button>
                     <button v-if="c.status === 'ACTIVE' || c.status === undefined" class="btn btn-danger deactive-btn-style btn-sm" @click="deactivatePrivateCourse(c.id || c.privateCourseId)">下架</button>
                     <button v-if="c.status === 'INACTIVE'" class="btn btn-edit edit-btn-style btn-sm" @click="activatePrivateCourse(c.id || c.privateCourseId)">上架</button>
                   </div>
@@ -353,7 +442,7 @@
               </option>
             </select>
           </div>
-          <div class="form-group checkbox-group" style="display:flex; align-items:center; min-height: 38px;">
+          <div class="form-group checkbox-group" style="display:flex; align-items:center; justify-content:center; min-height: 38px;">
             <label class="checkbox-container">
               <input v-model="editGroupCourseForm.isTrial" type="checkbox" class="custom-checkbox" />
               <span class="checkmark"></span>
@@ -382,12 +471,79 @@
         </div>
         <div class="form-group" style="margin-top: 1rem;">
           <label class="form-label">詳細說明介紹</label>
-          <textarea v-model="editGroupCourseForm.description" class="form-input" rows="3"></textarea>
+          <textarea v-model="editGroupCourseForm.description" class="form-input" rows="3" style="width: 100%; padding-top: 1rem;"></textarea>
         </div>
       </form>
       <template #footer>
         <button type="button" class="btn btn-ghost" @click="showEditGroupCourse = false">取消</button>
         <button type="submit" form="editGroupCourseForm" class="btn btn-primary" :disabled="saving">保存修改資料</button>
+      </template>
+    </AppModal>
+
+    <!-- 編輯私教課程 Modal -->
+    <AppModal v-model:visible="showEditPrivateCourse" title="編輯私教課程內容" size="md">
+      <form id="editPrivateCourseForm" @submit.prevent="updatePrivateCourse">
+        <div class="form-group">
+          <label class="form-label">課程名稱</label>
+          <input v-model="editPrivateCourseForm.name" class="form-input" required />
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label">課程堂數 (Session Per Unit)</label>
+          <input v-model.number="editPrivateCourseForm.sessionPerUnit" type="number" class="form-input" min="1" required />
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label">課程售價</label>
+          <input v-model.number="editPrivateCourseForm.price" type="number" class="form-input" min="0" required />
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label">上限人數</label>
+          <input v-model.number="editPrivateCourseForm.maxCapacity" type="number" class="form-input" min="1" required />
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label">課程分類</label>
+          <select v-model="editPrivateCourseForm.courseCategoryId" class="form-input" required>
+            <option :value="null" disabled>請選擇分類</option>
+            <option v-for="cat in privateCourseCategories" :key="cat.id" :value="cat.id">
+              {{ cat.name }}
+            </option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label">指導教練</label>
+          <select v-model="editPrivateCourseForm.trainerId" class="form-input" required>
+            <option :value="null" disabled>請選擇指導教練</option>
+            <option v-for="t in trainersList" :key="t.trainerId" :value="t.trainerId">
+              {{ t.displayName }} ({{ t.specialty }})
+            </option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label">照片設定</label>
+          <div class="file-upload-wrapper">
+            <label class="custom-file-btn">
+              重新上傳
+              <input type="file" @change="e => uploadFile(e, 'editPrivateCourse')" accept="image/*" class="hidden-file-input" />
+            </label>
+            <span v-if="uploadingFile" class="loading-spinner-inline"></span>
+            <img v-if="editPrivateCourseForm.imageUrl" :src="formatImageUrl(editPrivateCourseForm.imageUrl)" class="form-preview-thumb" alt="Preview" />
+          </div>
+          <input v-model="editPrivateCourseForm.imageUrl" class="form-input url-input" placeholder="圖片位址 URL" />
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label">詳細說明</label>
+          <textarea v-model="editPrivateCourseForm.description" class="form-input" rows="3" style="width: 100%; padding-top: 1rem;"></textarea>
+        </div>
+        <div class="form-group checkbox-group" style="display:flex; align-items:center; justify-content:center; min-height: 38px; margin-top: 1rem;">
+          <label class="checkbox-container">
+            <input v-model="editPrivateCourseForm.isTrial" type="checkbox" class="custom-checkbox" />
+            <span class="checkmark"></span>
+            <span class="checkbox-label-text">開放免費體驗</span>
+          </label>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-ghost" @click="showEditPrivateCourse = false">取消</button>
+        <button type="submit" form="editPrivateCourseForm" class="btn btn-primary" :disabled="saving">保存修改資料</button>
       </template>
     </AppModal>
 
@@ -485,6 +641,15 @@ const gcCategoryFilters = [
 
 const trainersList = ref([])
 const courseCategories = ref([])
+const privateCourseCategories = computed(() => courseCategories.value.filter(cat => cat.name === '重量訓練'))
+
+watch(privateCourseCategories, (newVal) => {
+  if (newVal.length > 0) {
+    if (!privateCourseForm.value.courseCategoryId) {
+      privateCourseForm.value.courseCategoryId = newVal[0].id
+    }
+  }
+})
 
 const groupCourseForm = ref({
   name: '',
@@ -517,6 +682,33 @@ const pcFilterParams = ref({
   keyword: '',
   startDate: '',
   endDate: ''
+})
+
+const showAddPrivateCourse = ref(false)
+const showEditPrivateCourse = ref(false)
+
+const privateCourseForm = ref({
+  name: '',
+  trainerId: null,
+  maxCapacity: 1,
+  sessionPerUnit: 1,
+  price: 0,
+  description: '',
+  imageUrl: '',
+  isTrial: false,
+  courseCategoryId: null
+})
+
+const editPrivateCourseForm = ref({
+  privateCourseId: null,
+  name: '',
+  maxCapacity: 1,
+  sessionPerUnit: 1,
+  price: 0,
+  description: '',
+  imageUrl: '',
+  isTrial: false,
+  courseCategoryId: null
 })
 
 // 課程分類管理新增表單
@@ -631,6 +823,10 @@ async function uploadFile(event, mode) {
         groupCourseForm.value.imageUrl = url
       } else if (mode === 'editGroupCourse') {
         editGroupCourseForm.value.imageUrl = url
+      } else if (mode === 'addPrivateCourse') {
+        privateCourseForm.value.imageUrl = url
+      } else if (mode === 'editPrivateCourse') {
+        editPrivateCourseForm.value.imageUrl = url
       }
       showToast('圖片上傳成功')
     }
@@ -713,11 +909,11 @@ async function createGroupCourse() {
 
 function openEditGroupCourseModal(c) {
   editGroupCourseForm.value = {
-    groupCourseId: c.groupCourseId,
+    groupCourseId: c.id || c.groupCourseId,
     name: c.name,
-    trainerId: c.trainer?.id || c.trainer?.trainerId || null,
+    trainerId: c.trainerId ? Number(c.trainerId) : null,
     maxCapacity: c.maxCapacity,
-    categoryId: c.category?.id || c.category?.courseCategoryId || null,
+    categoryId: c.courseCategoryId ? Number(c.courseCategoryId) : null,
     description: c.description || '',
     imageUrl: c.imageUrl || '',
     isTrial: c.isTrial === true,
@@ -799,6 +995,83 @@ async function activatePrivateCourse(id) {
     await loadPrivateCourses()
   } catch (e) {
     showToast('上架失敗', 'error')
+  }
+}
+
+async function createPrivateCourse() {
+  saving.value = true
+  try {
+    await api.post('/api/admin/private-courses', {
+      name: privateCourseForm.value.name,
+      trainerId: privateCourseForm.value.trainerId,
+      maxCapacity: privateCourseForm.value.maxCapacity,
+      sessionPerUnit: privateCourseForm.value.sessionPerUnit,
+      price: privateCourseForm.value.price,
+      description: privateCourseForm.value.description,
+      imageUrl: privateCourseForm.value.imageUrl || null,
+      isTrial: privateCourseForm.value.isTrial,
+      courseCategoryId: privateCourseForm.value.courseCategoryId,
+      status: 'ACTIVE'
+    })
+    showToast('私教課程新增成功！')
+    showAddPrivateCourse.value = false
+    // reset form
+    privateCourseForm.value = {
+      name: '',
+      trainerId: null,
+      maxCapacity: 1,
+      sessionPerUnit: 1,
+      price: 0,
+      description: '',
+      imageUrl: '',
+      isTrial: false,
+      courseCategoryId: null
+    }
+    await loadPrivateCourses()
+  } catch (e) {
+    showToast(e.response?.data?.message || '新增失敗', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+function openEditPrivateCourseModal(c) {
+  editPrivateCourseForm.value = {
+    privateCourseId: c.id || c.privateCourseId,
+    name: c.name,
+    maxCapacity: c.maxCapacity || 1,
+    sessionPerUnit: c.sessionPerUnit || c.sessionsPerUnit || 1,
+    price: c.price || 0,
+    description: c.description || '',
+    imageUrl: c.imageUrl || '',
+    isTrial: c.isTrial === true,
+    courseCategoryId: c.courseCategoryId ? Number(c.courseCategoryId) : null,
+    trainerId: c.trainerId ? Number(c.trainerId) : (c.trainer?.id ? Number(c.trainer.id) : null)
+  }
+  showEditPrivateCourse.value = true
+}
+
+async function updatePrivateCourse() {
+  saving.value = true
+  try {
+    await api.put(`/api/admin/private-courses/${editPrivateCourseForm.value.privateCourseId}`, {
+      name: editPrivateCourseForm.value.name,
+      description: editPrivateCourseForm.value.description,
+      imageUrl: editPrivateCourseForm.value.imageUrl || null,
+      isTrial: editPrivateCourseForm.value.isTrial,
+      maxCapacity: editPrivateCourseForm.value.maxCapacity,
+      sessionPerUnit: editPrivateCourseForm.value.sessionPerUnit,
+      price: editPrivateCourseForm.value.price,
+      courseCategoryId: editPrivateCourseForm.value.courseCategoryId,
+      trainerId: editPrivateCourseForm.value.trainerId
+    })
+    showToast('私教課程資料修改成功！')
+    showEditPrivateCourse.value = false
+    await loadPrivateCourses()
+  } catch (e) {
+    showToast(e.response?.data?.message || '修改失敗', 'error')
+  } finally {
+    saving.value = false
   }
 }
 

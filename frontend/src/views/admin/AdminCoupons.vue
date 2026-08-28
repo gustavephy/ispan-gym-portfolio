@@ -97,7 +97,7 @@
           <label class="form-label">適用商品範圍</label>
           <select v-model="couponForm.applicableType" class="form-input">
             <option value="ALL">全部商品與方案適用</option>
-            <option value="GOODS">僅限實體商品使用</option>
+            <option value="PRODUCT">僅限實體商品使用</option>
             <option value="COURSE">僅限教練課使用</option>
           </select>
         </div>
@@ -157,17 +157,16 @@
       <table style="table-layout: fixed; width: 100%;">
         <thead>
           <tr>
-            <th style="width: 100px;">代碼</th>
-            <th style="width: 180px;">促銷活動名稱</th>
+            <th style="width: 80px;">代碼</th>
+            <th style="width: 140px;">促銷活動名稱</th>
             <th style="width: 140px;">優惠券描述</th>
-            <th style="width: 110px;">折扣類型</th>
-            <th style="width: 120px;">折抵金額/比例</th>
-            <th style="width: 110px;">最低消費門檻</th>
-            <th style="width: 110px;">適用範圍</th>
-            <th style="width: 140px;">已領取/發行總數</th>
-            <th style="width: 200px;">有效期限</th>
-            <th style="width: 90px;">狀態</th>
-            <th style="width: 280px;">操作</th>
+            <th style="width: 90px;">折扣類型</th>
+            <th style="width: 150px;">折抵金額或比例 (最低門檻)</th>
+            <th style="width: 90px;">適用範圍</th>
+            <th style="width: 120px;">已領取/發行總數</th>
+            <th style="width: 110px;">有效期限</th>
+            <th style="width: 80px;">狀態</th>
+            <th style="width: 100px;">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -181,12 +180,14 @@
               </span>
             </td>
             <td style="font-weight: 700; color: var(--accent);">
-              {{ c.type === 'PERCENT' ? (c.value * 100) + '%' : 'NT$ ' + Number(c.value).toLocaleString() }}
+              <div>{{ c.type === 'PERCENT' ? c.value + '%' : 'NT$ ' + Number(c.value).toLocaleString() }}</div>
+              <div style="font-size: 0.85em; color: #64748b; font-weight: normal; margin-top: 2px;">
+                {{ c.minSpend > 0 ? '滿 NT$ ' + Number(c.minSpend).toLocaleString() : '無門檻' }}
+              </div>
             </td>
-            <td>NT$ {{ Number(c.minSpend).toLocaleString() }}</td>
             <td>
               <span class="badge badge-scope">
-                {{ c.applicableType === 'GOODS' ? '僅商品' : c.applicableType === 'COURSE' ? '僅課程' : '全部適用' }}
+                {{ c.applicableType === 'PRODUCT' ? '僅商品' : c.applicableType === 'COURSE' ? '僅課程' : '全部適用' }}
               </span>
             </td>
             <td>
@@ -194,9 +195,13 @@
                 <div class="progress-bar" :style="{ width: (c.claimedQuantity / c.totalQuantity * 100) + '%' }"></div>
                 <span class="progress-text">{{ c.claimedQuantity }} / {{ c.totalQuantity }}</span>
               </div>
+              <div style="font-size: 0.75rem; color: #64748b; text-align: center; margin-top: 4px; font-weight: 600;">
+                已領取 {{ Math.round((c.claimedQuantity / c.totalQuantity) * 100) }}%
+              </div>
             </td>
             <td class="coupon-date-text">
-              {{ c.startDate }} 至 {{ c.endDate || '永久有效' }}
+              <div>{{ c.startDate }}</div>
+              <div style="font-size: 0.85em; color: #64748b; margin-top: 2px;">至 {{ c.endDate || '永久有效' }}</div>
             </td>
             <td>
               <div class="status-cell-wrap">
@@ -207,16 +212,14 @@
               </div>
             </td>
             <td>
-              <div class="action-buttons-wrap">
+              <div class="action-buttons-wrap" style="display: flex; flex-direction: column; gap: 4px; align-items: stretch; padding: 4px 0;">
                 <button class="btn btn-sm btn-edit" @click="openEditCouponModal(c)" title="編輯">編輯</button>
-                <button v-if="c.status === 'ACTIVE' || c.status === '1'" class="btn btn-sm btn-edit" @click="distributeCouponToAll(c.couponId)" title="群發給全體會員">群發</button>
-                <button v-if="c.status === 'ACTIVE' || c.status === '1'" class="btn btn-sm btn-edit" @click="openDistributeModal(c)" title="指定會員發放">指定發放</button>
                 <button v-if="c.status === 'ACTIVE' || c.status === '1'" class="btn btn-sm btn-danger" @click="deleteCoupon(c.couponId)" title="下架">下架</button>
               </div>
             </td>
           </tr>
           <tr v-if="coupons.length === 0">
-            <td colspan="11" style="text-align: center; padding: 3rem; color: #94a3b8;">
+            <td colspan="10" style="text-align: center; padding: 3rem; color: #94a3b8;">
               目前未發佈任何促銷優惠活動
             </td>
           </tr>
@@ -282,7 +285,7 @@
             <label class="form-label">適用商品範圍</label>
             <select v-model="editCouponForm.applicableType" class="form-input">
               <option value="ALL">全部商品適用</option>
-              <option value="GOODS">僅限實體商品</option>
+              <option value="PRODUCT">僅限實體商品</option>
               <option value="COURSE">僅限課程方案</option>
             </select>
           </div>
@@ -666,6 +669,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.desc-cell {
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.4;
+  font-size: 0.85rem;
+}
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
