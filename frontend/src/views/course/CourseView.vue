@@ -145,6 +145,9 @@ const formatPrice = (price) => Number(price).toLocaleString('zh-TW')
 const displayedDropdownTrainers = computed(() => {
   if (activeTab.value === 'private') {
     const trainersMap = new Map()
+    // 刻意讀 store 的「未篩選」全部私教課清單，而不是分頁 API 篩選後的 privateCoursesData——
+    // 後者選了教練就只剩他的課，下拉會跟著縮成一個人。這份 store 清單由 onMounted 確保載入
+    //（原本只有首頁會載，直接開 /courses 會是空的）。
     const list = coursesStore.privateCourses || []
     list.forEach(c => {
       const t = c.trainer
@@ -250,6 +253,11 @@ async function checkMemberSubscription() {
 onMounted(async () => {
   await checkMemberSubscription()
   await coursesStore.loadCategories()
+  // 私教分頁的教練下拉靠 store 的未篩選課程清單（見 displayedDropdownTrainers）。
+  // 那份清單原本只有首頁會載，直接開這頁或重新整理時是空的，下拉就只剩「全部教練」。
+  if (!coursesStore.privateCourses?.length) {
+    await coursesStore.loadCourses()
+  }
   await fetchCourses()
   await fetchGroupCourses()
 })
