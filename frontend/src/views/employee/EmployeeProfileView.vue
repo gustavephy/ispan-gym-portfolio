@@ -82,8 +82,8 @@ async function uploadFile(event) {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    // 沿用產品圖片上傳端點
-    const res = await api.post('/api/admin/products/upload', formData, {
+    // 走員工自己的上傳端點：產品圖片那支 /api/admin/products/upload 要 ADMIN，一般教練會 403
+    const res = await api.post('/api/employee/uploads/images', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     const url = res.url || res.data?.url

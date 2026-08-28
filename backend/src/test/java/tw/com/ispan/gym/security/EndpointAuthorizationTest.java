@@ -113,6 +113,7 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.employee.EmployeeReviewController.class,
         tw.com.ispan.gym.controller.employee.AdminEmployeeController.class,
         tw.com.ispan.gym.controller.employee.EmployeeProfileController.class,
+        tw.com.ispan.gym.controller.employee.EmployeeUploadController.class,
         tw.com.ispan.gym.controller.coupon.AdminCouponController.class,
         tw.com.ispan.gym.controller.member.AdminMemberController.class,
         tw.com.ispan.gym.controller.member.MemberProfileController.class,
@@ -170,6 +171,9 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary TrainerRepository trainerRepository() {
             return Mockito.mock(TrainerRepository.class);
+        }
+        @Bean @Primary tw.com.ispan.gym.service.file.FileService fileService() {
+            return Mockito.mock(tw.com.ispan.gym.service.file.FileService.class);
         }
         @Bean @Primary OauthAccountRepository oauthAccountRepository() {
             return Mockito.mock(OauthAccountRepository.class);
@@ -867,6 +871,17 @@ class EndpointAuthorizationTest {
         expectUnauthorizedWhenAnonymous(put("/api/employee/profile"));
         expectForbidden(put("/api/employee/profile"), memberToken());
         expectAuthorized(put("/api/employee/profile"), employeeToken());
+    }
+
+    /**
+     * 教練頭像走員工自己的上傳端點，不是 /api/admin/products/upload（那支要 ADMIN，
+     * 一般教練會 403）。這裡送的不是 multipart，通過授權後會是 400，但重點只在不是 401／403。
+     */
+    @Test
+    void 員工上傳圖片需在職員工身分() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/employee/uploads/images"));
+        expectForbidden(post("/api/employee/uploads/images"), memberToken());
+        expectAuthorized(post("/api/employee/uploads/images"), employeeToken());
     }
 
     /**
