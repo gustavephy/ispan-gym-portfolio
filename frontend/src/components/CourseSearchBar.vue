@@ -119,9 +119,14 @@ watch(() => props.modelValue, (v) => {
 
 onMounted(()=>{
   if(props.showCategory) loadCategories()
-  // 只有外部沒傳 trainers 時才打 API 撈全部教練
-  if(props.showTrainer && props.trainers === null) loadTrainers()
 })
+
+// 外部沒傳 trainers（=== null）時才打 API 撈全部教練。用 watch 而不是只在 onMounted 判斷：
+// 課程方案頁初始是私教分頁（傳陣列），切到團課分頁才變成 null——只在掛載時判斷一次
+// 的話，切分頁後下拉永遠只有「全部教練」。已載過就不重打。
+watch(() => props.trainers, (t) => {
+  if (props.showTrainer && t === null && trainerOptions.value.length === 0) loadTrainers()
+}, { immediate: true })
 
 </script>
 <template>

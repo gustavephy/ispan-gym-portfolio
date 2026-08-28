@@ -217,7 +217,7 @@ public class OrderService {
 
         BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
         Order order = orders.save(new Order(member, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount,
-                subtotal, total, memberCoupon, member.getFirstName() + member.getLastName(), member.getPhone(), null,
+                subtotal, total, memberCoupon, member.getDisplayName(), member.getPhone(), null,
                 member.getAccount().getEmail()));
 
         orderItems.save(new OrderItem(order, course, course.getName(), course.getPrice(), quantity));
@@ -262,7 +262,7 @@ public class OrderService {
 
         BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
         Order order = new Order(member, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount,
-                subtotal, total, memberCoupon, member.getFirstName() + member.getLastName(), member.getPhone(), null,
+                subtotal, total, memberCoupon, member.getDisplayName(), member.getPhone(), null,
                 member.getAccount().getEmail());
         order.setSubscriptionPlan(plan);
         order = orders.save(order);
@@ -558,7 +558,7 @@ public class OrderService {
 
         BigDecimal total = subtotal.subtract(discount).max(BigDecimal.ZERO);
 
-        String finalReceiverName = valueOr(receiverName, member.getFirstName() + member.getLastName());
+        String finalReceiverName = valueOr(receiverName, member.getDisplayName());
         String finalReceiverPhone = valueOr(receiverPhone, member.getPhone());
 
         Order order = new Order(member, generateMerchantTradeNo(), generateOrderNo(), subtotal, discount, subtotal,

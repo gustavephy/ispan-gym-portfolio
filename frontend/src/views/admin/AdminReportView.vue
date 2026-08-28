@@ -297,8 +297,13 @@ async function handleGenerate() {
   generating.value = true
   generateError.value = null
   try {
-    await generateReport({ reportType: genReportType.value, periodStart, periodEnd })
-    await fetchReports() // 清單重抓後最新一份（就是剛生成的這份）會被自動選取
+    const { data: created } = await generateReport({ reportType: genReportType.value, periodStart, periodEnd })
+    // 同區間重複生成是「刪舊插新」，舊 id 已經不存在——回應一到就先把選取切到新 id，
+    // 不等清單重抓；否則這段空窗內按「下載 PDF」／「刪除」會打到剛被刪掉的舊 id 而 404。
+    if (created?.id != null) {
+      selectedReportId.value = created.id
+    }
+    await fetchReports() // 清單重抓後最新一份（就是剛生成的這份）會被自動選取並載入明細
     showGenerateForm.value = false
   } catch (e) {
     generateError.value = e.message

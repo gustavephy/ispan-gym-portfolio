@@ -201,7 +201,7 @@ public class GroupCourseService {
                 groupCourse.getId(),
                 groupCourse.getName(),
                 trainer.getId(),
-                trainer.getEmployee().getFirstName() + trainer.getEmployee().getLastName(),
+                trainer.getEmployee().getDisplayName(),
                 groupCourse.getDescription(),
                 groupCourse.getImageUrl(),
                 groupCourse.getMaxCapacity(),

@@ -31,6 +31,12 @@ async function generateDailyReport(page, date = REPORT_DATE) {
   await page.getByRole('button', { name: '確定生成' }).click()
   const res = await generated
   expect(res.ok(), `生成失敗：${await res.text()}`).toBeTruthy()
+
+  // 同區間重複生成是「刪舊插新」：POST 回來的瞬間頁面可能還選著已被刪掉的舊快照，
+  // 這時按下載／刪除會打到舊 id 而 404。等下拉真的切到新 id 再回傳，後續操作才可靠。
+  const created = await res.json()
+  await expect(page.locator('select').nth(1)).toHaveValue(String(created.id))
+  return created
 }
 
 test.describe('A7 營運報表', () => {

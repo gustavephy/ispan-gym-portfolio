@@ -51,6 +51,6 @@ public record OrderItemResponse(
     }
 
     private static String trainerName(Trainer trainer) {
-        return trainer == null ? null : trainer.getFirstName() + trainer.getLastName();
+        return trainer == null ? null : trainer.getDisplayName();
     }
 }

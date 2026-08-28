@@ -14,7 +14,8 @@ import { test, expect, ACCOUNTS, loginAs, apiToken } from './fixtures.js'
  */
 
 const API = 'http://localhost:8080'
-const PRODUCT = '乳清蛋白 1kg'
+// 46 筆版種子的實際商品名（庫存 45），舊名「乳清蛋白 1kg」已不存在
+const PRODUCT = '分離乳清蛋白-香草'
 
 function productCard(page, name) {
   return page.locator('.item-card').filter({ hasText: name }).first()
@@ -43,6 +44,8 @@ async function blockEcpayRedirect(page) {
 
 async function addProductToCart(page, name) {
   await page.goto('/products')
+  // 先等預設清單渲染完再輸入，避免初始載入期間搜尋框被重新渲染而吃掉輸入（見 shop.spec）
+  await expect(page.locator('.item-card').first()).toBeVisible()
   await page.getByPlaceholder('搜尋商品名稱...').fill(name)
   await expect(productCard(page, name)).toBeVisible()
 
