@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "format": "prettier --write --experimental-cli src/",
     "test:e2e": "playwright test",
+    "test:e2e:fresh": "node e2e/reset-db.mjs --yes --then-test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report"
   },

@@ -44,3 +44,4 @@ __screenshots__/
 /blob-report/
 /playwright/.cache/
 e2e/.auth-cache.json
+e2e/.backend.log
