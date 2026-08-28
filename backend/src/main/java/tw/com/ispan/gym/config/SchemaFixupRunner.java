@@ -774,14 +774,20 @@ public class SchemaFixupRunner implements CommandLineRunner {
                     WHERE status <> 'CANCELLED'
                 """);
 
-        // 一張已領取的優惠券只能用在一筆訂單。
+        // 一張已領取的優惠券同一時間只能用在一筆「有效」訂單。
         // 需要 WHERE 是因為大多數訂單沒用券，而 SQL Server 的唯一索引
         // 只允許「一列」為 NULL，不加條件會在第二筆無券訂單就爆掉。
+        // 必須排除 CANCELLED／REFUNDED：這兩個終態會把券退回會員（OrderService.restoreCoupon），
+        // 但訂單仍保留 member_coupon_id 供歷史查詢；舊版索引沒排除，退回的券再用就撞唯一鍵，
+        // 變成「看得到、結帳必失敗」的殭屍券（E2E order-cancel.spec 抓到）。
+        // FAILED 不釋放券，所以仍算佔用。
+        // （篩選索引的 WHERE 只接受 AND 串接的簡單比較，不能寫 NOT IN。）
         dropIndexIfExists("orders", "UX_orders_user_coupon");
-        createFilteredUniqueIndex("UX_orders_member_coupon", """
-                CREATE UNIQUE INDEX UX_orders_member_coupon
+        dropIndexIfExists("orders", "UX_orders_member_coupon");
+        createFilteredUniqueIndex("UX_orders_member_coupon_active", """
+                CREATE UNIQUE INDEX UX_orders_member_coupon_active
                     ON orders(member_coupon_id)
-                    WHERE member_coupon_id IS NOT NULL
+                    WHERE member_coupon_id IS NOT NULL AND status <> 'CANCELLED' AND status <> 'REFUNDED'
                 """);
 
         // 同一會員同一天只能有一筆有效的 InBody 記錄（欄位已改名 member_id）。
