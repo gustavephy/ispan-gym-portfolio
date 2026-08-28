@@ -47,6 +47,12 @@ test.describe('A7 營運報表', () => {
 
   test('即時統計顯示四張 KPI', async ({ page }) => {
     const kpis = page.locator('.kpi')
+    // 前三張（營收／件數／品項）來自即時統計，永遠都在；第四張「退款金額」來自選中的
+    // 報表快照——全新資料庫還沒有任何快照時只會有三張；已有快照的環境一進頁就是四張。
+    // 兩種狀態都要成立：先確認基礎三張都在，生成一份快照後必須是四張
+    await expect(kpis.first()).toBeVisible()
+    expect(await kpis.count()).toBeGreaterThanOrEqual(3)
+    await generateDailyReport(page)
     await expect(kpis).toHaveCount(4)
 
     // 每張都該有數字，不是空殼
