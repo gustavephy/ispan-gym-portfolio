@@ -47,6 +47,7 @@ import tw.com.ispan.gym.repository.account.OauthAccountRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
+import tw.com.ispan.gym.service.coach.CoachSlotService;
 import tw.com.ispan.gym.service.trainer.AdminTrainerService;
 import tw.com.ispan.gym.service.trainer.TrainerProfileService;
 import tw.com.ispan.gym.service.trainer.TrainerService;
@@ -163,6 +164,9 @@ class TrainerMethodSecurityTest {
         @Bean @Primary AdminTrainerService adminTrainerService() {
             return Mockito.mock(AdminTrainerService.class);
         }
+        @Bean @Primary CoachSlotService coachSlotService() {
+            return Mockito.mock(CoachSlotService.class);
+        }
     }
 
     @Autowired MockMvc mockMvc;
@@ -173,6 +177,7 @@ class TrainerMethodSecurityTest {
     @Autowired TrainerService trainerService;
     @Autowired TrainerProfileService trainerProfileService;
     @Autowired AdminTrainerService adminTrainerService;
+    @Autowired CoachSlotService coachSlotService;
 
     private static final String CREATE_BODY = """
             {
@@ -209,7 +214,8 @@ class TrainerMethodSecurityTest {
      */
     @BeforeEach
     void resetMocks() {
-        Mockito.reset(trainerService, trainerProfileService, adminTrainerService, accounts, employees, trainers);
+        Mockito.reset(trainerService, trainerProfileService, adminTrainerService, coachSlotService, accounts,
+                employees, trainers);
     }
 
     private String tokenFor(int accountId, int employeeId, String email, EmployeeRole role) {
@@ -406,6 +412,27 @@ class TrainerMethodSecurityTest {
                 .andExpect(status().isOk());
 
         Mockito.verify(adminTrainerService).getById(7);
+    }
+
+    // === GET /api/admin/trainers/{trainerId}/coach-slots ================================
+
+    @Test
+    void 教練排課查詢_一般員工被方法層級擋下() throws Exception {
+        mockMvc.perform(get("/api/admin/trainers/7/coach-slots")
+                        .header("Authorization", "Bearer " + employeeToken()))
+                .andExpect(status().isForbidden());
+
+        Mockito.verify(coachSlotService, Mockito.never())
+                .getSlotsForAdmin(any(), Mockito.anyInt(), Mockito.anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void 教練排課查詢_管理者通過方法層級() throws Exception {
+        mockMvc.perform(get("/api/admin/trainers/7/coach-slots")
+                        .header("Authorization", "Bearer " + adminToken()))
+                .andExpect(status().isOk());
+
+        Mockito.verify(coachSlotService).getSlotsForAdmin(eq(7), eq(0), eq(10), any(), any(), any());
     }
 
     // === PUT /api/admin/trainers/{trainerId} ==========================================

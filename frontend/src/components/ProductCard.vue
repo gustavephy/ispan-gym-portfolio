@@ -1,7 +1,7 @@
 <script setup>
 import '@/assets/card.css'
 import { ref } from 'vue';
-import { formatImageUrl } from '@/utils/image.js';
+import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js';
 import { useCartStore } from '@/stores/cart.js';
 import { useAuthStore } from '@/stores/auth.js';
 import { useFeedback } from '@/composables/useFeedback.js';
@@ -46,7 +46,8 @@ const addToCart = async () => {
 <template>
     <div class="item-card" @click="$router.push(`/products/${product.productId}`)">
         <div class="item-cover" :style="!product.imageUrl ? {background: 'linear-gradient(135deg, #fce4d6, #f9d5c5)' }: {} ">
-            <img v-if = "product.imageUrl" :src="formatImageUrl(product.imageUrl)" class="cover-image" alt="商品封面">
+            <img v-if = "product.imageUrl" :src="formatImageUrl(product.imageUrl)" class="cover-image" alt="商品封面"
+                 @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)">
             <span class="type-badge badge-product">商品</span>
         </div>
 

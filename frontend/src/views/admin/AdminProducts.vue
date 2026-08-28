@@ -29,7 +29,8 @@
           <label class="form-label">所屬分類</label>
           <select v-model="productForm.productCategoryId" class="form-input" required>
             <option :value="null" disabled selected>請選擇商品分類</option>
-            <option v-for="cat in goodsCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+            <!-- 後端回的是 productCategoryId，沒有 id 欄位；綁錯會讓選了分類仍存成未分類 -->
+            <option v-for="cat in goodsCategories" :key="cat.productCategoryId" :value="cat.productCategoryId">{{ cat.name }}</option>
           </select>
         </div>
         <div class="form-group">
@@ -128,7 +129,8 @@
           <tr v-for="p in paginatedProducts" :key="p.productId">
             <td class="hide-md">#{{ p.productId }}</td>
             <td>
-              <img :src="getProductImage(p)" class="product-thumb" alt="Product Image" />
+              <img :src="getProductImage(p)" class="product-thumb" alt="Product Image"
+                   @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" />
             </td>
             <td class="product-name-cell">
               <div class="name-text">{{ p.name }}</div>
@@ -191,7 +193,7 @@
             <label class="form-label">商品分類</label>
             <select v-model="editForm.productCategoryId" class="form-input">
               <option :value="null">無分類</option>
-              <option v-for="cat in goodsCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+              <option v-for="cat in goodsCategories" :key="cat.productCategoryId" :value="cat.productCategoryId">{{ cat.name }}</option>
             </select>
           </div>
           <div class="form-group">
@@ -277,7 +279,7 @@ import AppModal from '@/components/AppModal.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'
 import AdminFormCard from '@/components/AdminFormCard.vue'
-import { formatImageUrl } from '@/utils/image.js'
+import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
 import api from '@/api/axios.instance.js'
 
 const showToastInject = inject('showToast', null)
@@ -428,7 +430,7 @@ const visiblePages = computed(() => {
 
 function getProductImage(p) {
   if (p.imageUrl) return formatImageUrl(p.imageUrl)
-  return 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=400&auto=format&fit=crop&q=60'
+  return DEFAULT_PRODUCT_IMAGE
 }
 
 // 圖片上傳
@@ -449,10 +451,17 @@ async function uploadFile(event, mode) {
       }
     })
     uploadingFile.value = false
+    // 攔截器成功時回傳的是完整 response 物件，內容在 res.data（見 api/axios.instance.js）
+    const uploadedUrl = res.data?.url
+    if (!uploadedUrl) {
+      // 取不到網址就等於沒上傳成功，這裡要明講；否則會靜默存成沒有圖片的商品
+      showToast('上傳圖片失敗：伺服器未回傳圖片位址', 'error')
+      return
+    }
     if (mode === 'add') {
-      productForm.value.imageUrl = res.url
+      productForm.value.imageUrl = uploadedUrl
     } else {
-      editForm.value.imageUrl = res.url
+      editForm.value.imageUrl = uploadedUrl
     }
     showToast('圖片上傳成功')
   } catch (e) {

@@ -21,6 +21,7 @@ import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.CoachBookingResponse;
 import tw.com.ispan.gym.dto.coach.CoachSlotResponse;
 import tw.com.ispan.gym.dto.coach.MemberCourseQuotaResponse;
+import tw.com.ispan.gym.dto.coach.SessionDeductionLogResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.entity.coach.CoachBooking;
 import tw.com.ispan.gym.entity.coach.CoachSlot;
@@ -462,6 +463,50 @@ public class CoachBookingService {
                                                         booking.getStatus(), booking.getCheckInKey(),
                                                         booking.getQuota().getCourseName(),
                                                         snapshot);
+                                })
+                                .toList();
+
+                return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
+        }
+
+        /**
+         * 分頁查詢某會員的所有堂數異動稽核紀錄，可依事件類型與建立時間區間篩選，供管理員審計。
+         * size 做安全上限（1~100）、page 不可小於 0，理由同 {@link #getMyBookings}。
+         * dateFrom／dateTo 是使用者在畫面上選的「日期」（不含時間），dateTo 內部轉成隔天 00:00
+         * 做上界（不含），讓 dateTo 當天整天都算在篩選範圍內。
+         */
+        @Transactional(readOnly = true)
+        public PageResponse<SessionDeductionLogResponse> getMyDeductionLogs(Integer memberId, int page, int size,
+                        String eventType, LocalDate dateFrom, LocalDate dateTo) {
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+                Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+                LocalDateTime createdAtFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
+                LocalDateTime createdAtTo = dateTo == null ? null : dateTo.plusDays(1).atStartOfDay();
+
+                Page<SessionDeductionLog> result = sessionDeductionLogRepository.searchByMember(memberId, eventType,
+                                createdAtFrom, createdAtTo, pageable);
+
+                List<SessionDeductionLogResponse> items = result.getContent().stream()
+                                .map(log -> {
+                                        Trainer operatorTrainer = log.getOperatorTrainer();
+                                        String operatorTrainerName = (operatorTrainer == null) ? null
+                                                        : operatorTrainer.getLastName() + operatorTrainer.getFirstName();
+                                        return new SessionDeductionLogResponse(
+                                                        log.getId(),
+                                                        log.getEventType(),
+                                                        log.getDelta(),
+                                                        log.getBeforeRemaining(),
+                                                        log.getAfterRemaining(),
+                                                        log.getBeforeReserved(),
+                                                        log.getAfterReserved(),
+                                                        log.getBeforeUsed(),
+                                                        log.getAfterUsed(),
+                                                        log.getRemark(),
+                                                        operatorTrainerName,
+                                                        log.getQuota().getCourseName(),
+                                                        log.getCreatedAt());
                                 })
                                 .toList();
 

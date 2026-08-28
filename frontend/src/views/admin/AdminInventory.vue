@@ -65,7 +65,8 @@
             <tr v-for="p in filteredProducts" :key="p.productId">
               <td>#{{ p.productId }}</td>
               <td>
-                <img :src="getProductImage(p)" class="product-thumb" alt="Product Image" />
+                <img :src="getProductImage(p)" class="product-thumb" alt="Product Image"
+                     @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" />
               </td>
               <td class="product-name-cell">
                 <div class="name-text">{{ p.name }}</div>
@@ -115,6 +116,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '@/api/axios.instance.js'
+import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
 
 // [響應式狀態] products (products)
 // 為什麼要這麼做：在架商品清單，提供頁面渲染商品列表的資料來源。
@@ -181,27 +183,12 @@ const filteredProducts = computed(() => {
   return activeProducts.value
 })
 
-// [功能方法] formatImageUrl (格式化imageurl)
-// 為什麼要這麼做：將原始的資料（如日期、數值）轉換為符合本地語系與高可讀性的格式（如千分位、kg 單位）。
-function formatImageUrl(url) {
-  if (!url || typeof url !== 'string') return ''
-  const apiUrl = import.meta.env.VITE_API_URL
-  if (apiUrl && url.includes('localhost:8080')) {
-    const base = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl
-    return url.replace('http://localhost:8080', base)
-  }
-  if (url.startsWith('/uploads/') && apiUrl) {
-    const base = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl
-    return base + url
-  }
-  return url
-}
-
 // [功能方法] getProductImage (取得productimage)
 // 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
+// 這頁列的是商品，沒有圖時用商品預設圖；原本誤用課程的預設圖。
 function getProductImage(product) {
   if (product.imageUrl) return formatImageUrl(product.imageUrl)
-  return 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=200&auto=format&fit=crop&q=60'
+  return DEFAULT_PRODUCT_IMAGE
 }
 
 // [生命週期掛載] 組件初始化載入

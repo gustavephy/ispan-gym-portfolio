@@ -68,6 +68,11 @@ async function purchase(plan) {
       subscriptionPlanId: plan.subscriptionPlanId,
       couponCode: null,
     })
+    // 記下這筆訂單，讓使用者從綠界返回 /orders 時主動查一次付款結果
+    // （本機收不到綠界的 server-to-server 通知，見 OrderListView#syncPendingPayment）
+    if (res.data.order?.orderId) {
+      sessionStorage.setItem('pendingPaymentOrderId', String(res.data.order.orderId))
+    }
     submitEcpayForm(res.data.ecpayForm)
     // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 purchasingId，避免使用者在轉導期間重複點擊
   } catch (err) {

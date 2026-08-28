@@ -18,7 +18,8 @@ public record OrderDetailResponse(
         OrderStatus status,
         LocalDateTime createdAt,
         List<OrderItemResponse> items,
-        OrderSubscriptionResponse subscription) {
+        OrderSubscriptionResponse subscription,
+        OrderPaymentInfoResponse paymentInfo) {
 
     /**
      * 購買內容摘要標題。優先用訂閱方案名；否則看品項——單一品項用品項名，

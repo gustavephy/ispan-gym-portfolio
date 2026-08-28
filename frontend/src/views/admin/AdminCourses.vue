@@ -158,7 +158,8 @@
               <tr v-for="c in rawGroupCourses" :key="c.id">
                 <td>#{{ c.id }}</td>
                 <td>
-                  <img :src="c.imageUrl ? formatImageUrl(c.imageUrl) : 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=400&auto=format&fit=crop&q=60'" class="product-thumb" alt="Course Image" />
+                  <img :src="c.imageUrl ? formatImageUrl(c.imageUrl) : DEFAULT_COURSE_IMAGE" class="product-thumb" alt="Course Image"
+                       @error="useFallbackImage($event, DEFAULT_COURSE_IMAGE)" />
                 </td>
                 <td class="product-name-cell">
                   <div class="name-text">{{ c.name }}</div>
@@ -357,7 +358,8 @@
               <tr v-for="c in paginatedPrivateCourses" :key="c.id || c.privateCourseId">
                 <td>#{{ c.id || c.privateCourseId }}</td>
                 <td>
-                  <img :src="c.imageUrl ? formatImageUrl(c.imageUrl) : 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=400&auto=format&fit=crop&q=60'" class="product-thumb" alt="Course Image" />
+                  <img :src="c.imageUrl ? formatImageUrl(c.imageUrl) : DEFAULT_COURSE_IMAGE" class="product-thumb" alt="Course Image"
+                       @error="useFallbackImage($event, DEFAULT_COURSE_IMAGE)" />
                 </td>
                 <td class="product-name-cell">
                   <div class="name-text">{{ c.name }}</div>
@@ -596,7 +598,7 @@ import AppModal from '@/components/AppModal.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'
 import AdminFormCard from '@/components/AdminFormCard.vue'
-import { formatImageUrl } from '@/utils/image.js'
+import { formatImageUrl, useFallbackImage, DEFAULT_COURSE_IMAGE } from '@/utils/image.js'
 import api from '@/api/axios.instance.js'
 import { notify } from '@/api/error-bus.js'
 

@@ -11,3 +11,8 @@
 /docs/*
 !/docs/API-REFERENCE.md
 !/docs/google-oauth-design-notes.md
+
+# 後台上傳的商品／課程圖片；屬於執行期資料，各機器內容不同也會讓 repo 持續膨脹。
+# 資料庫的 image_url 仍會保留路徑，clone 後檔案不存在時前端會退回預設圖
+# （見 utils/image.js 的 useFallbackImage）
+/backend/uploads/

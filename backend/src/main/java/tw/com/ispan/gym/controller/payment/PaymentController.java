@@ -28,12 +28,17 @@ public class PaymentController {
         this.currentUser = currentUser;
     }
 
-    /** 組出綠界 AioCheckOut 表單欄位；只有訂單所屬會員本人可以查詢 */
+    /**
+     * 組出綠界 AioCheckOut 表單欄位；只有訂單所屬會員本人可以查詢。
+     * {@code method} 預設 Credit（信用卡），一般商品訂單可傳 ATM／CVS 改用轉帳或超商代碼繳費，
+     * 見 {@link EcpayService#buildCheckoutForm(Order, String)}。
+     */
     @PostMapping("/ecpay/checkout/{orderId}")
-    public Map<String, String> checkout(@PathVariable Integer orderId) {
+    public Map<String, String> checkout(@PathVariable Integer orderId,
+            @RequestParam(defaultValue = "Credit") String method) {
         Order order = orders.findByIdAndMemberId(orderId, currentUser.requireCurrentMemberId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
-        return ecpayService.buildCheckoutForm(order);
+        return ecpayService.buildCheckoutForm(order, method);
     }
 
     /**
@@ -47,6 +52,20 @@ public class PaymentController {
             ecpayService.handleNotify(params);
         } catch (Exception ex) {
             log.error("處理 ECPay 通知時發生例外：{}", params, ex);
+        }
+        return "1|OK";
+    }
+
+    /**
+     * ATM／CVS 取號結果通知（PaymentInfoURL），跟 {@link #notify} 是不同的 callback，
+     * 見 {@link EcpayService#handlePaymentInfo}。同樣不帶登入態，同樣一律回「1|OK」。
+     */
+    @PostMapping(value = "/ecpay/payment-info", produces = MediaType.TEXT_PLAIN_VALUE)
+    public String paymentInfo(@RequestParam Map<String, String> params) {
+        try {
+            ecpayService.handlePaymentInfo(params);
+        } catch (Exception ex) {
+            log.error("處理 ECPay 取號通知時發生例外：{}", params, ex);
         }
         return "1|OK";
     }

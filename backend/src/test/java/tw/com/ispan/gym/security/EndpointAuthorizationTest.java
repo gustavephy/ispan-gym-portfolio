@@ -59,6 +59,7 @@ import tw.com.ispan.gym.service.trainer.TrainerProfileService;
 import tw.com.ispan.gym.service.trainer.TrainerService;
 import tw.com.ispan.gym.service.report.OperationReportService;
 import tw.com.ispan.gym.service.report.ReportPdfService;
+import tw.com.ispan.gym.service.account.AccountService;
 import tw.com.ispan.gym.service.account.PasswordService;
 
 /**
@@ -126,6 +127,7 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.payment.PaymentController.class,
         tw.com.ispan.gym.controller.payment.AdminPaymentController.class,
         tw.com.ispan.gym.controller.report.OperationReportController.class,
+        tw.com.ispan.gym.controller.account.AccountController.class,
         tw.com.ispan.gym.controller.account.PasswordController.class,
         tw.com.ispan.gym.controller.account.PasswordResetController.class,
         tw.com.ispan.gym.controller.account.OAuthConnectionController.class,
@@ -257,6 +259,9 @@ class EndpointAuthorizationTest {
         }
         @Bean @Primary OrderRepository orderRepository() {
             return Mockito.mock(OrderRepository.class);
+        }
+        @Bean @Primary AccountService accountService() {
+            return Mockito.mock(AccountService.class);
         }
         @Bean @Primary PasswordService passwordService() {
             return Mockito.mock(PasswordService.class);
@@ -730,6 +735,14 @@ class EndpointAuthorizationTest {
         expectAuthorized(get("/api/admin/members/1/coach-bookings"), adminToken());
     }
 
+    @Test
+    void 查詢指定會員堂數異動稽核紀錄僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/members/1/deduction-logs"));
+        expectForbidden(get("/api/admin/members/1/deduction-logs"), memberToken());
+        expectForbidden(get("/api/admin/members/1/deduction-logs"), employeeToken());
+        expectAuthorized(get("/api/admin/members/1/deduction-logs"), adminToken());
+    }
+
     // === MEMBER：私教課額度查詢 ================================================
     //
     // memberId 一律由 CurrentUserProvider 從 token 反查（controller 不收參數），
@@ -795,6 +808,14 @@ class EndpointAuthorizationTest {
 
         expectForbidden(get("/api/admin/trainers/1"), trainerToken());
         expectAuthorized(get("/api/admin/trainers/1"), adminToken());
+    }
+
+    @Test
+    void 教練排課查詢僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/admin/trainers/1/coach-slots"));
+        expectForbidden(get("/api/admin/trainers/1/coach-slots"), employeeToken());
+        expectForbidden(get("/api/admin/trainers/1/coach-slots"), trainerToken());
+        expectAuthorized(get("/api/admin/trainers/1/coach-slots"), adminToken());
     }
 
     @Test
@@ -1015,5 +1036,21 @@ class EndpointAuthorizationTest {
         expectUnauthorizedWhenAnonymous(delete("/api/account/me/oauth/google"));
         expectAuthorized(delete("/api/account/me/oauth/google"), memberToken());
         expectAuthorized(delete("/api/account/me/oauth/google"), employeeToken());
+    }
+
+    // AccountController 都沒有 @PreAuthorize，跟密碼管理／Google 綁定一樣，
+    // 帳號層級的自助操作不分身分，只要求已登入。
+    @Test
+    void 查詢帳號身份快照需要登入_任何已登入身分皆可() throws Exception {
+        expectUnauthorizedWhenAnonymous(get("/api/account/me"));
+        expectAuthorized(get("/api/account/me"), memberToken());
+        expectAuthorized(get("/api/account/me"), employeeToken());
+    }
+
+    @Test
+    void 全裝置登出需要登入_任何已登入身分皆可() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/account/me/logout-all"));
+        expectAuthorized(post("/api/account/me/logout-all"), memberToken());
+        expectAuthorized(post("/api/account/me/logout-all"), employeeToken());
     }
 }

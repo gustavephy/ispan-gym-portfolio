@@ -65,6 +65,17 @@ function formatDate(dateStr) {
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
 }
 
+// [功能方法] formatReservationTimeRange
+// 從 startAt／endAt 組出「日期 HH:mm-HH:mm」的顯示格式
+function formatReservationTimeRange(r) {
+  if (!r.startAt || !r.endAt) return ''
+  const start = new Date(r.startAt)
+  const end = new Date(r.endAt)
+  const pad = (n) => String(n).padStart(2, '0')
+  const timeStr = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return `${formatDate(r.startAt)} ${timeStr(start)}-${timeStr(end)}`
+}
+
 // [功能方法] isNearExpiry (isnearexpiry)
 // 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 function isNearExpiry(expiryDate) {
@@ -104,13 +115,6 @@ function getQuotaTrainerName(quota) {
   return m?.trainer ? `${m.trainer.lastName || ''}${m.trainer.firstName || ''}` : ''
 }
 
-// [功能方法] getQuotaTypeLabel (取得quotatypelabel)
-// 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
-function getQuotaTypeLabel(quota) {
-  const m = getQuotaCourse(quota)
-  return m ? (isCoursePrivate(m) ? '私教課' : '團課') : ''
-}
-
 // [功能方法] getUsageRecords (取得usagerecords)
 // 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
 function getUsageRecords(quota) {
@@ -121,7 +125,7 @@ function getUsageRecords(quota) {
       const rName = r.courseName.trim().toLowerCase()
       return rName.includes(qName) || qName.includes(rName)
     })
-    .sort((a, b) => new Date(b.reservationDate) - new Date(a.reservationDate))
+    .sort((a, b) => new Date(b.startAt) - new Date(a.startAt))
 }
 
 // [功能方法] toggleHistory (切換history)
@@ -137,14 +141,18 @@ function toggleHistory(quotaId) {
 function handleBookCourse(quota) {
   if (quota.courseName) {
     showToast(`正在前往課表預約 ${quota.courseName}`, 'success')
-    const isPrivate = getQuotaTypeLabel(quota) === '私教課'
-    router.push({
-      path: '/reservation',
-      query: {
-        keyword: quota.courseName,
-        type: isPrivate ? 'PRIVATE' : 'GROUP'
-      }
-    })
+    // 額度必定來自私教課（後端 MemberCourseQuota.trainer 是必填關聯），直接以
+    // trainer 判斷要去哪。原本用「額度名 vs 課程名」的模糊比對推斷是否私教課，
+    // 額度名（如「一對一重量訓練額度」）與課程名不互含時會誤判成團課、
+    // 把使用者丟回 /reservation 而不是該教練的時段頁。
+    if (quota.trainer?.id) {
+      router.push(`/reservation/trainer/${quota.trainer.id}`)
+    } else {
+      router.push({
+        path: '/reservation',
+        query: { keyword: quota.courseName, type: 'PRIVATE' }
+      })
+    }
   } else {
     router.push('/reservation')
   }
@@ -197,20 +205,6 @@ const filteredQuotas = computed(() => quotas.value.filter(q => {
   return true
 }))
 
-// [功能方法] isReservationExpired (isreservationexpired)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-function isReservationExpired(r) {
-  if (!r.reservationDate || !r.reservationTime) return false
-  try {
-    const timeParts = r.reservationTime.split('-')
-    const endTimeStr = timeParts[1] ? timeParts[1].trim() : '00:00'
-    const endDateTime = new Date(`${r.reservationDate}T${endTimeStr}:00`)
-    return endDateTime < new Date()
-  } catch (e) {
-    return false
-  }
-}
-
 onMounted(async () => {
   try {
     const [quotasRes, reservationsRes] = await Promise.all([
@@ -219,7 +213,7 @@ onMounted(async () => {
       coursesStore.loadCourses()
     ])
     quotas.value = quotasRes.data || []
-    myReservations.value = reservationsRes.data?.content || []
+    myReservations.value = reservationsRes.data?.items || []
   } catch (error) {
     console.error('Failed to load courses data:', error)
     showToast('載入課程資料失敗，請重試', 'error')
@@ -334,7 +328,7 @@ onMounted(async () => {
                   >
                     <span class="history-dot"></span>
                     <div class="history-info">
-                      <span class="history-date">{{ formatDate(r.reservationDate) }} {{ r.reservationTime }}</span>
+                      <span class="history-date">{{ formatReservationTimeRange(r) }}</span>
                       <span class="history-trainer">教練：{{ r.trainerName }}</span>
                     </div>
                     <span :class="['badge', r.status === 'COMPLETED' ? 'badge-success' : 'badge-warning']">

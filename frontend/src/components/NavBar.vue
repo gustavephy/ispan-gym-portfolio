@@ -31,6 +31,7 @@
         { to: '/subscription', label: '會籍方案' },
         { to: '/orders', label: '我的訂單', requires: 'MEMBER' },
         { to: '/member/courses', label: '我的課程', requires: 'MEMBER' },
+        { to: '/member/profile', label: '會員資料', requires: 'MEMBER' },
         { to: '/coupons', label: '優惠券', requires: 'MEMBER' },
         { to: '/health', label: 'AI健康管理', requires: 'MEMBER' },
       ],
@@ -53,6 +54,7 @@
       links: [
         { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' },
         { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
+        { to: '/admin/trainer-schedules', label: '教練排課查詢', requires: 'ADMIN' },
         { to: '/admin/courses', label: '課程方案', requires: 'ADMIN' },
         { to: '/admin/coupons', label: '優惠券管理', requires: 'ADMIN' },
         { to: '/admin/group-classes', label: '團課場次', requires: 'ADMIN' },
@@ -171,7 +173,8 @@
   const roleLabels = computed(() => {
     const roles = new Set(auth.roles)
     const labels = []
-    if (roles.has('ADMIN')) labels.push('管理員')
+    // 對外徽章使用簡稱；完整身分提示仍顯示「管理員」
+    if (roles.has('ADMIN')) labels.push('管理')
     if (roles.has('TRAINER')) labels.push('教練')
     if (labels.length === 0 && roles.has('EMPLOYEE')) labels.push('員工')
     if (labels.length === 0 && roles.has('MEMBER')) labels.push('會員')
@@ -249,6 +252,13 @@
         <ul class="nav-auth__roles" aria-label="目前身分" :title="`完整身分：${fullRoleList}`">
           <li v-for="label in roleLabels" :key="label" class="nav-auth__role">{{ label }}</li>
         </ul>
+        <RouterLink
+          to="/account/security"
+          class="nav-auth__button"
+          :class="{ 'nav-link--active': isLinkActive('/account/security') }"
+        >
+          帳號設定
+        </RouterLink>
         <button type="button" class="nav-auth__button" @click="onLogout">登出</button>
       </div>
       <div v-else key="out" class="nav-auth__panel">
@@ -283,6 +293,9 @@
     border-right: 2px solid #d5c2ab;
     box-shadow: 6px 0 22px rgba(60, 48, 43, 0.22);
     z-index: 100;
+    /* 側欄是 fixed 且上下撐滿，內容超過視窗高度時預設會被裁掉又無法捲動——
+       多重身分帳號的工作區連結較多，1280x720 這類矮視窗下底部的帳號區塊會完全點不到 */
+    overflow-y: auto;
   }
 
   .brand {
@@ -491,10 +504,15 @@
     }
     .brand-mark { font-size: 1.2rem; }
     .brand-sub { display: none; }
+    .ws-switch {
+      margin-bottom: 0;
+      flex-shrink: 0;
+    }
     .nav-links {
       flex-direction: row;
       overflow-x: auto;
       gap: 0.25rem;
+      min-width: 0;
     }
     .nav-link {
       white-space: nowrap;
@@ -523,6 +541,28 @@
       padding: 0.35rem 0.7rem;
       font-size: 0.82rem;
       white-space: nowrap;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .navbar {
+      gap: 0.4rem;
+      padding-inline: 0.5rem;
+      overflow-x: hidden;
+    }
+    .ws-switch { padding: 0.15rem; }
+    .ws-tab {
+      padding: 0.3rem 0.15rem;
+      font-size: 0.78rem;
+    }
+    .nav-auth__panel { gap: 0.25rem; }
+    .nav-auth__role {
+      padding-inline: 0.4rem;
+      font-size: 0.68rem;
+    }
+    .nav-auth__button {
+      padding: 0.3rem 0.45rem;
+      font-size: 0.76rem;
     }
   }
 </style>

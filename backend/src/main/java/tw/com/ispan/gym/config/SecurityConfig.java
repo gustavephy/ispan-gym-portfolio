@@ -98,6 +98,9 @@ public class SecurityConfig {
                         // 授權已在原始 REQUEST dispatch 做過，這裡放行以免被二次攔成 401
                         .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // 商品／課程圖片，前台未登入也要看得到（上傳仍受 /api/admin/** 保護）。
+                        // 不限定 GET：瀏覽器與快取／預載機制也會對圖片發 HEAD，只放 GET 會回 401
+                        .requestMatchers("/uploads/**").permitAll()
                         // 登入 / 註冊 / 忘記密碼等免驗證入口
                         .requestMatchers("/api/auth/**").permitAll()
                         // 會員註冊（MemberRegisterController）
@@ -135,6 +138,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/subscription-plans").permitAll()
                         // 綠界 server-to-server 付款結果通知，不帶登入態（PaymentController#notify）
                         .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/notify").permitAll()
+                        // ATM／CVS 取號結果通知，跟上面 notify 是不同的 callback URL（PaymentController#paymentInfo）
+                        .requestMatchers(HttpMethod.POST, "/api/payments/ecpay/payment-info").permitAll()
                         // 注意：POST /api/auth/oauth/exchange 與
                         // /api/auth/oauth/google/registration/complete 不需要在這裡另外列——
                         // 已經落在上面 "/api/auth/**" permitAll 規則裡；安全性不是靠端點層級

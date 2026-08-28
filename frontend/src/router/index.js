@@ -16,6 +16,11 @@ const router = createRouter({
           component: () => import('@/views/reservation/ReservationView.vue'),
           meta: { requiresAuth: true },
         },
+        {
+          path: 'reservation/trainer/:trainerId',
+          component: () => import('@/views/reservation/TrainerSlotsView.vue'),
+          meta: { requiresAuth: true },
+        },
         { path: 'group-classes', component: () => import('@/views/reservation/GroupClassView.vue') },
         { path: 'products', component: () => import('@/views/product/ProductView.vue') },
         { path: 'products/:id', component: () => import('@/views/product/ProductDetail.vue') },
@@ -47,6 +52,18 @@ const router = createRouter({
           path: 'member/courses',
           component: () => import('@/views/member/MemberCourseView.vue'),
           meta: { requiresAuth: true, requiresRole: 'MEMBER' },
+        },
+        {
+          path: 'member/profile',
+          component: () => import('@/views/member/MemberProfileView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
+        },
+        {
+          // 帳號設定：只要求已登入，不限角色——純 Employee/Admin/Trainer 帳號也要用得到，
+          // 不能只放在會員工作區底下（見 NavBar.vue 的入口位置）
+          path: 'account/security',
+          component: () => import('@/views/account/AccountSecurityView.vue'),
+          meta: { requiresAuth: true },
         },
         {
           path: 'trainer/schedules',
@@ -81,6 +98,11 @@ const router = createRouter({
         {
           path: 'admin/members',
           component: () => import('@/views/admin/AdminMemberView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
+          path: 'admin/trainer-schedules',
+          component: () => import('@/views/admin/AdminTrainerScheduleView.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
@@ -176,6 +198,19 @@ const router = createRouter({
       path: '/employee-reapply',
       name: 'employee-reapply',
       component: () => import('@/views/employee/EmployeeReapplyView.vue'),
+    },
+    // Google OAuth 登入流程：後端 app.oauth.frontend-success-url／frontend-registration-url
+    // 直接把瀏覽器導到這兩個路徑，路徑名稱不可隨意更動。跟其他匿名頁一樣不掛 DefaultLayout。
+    // 失敗時後端改導 /login?oauthError=<reason>，由 LoginView 承接，不另設錯誤頁。
+    {
+      path: '/oauth/callback',
+      name: 'oauth-callback',
+      component: () => import('@/views/oauth/OAuthCallbackView.vue'),
+    },
+    {
+      path: '/oauth/register',
+      name: 'oauth-register',
+      component: () => import('@/views/oauth/OAuthRegisterView.vue'),
     },
   ],
 })

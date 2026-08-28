@@ -19,6 +19,7 @@ import jakarta.validation.Valid;
 import tw.com.ispan.gym.dto.coach.CoachBookingHistoryResponse;
 import tw.com.ispan.gym.dto.coach.GroupClassBookingResponse;
 import tw.com.ispan.gym.dto.coach.MemberCourseQuotaResponse;
+import tw.com.ispan.gym.dto.coach.SessionDeductionLogResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberResponse;
 import tw.com.ispan.gym.dto.member.AdminMemberSummaryResponse;
@@ -122,6 +123,25 @@ public class AdminMemberController {
             @RequestParam(required = false) LocalDate dateFrom,
             @RequestParam(required = false) LocalDate dateTo) {
         return ResponseEntity.ok(coachBookingService.getMyBookings(memberId, page, size, status, dateFrom, dateTo));
+    }
+
+    /**
+     * 查詢指定會員的私教課堂數異動稽核紀錄（核銷/取消/購課發放等每一次異動的前後快照）。
+     * 跟 coach-bookings 端點是不同層級的資料——coach-bookings 是「有哪幾次預約」，
+     * 這支是「每一次預約造成堂數怎麼變動」。與會員端 CoachBookingService 共用邏輯，
+     * 差異只在 memberId 是管理者指定而非從 token 反查。
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{memberId}/deduction-logs")
+    public ResponseEntity<PageResponse<SessionDeductionLogResponse>> getDeductionLogs(
+            @PathVariable Integer memberId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo) {
+        return ResponseEntity
+                .ok(coachBookingService.getMyDeductionLogs(memberId, page, size, eventType, dateFrom, dateTo));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

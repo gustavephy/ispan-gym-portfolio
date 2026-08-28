@@ -22,13 +22,17 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import tw.com.ispan.gym.dto.coach.AdminCoachSlotResponse;
+import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.dto.trainer.AdminTrainerResponse;
 import tw.com.ispan.gym.dto.trainer.TrainerSuspensionCheckResponse;
+import tw.com.ispan.gym.enums.coach.SlotStatus;
 import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.enums.trainer.TrainerStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.GlobalExceptionHandler;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.service.coach.CoachSlotService;
 import tw.com.ispan.gym.service.trainer.AdminTrainerService;
 
 /**
@@ -40,9 +44,10 @@ import tw.com.ispan.gym.service.trainer.AdminTrainerService;
 class AdminTrainerControllerTest {
 
     private final AdminTrainerService adminTrainerService = mock(AdminTrainerService.class);
+    private final CoachSlotService coachSlotService = mock(CoachSlotService.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new AdminTrainerController(adminTrainerService))
+            .standaloneSetup(new AdminTrainerController(adminTrainerService, coachSlotService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
@@ -100,6 +105,42 @@ class AdminTrainerControllerTest {
         when(adminTrainerService.getById(999)).thenThrow(new ResourceNotFoundException("找不到此教練"));
 
         mockMvc.perform(get("/api/admin/trainers/999"))
+                .andExpect(status().isNotFound());
+    }
+
+    // === GET /api/admin/trainers/{trainerId}/coach-slots ============================
+
+    @Test
+    void getCoachSlots_預設參數正確傳給Service() throws Exception {
+        when(coachSlotService.getSlotsForAdmin(eq(7), eq(0), eq(10), isNull(), isNull(), isNull()))
+                .thenReturn(new PageResponse<>(java.util.List.of(), 0, 10, 0, 0));
+
+        mockMvc.perform(get("/api/admin/trainers/7/coach-slots"))
+                .andExpect(status().isOk());
+
+        verify(coachSlotService).getSlotsForAdmin(eq(7), eq(0), eq(10), isNull(), isNull(), isNull());
+    }
+
+    @Test
+    void getCoachSlots_成功回傳含預約會員姓名() throws Exception {
+        AdminCoachSlotResponse slot = new AdminCoachSlotResponse(101, 7,
+                LocalDateTime.of(2026, 9, 1, 10, 0), LocalDateTime.of(2026, 9, 1, 11, 0),
+                SlotStatus.BOOKED, 55, tw.com.ispan.gym.enums.coach.CoachBookingStatus.PENDING, 12, "王小明");
+        when(coachSlotService.getSlotsForAdmin(eq(7), eq(0), eq(10), isNull(), isNull(), isNull()))
+                .thenReturn(new PageResponse<>(java.util.List.of(slot), 0, 10, 1, 1));
+
+        mockMvc.perform(get("/api/admin/trainers/7/coach-slots"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].memberName").value("王小明"))
+                .andExpect(jsonPath("$.items[0].bookingStatus").value("PENDING"));
+    }
+
+    @Test
+    void getCoachSlots_教練不存在時回404() throws Exception {
+        when(coachSlotService.getSlotsForAdmin(eq(999), eq(0), eq(10), isNull(), isNull(), isNull()))
+                .thenThrow(new ResourceNotFoundException("找不到此教練"));
+
+        mockMvc.perform(get("/api/admin/trainers/999/coach-slots"))
                 .andExpect(status().isNotFound());
     }
 

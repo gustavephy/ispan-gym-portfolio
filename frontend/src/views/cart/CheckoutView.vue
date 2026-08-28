@@ -10,6 +10,8 @@ import { submitEcpayForm } from '@/utils/ecpay.js'
 import { useFeedback } from '@/composables/useFeedback.js'
 import { taiwanDistricts } from '@/data/taiwanDistricts.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import OrderSummaryCard from '@/components/OrderSummaryCard.vue'
 
 const cart = useCartStore()
 const { items, totalAmount, loading } = storeToRefs(cart)
@@ -20,12 +22,52 @@ const receiverPhone = ref('')
 const submitting = ref(false)
 const showConfirm = ref(false)
 
+// 付款方式：Credit（信用卡，即時）／ATM（虛擬帳號轉帳）／CVS（超商代碼繳費）——
+// 後兩者不是即時付款，綠界會先給一組帳號/代碼，消費者之後自行完成繳費
+const paymentMethod = ref('Credit')
+const paymentMethodOptions = [
+  { value: 'Credit', label: '信用卡', desc: '導向綠界頁面輸入卡號，即時完成付款' },
+  { value: 'ATM', label: 'ATM 轉帳', desc: '取得虛擬帳號，請於期限內完成轉帳' },
+  { value: 'CVS', label: '超商代碼', desc: '取得繳費代碼，請至超商完成繳費' },
+]
+const paymentMethodLabel = computed(
+  () => paymentMethodOptions.find((o) => o.value === paymentMethod.value)?.label ?? '',
+)
+
+// 超商代碼繳費金額限制（含手續費），跟後端 EcpayService 的檢查一致
+const CVS_MIN_AMOUNT = 27
+const CVS_MAX_AMOUNT = 20000
+const isCvsAllowed = computed(
+  () => Number(totalAmount.value) >= CVS_MIN_AMOUNT && Number(totalAmount.value) <= CVS_MAX_AMOUNT,
+)
+// 訂單金額變動（例如優惠券折抵後）導致超商代碼不再適用時，自動退回信用卡，避免送出後被後端擋下
+watch(isCvsAllowed, (allowed) => {
+  if (!allowed && paymentMethod.value === 'CVS') paymentMethod.value = 'Credit'
+})
+
+const paymentMethodNote = computed(() => {
+  if (paymentMethod.value === 'ATM') {
+    return '送出後將導向綠界測試環境取得轉帳虛擬帳號，請於期限內完成轉帳；付款結果需要一些時間才會更新，可至「我的訂單」查詢繳費資訊'
+  }
+  if (paymentMethod.value === 'CVS') {
+    return '送出後將導向綠界測試環境取得超商代碼，請至超商完成繳費；付款結果需要一些時間才會更新，可至「我的訂單」查詢繳費資訊'
+  }
+  return '目前僅支援信用卡付款，送出後將導向綠界測試付款頁輸入卡號完成付款'
+})
+const paymentMethodConfirmNote = computed(() => {
+  if (paymentMethod.value === 'ATM') return '確認無誤後將導向綠界頁面取得轉帳用虛擬帳號'
+  if (paymentMethod.value === 'CVS') return '確認無誤後將導向綠界頁面取得超商繳費代碼'
+  return '確認無誤後將導向綠界測試付款頁，僅支援信用卡付款'
+})
+
 // 收件地址拆成縣市/行政區下拉 + 詳細地址（路名、巷弄、門牌）自由輸入
 const cityOptions = Object.keys(taiwanDistricts)
 const receiverCity = ref('')
 const receiverDistrict = ref('')
 const receiverAddressDetail = ref('')
-const districtOptions = computed(() => (receiverCity.value ? taiwanDistricts[receiverCity.value] ?? [] : []))
+const districtOptions = computed(() =>
+  receiverCity.value ? (taiwanDistricts[receiverCity.value] ?? []) : [],
+)
 
 // 換縣市時，原本選的行政區不一定屬於新縣市，直接清空避免留著兜不起來的組合
 watch(receiverCity, () => {
@@ -44,15 +86,21 @@ const memberProfile = ref(null)
 const receiverMode = ref('custom') // 'profile' | 'custom'
 
 const hasProfileAddress = computed(() =>
-  Boolean(memberProfile.value?.city || memberProfile.value?.district || memberProfile.value?.address),
+  Boolean(
+    memberProfile.value?.city || memberProfile.value?.district || memberProfile.value?.address,
+  ),
 )
 const profileName = computed(() =>
-  memberProfile.value ? `${memberProfile.value.firstName ?? ''}${memberProfile.value.lastName ?? ''}`.trim() : '',
+  memberProfile.value
+    ? `${memberProfile.value.firstName ?? ''}${memberProfile.value.lastName ?? ''}`.trim()
+    : '',
 )
 const profilePhone = computed(() => memberProfile.value?.phone ?? '')
 const profileAddress = computed(() =>
   memberProfile.value
-    ? [memberProfile.value.city, memberProfile.value.district, memberProfile.value.address].filter(Boolean).join('')
+    ? [memberProfile.value.city, memberProfile.value.district, memberProfile.value.address]
+        .filter(Boolean)
+        .join('')
     : '',
 )
 
@@ -101,19 +149,25 @@ async function handleCheckout() {
   submitting.value = true
   try {
     const receiver = effectiveReceiver.value
-    const orderRes = await checkoutFromCart({
-      couponCode: couponCode.value.trim() || null,
-      receiverName: receiver.name || null,
-      receiverPhone: receiver.phone || null,
-      receiverAddress: receiver.address || null,
-    }, idempotencyKey)
+    const orderRes = await checkoutFromCart(
+      {
+        couponCode: couponCode.value.trim() || null,
+        receiverName: receiver.name || null,
+        receiverPhone: receiver.phone || null,
+        receiverAddress: receiver.address || null,
+      },
+      idempotencyKey,
+    )
     const orderId = orderRes.data.orderId
+    cart.reset() // 訂單一旦建立後端就已清空購物車，本地狀態在這裡就同步清空即可，不必等組表單成功
 
-    const formRes = await getEcpayCheckoutForm(orderId)
-    cart.reset() // 訂單建立後後端已清空購物車，本地狀態跟著清空即可，不必再打一次 API
+    const formRes = await getEcpayCheckoutForm(orderId, paymentMethod.value)
 
-    // 從綠界返回 /orders 後，OrderListView 會輪詢這筆訂單的付款結果
-    sessionStorage.setItem('pendingPaymentOrderId', String(orderId))
+    // 只有信用卡是「幾乎即時」的付款體驗，回 /orders 後才需要 OrderListView 短輪詢確認付款結果；
+    // ATM／超商代碼要等消費者之後自行完成繳費，短輪詢不會有結果，改由 OrderListView 顯示待繳費資訊
+    if (paymentMethod.value === 'Credit') {
+      sessionStorage.setItem('pendingPaymentOrderId', String(orderId))
+    }
     submitEcpayForm(formRes.data)
     // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 submitting，避免使用者在轉導期間重複點擊
   } catch (err) {
@@ -136,10 +190,16 @@ onMounted(() => {
 
     <div v-if="loading" class="spinner"></div>
 
-    <div v-else-if="items.length === 0" class="empty-state">
-      <p>購物車是空的，無法結帳</p>
-      <RouterLink to="/products" class="btn btn-accent">去逛逛</RouterLink>
-    </div>
+    <EmptyState
+      v-else-if="items.length === 0"
+      icon="cart"
+      title="購物車是空的，無法結帳"
+      description="先去挑幾件商品，再回來完成結帳"
+    >
+      <template #action>
+        <RouterLink to="/products" class="btn btn-accent">去逛逛</RouterLink>
+      </template>
+    </EmptyState>
 
     <div v-else class="checkout-layout">
       <div class="checkout-form">
@@ -148,7 +208,9 @@ onMounted(() => {
           <div v-for="item in items" :key="item.cartItemId" class="order-item-row">
             <span class="order-item-name">
               {{ item.productName }} × {{ item.quantity }}
-              <span v-if="item.available === false" class="item-flag danger">已下架 / 庫存不足</span>
+              <span v-if="item.available === false" class="item-flag danger"
+                >已下架 / 庫存不足</span
+              >
               <span v-else-if="item.priceChanged" class="item-flag warn">
                 價格已變動（加入時 NT$ {{ Number(item.priceWhenAdded).toLocaleString() }}）
               </span>
@@ -165,7 +227,12 @@ onMounted(() => {
         <div class="form-card">
           <h3>收件資訊<span class="req">＊</span></h3>
 
-          <div v-if="hasProfileAddress" class="receiver-mode-select" role="group" aria-label="收件資訊來源">
+          <div
+            v-if="hasProfileAddress"
+            class="receiver-mode-select"
+            role="group"
+            aria-label="收件資訊來源"
+          >
             <button
               type="button"
               class="receiver-mode-option"
@@ -205,7 +272,11 @@ onMounted(() => {
                   <option value="">縣市</option>
                   <option v-for="city in cityOptions" :key="city" :value="city">{{ city }}</option>
                 </select>
-                <select v-model="receiverDistrict" class="form-input region-select" :disabled="!receiverCity">
+                <select
+                  v-model="receiverDistrict"
+                  class="form-input region-select"
+                  :disabled="!receiverCity"
+                >
                   <option value="">行政區</option>
                   <option v-for="d in districtOptions" :key="d" :value="d">{{ d }}</option>
                 </select>
@@ -220,37 +291,60 @@ onMounted(() => {
         </div>
 
         <div class="form-card">
+          <h3>付款方式</h3>
+          <div class="payment-method-select" role="group" aria-label="付款方式">
+            <button
+              v-for="opt in paymentMethodOptions"
+              :key="opt.value"
+              type="button"
+              class="payment-method-option"
+              :class="{ active: paymentMethod === opt.value }"
+              :disabled="opt.value === 'CVS' && !isCvsAllowed"
+              :aria-pressed="paymentMethod === opt.value"
+              @click="paymentMethod = opt.value"
+            >
+              <span class="payment-method-option-label">{{ opt.label }}</span>
+              <span class="payment-method-option-desc">{{ opt.desc }}</span>
+            </button>
+          </div>
+          <p v-if="!isCvsAllowed" class="payment-method-hint">
+            超商代碼僅支援 NT$27～NT$20,000 的訂單金額，本筆訂單金額不符，已停用此選項
+          </p>
+        </div>
+
+        <div class="form-card">
           <h3>優惠券（選填）</h3>
           <input v-model="couponCode" class="form-input" placeholder="輸入優惠券代碼" />
         </div>
       </div>
 
-      <div class="checkout-summary">
-        <h3 class="summary-title">付款金額</h3>
-        <div class="summary-row">
-          <span>商品小計</span>
-          <span>NT$ {{ Number(totalAmount).toLocaleString() }}</span>
-        </div>
-        <div class="summary-divider"></div>
-        <div class="summary-row total-row">
-          <span>應付金額</span>
-          <span class="total-price">NT$ {{ Number(totalAmount).toLocaleString() }}</span>
-        </div>
-
+      <OrderSummaryCard
+        title="付款金額"
+        :rows="[{ label: '商品小計', value: Number(totalAmount) }]"
+        total-label="應付金額"
+        :total-value="Number(totalAmount)"
+        sticky
+      >
         <div class="payment-method-row">
           <span class="payment-method-label">付款方式</span>
-          <span class="payment-method-value">信用卡（綠界 ECPay）</span>
+          <span class="payment-method-value">{{ paymentMethodLabel }}（綠界 ECPay）</span>
         </div>
-        <p class="ecpay-note">目前僅支援信用卡付款，送出後將導向綠界安全金流支付頁輸入卡號完成付款</p>
+        <p class="ecpay-note">{{ paymentMethodNote }}</p>
         <button
           class="btn btn-accent submit-btn"
           :disabled="submitting || hasUnavailableItem"
           @click="openConfirm"
-        >確認結帳並前往付款</button>
-      </div>
+        >
+          確認結帳並前往付款
+        </button>
+      </OrderSummaryCard>
     </div>
 
-    <div v-if="showConfirm" class="modal-overlay" @click.self="!submitting && (showConfirm = false)">
+    <div
+      v-if="showConfirm"
+      class="modal-overlay"
+      @click.self="!submitting && (showConfirm = false)"
+    >
       <div class="modal-content">
         <h3 class="modal-title">確認訂單內容</h3>
 
@@ -264,7 +358,9 @@ onMounted(() => {
 
         <div class="confirm-section">
           <h4 class="confirm-section-title">收件資訊</h4>
-          <p class="confirm-text">{{ effectiveReceiver.name || '未填寫' }}　{{ effectiveReceiver.phone }}</p>
+          <p class="confirm-text">
+            {{ effectiveReceiver.name || '未填寫' }}　{{ effectiveReceiver.phone }}
+          </p>
           <p class="confirm-text">{{ effectiveReceiver.address || '未填寫地址' }}</p>
         </div>
 
@@ -273,17 +369,32 @@ onMounted(() => {
           <p class="confirm-text">{{ couponCode.trim() }}（實際折扣將於送出後計算）</p>
         </div>
 
+        <div class="confirm-section">
+          <h4 class="confirm-section-title">付款方式</h4>
+          <p class="confirm-text">{{ paymentMethodLabel }}</p>
+        </div>
+
         <div class="confirm-total-row">
           <span>應付金額</span>
           <span class="total-price">NT$ {{ Number(totalAmount).toLocaleString() }}</span>
         </div>
-        <p class="ecpay-note">確認無誤後將導向綠界安全金流支付頁，僅支援信用卡付款</p>
+        <p class="ecpay-note">{{ paymentMethodConfirmNote }}</p>
 
         <div class="modal-actions">
-          <button class="btn btn-accent" type="button" :disabled="submitting" @click="handleCheckout">
+          <button
+            class="btn btn-accent"
+            type="button"
+            :disabled="submitting"
+            @click="handleCheckout"
+          >
             {{ submitting ? '處理中...' : '確認送出，前往付款' }}
           </button>
-          <button class="btn btn-outline" type="button" :disabled="submitting" @click="showConfirm = false">
+          <button
+            class="btn btn-outline"
+            type="button"
+            :disabled="submitting"
+            @click="showConfirm = false"
+          >
             返回修改
           </button>
         </div>
@@ -301,15 +412,6 @@ onMounted(() => {
   gap: 1.5rem;
   align-items: start;
   margin-top: 2rem;
-}
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  color: var(--text-muted);
 }
 .checkout-form {
   display: flex;
@@ -340,14 +442,23 @@ onMounted(() => {
   font-weight: 600;
   vertical-align: middle;
 }
-.item-flag.danger { background: #fde2e2; color: #c92a2a; }
-.item-flag.warn { background: #fff3cd; color: #a06400; }
+.item-flag.danger {
+  background: #fde2e2;
+  color: #c92a2a;
+}
+.item-flag.warn {
+  background: #fff3cd;
+  color: #a06400;
+}
 .checkout-blocker {
   margin-top: 0.75rem;
   font-size: 0.82rem;
   color: #c92a2a;
 }
-.checkout-blocker a { color: var(--accent-hover); font-weight: 600; }
+.checkout-blocker a {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
 .order-item-row {
   display: flex;
   justify-content: space-between;
@@ -373,7 +484,9 @@ onMounted(() => {
   cursor: pointer;
   transition: var(--transition);
 }
-.receiver-mode-option:hover { border-color: var(--accent); }
+.receiver-mode-option:hover {
+  border-color: var(--accent);
+}
 .receiver-mode-option.active {
   border-color: var(--accent);
   background: var(--bg-soft);
@@ -383,7 +496,9 @@ onMounted(() => {
   font-weight: 700;
   color: var(--text-primary);
 }
-.receiver-mode-option.active .receiver-mode-label { color: var(--accent-hover); }
+.receiver-mode-option.active .receiver-mode-label {
+  color: var(--accent-hover);
+}
 .receiver-mode-preview {
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -400,7 +515,9 @@ onMounted(() => {
   gap: 0.35rem;
   margin-bottom: 0.9rem;
 }
-.field-group:last-child { margin-bottom: 0; }
+.field-group:last-child {
+  margin-bottom: 0;
+}
 .field-group label {
   font-size: 0.82rem;
   color: var(--text-secondary);
@@ -426,25 +543,58 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-.checkout-summary {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-section);
-  padding: 1.5rem;
-  position: sticky;
-  top: 1.5rem;
+.payment-method-select {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
 }
-.summary-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 1.2rem; }
-.summary-row {
+.payment-method-option {
   display: flex;
-  justify-content: space-between;
-  font-size: 0.9rem;
-  margin-bottom: 0.75rem;
-  color: var(--text-secondary);
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-section);
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
 }
-.summary-divider { height: 1px; background: var(--border); margin: 1rem 0; }
-.total-row { color: var(--text-primary); font-weight: 700; font-size: 1rem; }
-.total-price { color: var(--accent-hover); font-size: 1.2rem; }
+.payment-method-option:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.payment-method-option.active {
+  border-color: var(--accent);
+  background: var(--bg-soft);
+}
+.payment-method-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.payment-method-option-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.payment-method-option.active .payment-method-option-label {
+  color: var(--accent-hover);
+}
+.payment-method-option-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+.payment-method-hint {
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: #a06400;
+}
+
+/* modal 內的應付金額沿用這個色與字級（摘要卡的合計已由 OrderSummaryCard 處理） */
+.total-price {
+  color: var(--accent-hover);
+  font-size: 1.2rem;
+}
 .payment-method-row {
   display: flex;
   justify-content: space-between;
@@ -456,19 +606,35 @@ onMounted(() => {
   background: var(--bg-soft);
   font-size: 0.85rem;
 }
-.payment-method-label { color: var(--text-secondary); }
-.payment-method-value { font-weight: 700; color: var(--text-primary); }
+.payment-method-label {
+  color: var(--text-secondary);
+}
+.payment-method-value {
+  font-weight: 700;
+  color: var(--text-primary);
+}
 .ecpay-note {
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 0.75rem;
   text-align: center;
 }
-.submit-btn { width: 100%; margin-top: 0.75rem; padding: 0.8rem; }
+.submit-btn {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.8rem;
+}
 
 @media (max-width: 768px) {
-  .checkout-layout { grid-template-columns: 1fr; }
-  .receiver-mode-select { grid-template-columns: 1fr; }
+  .checkout-layout {
+    grid-template-columns: 1fr;
+  }
+  .receiver-mode-select {
+    grid-template-columns: 1fr;
+  }
+  .payment-method-select {
+    grid-template-columns: 1fr;
+  }
 }
 
 .modal-overlay {

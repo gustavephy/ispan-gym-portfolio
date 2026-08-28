@@ -6,6 +6,8 @@ import { useCartStore } from '@/stores/cart.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import OrderSummaryCard from '@/components/OrderSummaryCard.vue'
 
 const cart = useCartStore()
 const auth = useAuthStore()
@@ -76,18 +78,44 @@ onMounted(() => {
 
 <template>
   <div class="page-container">
-    <h1 class="section-title">我的購物車</h1>
-
-    <div v-if="loading" class="spinner"></div>
-
-    <div v-else-if="!auth.isLoggedIn" class="empty-state">
-      <p>請先登入會員才能查看購物車</p>
+    <div class="section-header">
+      <span class="section-tag">CART</span>
+      <h1 class="section-title">我的購物車</h1>
+      <p class="section-desc">確認購物車內的商品與數量，確認無誤後即可前往結帳。</p>
     </div>
 
-    <div v-else-if="items.length === 0" class="empty-state">
-      <p>購物車是空的</p>
-      <RouterLink to="/products" class="btn btn-accent">去逛逛</RouterLink>
+    <div v-if="loading" class="cart-layout" aria-hidden="true">
+      <div class="cart-items">
+        <div v-for="n in 3" :key="n" class="cart-item cart-item--skeleton">
+          <div class="skeleton item-image"></div>
+          <div class="item-info">
+            <div class="skeleton skeleton-line" style="width: 55%"></div>
+            <div class="skeleton skeleton-line skeleton-line--sm" style="width: 32%"></div>
+          </div>
+          <div class="skeleton skeleton-pill"></div>
+          <div class="skeleton skeleton-line" style="width: 72px"></div>
+        </div>
+      </div>
+      <div class="skeleton skeleton-summary"></div>
     </div>
+
+    <EmptyState
+      v-else-if="!auth.isLoggedIn"
+      icon="cart"
+      title="請先登入會員"
+      description="登入後即可查看購物車與結帳"
+    />
+
+    <EmptyState
+      v-else-if="items.length === 0"
+      icon="cart"
+      title="購物車是空的"
+      description="快去挑選喜歡的商品，加入後就會出現在這裡"
+    >
+      <template #action>
+        <RouterLink to="/products" class="btn btn-accent">去逛逛</RouterLink>
+      </template>
+    </EmptyState>
 
     <div v-else class="cart-layout">
       <div class="cart-items">
@@ -114,7 +142,9 @@ onMounted(() => {
               :aria-label="`減少 ${item.productName} 數量`"
               :disabled="busyId === item.cartItemId"
               @click="changeQty(item, -1)"
-            >−</button>
+            >
+              −
+            </button>
             <input
               type="number"
               min="1"
@@ -129,7 +159,9 @@ onMounted(() => {
               :aria-label="`增加 ${item.productName} 數量`"
               :disabled="busyId === item.cartItemId"
               @click="changeQty(item, 1)"
-            >＋</button>
+            >
+              ＋
+            </button>
           </div>
 
           <div class="item-subtotal">NT$ {{ Number(item.subtotal).toLocaleString() }}</div>
@@ -139,27 +171,24 @@ onMounted(() => {
             :aria-label="`移除 ${item.productName}`"
             :disabled="busyId === item.cartItemId"
             @click="removeItem(item)"
-          >✕</button>
+          >
+            ✕
+          </button>
         </div>
       </div>
 
-      <div class="cart-summary">
-        <h3 class="summary-title">訂單摘要</h3>
-        <div class="summary-row">
-          <span>商品小計</span>
-          <span>NT$ {{ Number(totalAmount).toLocaleString() }}</span>
-        </div>
-        <div class="summary-divider"></div>
-        <div class="summary-row total-row">
-          <span>合計</span>
-          <span class="total-price">NT$ {{ Number(totalAmount).toLocaleString() }}</span>
-        </div>
-
+      <OrderSummaryCard
+        title="訂單摘要"
+        :rows="[{ label: '商品小計', value: Number(totalAmount) }]"
+        total-label="合計"
+        :total-value="Number(totalAmount)"
+        sticky
+      >
         <button class="btn btn-accent checkout-btn" @click="goCheckout">前往結帳 →</button>
         <button class="btn btn-outline clear-btn" :disabled="clearing" @click="clearCart">
           {{ clearing ? '清空中…' : '清空購物車' }}
         </button>
-      </div>
+      </OrderSummaryCard>
     </div>
 
     <FeedbackToast :feedback="feedback" />
@@ -172,16 +201,6 @@ onMounted(() => {
   grid-template-columns: 1fr 320px;
   gap: 1.5rem;
   align-items: start;
-  margin-top: 2rem;
-}
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  color: var(--text-muted);
 }
 .cart-item {
   display: flex;
@@ -213,7 +232,10 @@ onMounted(() => {
   font-size: 1.5rem;
   color: var(--text-muted);
 }
-.item-info { flex: 1; min-width: 0; }
+.item-info {
+  flex: 1;
+  min-width: 0;
+}
 .item-name {
   font-size: 0.95rem;
   margin-bottom: 0.3rem;
@@ -233,19 +255,37 @@ onMounted(() => {
 .item-warn.danger {
   color: #c92a2a;
 }
-.item-qty { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.item-qty {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
 .qty-btn {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg-section);
   cursor: pointer;
   font-size: 1rem;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: var(--transition);
 }
-.qty-btn:hover { background: var(--bg-soft); }
-.qty-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.qty-btn:hover {
+  background: var(--bg-soft);
+}
+.qty-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.qty-btn:focus-visible,
+.remove-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(201, 154, 91, 0.3);
+}
 .qty-input {
   width: 44px;
   text-align: center;
@@ -264,7 +304,15 @@ onMounted(() => {
   -webkit-appearance: none;
   margin: 0;
 }
-.qty-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.qty-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.qty-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(201, 154, 91, 0.15);
+}
 .item-subtotal {
   width: 100px;
   text-align: right;
@@ -282,30 +330,54 @@ onMounted(() => {
   transition: var(--transition);
   flex-shrink: 0;
 }
-.remove-btn:hover { color: #e03131; }
-.remove-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.remove-btn:hover {
+  color: #e03131;
+}
+.remove-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
-.cart-summary {
-  border: 1px solid var(--border);
+.checkout-btn {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.8rem;
+}
+.clear-btn {
+  width: 100%;
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* 載入骨架：沿用 cart-item / cart-layout 版位，載入完成後不跳版 */
+.cart-item--skeleton {
+  pointer-events: none;
+}
+.skeleton-line {
+  height: 0.85rem;
+  border-radius: 4px;
+}
+.skeleton-line--sm {
+  height: 0.7rem;
+  margin-top: 0.5rem;
+}
+.skeleton-pill {
+  width: 96px;
+  height: 28px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.skeleton-summary {
+  height: 232px;
   border-radius: var(--radius-md);
-  background: var(--bg-section);
-  padding: 1.5rem;
 }
-.summary-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 1.2rem; }
-.summary-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.9rem;
-  margin-bottom: 0.75rem;
-  color: var(--text-secondary);
-}
-.summary-divider { height: 1px; background: var(--border); margin: 1rem 0; }
-.total-row { color: var(--text-primary); font-weight: 700; font-size: 1rem; }
-.total-price { color: var(--accent-hover); font-size: 1.2rem; }
-.checkout-btn { width: 100%; margin-top: 1rem; padding: 0.8rem; }
-.clear-btn { width: 100%; margin-top: 0.6rem; font-size: 0.85rem; }
 
 @media (max-width: 768px) {
-  .cart-layout { grid-template-columns: 1fr; }
+  .cart-layout {
+    grid-template-columns: 1fr;
+  }
+  .skeleton-summary {
+    height: 180px;
+  }
 }
 </style>

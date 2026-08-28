@@ -1,12 +1,23 @@
 import { test, expect, ACCOUNTS, loginAs, loginViaForm } from './fixtures.js'
 
 /**
- * 身分徽章。不能直接用 getByText 找「教練」「管理員」——導覽列的工作區切換頁籤
- * 用的是同一批字，會同時命中兩個元素。徽章清單有 aria-label="目前身分"，
- * 從那裡進去才是唯一的。
+ * 導覽列已登入區塊有兩處會用到同一批字（會員／教練／管理），定位時要分開：
+ *
+ * - 角色徽章：`<ul aria-label="目前身分">` 裡化簡後的對外身分（roleLabels）。
+ *   顯示簡稱（ADMIN → 「管理」），完整角色（含「管理員」）收在這個 <ul> 的 title。
+ * - 工作區切換頁籤：`<div role="tablist" aria-label="工作區">`，多於一個工作區才算繪，
+ *   點了會切換目前顯示的導覽連結組。
  */
+function roleList(page) {
+  return page.getByLabel('目前身分')
+}
+
 function roleBadge(page, label) {
-  return page.getByLabel('目前身分').getByText(label, { exact: true })
+  return roleList(page).getByText(label, { exact: true })
+}
+
+function workspaceTab(page, name) {
+  return page.getByRole('tablist', { name: '工作區' }).getByRole('tab', { name })
 }
 
 test.describe('A2 登入與角色導流', () => {
@@ -15,20 +26,34 @@ test.describe('A2 登入與角色導流', () => {
 
     await expect(page).toHaveURL('/')
     await expect(roleBadge(page, ACCOUNTS.member.roleLabel)).toBeVisible()
+    // 純會員只有一個工作區，不算繪切換頁籤
+    await expect(page.getByRole('tablist', { name: '工作區' })).toHaveCount(0)
   })
 
   test('管理員登入後看得到管理工作區', async ({ page }) => {
     await loginAs(page, ACCOUNTS.admin)
 
-    await expect(roleBadge(page, ACCOUNTS.admin.roleLabel)).toBeVisible()
-    await expect(page.getByRole('tab', { name: '管理' })).toBeVisible()
+    // 徽章顯示簡稱「管理」；完整角色（含「管理員」）收在清單的 title
+    await expect(roleBadge(page, '管理')).toBeVisible()
+    await expect(roleList(page)).toHaveAttribute('title', new RegExp(ACCOUNTS.admin.roleLabel))
+
+    // 預設停在「會員」工作區，點「管理」頁籤後要真的切過去
+    const adminTab = workspaceTab(page, '管理')
+    await adminTab.click()
+    await expect(adminTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('link', { name: '會員管理' })).toBeVisible()
   })
 
   test('教練登入後看得到教練工作區', async ({ page }) => {
     await loginAs(page, ACCOUNTS.trainer)
 
     await expect(roleBadge(page, ACCOUNTS.trainer.roleLabel)).toBeVisible()
-    await expect(page.getByRole('tab', { name: '教練' })).toBeVisible()
+    await expect(roleList(page)).toHaveAttribute('title', new RegExp(ACCOUNTS.trainer.roleLabel))
+
+    const trainerTab = workspaceTab(page, '教練')
+    await trainerTab.click()
+    await expect(trainerTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('link', { name: '教練排班' })).toBeVisible()
   })
 
   /**

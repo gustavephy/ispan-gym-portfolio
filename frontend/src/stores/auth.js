@@ -65,6 +65,18 @@ export const useAuthStore = defineStore('auth', () => {
     persist()
   }
 
+  /**
+   * 用 GET /api/account/me 的最新結果覆蓋 accountId/email/roles，藉此刷新可能已經過期的
+   * localStorage 快照（例如帳號在登入後被停權/復權、身分被調整）。刻意不動 token——
+   * 這支後端端點不核發新 JWT，跟 setSession() 預期拿到一組全新 accessToken 不同。
+   */
+  function syncAccount(accountMeResponse) {
+    accountId.value = accountMeResponse.accountId ?? null
+    email.value = accountMeResponse.email || ''
+    roles.value = accountMeResponse.roles || []
+    persist()
+  }
+
   function logout() {
     token.value = ''
     accountId.value = null
@@ -86,6 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
     isTrainer,
     setSession,
     setToken,
+    syncAccount,
     logout,
   }
 })
