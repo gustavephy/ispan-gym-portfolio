@@ -1,4 +1,5 @@
 import { test as base, expect, request as playwrightRequest } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -185,6 +186,57 @@ export async function ensureCashCoupon(request, memberToken, amount) {
   const claim = await request.post(`${API}/api/coupons/claim/${coupon.couponId}`, auth(memberToken))
   expect(claim.ok(), `領取新建優惠券失敗：${await claim.text()}`).toBeTruthy()
   return coupon
+}
+
+/**
+ * 直接對開發資料庫下 SQL（sqlcmd），回傳修剪過的輸出。只給「沒有 API 可拿」的東西用：
+ * email 驗證 token、密碼重設 token 的雜湊……那些刻意不開端點的資料。
+ * 需要 DB_PASSWORD 環境變數（`npm run test:e2e:fresh` 會從專案根目錄 .env 帶進來）。
+ */
+export function sql(statement) {
+  expect(process.env.DB_PASSWORD, '需要 DB_PASSWORD 環境變數才能直接讀資料庫').toBeTruthy()
+  return execFileSync(
+    'sqlcmd',
+    ['-S', process.env.DB_HOST || 'localhost', '-d', process.env.E2E_DB_NAME || 'ispan-proj-gymdb',
+      '-U', process.env.DB_USERNAME || 'sa', '-P', process.env.DB_PASSWORD, '-C', '-h', '-1', '-W', '-Q', statement],
+    { encoding: 'utf8' },
+  ).trim()
+}
+
+/** 用目前的 token 改密碼，回傳後端換發的新 token */
+export async function changePassword(request, token, from, to) {
+  const res = await request.post(`${API}/api/account/me/change-password`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { currentPassword: from, newPassword: to, confirmPassword: to },
+  })
+  expect(res.ok(), `改密碼失敗：${await res.text()}`).toBeTruthy()
+  return (await res.json()).accessToken
+}
+
+/**
+ * 把一個播種帳號的密碼從 currentPassword 改回 Admin@12345。
+ * 後端不允許重用最近 4 組密碼（PasswordService.PASSWORD_HISTORY_LIMIT），所以先用 4 組
+ * 拋棄式密碼把播種密碼擠出歷史，再改回去；每次改密碼都會換發 token，接著用新 token 改，
+ * 不必重新登入（登入有 IP 限流）。改密碼／重設密碼的 spec 收尾都靠這支，不改回來
+ * 下一輪對這個帳號的登入會整批失敗。
+ */
+export async function restoreSeedPassword(request, email, currentPassword) {
+  const login = await request.post(`${API}/api/auth/login`, { data: { email, password: currentPassword } })
+  expect(login.ok(), `用目前密碼登入失敗，無法還原：${await login.text()}`).toBeTruthy()
+  let token = (await login.json()).accessToken
+  let from = currentPassword
+  for (let i = 0; i < 4; i++) {
+    const next = `Tmp${Date.now()}${i}Pw`
+    token = await changePassword(request, token, from, next)
+    from = next
+  }
+  await changePassword(request, token, from, PASSWORD)
+  const check = await request.post(`${API}/api/auth/login`, { data: { email, password: PASSWORD } })
+  expect(check.ok(), '播種密碼應已還原').toBeTruthy()
+  // 快取裡這個帳號的 token 已因改密碼失效，清掉讓下一次 fetchSession 重新登入
+  const cache = readCache()
+  delete cache[email]
+  writeCache(cache)
 }
 
 export const test = base

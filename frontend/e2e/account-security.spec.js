@@ -1,4 +1,4 @@
-import { test, expect, loginAs, apiToken, PASSWORD } from './fixtures.js'
+import { test, expect, loginAs, apiToken, PASSWORD, restoreSeedPassword } from './fixtures.js'
 
 /**
  * C4 帳號安全：改密碼後舊 token 立即失效。
@@ -10,14 +10,12 @@ import { test, expect, loginAs, apiToken, PASSWORD } from './fixtures.js'
  * <p>用一個較少被其他 spec 碰的播種教練帳號，改完在 finally 一定改回 Admin@12345——
  * 不改回來，fixtures 的登入快取會在下一輪對這個帳號整批失敗。
  *
- * <p>後端不允許重用最近 4 組密碼（PasswordService.PASSWORD_HISTORY_LIMIT），所以：
- * 新密碼每次都帶時間戳保證沒用過；改回播種密碼前要先用 4 組拋棄式密碼把它擠出歷史。
- * 每次改密碼都會回傳新 session，接著用新 token 繼續改，不必重新登入（登入有 IP 限流）。
+ * <p>後端不允許重用最近 4 組密碼（PasswordService.PASSWORD_HISTORY_LIMIT），所以新密碼
+ * 每次都帶時間戳保證沒用過；改回播種密碼靠 fixtures 的 restoreSeedPassword（4 組拋棄式輪替）。
  */
 
 const API = 'http://localhost:8080'
 const ACCOUNT = { email: 'emp-trainer6@local.test', roleLabel: '教練' }
-const HISTORY_LIMIT = 4
 // 符合後端規則：8–72 字、含大小寫與數字、無空白；帶時間戳避免撞到歷史
 const NEW_PASSWORD = `E2e${Date.now()}Pw`
 
@@ -25,29 +23,6 @@ const auth = (token) => ({ headers: { Authorization: `Bearer ${token}` } })
 
 async function login(request, email, password) {
   return request.post(`${API}/api/auth/login`, { data: { email, password } })
-}
-
-/** 改密碼並回傳換發的新 token */
-async function changePassword(request, token, from, to) {
-  const res = await request.post(`${API}/api/account/me/change-password`, {
-    ...auth(token),
-    data: { currentPassword: from, newPassword: to, confirmPassword: to },
-  })
-  expect(res.ok(), `改密碼失敗：${await res.text()}`).toBeTruthy()
-  return (await res.json()).accessToken
-}
-
-/** 用 4 組拋棄式密碼把播種密碼擠出歷史，再改回播種密碼 */
-async function restoreSeedPassword(request, currentPassword) {
-  let token = (await (await login(request, ACCOUNT.email, currentPassword)).json()).accessToken
-  let from = currentPassword
-  for (let i = 0; i < HISTORY_LIMIT; i++) {
-    const next = `Tmp${Date.now()}${i}Pw`
-    token = await changePassword(request, token, from, next)
-    from = next
-  }
-  await changePassword(request, token, from, PASSWORD)
-  expect((await login(request, ACCOUNT.email, PASSWORD)).ok(), '播種密碼應已還原').toBeTruthy()
 }
 
 test.describe('C4 帳號安全', () => {
@@ -84,7 +59,7 @@ test.describe('C4 帳號安全', () => {
       expect((await login(request, ACCOUNT.email, PASSWORD)).status()).toBe(401)
       expect((await login(request, ACCOUNT.email, NEW_PASSWORD)).ok()).toBeTruthy()
     } finally {
-      if (changed) await restoreSeedPassword(request, NEW_PASSWORD)
+      if (changed) await restoreSeedPassword(request, ACCOUNT.email, NEW_PASSWORD)
     }
   })
 
