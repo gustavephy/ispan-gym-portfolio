@@ -1,10 +1,11 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { getTrainers, getTrainerSchedules, createBooking } from '@/api/coachBooking.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import Pagination from '@/components/Pagination.vue'
 
 const route = useRoute()
 const trainerId = Number(route.params.trainerId)
@@ -14,6 +15,14 @@ const trainerLoading = ref(true)
 
 const slots = ref([])
 const slotsLoading = ref(false)
+
+// 時段列表的分頁與日期區間篩選狀態；這頁不開放狀態篩選，固定只查 AVAILABLE
+const page = ref(0)
+const size = ref(10)
+const dateFrom = ref('')
+const dateTo = ref('')
+const totalItems = ref(0)
+const totalPages = ref(0)
 
 // 正在送出預約的時段 id；用來讓「預約」按鈕在等待回應期間顯示 loading、避免重複點擊
 const bookingSlotId = ref(null)
@@ -61,12 +70,36 @@ async function fetchTrainerInfo() {
 async function fetchSlots() {
   slotsLoading.value = true
   try {
-    const res = await getTrainerSchedules(trainerId)
+    const res = await getTrainerSchedules(trainerId, {
+      page: page.value,
+      size: size.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+    })
     // 這個頁面只做瀏覽可預約時段，BOOKED／CANCELLED 的時段不在會員視角顯示
-    slots.value = res.data.filter((slot) => slot.status === 'AVAILABLE')
+    slots.value = res.data.items.filter((slot) => slot.status === 'AVAILABLE')
+    totalItems.value = res.data.totalItems
+    totalPages.value = res.data.totalPages
   } finally {
     slotsLoading.value = false
   }
+}
+
+// 日期輸入不像文字輸入會逐字觸發，不需要 debounce
+watch([dateFrom, dateTo], () => {
+  page.value = 0
+  fetchSlots()
+})
+
+function handlePageChange(newPage) {
+  page.value = newPage
+  fetchSlots()
+}
+
+function handleSizeChange(newSize) {
+  size.value = newSize
+  page.value = 0
+  fetchSlots()
 }
 
 // 點擊「預約」：先用瀏覽器原生 confirm() 做二次確認，讓使用者看清楚自己在約什麼堂課，
@@ -124,6 +157,17 @@ onMounted(() => {
 
         <OperationMessage :message="bookingActionMessage" />
 
+        <div class="filters">
+          <label class="filter">
+            <span class="filter__label">起始日期</span>
+            <input v-model="dateFrom" type="date" class="filter__input" :max="dateTo || undefined" />
+          </label>
+          <label class="filter">
+            <span class="filter__label">結束日期</span>
+            <input v-model="dateTo" type="date" class="filter__input" :min="dateFrom || undefined" />
+          </label>
+        </div>
+
         <div v-if="slotsLoading" class="spinner"></div>
 
         <template v-else>
@@ -154,6 +198,14 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+
+          <Pagination
+            :page="page"
+            :total-pages="totalPages"
+            :size="size"
+            @update:page="handlePageChange"
+            @update:size="handleSizeChange"
+          />
         </template>
       </div>
     </template>
@@ -195,6 +247,34 @@ onMounted(() => {
   margin: 0 0 1rem;
   font-size: 1.15rem;
   color: var(--text-primary);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.filter__label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.filter__input {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  min-width: 8rem;
 }
 
 .empty-state {

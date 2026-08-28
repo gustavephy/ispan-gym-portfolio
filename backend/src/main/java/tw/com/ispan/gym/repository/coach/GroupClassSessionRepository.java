@@ -45,22 +45,26 @@ public interface GroupClassSessionRepository extends JpaRepository<GroupClassSes
                         @Param("after") LocalDateTime after);
 
         /**
-         * 後台團課場次列表的分頁＋文字搜尋，比對課程名稱、授課教練姓名與教室，篩選邏輯沿用
-         * {@link #findByStatusAndStartAtAfterWithCourseTrainerOrderByStartAtAsc}（status=SCHEDULED
-         * 且 startAt 在指定時間之後）。用 JOIN FETCH 一次撈出 course/trainer/employee，
-         * 避免 service 層映射時觸發 N+1；排序交給呼叫端組出的 Pageable 決定，不在這裡寫 ORDER BY。
-         */
-        /**
-         * roomName 是 enum（見 {@link tw.com.ispan.gym.enums.coach.ClassRoom}），JPQL 對 enum
-         * 欄位套字串函式（LOWER/LIKE）並不保證能編譯，故改由呼叫端（GroupClassService）先把
-         * search 字串對照 ClassRoom 的中文顯示名稱算出三個固定 boolean，這裡只做字面值相等比較。
+         * 後台團課場次列表的分頁查詢，查詢範圍是「全部」場次（含已取消、含已結束），
+         * 跟會員瀏覽團課行事曆用的 {@link #findByStatusAndStartAtAfterWithCourseTrainerOrderByStartAtAsc}
+         * （固定只回傳未來、SCHEDULED）刻意分開、互不影響：管理端要能稽核歷史與已取消紀錄，
+         * 會員端只該看到能報名的場次，兩者「該顯示什麼」語意本來就不一樣，不能共用同一支查詢。
+         *
+         * status／startAtFrom／startAtTo／search 全部可為 null，null 代表不篩選該條件。
+         * 用 JOIN FETCH 一次撈出 course/trainer/employee，避免 service 層映射時觸發 N+1；
+         * 排序交給呼叫端組出的 Pageable 決定，不在這裡寫 ORDER BY。
          */
         @Query("""
                         SELECT s FROM GroupClassSession s
                         JOIN FETCH s.course c
                         JOIN FETCH c.trainer t
                         JOIN FETCH t.employee e
-                        WHERE s.status = :status AND s.startAt > :after
+                        WHERE (:status IS NULL OR s.status = :status)
+                            AND (:requireEnded IS NULL
+                                OR (:requireEnded = true AND s.endAt < :now)
+                                OR (:requireEnded = false AND s.endAt >= :now))
+                            AND (:startAtFrom IS NULL OR s.startAt >= :startAtFrom)
+                            AND (:startAtTo IS NULL OR s.startAt < :startAtTo)
                             AND (:search IS NULL OR :search = ''
                                 OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))
                                 OR LOWER(CONCAT(e.firstName, e.lastName)) LIKE LOWER(CONCAT('%', :search, '%'))
@@ -68,10 +72,12 @@ public interface GroupClassSessionRepository extends JpaRepository<GroupClassSes
                                 OR (:matchesBoxing = true AND s.roomName = 'BOXING_ROOM')
                                 OR (:matchesWeight = true AND s.roomName = 'WEIGHT_ROOM'))
                         """)
-        Page<GroupClassSession> searchUpcomingSessions(@Param("status") GroupClassSessionStatus status,
-                        @Param("after") LocalDateTime after, @Param("search") String search,
-                        @Param("matchesYoga") boolean matchesYoga, @Param("matchesBoxing") boolean matchesBoxing,
-                        @Param("matchesWeight") boolean matchesWeight, Pageable pageable);
+        Page<GroupClassSession> searchSessionsForAdmin(@Param("status") GroupClassSessionStatus status,
+                        @Param("requireEnded") Boolean requireEnded, @Param("now") LocalDateTime now,
+                        @Param("startAtFrom") LocalDateTime startAtFrom, @Param("startAtTo") LocalDateTime startAtTo,
+                        @Param("search") String search, @Param("matchesYoga") boolean matchesYoga,
+                        @Param("matchesBoxing") boolean matchesBoxing, @Param("matchesWeight") boolean matchesWeight,
+                        Pageable pageable);
 
         /**
          * 教練停用前檢查用：名下還有多少「未完成」團課場次。教練綁在 GroupCourse 主檔，

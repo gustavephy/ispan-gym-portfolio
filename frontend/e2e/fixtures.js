@@ -145,5 +145,47 @@ export function uniqueSuffix() {
   ].join('-')
 }
 
+/**
+ * 拿一張會員能用在金額 amount 商品上的現金券：名下未使用 → 可領取清單領一張 → 都沒有就由
+ * 管理端建一張新的商品現金券再領。優惠券用過就不能再用，種子裡對一般商品可用的現金券只有
+ * 兩三張；最後一步讓 coupon／order-cancel spec 在同一個資料庫上可以無限次重跑。
+ */
+export async function ensureCashCoupon(request, memberToken, amount) {
+  const auth = (t) => ({ headers: { Authorization: `Bearer ${t}` } })
+  const usable = (c) =>
+    c && c.type === 'CASH' && ['ALL', 'PRODUCT'].includes(c.applicableType) && Number(c.minSpend) <= amount
+  const unwrap = (b) => (Array.isArray(b) ? b : b.content ?? b.items ?? []).map((x) => x.coupon ?? x)
+
+  const mine = unwrap(await (await request.get(`${API}/api/coupons/my-unused`, auth(memberToken))).json())
+  const owned = mine.find(usable)
+  if (owned) return owned
+
+  const avail = unwrap(await (await request.get(`${API}/api/coupons/available?size=100`, auth(memberToken))).json())
+  for (const c of avail.filter(usable)) {
+    if ((await request.post(`${API}/api/coupons/claim/${c.couponId}`, auth(memberToken))).ok()) return c
+  }
+
+  const adminToken = await apiToken(ACCOUNTS.admin)
+  const code = `E2E${Date.now().toString(36).toUpperCase()}`
+  const iso = (d) => d.toISOString().slice(0, 10)
+  const start = new Date()
+  start.setDate(start.getDate() - 1) // 昨天起算，避開時區造成「尚未開始」
+  const end = new Date()
+  end.setFullYear(end.getFullYear() + 1)
+  const created = await request.post(`${API}/api/admin/coupons`, {
+    ...auth(adminToken),
+    data: {
+      code, name: `E2E 測試券 ${code}`, description: 'E2E 自動建立', type: 'CASH', value: 50,
+      minSpend: Math.min(amount, 100), totalQuantity: 1000, startDate: iso(start), endDate: iso(end),
+      applicableType: 'PRODUCT',
+    },
+  })
+  expect(created.ok(), `管理端建立優惠券失敗：${await created.text()}`).toBeTruthy()
+  const coupon = await created.json()
+  const claim = await request.post(`${API}/api/coupons/claim/${coupon.couponId}`, auth(memberToken))
+  expect(claim.ok(), `領取新建優惠券失敗：${await claim.text()}`).toBeTruthy()
+  return coupon
+}
+
 export const test = base
 export { expect }

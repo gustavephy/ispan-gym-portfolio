@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -18,6 +19,10 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import tw.com.ispan.gym.dto.coach.CreateGroupClassSessionRequest;
 import tw.com.ispan.gym.dto.coach.GroupClassBookingResponse;
@@ -32,6 +37,7 @@ import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.entity.trainer.Trainer;
 import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
+import tw.com.ispan.gym.enums.coach.GroupClassSessionFilterStatus;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import tw.com.ispan.gym.enums.course.CourseStatus;
 import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
@@ -52,7 +58,7 @@ import tw.com.ispan.gym.service.trainer.TrainerService;
  *
  * 涵蓋 GroupClassService 全部 5 支會異動資料的方法：
  * bookSession/cancelBooking（會員視角）、createSession/updateSession/cancelSession（管理視角）。
- * 兩支唯讀查詢（getUpcomingSessions/getUpcomingSessionsForAdmin）風險低，不在這批範圍。
+ * 兩支唯讀查詢（getUpcomingSessions/searchSessionsForAdmin）風險低，不在這批範圍。
  *
  * bookSession 案例 7（樂觀鎖衝突）驗證的是「save() 失敗時例外正確往外拋、
  * 不誤建立報名紀錄」，不是真的模擬兩個請求同時到達資料庫——純 mock 測試沒有
@@ -706,5 +712,62 @@ class GroupClassServiceTest {
         assertThatThrownBy(() -> service.cancelSession(SESSION_ID, false))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(sessions, never()).saveAndFlush(any());
+    }
+
+    // === searchSessionsForAdmin：「篩選用」狀態轉譯成 GroupClassSessionStatus + requireEnded ====
+    // 這裡只驗證 Service 層把 GroupClassSessionFilterStatus 轉譯成傳給 repository 的參數是否正確，
+    // 不驗證 repository 查詢本身的行為（那需要真的資料庫），也不需要準備 GroupClassSession 資料，
+    // repository 一律 mock 回傳空頁面即可。
+
+    @Test
+    void 查詢後台場次_篩選狀態為已排定時查SCHEDULED且要求尚未結束() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
+        when(sessions.searchSessionsForAdmin(eq(GroupClassSessionStatus.SCHEDULED), eq(false),
+                any(LocalDateTime.class), isNull(), isNull(), isNull(), eq(false), eq(false), eq(false), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        service.searchSessionsForAdmin(0, 10, null, GroupClassSessionFilterStatus.SCHEDULED, null, null);
+
+        verify(sessions).searchSessionsForAdmin(eq(GroupClassSessionStatus.SCHEDULED), eq(false),
+                any(LocalDateTime.class), isNull(), isNull(), isNull(), eq(false), eq(false), eq(false), eq(pageable));
+    }
+
+    @Test
+    void 查詢後台場次_篩選狀態為已結束時查SCHEDULED且要求已結束() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
+        when(sessions.searchSessionsForAdmin(eq(GroupClassSessionStatus.SCHEDULED), eq(true),
+                any(LocalDateTime.class), isNull(), isNull(), isNull(), eq(false), eq(false), eq(false), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        service.searchSessionsForAdmin(0, 10, null, GroupClassSessionFilterStatus.ENDED, null, null);
+
+        verify(sessions).searchSessionsForAdmin(eq(GroupClassSessionStatus.SCHEDULED), eq(true),
+                any(LocalDateTime.class), isNull(), isNull(), isNull(), eq(false), eq(false), eq(false), eq(pageable));
+    }
+
+    @Test
+    void 查詢後台場次_篩選狀態為已取消時查CANCELLED且不檢查endAt() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
+        when(sessions.searchSessionsForAdmin(eq(GroupClassSessionStatus.CANCELLED), isNull(),
+                any(LocalDateTime.class), isNull(), isNull(), isNull(), eq(false), eq(false), eq(false), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        service.searchSessionsForAdmin(0, 10, null, GroupClassSessionFilterStatus.CANCELLED, null, null);
+
+        verify(sessions).searchSessionsForAdmin(eq(GroupClassSessionStatus.CANCELLED), isNull(),
+                any(LocalDateTime.class), isNull(), isNull(), isNull(), eq(false), eq(false), eq(false), eq(pageable));
+    }
+
+    @Test
+    void 查詢後台場次_不篩選狀態時狀態與是否已結束皆不限制() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
+        when(sessions.searchSessionsForAdmin(isNull(), isNull(), any(LocalDateTime.class), isNull(), isNull(),
+                isNull(), eq(false), eq(false), eq(false), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        service.searchSessionsForAdmin(0, 10, null, null, null, null);
+
+        verify(sessions).searchSessionsForAdmin(isNull(), isNull(), any(LocalDateTime.class), isNull(), isNull(),
+                isNull(), eq(false), eq(false), eq(false), eq(pageable));
     }
 }

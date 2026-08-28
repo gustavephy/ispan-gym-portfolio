@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.controller.coach;
 
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 
@@ -24,6 +25,7 @@ import tw.com.ispan.gym.dto.coach.UpdateGroupClassSessionRequest;
 import tw.com.ispan.gym.dto.coach.GroupClassSessionResponse;
 import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.enums.coach.ClassRoom;
+import tw.com.ispan.gym.enums.coach.GroupClassSessionFilterStatus;
 import tw.com.ispan.gym.service.coach.GroupClassService;
 
 /**
@@ -53,18 +55,21 @@ public class AdminGroupClassController {
     }
 
     /**
-     * 分頁查詢即將開始、開放報名的團課場次，可依課程名稱／教練姓名／教室搜尋，成功回 200。
-     * 全新端點，跟 {@code GroupClassController#getUpcomingSessions()}（會員瀏覽團課行事曆的
-     * 資料來源，前端依賴它一次回傳全部資料）完全分開，不影響那支既有端點的行為。
+     * 分頁查詢團課場次，可依課程名稱／教練姓名／教室搜尋，並可依狀態、開課日期區間篩選。
+     * 查詢範圍是全部場次（含已取消、含已結束），供管理員稽核歷史用；跟會員瀏覽團課行事曆的
+     * GroupClassController#getUpcomingSessions()（固定只回傳未來可報名的場次）完全分開。
      */
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<PageResponse<GroupClassSessionResponse>> getUpcomingSessions(
+    public ResponseEntity<PageResponse<GroupClassSessionResponse>> searchSessions(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false) String search) {
-        PageResponse<GroupClassSessionResponse> resp = groupClassService.getUpcomingSessionsForAdmin(page, size,
-                search);
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) GroupClassSessionFilterStatus status,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo) {
+        PageResponse<GroupClassSessionResponse> resp = groupClassService.searchSessionsForAdmin(page, size,
+                search, status, dateFrom, dateTo);
         return ResponseEntity.status(HttpStatus.OK).body(resp);
     }
 

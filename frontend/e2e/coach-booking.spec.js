@@ -173,11 +173,26 @@ test.describe('B3 會員預約私教課', () => {
     await page.goto('/reservation')
     await page.getByRole('tab', { name: '我的預約' }).click()
 
-    // 這個列表也分頁，用日期篩選縮到只剩剛預約的那筆
+    // 這個列表也分頁，用「待上課 + 當天」篩選縮到只剩剛預約的那筆。
+    // 歷次測試留下的已取消紀錄會越積越多，同一天可能有好幾筆；不篩狀態就可能撿到
+    // 已取消那列（沒有「取消」鈕）。每改一個條件就重抓一次，要等帶齊全部條件的那次回來，
+    // 否則列表還是舊結果。
+    const filtered = page.waitForResponse(
+      (r) =>
+        r.url().includes('/api/member/bookings') &&
+        r.url().includes(`dateTo=${slot.date}`) &&
+        r.url().includes('status=PENDING'),
+    )
+    await page.locator('#myBookingsStatus').selectOption('PENDING')
     await page.locator('#myBookingsDateFrom').fill(slot.date)
     await page.locator('#myBookingsDateTo').fill(slot.date)
+    await filtered
 
-    const row = page.locator('tbody tr').filter({ hasText: slot.displayDate }).first()
+    const row = page
+      .locator('tbody tr')
+      .filter({ hasText: slot.displayDate })
+      .filter({ has: page.getByRole('button', { name: '取消' }) })
+      .first()
     await expect(row).toBeVisible()
 
     const cancelled = page.waitForResponse(

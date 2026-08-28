@@ -11,7 +11,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import tw.com.ispan.gym.entity.coach.CoachSlot;
-import tw.com.ispan.gym.enums.coach.SlotStatus;
 
 public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
 
@@ -39,13 +38,21 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
                         @Param("endAt") LocalDateTime endAt);
 
         /**
-         * 查詢某教練指定狀態的時段，依開始時間排序。
-         * 用在會員瀏覽可預約時段（searchSlots），只需要 AVAILABLE，
-         * 不像 {@link #findByTrainerId} 是給教練本人管理用、需要看到所有狀態。
-         * 直接在查詢條件過濾，避免撈出不需要的資料再用 Java 篩選。
+         * 會員瀏覽某教練可預約時段用的分頁查詢，固定只查 AVAILABLE（寫死在查詢裡，不開放呼叫端
+         * 指定其他狀態）——這是公開、免登入的端點，讓外部指定狀態沒有實益，還會增加日後不小心
+         * 查出 BOOKED／CANCELLED 時段洩漏給陌生人的風險。可選 dateFrom／dateTo 縮小時間範圍。
          */
-        @Query("SELECT s FROM CoachSlot s WHERE s.trainer.id = :trainerId AND s.status = :status ORDER BY s.startAt ASC")
-        List<CoachSlot> findByTrainerIdAndStatusOrderByStartAtAsc(@Param("trainerId") Integer trainerId, @Param("status") SlotStatus status);
+        @Query("""
+                        SELECT s FROM CoachSlot s
+                        WHERE s.trainer.id = :trainerId
+                            AND s.status = tw.com.ispan.gym.enums.coach.SlotStatus.AVAILABLE
+                            AND (:startAtFrom IS NULL OR s.startAt >= :startAtFrom)
+                            AND (:startAtTo IS NULL OR s.startAt < :startAtTo)
+                        """)
+        Page<CoachSlot> searchAvailableSlots(@Param("trainerId") Integer trainerId,
+                        @Param("startAtFrom") LocalDateTime startAtFrom,
+                        @Param("startAtTo") LocalDateTime startAtTo,
+                        Pageable pageable);
 
         /**
          * 分頁查詢某位教練的所有時段（含所有狀態），排序交給呼叫端組出的 Pageable 決定。

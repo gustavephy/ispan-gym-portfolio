@@ -12,10 +12,15 @@ import api from './axios.instance.js'
 export const getTrainers = () => api.get('/api/trainers')
 
 /**
- * 查詢指定教練目前的所有時段（含非 AVAILABLE 的，由畫面自行篩選），不需登入即可呼叫
+ * 分頁查詢指定教練目前可預約（AVAILABLE）的時段，可依日期區間篩選，不需登入即可呼叫。
+ * 不開放狀態篩選：這支端點固定只回傳 AVAILABLE，是設計決定。
  * @param {number} trainerId 教練 id
+ * @param {{page?: number, size?: number, dateFrom?: string, dateTo?: string}} params page 從 0 開始，dateFrom/dateTo 為 yyyy-MM-dd
  */
-export const getTrainerSchedules = (trainerId) => api.get(`/api/member/trainers/${trainerId}/schedules`)
+export const getTrainerSchedules = (trainerId, { page = 0, size = 10, dateFrom = '', dateTo = '' } = {}) =>
+  api.get(`/api/member/trainers/${trainerId}/schedules`, {
+    params: { page, size, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
+  })
 
 /**
  * 預約指定時段，需登入。memberId 由後端從登入身分解析，這裡不用傳

@@ -316,8 +316,11 @@ async function handleGenerate() {
 const deleting = ref(false)
 
 async function handleDelete() {
-  if (!detail.value) return
-  const target = detail.value
+  // 以「目前選中的快照」為準，不用 detail：生成後選取會立刻切到新 id，但 detail 要等重抓
+  // 才更新——這段空窗按刪除會刪到已被覆蓋掉的舊 id（DELETE 回 204 卻什麼都沒刪）
+  const targetId = selectedReportId.value
+  const target = reports.value.find((r) => r.id === targetId) ?? detail.value
+  if (!targetId || !target) return
   const confirmed = window.confirm(
     `確定要刪除這份報表快照嗎？（${REPORT_TYPE_LABELS[target.reportType] ?? target.reportType}｜${formatDate(target.periodStart)} – ${formatDate(target.periodEnd)}）此動作無法復原。`,
   )
@@ -325,7 +328,7 @@ async function handleDelete() {
 
   deleting.value = true
   try {
-    await deleteReport(target.id)
+    await deleteReport(targetId)
     await fetchReports()
   } catch (e) {
     notifyApiError(e)
@@ -358,13 +361,16 @@ watch(selectedReportId, (id) => fetchDetail(id))
 // 轉成下載連結；寫法比照 AiPlanPanel.vue 的 onDownloadPdf
 const downloadingPdf = ref(false)
 
+// 下載與刪除都以「目前選中的快照 id」為準（見 handleDelete 的說明），detail 只當備援
+const currentReportId = () => selectedReportId.value ?? detail.value?.id
+
 async function onDownloadPdf() {
-  await downloadBlob(() => downloadReportPdf(detail.value.id), 'application/pdf', 'pdf', (v) => (downloadingPdf.value = v))
+  await downloadBlob(() => downloadReportPdf(currentReportId()), 'application/pdf', 'pdf', (v) => (downloadingPdf.value = v))
 }
 
 const downloadingCsv = ref(false)
 async function onDownloadCsv() {
-  await downloadBlob(() => downloadReportCsv(detail.value.id), 'text/csv;charset=utf-8', 'csv',
+  await downloadBlob(() => downloadReportCsv(currentReportId()), 'text/csv;charset=utf-8', 'csv',
     (v) => (downloadingCsv.value = v))
 }
 
