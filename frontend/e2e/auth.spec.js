@@ -1,20 +1,23 @@
 import { test, expect, ACCOUNTS, loginAs, loginViaForm } from './fixtures.js'
 
 /**
- * 導覽列上顯示「目前工作區」的徽章。它同時是身分下拉選單的觸發器，
- * 多工作區時算繪成 button、單一工作區時是 span，所以用 class 定位而不是 role。
+ * 導覽列已登入區塊有兩處會用到同一批字（會員／教練／管理），定位時要分開：
  *
- * 徽章顯示的是工作區（管理／教練／會員）而非角色——emp-admin 同時具備
- * MEMBER/EMPLOYEE/ADMIN，徽章只顯示當下所在的那一個，完整角色清單在 title。
+ * - 角色徽章：`<ul aria-label="目前身分">` 裡化簡後的對外身分（roleLabels）。
+ *   顯示簡稱（ADMIN → 「管理」），完整角色（含「管理員」）收在這個 <ul> 的 title。
+ * - 工作區切換頁籤：`<div role="tablist" aria-label="工作區">`，多於一個工作區才算繪，
+ *   點了會切換目前顯示的導覽連結組。
  */
-function workspaceBadge(page) {
-  return page.locator('.nav-auth__role')
+function roleList(page) {
+  return page.getByLabel('目前身分')
 }
 
-/** 展開身分下拉選單，回傳選單本身以便斷言可切換的工作區 */
-async function openWorkspaceMenu(page) {
-  await workspaceBadge(page).click()
-  return page.getByRole('menu', { name: '切換身分' })
+function roleBadge(page, label) {
+  return roleList(page).getByText(label, { exact: true })
+}
+
+function workspaceTab(page, name) {
+  return page.getByRole('tablist', { name: '工作區' }).getByRole('tab', { name })
 }
 
 test.describe('A2 登入與角色導流', () => {
@@ -22,26 +25,35 @@ test.describe('A2 登入與角色導流', () => {
     await loginAs(page, ACCOUNTS.member)
 
     await expect(page).toHaveURL('/')
-    await expect(workspaceBadge(page)).toHaveText(ACCOUNTS.member.roleLabel)
+    await expect(roleBadge(page, ACCOUNTS.member.roleLabel)).toBeVisible()
+    // 純會員只有一個工作區，不算繪切換頁籤
+    await expect(page.getByRole('tablist', { name: '工作區' })).toHaveCount(0)
   })
 
   test('管理員登入後看得到管理工作區', async ({ page }) => {
     await loginAs(page, ACCOUNTS.admin)
 
-    // 徽章本身顯示工作區名稱「管理」，完整角色（含「管理員」）收在 title
-    await expect(workspaceBadge(page)).toHaveAttribute('title', new RegExp(ACCOUNTS.admin.roleLabel))
+    // 徽章顯示簡稱「管理」；完整角色（含「管理員」）收在清單的 title
+    await expect(roleBadge(page, '管理')).toBeVisible()
+    await expect(roleList(page)).toHaveAttribute('title', new RegExp(ACCOUNTS.admin.roleLabel))
 
-    const menu = await openWorkspaceMenu(page)
-    await expect(menu.getByRole('menuitemradio', { name: '管理' })).toBeVisible()
+    // 預設停在「會員」工作區，點「管理」頁籤後要真的切過去
+    const adminTab = workspaceTab(page, '管理')
+    await adminTab.click()
+    await expect(adminTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('link', { name: '會員管理' })).toBeVisible()
   })
 
   test('教練登入後看得到教練工作區', async ({ page }) => {
     await loginAs(page, ACCOUNTS.trainer)
 
-    await expect(workspaceBadge(page)).toHaveAttribute('title', new RegExp(ACCOUNTS.trainer.roleLabel))
+    await expect(roleBadge(page, ACCOUNTS.trainer.roleLabel)).toBeVisible()
+    await expect(roleList(page)).toHaveAttribute('title', new RegExp(ACCOUNTS.trainer.roleLabel))
 
-    const menu = await openWorkspaceMenu(page)
-    await expect(menu.getByRole('menuitemradio', { name: '教練' })).toBeVisible()
+    const trainerTab = workspaceTab(page, '教練')
+    await trainerTab.click()
+    await expect(trainerTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('link', { name: '教練排班' })).toBeVisible()
   })
 
   /**
