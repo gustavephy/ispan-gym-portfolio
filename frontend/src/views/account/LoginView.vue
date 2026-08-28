@@ -1,7 +1,8 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { login } from '@/api/auth.js'
+import { googleLoginUrl } from '@/api/oauth.js'
 import { useAuthStore } from '@/stores/auth.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 
@@ -9,6 +10,10 @@ import OperationMessage from '@/components/OperationMessage.vue'
  * 登入頁。同時也是「就地顯示錯誤」的示範：
  * /api/auth/login 屬於匿名端點（見 api/auth.js 的 ANONYMOUS_CONFIG），
  * 攔截器不會為它跳全域錯誤或導向登入頁，帳密錯誤等結果由這裡自己顯示在表單上。
+ *
+ * 也承接 Google 登入失敗：後端 app.oauth.frontend-error-url 指向 /login，失敗時
+ * 會導回 /login?oauthError=<reason>（OAuthRedirectReason 的小寫），這裡把 reason
+ * 對應成使用者看得懂的訊息顯示。
  */
 const route = useRoute()
 const router = useRouter()
@@ -18,6 +23,37 @@ const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
 const submitting = ref(false)
+
+// Google 登入按鈕預設顯示（OAuth 後端已在 dev、GOOGLE_OAUTH_ENABLED=true）。
+// 要在某個環境關掉，設 VITE_GOOGLE_OAUTH_ENABLED=false（見 frontend/.env.example）。
+// 根目錄 .gitignore 忽略所有 .env，所以用「預設開、明確設 false 才關」，不靠 committed 的 .env。
+const googleOAuthEnabled = import.meta.env.VITE_GOOGLE_OAUTH_ENABLED !== 'false'
+
+// 後端只把固定白名單的 reason（小寫）放進網址，不帶任何敏感資訊，前端只依它決定文案。
+const OAUTH_ERROR_MESSAGES = {
+  access_denied: '您已取消 Google 登入。',
+  flow_expired: '登入流程已逾時，請重新使用 Google 登入。',
+  flow_replaced: '這個登入流程已被較新的操作取代，請重新使用 Google 登入。',
+  account_link_required: '這個 Google 帳號的 Email 已有本站帳號，請使用原本的登入方式登入。',
+  email_not_verified: '您的 Google 帳號 Email 尚未驗證，無法用於登入。',
+  account_disabled: '此帳號已被停用，如有疑問請聯絡管理員。',
+  provider_error: 'Google 登入服務暫時發生問題，請稍後再試。',
+  unexpected_error: '登入時發生非預期的錯誤，請稍後再試。',
+}
+
+onMounted(() => {
+  const reason = route.query.oauthError
+  if (typeof reason === 'string' && reason) {
+    errorMessage.value = OAUTH_ERROR_MESSAGES[reason] || 'Google 登入未完成，請再試一次。'
+    // 清掉網址列的 oauthError，重新整理不會再出現同一則訊息
+    router.replace({ path: '/login', query: route.query.redirect ? { redirect: route.query.redirect } : {} })
+  }
+})
+
+function loginWithGoogle() {
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : undefined
+  window.location.href = googleLoginUrl(redirect)
+}
 
 /**
  * 開發／展示用測試帳號，點擊自動填入表單。
@@ -118,6 +154,25 @@ async function onSubmit() {
         </button>
       </form>
 
+      <template v-if="googleOAuthEnabled">
+        <div class="oauth-divider"><span>或</span></div>
+
+        <button class="btn btn-outline btn-block oauth-btn" type="button" @click="loginWithGoogle">
+          <svg class="oauth-btn__icon" viewBox="0 0 18 18" aria-hidden="true">
+            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/>
+            <path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.05l3.01-2.33z"/>
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+          </svg>
+          使用 Google 登入
+        </button>
+
+        <p class="oauth-hint">
+          使用 Google 登入代表授權本站讀取您 Google 帳號的 Email、姓名與大頭貼。
+          首次登入會請您補上手機等基本資料以建立會員帳號；Google 僅作為一種登入方式，您的帳號與權限仍由本站管理。
+        </p>
+      </template>
+
       <div class="auth-card__links">
         <RouterLink to="/forgot-password">忘記密碼？</RouterLink>
         <span>還沒有帳號？<RouterLink to="/member-register">立即註冊</RouterLink></span>
@@ -159,6 +214,39 @@ async function onSubmit() {
 }
 .auth-card__links--secondary + .auth-card__links--secondary {
   margin-top: 0;
+}
+
+/* 帳號密碼登入與 Google 登入之間的分隔線 */
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.1rem 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.oauth-divider::before,
+.oauth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.oauth-btn {
+  gap: 0.6rem;
+}
+.oauth-btn__icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.oauth-hint {
+  margin-top: 0.6rem;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
 }
 
 .test-accounts {
