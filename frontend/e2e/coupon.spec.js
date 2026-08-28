@@ -1,4 +1,4 @@
-import { test, expect, ACCOUNTS, loginAs, apiToken } from './fixtures.js'
+import { test, expect, ACCOUNTS, loginAs, apiToken, ensureCashCoupon } from './fixtures.js'
 
 /**
  * B7 優惠券：領取 → 結帳套用 → 折扣金額正確；無效代碼被擋下。
@@ -6,36 +6,14 @@ import { test, expect, ACCOUNTS, loginAs, apiToken } from './fixtures.js'
  * <p>折扣是後端算的（結帳頁只顯示「實際折扣將於送出後計算」），所以斷言看後台訂單明細的
  * subtotalAmount / discountAmount / totalAmount，用數字對數字，不看畫面文字。
  *
- * <p>優惠券用過就不能再用：每輪從「名下未使用」找不到就去「可領取」領一張，種子有
- * 十幾張全館／商品現金券，撐得起多輪；乾淨 DB 靠 `npm run test:e2e:fresh`。
+ * <p>優惠券用過就不能再用，每跑一輪就永久消耗一張；券由 fixtures 的 ensureCashCoupon 供應
+ *（名下未使用 → 可領取 → 管理端新建），所以不必重建資料庫也能一直重跑。
  */
 
 const API = 'http://localhost:8080'
 const PRODUCT = '分離乳清蛋白-香草'
 
 const auth = (token) => ({ headers: { Authorization: `Bearer ${token}` } })
-
-/** 現金券、適用全館或商品、門檻不超過訂單金額 */
-const usableOn = (amount) => (c) =>
-  c && c.type === 'CASH' && ['ALL', 'PRODUCT'].includes(c.applicableType) && Number(c.minSpend) <= amount
-
-/** 先看名下未使用的券，沒有就從可領取清單領一張；領取撞到「已擁有」就換下一張 */
-async function ensureCashCoupon(request, token, amount) {
-  const mine = await (await request.get(`${API}/api/coupons/my-unused`, auth(token))).json()
-  const owned = (Array.isArray(mine) ? mine : mine.items ?? mine.content ?? [])
-    .map((x) => x.coupon ?? x)
-    .find(usableOn(amount))
-  if (owned) return owned
-
-  const avail = await (await request.get(`${API}/api/coupons/available?size=100`, auth(token))).json()
-  const candidates = (avail.content ?? avail.items ?? avail).filter(usableOn(amount))
-  expect(candidates.length, '種子裡應有可套用在商品上的現金券').toBeGreaterThan(0)
-  for (const c of candidates) {
-    const res = await request.post(`${API}/api/coupons/claim/${c.couponId}`, auth(token))
-    if (res.ok()) return c
-  }
-  throw new Error('可領取清單裡的現金券全部領取失敗（可能都已領過且用掉）')
-}
 
 async function productPrice(request, name) {
   const res = await request.get(`${API}/api/products?keyword=${encodeURIComponent(name)}&size=5`)
