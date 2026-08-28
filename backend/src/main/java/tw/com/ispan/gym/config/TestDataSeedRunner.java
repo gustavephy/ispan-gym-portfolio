@@ -174,7 +174,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         }
 
         Account wendy = ensureAccount("wendy-test@local.test", AccountType.MEMBER);
-        Member wendyMember = ensureMember(wendy, "斐凝", "王", "0911111111");
+        Member wendyMember = ensureMember(wendy, "美秀", "陳", "0911111111");
 
         Account admin = ensureAccount("emp-admin@local.test", AccountType.MEMBER, AccountType.EMPLOYEE);
         ensureMember(admin, "大同", "王", "0922222222");
