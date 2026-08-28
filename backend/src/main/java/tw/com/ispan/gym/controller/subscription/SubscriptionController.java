@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import tw.com.ispan.gym.dto.subscription.SubscriptionPlanResponse;
 import tw.com.ispan.gym.dto.subscription.SubscriptionResponse;
-import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
 import tw.com.ispan.gym.repository.subscription.SubscriptionPlanRepository;
 import tw.com.ispan.gym.security.CurrentUserProvider;
@@ -37,13 +36,13 @@ public class SubscriptionController {
                 .toList();
     }
 
-    /** 查詢自己名下最新一筆訂閱（依到期日排序取第一筆），供前端判斷目前是否仍在有效期內 */
     @GetMapping("/api/me/subscription")
-    public SubscriptionResponse getMySubscription() {
-        return subscriptions.findByMemberIdOrderByEndDateDesc(currentUser.requireCurrentMemberId())
+    public org.springframework.http.ResponseEntity<SubscriptionResponse> getMySubscription() {
+        SubscriptionResponse response = subscriptions.findByMemberIdOrderByEndDateDesc(currentUser.requireCurrentMemberId())
                 .stream()
                 .findFirst()
                 .map(SubscriptionResponse::from)
-                .orElseThrow(() -> new ResourceNotFoundException("尚無任何訂閱紀錄"));
+                .orElse(null);
+        return org.springframework.http.ResponseEntity.ok(response);
     }
 }

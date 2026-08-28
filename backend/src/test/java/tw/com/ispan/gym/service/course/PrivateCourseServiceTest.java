@@ -82,7 +82,7 @@ class PrivateCourseServiceTest {
 
     private UpdatePrivateCourseRequest updateRequest() {
         return new UpdatePrivateCourseRequest("重量訓練體驗課（改版）", BigDecimal.valueOf(20), "新描述", null,
-                true, 2, 1, null);
+                true, 2, 1, null, null);
     }
 
     private PrivateCourseRequest requestWithCategory() {
@@ -92,7 +92,7 @@ class PrivateCourseServiceTest {
 
     private UpdatePrivateCourseRequest updateRequestWithCategory() {
         return new UpdatePrivateCourseRequest("重量訓練體驗課（改版）", BigDecimal.valueOf(20), "新描述", null,
-                true, 2, 1, CATEGORY_ID);
+                true, 2, 1, CATEGORY_ID, null);
     }
 
     private CourseCategory category() {

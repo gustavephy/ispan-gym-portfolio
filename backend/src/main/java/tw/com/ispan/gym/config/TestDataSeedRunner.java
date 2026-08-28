@@ -842,9 +842,10 @@ public class TestDataSeedRunner implements CommandLineRunner {
         log.info("已建立 {} 筆測試訂閱方案", seeds.size());
     }
 
-    /** 確保 4 個課程分類存在，回傳分類 Map (名稱 -> 實體) */
+    /** 確保 4 個課程分類存在，回傳分類 Map (名稱 -> 實體)；同時清除不在名單內的多餘分類 */
     private java.util.Map<String, CourseCategory> ensureAllCourseCategories() {
         String[] names = { "有氧燃脂", "重量訓練", "瑜珈伸展", "功能性訓練" };
+        java.util.Set<String> canonical = java.util.Set.of(names);
         java.util.Map<String, CourseCategory> map = new java.util.LinkedHashMap<>();
         for (int i = 0; i < names.length; i++) {
             final String name = names[i];
@@ -859,6 +860,17 @@ public class TestDataSeedRunner implements CommandLineRunner {
             });
             map.put(name, cat);
         }
+        // 清除資料庫中不在標準名單的多餘分類（安全：僅刪除無課程的分類）
+        courseCategories.findAll().forEach(cat -> {
+            if (!canonical.contains(cat.getName())) {
+                try {
+                    courseCategories.delete(cat);
+                    log.info("已刪除多餘課程分類：{}", cat.getName());
+                } catch (Exception e) {
+                    log.warn("無法刪除分類「{}」（可能仍有課程關聯）：{}", cat.getName(), e.getMessage());
+                }
+            }
+        });
         return map;
     }
 

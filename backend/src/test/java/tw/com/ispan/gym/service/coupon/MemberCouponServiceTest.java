@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
@@ -114,7 +113,7 @@ class MemberCouponServiceTest {
 
         org.springframework.data.domain.Page<CouponResponse> result = service.getAvailableCouponsForClaim(MEMBER_ID, org.springframework.data.domain.Pageable.unpaged());
 
-        assertThat(result.getContent()).extracting(CouponResponse::getCouponId).containsExactly(COUPON_ID);
+        assertThat(result.getContent()).extracting(CouponResponse::couponId).containsExactly(COUPON_ID);
     }
 
     @Test
@@ -152,7 +151,7 @@ class MemberCouponServiceTest {
         MemberCouponResponse response = service.claimCoupon(MEMBER_ID, COUPON_ID);
 
         assertThat(response.getStatus()).isEqualTo(MemberCouponStatus.UNUSED);
-        assertThat(response.getCoupon().getCouponId()).isEqualTo(COUPON_ID);
+        assertThat(response.getCoupon().couponId()).isEqualTo(COUPON_ID);
         assertThat(coupon.getClaimedQuantity()).isEqualTo(11);
         verify(coupons).save(coupon);
         // 併發防護：確實有對優惠券取鎖，序列化「最後一張」的並行搶領
@@ -292,7 +291,7 @@ class MemberCouponServiceTest {
         List<MemberCouponResponse> result = service.getMyUnusedCoupons(MEMBER_ID);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCoupon().getCouponId()).isEqualTo(COUPON_ID);
+        assertThat(result.get(0).getCoupon().couponId()).isEqualTo(COUPON_ID);
     }
 
     @Test

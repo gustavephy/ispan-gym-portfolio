@@ -18,5 +18,6 @@ public record UpdatePrivateCourseRequest(
         Boolean isTrial,
         Integer maxCapacity,
         Integer sessionPerUnit,
-        Integer courseCategoryId
+        Integer courseCategoryId,
+        Integer trainerId
 ) {}

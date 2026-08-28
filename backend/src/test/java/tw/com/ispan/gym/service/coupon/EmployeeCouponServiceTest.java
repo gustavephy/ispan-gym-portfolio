@@ -13,7 +13,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
 
 import org.junit.jupiter.api.Test;
@@ -95,7 +94,7 @@ class EmployeeCouponServiceTest {
 
         CouponResponse response = service.createCoupon(request("  spring20  "));
 
-        assertThat(response.getCode()).isEqualTo("SPRING20");
+        assertThat(response.code()).isEqualTo("SPRING20");
     }
 
     @Test
@@ -118,7 +117,7 @@ class EmployeeCouponServiceTest {
 
         CouponResponse response = service.createCoupon(request);
 
-        assertThat(response.getApplicableType()).isEqualTo(CouponApplicableType.ALL);
+        assertThat(response.applicableType()).isEqualTo(CouponApplicableType.ALL);
     }
 
     // === updateCoupon() ======================================================
@@ -133,7 +132,7 @@ class EmployeeCouponServiceTest {
 
         CouponResponse response = service.updateCoupon(COUPON_ID, request("SPRING20"));
 
-        assertThat(response.getCode()).isEqualTo("SPRING20");
+        assertThat(response.code()).isEqualTo("SPRING20");
     }
 
     @Test
@@ -182,7 +181,7 @@ class EmployeeCouponServiceTest {
 
         List<CouponResponse> result = service.getAllCoupons("spring", null, null, null, PageRequest.of(0, 10)).getContent();
 
-        assertThat(result).extracting(CouponResponse::getCouponId).containsExactly(1, 2);
+        assertThat(result).extracting(CouponResponse::couponId).containsExactly(1, 2);
     }
 
     @Test
@@ -204,7 +203,7 @@ class EmployeeCouponServiceTest {
 
         List<CouponResponse> result = service.getAllCoupons(null, null, LocalDate.now(), null, PageRequest.of(0, 10)).getContent();
 
-        assertThat(result).extracting(CouponResponse::getCouponId).containsExactly(2);
+        assertThat(result).extracting(CouponResponse::couponId).containsExactly(2);
     }
 
     @Test
@@ -217,11 +216,11 @@ class EmployeeCouponServiceTest {
         when(coupons.findAll()).thenReturn(List.of(ongoing, upcoming, expired));
 
         assertThat(service.getAllCoupons(null, "ONGOING", null, null, PageRequest.of(0, 10)).getContent())
-                .extracting(CouponResponse::getCouponId).containsExactly(1);
+                .extracting(CouponResponse::couponId).containsExactly(1);
         assertThat(service.getAllCoupons(null, "upcoming", null, null, PageRequest.of(0, 10)).getContent())
-                .extracting(CouponResponse::getCouponId).containsExactly(2);
+                .extracting(CouponResponse::couponId).containsExactly(2);
         assertThat(service.getAllCoupons(null, "EXPIRED", null, null, PageRequest.of(0, 10)).getContent())
-                .extracting(CouponResponse::getCouponId).containsExactly(3);
+                .extracting(CouponResponse::couponId).containsExactly(3);
     }
 
     @Test

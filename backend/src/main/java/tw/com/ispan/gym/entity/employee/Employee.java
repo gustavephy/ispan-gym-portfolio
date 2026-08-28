@@ -110,4 +110,13 @@ public class Employee {
 	protected void onUpdate() {
 		updatedAt = LocalDateTime.now();
 	}
+
+	/**
+	 * 顯示用全名，一律「姓 + 名」（中文慣例）。所有要組員工姓名的地方都走這裡，
+	 * 不要在各模組各自拼 firstName／lastName——之前四個模組拼出三種順序。
+	 */
+	@jakarta.persistence.Transient
+	public String getDisplayName() {
+		return (lastName == null ? "" : lastName) + (firstName == null ? "" : firstName);
+	}
 }

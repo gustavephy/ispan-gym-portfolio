@@ -33,5 +33,12 @@ export const getMySubscription = async () => {
     //（比照 axios.instance.js 的 request 攔截器對同一風險的處理）
     return { data: null }
   }
-  return api.get('/api/me/subscription', { skipGlobalError: true, skipAuthRedirect: true })
+  try {
+    return await api.get('/api/me/subscription', { skipGlobalError: true, skipAuthRedirect: true })
+  } catch (err) {
+    if (err.status === 404) {
+      return { data: null }
+    }
+    throw err
+  }
 }

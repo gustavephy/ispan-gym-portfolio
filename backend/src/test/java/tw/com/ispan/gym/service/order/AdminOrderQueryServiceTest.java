@@ -96,8 +96,8 @@ class AdminOrderQueryServiceTest {
 
         AdminOrderSummaryResponse summary = result.getContent().get(0);
         assertThat(summary.orderId()).isEqualTo(ORDER_ID);
-        // memberName 沿用 OrderService 建單時同一套 firstName+lastName 直接串接的慣例
-        assertThat(summary.memberName()).isEqualTo("小明王");
+        // memberName 走 Member.getDisplayName()，全專案統一「姓 + 名」
+        assertThat(summary.memberName()).isEqualTo("王小明");
         assertThat(summary.memberEmail()).isEqualTo("buyer@example.com");
         assertThat(summary.status()).isEqualTo(OrderStatus.UNPAID);
     }
@@ -144,7 +144,7 @@ class AdminOrderQueryServiceTest {
         AdminOrderDetailResponse detail = service.findById(ORDER_ID);
 
         assertThat(detail.orderId()).isEqualTo(ORDER_ID);
-        assertThat(detail.memberName()).isEqualTo("小明王");
+        assertThat(detail.memberName()).isEqualTo("王小明");
         assertThat(detail.items()).hasSize(1);
         assertThat(detail.items().get(0).productId()).isEqualTo(10);
         assertThat(detail.history()).hasSize(2);

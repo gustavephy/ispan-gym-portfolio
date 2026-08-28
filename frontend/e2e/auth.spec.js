@@ -41,6 +41,9 @@ test.describe('A2 登入與角色導流', () => {
     const adminTab = workspaceTab(page, '管理')
     await adminTab.click()
     await expect(adminTab).toHaveAttribute('aria-selected', 'true')
+    // 管理工作區的連結分組預設收合（只有含目前路徑的那組會自動展開），
+    // 「會員管理」在「人事與會員」底下，要先點開分組標題才看得到
+    await page.getByRole('button', { name: '人事與會員' }).click()
     await expect(page.getByRole('link', { name: '會員管理' })).toBeVisible()
   })
 

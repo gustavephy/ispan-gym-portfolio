@@ -11,6 +11,7 @@ import CourseCard from '@/components/CourseCard.vue'
 import CourseSearchBar from '@/components/CourseSearchBar.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import { getGroupCoursesPublic, getPrivateCoursesPublicPaged } from '@/api/course/course.js'
+import { getMySubscription } from '@/api/subscription.js'
 
 const coursesStore = useCoursesStore()
 const cartStore = useCartStore()
@@ -144,6 +145,9 @@ const formatPrice = (price) => Number(price).toLocaleString('zh-TW')
 const displayedDropdownTrainers = computed(() => {
   if (activeTab.value === 'private') {
     const trainersMap = new Map()
+    // 刻意讀 store 的「未篩選」全部私教課清單，而不是分頁 API 篩選後的 privateCoursesData——
+    // 後者選了教練就只剩他的課，下拉會跟著縮成一個人。這份 store 清單由 onMounted 確保載入
+    //（原本只有首頁會載，直接開 /courses 會是空的）。
     const list = coursesStore.privateCourses || []
     list.forEach(c => {
       const t = c.trainer
@@ -230,7 +234,7 @@ const displayedCategories = computed(() => {
 // 載入會籍狀態
 async function checkMemberSubscription() {
   if (!authStore.isLoggedIn || !authStore.isMember) {
-    hasActiveSubscription.value = false
+      hasActiveSubscription.value = false
     return
   }
   try {
@@ -249,6 +253,11 @@ async function checkMemberSubscription() {
 onMounted(async () => {
   await checkMemberSubscription()
   await coursesStore.loadCategories()
+  // 私教分頁的教練下拉靠 store 的未篩選課程清單（見 displayedDropdownTrainers）。
+  // 那份清單原本只有首頁會載，直接開這頁或重新整理時是空的，下拉就只剩「全部教練」。
+  if (!coursesStore.privateCourses?.length) {
+    await coursesStore.loadCourses()
+  }
   await fetchCourses()
   await fetchGroupCourses()
 })
@@ -266,6 +275,8 @@ onUnmounted(() => {
       <h2 class="section-title">專業健身與教練課程</h2>
       <p class="section-desc">我們提供一對一私人教練客製化課程以及各類精緻小班課程，陪伴您安全、有效地達成健康與體態目標。</p>
     </div>
+
+
 
     <!-- 頁面選單分類切換 (一對一私教 / 團課) -->
     <div class="tabs-container">

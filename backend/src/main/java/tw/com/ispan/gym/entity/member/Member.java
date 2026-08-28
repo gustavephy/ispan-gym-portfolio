@@ -124,4 +124,10 @@ public class Member {
 	protected void onUpdate() {
 		updatedAt = LocalDateTime.now();
 	}
+
+	/** 顯示用全名，一律「姓 + 名」（中文慣例）；訂單收件人、後台會員名等都走這裡 */
+	@jakarta.persistence.Transient
+	public String getDisplayName() {
+		return (lastName == null ? "" : lastName) + (firstName == null ? "" : firstName);
+	}
 }

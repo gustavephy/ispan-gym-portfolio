@@ -1,5 +1,6 @@
 <script setup>
-import { computed, inject, onMounted, ref } from 'vue'
+defineOptions({ name: 'AccountSecurityView' })
+import { computed, inject, onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { getMyAccount, getOAuthConnections, changePassword, logoutAllDevices } from '@/api/account.js'
@@ -52,6 +53,14 @@ async function loadAll() {
 }
 
 onMounted(loadAll)
+
+// DefaultLayout 用 <keep-alive> 快取這頁：從 Google 連結回呼頁回來要看到最新連結狀態，重新抓。
+// onActivated 在首次掛載也會觸發（那次由 onMounted 負責），用旗標略過。
+let activatedBefore = false
+onActivated(() => {
+  if (activatedBefore) loadAll()
+  activatedBefore = true
+})
 
 // === 修改密碼 ================================================================
 // 密碼規則檢查沿用 EmployeeRegisterView.vue／ResetPasswordView.vue 既有的 inline

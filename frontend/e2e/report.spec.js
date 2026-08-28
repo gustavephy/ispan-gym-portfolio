@@ -31,6 +31,12 @@ async function generateDailyReport(page, date = REPORT_DATE) {
   await page.getByRole('button', { name: '確定生成' }).click()
   const res = await generated
   expect(res.ok(), `生成失敗：${await res.text()}`).toBeTruthy()
+
+  // 同區間重複生成是「刪舊插新」：POST 回來的瞬間頁面可能還選著已被刪掉的舊快照，
+  // 這時按下載／刪除會打到舊 id 而 404。等下拉真的切到新 id 再回傳，後續操作才可靠。
+  const created = await res.json()
+  await expect(page.locator('select').nth(1)).toHaveValue(String(created.id))
+  return created
 }
 
 test.describe('A7 營運報表', () => {
@@ -41,6 +47,12 @@ test.describe('A7 營運報表', () => {
 
   test('即時統計顯示四張 KPI', async ({ page }) => {
     const kpis = page.locator('.kpi')
+    // 前三張（營收／件數／品項）來自即時統計，永遠都在；第四張「退款金額」來自選中的
+    // 報表快照——全新資料庫還沒有任何快照時只會有三張；已有快照的環境一進頁就是四張。
+    // 兩種狀態都要成立：先確認基礎三張都在，生成一份快照後必須是四張
+    await expect(kpis.first()).toBeVisible()
+    expect(await kpis.count()).toBeGreaterThanOrEqual(3)
+    await generateDailyReport(page)
     await expect(kpis).toHaveCount(4)
 
     // 每張都該有數字，不是空殼

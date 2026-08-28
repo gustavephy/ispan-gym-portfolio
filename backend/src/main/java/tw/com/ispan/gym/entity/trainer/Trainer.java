@@ -99,4 +99,10 @@ public class Trainer {
 	protected void onUpdate() {
 		updatedAt = LocalDateTime.now();
 	}
+
+	/** 顯示用全名，一律「姓 + 名」（中文慣例），以 Trainer 自帶的姓名欄位組成 */
+	@jakarta.persistence.Transient
+	public String getDisplayName() {
+		return (lastName == null ? "" : lastName) + (firstName == null ? "" : firstName);
+	}
 }

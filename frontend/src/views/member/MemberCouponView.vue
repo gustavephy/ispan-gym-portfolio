@@ -1,5 +1,6 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+defineOptions({ name: 'MemberCouponView' })
+import { ref, onMounted, onActivated, computed } from 'vue'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 import AppPagination from '@/components/AppPagination.vue'
@@ -87,6 +88,17 @@ function handleStatusFilter(status) {
 onMounted(() => {
   loadClaimable(1)
   loadMyCoupons(1)
+})
+
+// DefaultLayout 用 <keep-alive> 快取這頁：結帳用掉券再回來會停在舊清單，重新抓。
+// onActivated 在首次掛載也會觸發（那次由 onMounted 負責），用旗標略過。
+let activatedBefore = false
+onActivated(() => {
+  if (activatedBefore) {
+    loadClaimable(1)
+    loadMyCoupons(1)
+  }
+  activatedBefore = true
 })
 </script>
 
