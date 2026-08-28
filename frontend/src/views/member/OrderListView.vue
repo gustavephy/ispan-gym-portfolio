@@ -1,6 +1,6 @@
 <script setup>
 defineOptions({ name: 'OrderListView' })
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import {
   getMyOrders,
@@ -416,6 +416,14 @@ let highlightTimer = null
 onUnmounted(() => {
   clearTimeout(copiedTimer)
   clearTimeout(highlightTimer)
+})
+
+// DefaultLayout 用 <keep-alive> 快取這頁：離開再回來不會重新掛載，付完款／申請退款後
+// 回來會停在舊狀態。onActivated 在首次掛載也會觸發（那次由 onMounted 負責），用旗標略過。
+let activatedBefore = false
+onActivated(() => {
+  if (activatedBefore) loadOrders()
+  activatedBefore = true
 })
 
 onMounted(async () => {

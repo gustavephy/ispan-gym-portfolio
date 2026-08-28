@@ -1,6 +1,6 @@
 <script setup>
 defineOptions({ name: 'MemberCourseView' })
-import { ref, computed, onMounted, inject, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, inject, watch } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { getMyQuotas, getMyReservations } from '@/api/member/booking.js'
@@ -206,7 +206,7 @@ const filteredQuotas = computed(() => quotas.value.filter(q => {
   return true
 }))
 
-onMounted(async () => {
+async function loadCourseData() {
   try {
     const [quotasRes, reservationsRes] = await Promise.all([
       getMyQuotas(),
@@ -221,6 +221,16 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+}
+
+onMounted(loadCourseData)
+
+// DefaultLayout 用 <keep-alive> 快取這頁：買了課、預約／取消後回來會停在舊額度與舊紀錄，重新抓。
+// onActivated 在首次掛載也會觸發（那次由 onMounted 負責），用旗標略過。
+let activatedBefore = false
+onActivated(() => {
+  if (activatedBefore) loadCourseData()
+  activatedBefore = true
 })
 
 

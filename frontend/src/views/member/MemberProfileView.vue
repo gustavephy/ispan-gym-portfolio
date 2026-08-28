@@ -1,6 +1,6 @@
 <script setup>
 defineOptions({ name: 'MemberProfileView' })
-import { computed, inject, onMounted, ref } from 'vue'
+import { computed, inject, onActivated, onMounted, ref } from 'vue'
 import { getMyProfile, updateMyProfile } from '@/api/memberProfile.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
@@ -64,7 +64,7 @@ function applyProfile(profile) {
   address.value = profile.address || ''
 }
 
-onMounted(async () => {
+async function loadProfile() {
   try {
     const { data } = await getMyProfile()
     applyProfile(data)
@@ -73,6 +73,16 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+}
+
+onMounted(loadProfile)
+
+// DefaultLayout 用 <keep-alive> 快取這頁：離開再回來不會重新掛載，改完資料從別頁回來
+// 會停在舊值。onActivated 在首次掛載也會觸發（那次由 onMounted 負責），用旗標略過。
+let activatedBefore = false
+onActivated(() => {
+  if (activatedBefore) loadProfile()
+  activatedBefore = true
 })
 
 async function onSubmit() {
