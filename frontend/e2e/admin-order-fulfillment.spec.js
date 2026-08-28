@@ -1,4 +1,4 @@
-import { test, expect, ACCOUNTS, loginAs, apiToken } from './fixtures.js'
+import { test, expect, ACCOUNTS, loginAs, apiToken, pickInStockProduct } from './fixtures.js'
 
 /**
  * A6 管理端履約：付款 → 出貨 → 完成。
@@ -12,22 +12,13 @@ import { test, expect, ACCOUNTS, loginAs, apiToken } from './fixtures.js'
  */
 
 const API = 'http://localhost:8080'
-const PHYSICAL_PRODUCT = '防滑瑜珈鋪巾'
 const RECEIVER = { receiverName: '測試收件人', receiverPhone: '0912345678', receiverAddress: '台北市測試路 1 號' }
 const auth = (token) => ({ headers: { Authorization: `Bearer ${token}` } })
 
-async function findProductId(request, name) {
-  const res = await request.get(`${API}/api/products?keyword=${encodeURIComponent(name)}&size=5`)
-  const body = await res.json()
-  const hit = (body.items ?? body.content ?? body).find((p) => p.name === name)
-  expect(hit, `找不到播種商品 ${name}`).toBeTruthy()
-  return hit.productId
-}
-
-/** 購物車只放一件實體商品，建一張未付款訂單 */
+/** 購物車只放一件實體商品（挑目前庫存最多的），建一張未付款訂單 */
 async function createProductOrder(request, memberToken) {
   await request.delete(`${API}/api/cart`, auth(memberToken))
-  const productId = await findProductId(request, PHYSICAL_PRODUCT)
+  const { productId } = await pickInStockProduct(request)
   const add = await request.post(`${API}/api/cart/items`, { ...auth(memberToken), data: { productId, quantity: 1 } })
   expect(add.ok(), `加入購物車失敗：${await add.text()}`).toBeTruthy()
   const res = await request.post(`${API}/api/orders`, { ...auth(memberToken), data: RECEIVER })

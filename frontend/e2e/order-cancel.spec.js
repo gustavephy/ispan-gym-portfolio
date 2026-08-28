@@ -1,4 +1,4 @@
-import { test, expect, ACCOUNTS, loginAs, apiToken, ensureCashCoupon } from './fixtures.js'
+import { test, expect, ACCOUNTS, loginAs, apiToken, ensureCashCoupon, pickInStockProduct } from './fixtures.js'
 
 /**
  * B7 會員取消未付款訂單。
@@ -9,7 +9,6 @@ import { test, expect, ACCOUNTS, loginAs, apiToken, ensureCashCoupon } from './f
  */
 
 const API = 'http://localhost:8080'
-const PRODUCT = '防滑瑜珈鋪巾'
 const RECEIVER = { receiverName: '測試收件人', receiverPhone: '0912345678', receiverAddress: '台北市測試路 1 號' }
 const auth = (token) => ({ headers: { Authorization: `Bearer ${token}` } })
 
@@ -31,7 +30,8 @@ test.describe('B7 取消未付款訂單', () => {
     const memberToken = await apiToken(ACCOUNTS.member)
     await request.delete(`${API}/api/cart`, auth(memberToken))
 
-    const product = await findProduct(request, PRODUCT)
+    const product = await pickInStockProduct(request)
+    const PRODUCT = product.name
     const stockBefore = product.stock
     const coupon = await ensureCashCoupon(request, memberToken, Number(product.price))
     const couponCode = coupon.code ?? coupon.couponCode
@@ -89,7 +89,8 @@ test.describe('B7 取消未付款訂單', () => {
     const memberToken = await apiToken(ACCOUNTS.member)
     const adminToken = await apiToken(ACCOUNTS.admin)
     await request.delete(`${API}/api/cart`, auth(memberToken))
-    const product = await findProduct(request, PRODUCT)
+    const product = await pickInStockProduct(request)
+    const PRODUCT = product.name
     const stockBefore = product.stock
     await request.post(`${API}/api/cart/items`, { ...auth(memberToken), data: { productId: product.productId, quantity: 1 } })
     const order = await (await request.post(`${API}/api/orders`, { ...auth(memberToken), data: RECEIVER })).json()

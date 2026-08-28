@@ -1,4 +1,4 @@
-import { test, expect, ACCOUNTS, loginAs, apiToken, uniqueSuffix } from './fixtures.js'
+import { test, expect, ACCOUNTS, loginAs, apiToken, uniqueSuffix, pickInStockProduct } from './fixtures.js'
 
 /**
  * C5 會員資料修改：改電話／地址 → 重新整理仍在 → 切頁再回來仍是新值 → 結帳頁收件資訊預設帶入。
@@ -11,17 +11,9 @@ import { test, expect, ACCOUNTS, loginAs, apiToken, uniqueSuffix } from './fixtu
  */
 
 const API = 'http://localhost:8080'
-const PRODUCT = '防滑瑜珈鋪巾'
 const auth = (token) => ({ headers: { Authorization: `Bearer ${token}` } })
 
 const UPDATE_FIELDS = ['firstName', 'lastName', 'phone', 'dob', 'gender', 'emergencyContact', 'emergencyPhone', 'zipCode', 'city', 'district', 'address']
-
-async function findProductId(request, name) {
-  const body = await (await request.get(`${API}/api/products?keyword=${encodeURIComponent(name)}&size=5`)).json()
-  const hit = (body.items ?? body.content ?? body).find((p) => p.name === name)
-  expect(hit, `找不到播種商品 ${name}`).toBeTruthy()
-  return hit.productId
-}
 
 test.describe('C5 會員資料', () => {
   test('改電話與地址後：重整仍在、切頁回來仍在、結帳頁預設帶入', async ({ page, request }) => {
@@ -61,7 +53,7 @@ test.describe('C5 會員資料', () => {
       // 結帳頁：預設就選「使用會員資料地址」，內容是剛改的
       await request.delete(`${API}/api/cart`, auth(token))
       const add = await request.post(`${API}/api/cart/items`, {
-        ...auth(token), data: { productId: await findProductId(request, PRODUCT), quantity: 1 },
+        ...auth(token), data: { productId: (await pickInStockProduct(request)).productId, quantity: 1 },
       })
       expect(add.ok()).toBeTruthy()
       await page.goto('/checkout')

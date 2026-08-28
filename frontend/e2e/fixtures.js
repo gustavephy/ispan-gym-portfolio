@@ -203,6 +203,20 @@ export function sql(statement) {
   ).trim()
 }
 
+/**
+ * 挑一個「現在還有庫存」的上架商品給要建單的 spec 用（庫存最多的那個）。
+ * 付款成功的訂單不會把庫存還回去，寫死商品名稱跑個幾十輪就會 INSUFFICIENT_STOCK；
+ * 動態挑庫存最多的，在同一個資料庫上可以一直跑，重建資料庫時也不必管。
+ */
+export async function pickInStockProduct(request, minStock = 3) {
+  const body = await (await request.get(`${API}/api/products?page=0&size=100`)).json()
+  const list = (body.items ?? body.content ?? body).filter(
+    (p) => (p.status ?? 'ACTIVE') === 'ACTIVE' && Number(p.stock) >= minStock && Number(p.price) > 0,
+  )
+  expect(list.length, `找不到庫存 ≥ ${minStock} 的上架商品，請重建資料庫`).toBeGreaterThan(0)
+  return list.sort((a, b) => b.stock - a.stock)[0]
+}
+
 /** 用目前的 token 改密碼，回傳後端換發的新 token */
 export async function changePassword(request, token, from, to) {
   const res = await request.post(`${API}/api/account/me/change-password`, {
