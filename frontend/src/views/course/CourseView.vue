@@ -11,6 +11,7 @@ import CourseCard from '@/components/CourseCard.vue'
 import CourseSearchBar from '@/components/CourseSearchBar.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import { getGroupCoursesPublic, getPrivateCoursesPublicPaged } from '@/api/course/course.js'
+import { getMySubscription } from '@/api/subscription.js'
 
 const coursesStore = useCoursesStore()
 const cartStore = useCartStore()
@@ -230,7 +231,7 @@ const displayedCategories = computed(() => {
 // 載入會籍狀態
 async function checkMemberSubscription() {
   if (!authStore.isLoggedIn || !authStore.isMember) {
-    hasActiveSubscription.value = false
+      hasActiveSubscription.value = false
     return
   }
   try {
@@ -266,6 +267,8 @@ onUnmounted(() => {
       <h2 class="section-title">專業健身與教練課程</h2>
       <p class="section-desc">我們提供一對一私人教練客製化課程以及各類精緻小班課程，陪伴您安全、有效地達成健康與體態目標。</p>
     </div>
+
+
 
     <!-- 頁面選單分類切換 (一對一私教 / 團課) -->
     <div class="tabs-container">

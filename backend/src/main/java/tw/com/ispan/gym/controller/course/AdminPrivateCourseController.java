@@ -1,17 +1,23 @@
 package tw.com.ispan.gym.controller.course;
 
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import tw.com.ispan.gym.dto.course.PrivateCourseRequest;
 import tw.com.ispan.gym.dto.course.PrivateCourseResponse;
+import tw.com.ispan.gym.dto.course.UpdatePrivateCourseRequest;
 import tw.com.ispan.gym.dto.common.PageResponse;
 import tw.com.ispan.gym.service.course.PrivateCourseService;
 
@@ -65,5 +71,22 @@ public class AdminPrivateCourseController {
     @PreAuthorize("hasRole('ADMIN')")
     public PrivateCourseResponse activate(@PathVariable Integer privateCourseId) {
         return privateCourseService.activateByAdmin(privateCourseId);
+    }
+
+    /** 後台管理：建立私教課商品 */
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PrivateCourseResponse> createCourse(@Valid @RequestBody PrivateCourseRequest request) {
+        PrivateCourseResponse resp = privateCourseService.createCourseByAdmin(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(resp);
+    }
+
+    /** 後台管理：編輯私教課商品 */
+    @PutMapping("/{privateCourseId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PrivateCourseResponse> updateCourse(@PathVariable Integer privateCourseId,
+            @Valid @RequestBody UpdatePrivateCourseRequest request) {
+        PrivateCourseResponse resp = privateCourseService.updatePrivateCourseByAdmin(privateCourseId, request);
+        return ResponseEntity.ok(resp);
     }
 }

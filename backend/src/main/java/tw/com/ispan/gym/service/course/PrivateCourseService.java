@@ -22,6 +22,7 @@ import tw.com.ispan.gym.service.trainer.TrainerService;
 
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.exception.InvalidRequestException;
 
 @Service
 @Slf4j
@@ -176,6 +177,56 @@ public class PrivateCourseService {
                 return privateCourseRepository.findByTrainerId(trainerId).stream()
                                 .map(PrivateCourseResponse::from)
                                 .collect(Collectors.toList());
+        }
+
+        /** ADMIN/Employee 建立私教課商品 */
+        @Transactional
+        public PrivateCourseResponse createCourseByAdmin(PrivateCourseRequest request) {
+                if (request.trainerId() == null) {
+                        throw new InvalidRequestException("必須指定教練");
+                }
+                Trainer trainer = trainerService.lockAndAssertAvailableForNewBusiness(request.trainerId());
+
+                CourseCategory category = null;
+                if (request.courseCategoryId() != null) {
+                        category = courseCategoryRepository.findById(request.courseCategoryId())
+                                        .orElseThrow(() -> new ResourceNotFoundException("查無此課程分類"));
+                }
+
+                PrivateCourse course = new PrivateCourse();
+                course.setTrainer(trainer);
+                course.setCategory(category);
+                applyRequest(course, request);
+                if (request.status() != null) {
+                        course.setStatus(request.status());
+                } else {
+                        course.setStatus(CourseStatus.ACTIVE);
+                }
+                PrivateCourse saved = privateCourseRepository.save(course);
+                log.info("Admin successfully created private course (ID: {}, name: {})",
+                                saved.getPrivateCourseId(), saved.getName());
+                return PrivateCourseResponse.from(saved);
+        }
+
+        /** ADMIN/Employee 編輯私教課商品 */
+        @Transactional
+        public PrivateCourseResponse updatePrivateCourseByAdmin(Integer privateCourseId, UpdatePrivateCourseRequest request) {
+                PrivateCourse privateCourse = privateCourseRepository.findById(privateCourseId)
+                                .orElseThrow(() -> new ResourceNotFoundException("課程不存在"));
+                applyUpdateRequest(privateCourse, request);
+                if (request.trainerId() != null) {
+                        Trainer trainer = trainerService.lockAndAssertAvailableForNewBusiness(request.trainerId());
+                        privateCourse.setTrainer(trainer);
+                }
+                if (request.courseCategoryId() != null) {
+                        CourseCategory category = courseCategoryRepository.findById(request.courseCategoryId())
+                                        .orElseThrow(() -> new ResourceNotFoundException("查無此課程分類"));
+                        privateCourse.setCategory(category);
+                }
+                PrivateCourse saved = privateCourseRepository.save(privateCourse);
+                log.info("Admin successfully updated private course (ID: {})",
+                                saved.getPrivateCourseId());
+                return PrivateCourseResponse.from(saved);
         }
 
         // 內用方法，只給 createCourse 使用，不對外開放。建立時可以直接設定初始 status，

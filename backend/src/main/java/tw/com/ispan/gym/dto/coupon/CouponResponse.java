@@ -4,43 +4,43 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-import lombok.Data;
 import tw.com.ispan.gym.entity.coupon.Coupon;
 import tw.com.ispan.gym.enums.coupon.CouponApplicableType;
 import tw.com.ispan.gym.enums.coupon.CouponStatus;
 import tw.com.ispan.gym.enums.coupon.CouponType;
 
-@Data
-public class CouponResponse {
-    private Integer couponId;
-    private String code;
-    private String name;
-    private CouponType type;
-    private BigDecimal value;
-    private BigDecimal minSpend;
-    private Integer totalQuantity;
-    private Integer claimedQuantity;
-    private LocalDate startDate;
-    private LocalDate endDate;
-    private CouponStatus status;
-    private CouponApplicableType applicableType;
-    private LocalDateTime createdAt;
-     
+public record CouponResponse(
+    Integer couponId,
+    String code,
+    String name,
+    CouponType type,
+    BigDecimal value,
+    BigDecimal minSpend,
+    Integer totalQuantity,
+    Integer claimedQuantity,
+    LocalDate startDate,
+    LocalDate endDate,
+    CouponStatus status,
+    CouponApplicableType applicableType,
+    LocalDateTime createdAt,
+    String description
+) {
     public static CouponResponse from(Coupon coupon) {
-        CouponResponse dto = new CouponResponse();
-        dto.setCouponId(coupon.getCouponId());
-        dto.setCode(coupon.getCode());
-        dto.setName(coupon.getName());
-        dto.setType(coupon.getType());
-        dto.setValue(coupon.getValue());
-        dto.setMinSpend(coupon.getMinSpend());
-        dto.setTotalQuantity(coupon.getTotalQuantity());
-        dto.setClaimedQuantity(coupon.getClaimedQuantity());
-        dto.setStartDate(coupon.getStartDate());
-        dto.setEndDate(coupon.getEndDate());
-        dto.setStatus(coupon.getStatus());
-        dto.setApplicableType(coupon.getApplicableType());
-        dto.setCreatedAt(coupon.getCreatedAt());
-        return dto;
+        return new CouponResponse(
+            coupon.getCouponId(),
+            coupon.getCode(),
+            coupon.getName(),
+            coupon.getType(),
+            coupon.getValue(),
+            coupon.getMinSpend(),
+            coupon.getTotalQuantity(),
+            coupon.getClaimedQuantity(),
+            coupon.getStartDate(),
+            coupon.getEndDate(),
+            coupon.getStatus(),
+            coupon.getApplicableType(),
+            coupon.getCreatedAt(),
+            coupon.getDescription()
+        );
     }
 }

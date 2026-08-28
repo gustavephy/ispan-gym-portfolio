@@ -1,6 +1,5 @@
 package tw.com.ispan.gym.dto.coupon;
 
-import tw.com.ispan.gym.entity.coupon.Coupon;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,6 +20,8 @@ public class CouponRequest {
 
     @NotBlank(message = "優惠券名稱不得為空")
     private String name;
+
+    private String description;
 
     // @NotBlank 只適用字串，掛在 enum 上會讓驗證器初始化直接炸 500（HV000030）
     @NotNull(message = "優惠券類型不得為空")
