@@ -1,4 +1,5 @@
 <script setup>
+defineOptions({ name: 'OrderListView' })
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import {

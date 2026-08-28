@@ -33,6 +33,7 @@ const INLINE_ERROR_CODES = new Set([
   'MISSING_INBODY_MEASUREMENT',
   'INVALID_GOAL',
   'COURSE_FULL',
+  'HTTP_404',
 ])
 
 /** 後端沒回 message 時的預設字串，依狀態碼給比「發生錯誤」更具體的說法 */

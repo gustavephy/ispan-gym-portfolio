@@ -1,4 +1,5 @@
 <script setup>
+defineOptions({ name: 'MemberCourseView' })
 import { ref, computed, onMounted, inject, watch } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'

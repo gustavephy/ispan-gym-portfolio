@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import {
   getTrainers,
   getMyBookings,
@@ -19,6 +19,7 @@ const BOOKING_STATUS_MAP = {
 }
 
 const router = useRouter()
+const route = useRoute()
 
 const trainers = ref([])
 const trainersLoading = ref(true)
@@ -27,6 +28,18 @@ const trainersLoading = ref(true)
 // 切換不重打 API。這頁本身 requiresAuth: true（進得來就一定是登入會員），
 // 不需要像 GroupClassView 那樣額外判斷 auth.isMember 才顯示切換器。
 const viewMode = ref('trainers')
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    if (tab === 'bookings') {
+      viewMode.value = 'bookings'
+    } else {
+      viewMode.value = 'trainers'
+    }
+  },
+  { immediate: true }
+)
 
 // 我的預約列表，跟教練清單的 loading 各自獨立、互不影響
 const myBookings = ref([])

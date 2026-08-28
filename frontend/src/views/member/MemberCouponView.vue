@@ -1,4 +1,5 @@
 <script setup>
+defineOptions({ name: 'MemberCouponView' })
 import { ref, onMounted, computed } from 'vue'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'

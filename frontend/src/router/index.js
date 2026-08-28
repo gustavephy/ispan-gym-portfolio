@@ -3,6 +3,10 @@ import { useAuthStore } from '@/stores/auth.js'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  scrollBehavior(_to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    return { top: 0, behavior: 'instant' }
+  },
   routes: [
     //會員/公開區域
     {
@@ -145,6 +149,11 @@ const router = createRouter({
         {
           path: 'employee/chat',
           component: () => import('@/views/employee/EmployeeChatView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'EMPLOYEE' },
+        },
+        {
+          path: 'employee/profile',
+          component: () => import('@/views/employee/EmployeeProfileView.vue'),
           meta: { requiresAuth: true, requiresRole: 'EMPLOYEE' },
         },
       ],
