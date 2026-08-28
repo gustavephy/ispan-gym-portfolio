@@ -47,16 +47,21 @@ test.describe('A2 登入與角色導流', () => {
     await expect(page.getByRole('link', { name: '會員管理' })).toBeVisible()
   })
 
-  test('教練登入後看得到教練工作區', async ({ page }) => {
+  /**
+   * 教練（會員＋員工＋教練）登入後只剩教練工作區：會員工作區對教練刻意隱藏、管理工作區
+   * 要 ADMIN（fix/navbar-navigation-flicker 的產品決定），只有一個工作區時不顯示切換頁籤；
+   * 進首頁也直接被導到教練排班。
+   */
+  test('教練登入後直接進教練工作區，沒有會員／管理頁籤', async ({ page }) => {
     await loginAs(page, ACCOUNTS.trainer)
 
     await expect(roleBadge(page, ACCOUNTS.trainer.roleLabel)).toBeVisible()
     await expect(roleList(page)).toHaveAttribute('title', new RegExp(ACCOUNTS.trainer.roleLabel))
 
-    const trainerTab = workspaceTab(page, '教練')
-    await trainerTab.click()
-    await expect(trainerTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page).toHaveURL(/\/trainer\/schedules/)
+    await expect(page.getByRole('tablist', { name: '工作區' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: '教練排班' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '補給商城' })).toHaveCount(0)
   })
 
   /**
@@ -70,9 +75,10 @@ test.describe('A2 登入與角色導流', () => {
   test('純管理員逛完首頁、課程、會籍頁都不會被登出', async ({ page }) => {
     await loginAs(page, ACCOUNTS.adminOnly)
 
-    for (const path of ['/', '/courses', '/subscription']) {
+    // 管理員進首頁會被導到營運統計（router 的角色導向），其餘兩頁留在原地
+    for (const [path, expected] of [['/', '/admin/reports'], ['/courses', '/courses'], ['/subscription', '/subscription']]) {
       await page.goto(path)
-      await expect(page).toHaveURL(path)
+      await expect(page).toHaveURL(expected)
       await expect(page.getByTitle(ACCOUNTS.adminOnly.email)).toBeVisible()
     }
   })
