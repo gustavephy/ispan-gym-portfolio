@@ -368,22 +368,35 @@ public class CoachSlotService {
         }
 
         /**
-         * 查詢某教練目前所有可預約（AVAILABLE）的時段，供會員瀏覽、決定要約哪一個。
-         * 與 {@link #getMySlots} 不同：這裡的參數是真正的 trainerId（路徑變數指定的任意教練），
-         * 不是「目前登入者自己」，因此不做本人身分檢查。
+         * 分頁查詢某教練目前可預約（AVAILABLE）的時段，供會員瀏覽、決定要約哪一個，
+         * 可依日期區間縮小範圍。與 getMySlots 不同：這裡的 trainerId 是路徑變數指定的
+         * 任意教練，不是「目前登入者自己」，因此不做本人身分檢查；也不像 getMySlots 開放
+         * 狀態篩選，這支固定只回傳 AVAILABLE。
          */
         @Transactional(readOnly = true)
-        public List<CoachSlotResponse> searchSlots(Integer trainerId) {
-                List<CoachSlot> availableSlots = coachSlotRepository
-                                .findByTrainerIdAndStatusOrderByStartAtAsc(trainerId, SlotStatus.AVAILABLE);
+        public PageResponse<CoachSlotResponse> searchSlots(Integer trainerId, int page, int size,
+                        LocalDate dateFrom, LocalDate dateTo) {
+                if (!trainerRepository.existsById(trainerId)) {
+                        throw new ResourceNotFoundException("找不到此教練");
+                }
+
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(Math.max(size, 1), 100);
+                Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "startAt"));
+
+                LocalDateTime startAtFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
+                LocalDateTime startAtTo = dateTo == null ? null : dateTo.plusDays(1).atStartOfDay();
+
+                Page<CoachSlot> result = coachSlotRepository.searchAvailableSlots(trainerId, startAtFrom, startAtTo, pageable);
+
                 // 公開瀏覽端點、不需登入即可打，bookingId／bookingStatus 固定給 null，
                 // 不查詢 CoachBookingRepository，避免把別人的預約內部 id 曝光給陌生人
-                List<CoachSlotResponse> response = availableSlots.stream()
+                List<CoachSlotResponse> items = result.getContent().stream()
                                 .map(slot -> new CoachSlotResponse(slot.getId(),
                                                 slot.getTrainer().getId(), slot.getStartAt(), slot.getEndAt(),
                                                 slot.getStatus(), null, null))
                                 .toList();
 
-                return response;
+                return new PageResponse<>(items, safePage, safeSize, result.getTotalElements(), result.getTotalPages());
         }
 }
