@@ -1,5 +1,6 @@
 <template>
-  <AppModal :model-value="visible" @update:model-value="val => $emit('update:visible', val)" title="編輯私教課程內容" size="md">
+  <!-- AppModal 的 model 叫 visible（defineModel('visible')），綁 model-value 不會有任何反應、彈窗永遠打不開 -->
+  <AppModal :visible="visible" @update:visible="val => $emit('update:visible', val)" title="編輯私教課程內容" size="md">
     <form id="editPrivateCourseForm" @submit.prevent="handleSubmit">
       <div class="form-group">
         <label class="form-label">課程名稱</label>

@@ -1,5 +1,6 @@
 <template>
-  <AppModal :model-value="visible" @update:model-value="val => $emit('update:visible', val)" title="管理課程分類" size="md">
+  <!-- AppModal 的 model 叫 visible（defineModel('visible')），綁 model-value 不會有任何反應、彈窗永遠打不開 -->
+  <AppModal :visible="visible" @update:visible="val => $emit('update:visible', val)" title="管理課程分類" size="md">
     <div class="category-manager-content">
       <!-- 新增分類表單 -->
       <form @submit.prevent="createCategory" class="card" style="padding: 1rem; margin-bottom: 1.5rem; background: var(--bg-soft, #f8fafc); border: 1px solid var(--border, #e2e8f0); border-radius: 8px;">
