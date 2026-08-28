@@ -1,4 +1,5 @@
 <script setup>
+defineOptions({ name: 'AccountSecurityView' })
 import { computed, inject, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'

@@ -1,4 +1,5 @@
 <script setup>
+defineOptions({ name: 'MemberProfileView' })
 import { computed, inject, onMounted, ref } from 'vue'
 import { getMyProfile, updateMyProfile } from '@/api/memberProfile.js'
 import OperationMessage from '@/components/OperationMessage.vue'

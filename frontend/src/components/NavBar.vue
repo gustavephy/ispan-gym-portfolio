@@ -1,8 +1,45 @@
 <script setup>
-  import { computed, nextTick, onMounted, ref, watch } from 'vue'
+  import { computed, nextTick, onMounted, ref, watch, onBeforeUnmount } from 'vue'
   import { RouterLink, useRoute, useRouter } from 'vue-router'
   import { useAuthStore } from '@/stores/auth.js'
   import { useCartStore } from '@/stores/cart.js'
+  import api from '@/api/axios.instance.js'
+
+  const auth = useAuthStore()
+  const frontSidebarOpen = ref(false)
+  const displayName = ref('')
+
+  async function fetchDisplayName() {
+    if (!auth.isLoggedIn) {
+      displayName.value = ''
+      return
+    }
+    try {
+      if (auth.isMember) {
+        const { data } = await api.get('/api/member/profile')
+        displayName.value = (data.lastName || '') + (data.firstName || '') || auth.email
+      } else if (auth.isEmployee || auth.isTrainer || auth.isAdmin) {
+        const { data } = await api.get('/api/employee/profile')
+        displayName.value = (data.lastName || '') + (data.firstName || '') || auth.email
+      } else {
+        displayName.value = auth.email
+      }
+    } catch (e) {
+      displayName.value = auth.email
+    }
+  }
+
+  watch(
+    () => auth.isLoggedIn,
+    (loggedIn) => {
+      if (loggedIn) {
+        fetchDisplayName()
+      } else {
+        displayName.value = ''
+      }
+    },
+    { immediate: true }
+  )
 
   /**
    * 工作區（workspace）：同一帳號可同時具會員、教練、管理者身分（見 TestDataSeedRunner
@@ -29,11 +66,6 @@
         { to: '/group-classes', label: '團體課程' },
         { to: '/products', label: '補給商城' },
         { to: '/subscription', label: '會籍方案' },
-        { to: '/orders', label: '我的訂單', requires: 'MEMBER' },
-        { to: '/member/courses', label: '我的課程', requires: 'MEMBER' },
-        { to: '/member/profile', label: '會員資料', requires: 'MEMBER' },
-        { to: '/coupons', label: '優惠券', requires: 'MEMBER' },
-        { to: '/health', label: 'AI健康管理', requires: 'MEMBER' },
       ],
     },
     {
@@ -68,7 +100,6 @@
     },
   ]
 
-  const auth = useAuthStore()
   const route = useRoute()
   const router = useRouter()
 
@@ -129,6 +160,10 @@
     () => availableWorkspaces.value.find((w) => w.key === activeKey.value) ?? availableWorkspaces.value[0],
   )
 
+  const menuOpen = ref(false)
+  const menuRef = ref(null)
+  const toggleMenu = () => { menuOpen.value = !menuOpen.value }
+
   // 網址對不到任何工作區時（例如首頁 '/'）退回第一個可用的，而不是寫死 'member'——
   // 純員工／純管理員沒有會員工作區，退回去會讓 currentWorkspace 落空、選單整個空白
   function workspaceOf(path) {
@@ -143,6 +178,7 @@
     () => route.path,
     (path) => {
       activeKey.value = workspaceOf(path)
+      menuOpen.value = false
     },
     { immediate: true },
   )
@@ -185,6 +221,95 @@
     return labels
   })
   const fullRoleList = computed(() => auth.roles.map((role) => ROLE_LABELS[role] ?? role).join('、'))
+  const isPureMember = computed(() => auth.isMember && !auth.isTrainer && !auth.isEmployee && !auth.isAdmin)
+
+  const ADMIN_GROUPS = [
+    {
+      key: 'reports',
+      label: '營運數據',
+      links: [
+        { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' }
+      ]
+    },
+    {
+      key: 'hr_member',
+      label: '人事與會員',
+      links: [
+        { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
+        { to: '/admin/employee-reviews', label: '員工審核' },
+        { to: '/admin/payments', label: '交易紀錄', requires: 'ADMIN' }
+      ]
+    },
+    {
+      key: 'course',
+      label: '課程與排課',
+      links: [
+        { to: '/admin/courses', label: '課程方案', requires: 'ADMIN' },
+        { to: '/admin/group-classes', label: '團課場次', requires: 'ADMIN' },
+        { to: '/admin/trainer-schedules', label: '教練排課查詢', requires: 'ADMIN' }
+      ]
+    },
+    {
+      key: 'store',
+      label: '商城與訂單',
+      links: [
+        { to: '/admin/products', label: '商品管理', requires: 'ADMIN' },
+        { to: '/admin/inventory', label: '庫存管理', requires: 'ADMIN' },
+        { to: '/admin/orders', label: '訂單管理', requires: 'ADMIN' },
+        { to: '/admin/refunds', label: '退款處理', requires: 'ADMIN' },
+        { to: '/admin/coupons', label: '優惠券管理', requires: 'ADMIN' }
+      ]
+    }
+  ]
+
+  const openGroups = ref({
+    reports: false,
+    hr_member: false,
+    course: false,
+    store: false
+  })
+
+  function toggleGroup(key) {
+    openGroups.value[key] = !openGroups.value[key]
+  }
+
+  // 監聽路由變化，自動展開包含當前選中連結的分類分組
+  watch(
+    () => route.path,
+    (path) => {
+      ADMIN_GROUPS.forEach((g) => {
+        if (g.links.some((l) => path === l.to || path.startsWith(l.to + '/'))) {
+          openGroups.value[g.key] = true
+        }
+      })
+    },
+    { immediate: true }
+  )
+
+  const visibleAdminGroups = computed(() => {
+    return ADMIN_GROUPS.map((g) => {
+      const links = g.links.filter(
+        (link) => !link.requires || auth.roles.includes(link.requires)
+      )
+      return { ...g, links }
+    }).filter((g) => g.links.length > 0)
+  })
+
+
+
+  function handleClickOutside(e) {
+    if (menuRef.value && !menuRef.value.contains(e.target)) {
+      menuOpen.value = false
+    }
+  }
+
+  onMounted(() => {
+    document.addEventListener('click', handleClickOutside)
+  })
+
+  onBeforeUnmount(() => {
+    document.removeEventListener('click', handleClickOutside)
+  })
 
   function onLogout() {
     auth.logout()
@@ -194,91 +319,186 @@
 </script>
 
 <template>
-  <aside class="navbar">
-    <RouterLink to="/" class="brand">
-      <span class="brand-mark">威力</span>
-      <span class="brand-sub">健身房管理系統</span>
-    </RouterLink>
-
-    <!-- 兩個以上工作區才顯示切換器；只有會員身分的人看不到多餘的 UI -->
-    <div v-if="availableWorkspaces.length > 1" class="ws-switch" role="tablist" aria-label="工作區">
-      <button
-        v-for="ws in availableWorkspaces"
-        :key="ws.key"
-        type="button"
-        role="tab"
-        class="ws-tab"
-        :class="{ 'ws-tab--active': ws.key === currentWorkspace?.key }"
-        :aria-selected="ws.key === currentWorkspace?.key"
-        @click="activeKey = ws.key"
-      >
-        {{ ws.label }}
-      </button>
-    </div>
-
-    <nav class="nav-links">
-      <RouterLink
-        v-for="link in visibleLinks"
-        :key="link.to"
-        :to="link.to"
-        class="nav-link"
-        :class="{ 'nav-link--active': isLinkActive(link.to) }"
-      >
-        {{ link.label }}
+  <div>
+    <!-- Mobile Top Header Bar -->
+    <header class="mobile-top-bar">
+      <button class="btn-toggle-sidebar-front" @click="frontSidebarOpen = !frontSidebarOpen">☰</button>
+      <RouterLink to="/" class="nav-logo-mobile">
+        <span class="brand-mark">威力</span>
       </RouterLink>
-      <!-- 購物車只在會員工作區出現；要掛數量徽章，無法塞進上面的 v-for -->
-      <RouterLink
-        v-if="currentWorkspace?.key === 'member' && auth.isMember"
-        to="/cart"
-        class="nav-link cart-link"
-        :class="{ 'nav-link--active': isLinkActive('/cart') }"
-      >
-        購物車
-        <span
-          v-if="cart.itemCount > 0"
-          class="cart-badge"
-          :class="{ 'cart-badge--bump': badgeBump }"
-          @animationend="badgeBump = false"
-        >{{ cart.itemCount }}</span>
-      </RouterLink>
-    </nav>
-
-    <div class="nav-auth">
-      <!-- mode="out-in"：登入／登出兩種狀態高度不同，同時存在會互相推擠，
-           改成舊的先退場、新的才進場 -->
-      <Transition name="auth" mode="out-in">
-      <div v-if="auth.isLoggedIn" key="in" class="nav-auth__panel">
-        <span class="nav-auth__email" :title="auth.email">{{ auth.email }}</span>
-        <ul class="nav-auth__roles" aria-label="目前身分" :title="`完整身分：${fullRoleList}`">
-          <li v-for="label in roleLabels" :key="label" class="nav-auth__role">{{ label }}</li>
-        </ul>
+      <div class="mobile-top-actions">
         <RouterLink
-          to="/account/security"
-          class="nav-auth__button"
-          :class="{ 'nav-link--active': isLinkActive('/account/security') }"
+          v-if="isPureMember"
+          to="/cart"
+          class="cart-btn-mobile"
+          title="購物車"
         >
-          帳號設定
-        </RouterLink>
-        <button type="button" class="nav-auth__button" @click="onLogout">登出</button>
-      </div>
-      <div v-else key="out" class="nav-auth__panel">
-        <RouterLink
-          class="nav-auth__button nav-auth__button--primary"
-          :to="{ name: 'login', query: route.fullPath !== '/' ? { redirect: route.fullPath } : {} }"
-        >
-          登入
-        </RouterLink>
-        <RouterLink class="nav-auth__button" to="/member-register">
-          註冊
+          <span class="cart-icon">🛒</span>
+          <span v-if="cart.itemCount > 0" class="cart-badge">{{ cart.itemCount }}</span>
         </RouterLink>
       </div>
-      </Transition>
-    </div>
+    </header>
 
-  </aside>
+    <!-- Overlay Background when Sidebar is open on narrow screens -->
+    <div v-if="frontSidebarOpen" class="sidebar-overlay-front" @click="frontSidebarOpen = false"></div>
+
+    <!-- Left Sidebar Navbar -->
+    <aside class="navbar" :class="{ 'sidebar-open': frontSidebarOpen }">
+      <div class="nav-inner">
+        <!-- Logo 區塊 -->
+        <RouterLink to="/" class="brand" @click="frontSidebarOpen = false">
+          <span class="brand-mark">威力</span>
+          <span class="brand-sub">健身房管理系統</span>
+        </RouterLink>
+
+        <!-- 兩個以上工作區才顯示切換器 -->
+        <div v-if="availableWorkspaces.length > 1" class="ws-switch" role="tablist" aria-label="工作區">
+          <button
+            v-for="ws in availableWorkspaces"
+            :key="ws.key"
+            type="button"
+            role="tab"
+            class="ws-tab"
+            :class="{ 'ws-tab--active': ws.key === currentWorkspace?.key }"
+            :aria-selected="ws.key === currentWorkspace?.key"
+            @click="activeKey = ws.key; frontSidebarOpen = false"
+            :title="ws.label"
+          >
+            {{ ws.label }}
+          </button>
+        </div>
+
+        <nav class="nav-links">
+          <!-- 管理後台專屬的摺疊分組選單 -->
+          <template v-if="currentWorkspace?.key === 'admin'">
+            <div v-for="group in visibleAdminGroups" :key="group.key" class="menu-group">
+              <button type="button" class="menu-group-header" @click="toggleGroup(group.key)">
+                <span class="group-title">{{ group.label }}</span>
+                <span class="group-arrow" :class="{ 'group-arrow--open': openGroups[group.key] }">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </span>
+              </button>
+              <div v-show="openGroups[group.key]" class="menu-group-content">
+                <RouterLink
+                  v-for="link in group.links"
+                  :key="link.to"
+                  :to="link.to"
+                  class="nav-link nav-link--sub"
+                  :class="{ 'nav-link--active': isLinkActive(link.to) }"
+                  @click="frontSidebarOpen = false"
+                >
+                  {{ link.label }}
+                </RouterLink>
+              </div>
+            </div>
+          </template>
+
+          <!-- 其它工作區（會員、教練）維持一般扁平選單 -->
+          <template v-else>
+            <RouterLink
+              v-for="link in visibleLinks"
+              :key="link.to"
+              :to="link.to"
+              class="nav-link"
+              :class="{ 'nav-link--active': isLinkActive(link.to) }"
+              @click="frontSidebarOpen = false"
+            >
+              {{ link.label }}
+            </RouterLink>
+          </template>
+        </nav>
+      </div>
+      <!-- nav-auth 移至 navbar 直屬，見下方 -->
+      <!-- nav-auth 移至 navbar 直屬，不再在 nav-inner 內 -->
+      <div class="nav-auth">
+        <!-- 我的購物車只在登入為會員時出現 -->
+        <RouterLink
+          v-if="activeKey === 'member' && isPureMember"
+          to="/cart"
+          class="nav-link cart-link desktop-only"
+          :class="{ 'nav-link--active': isLinkActive('/cart') }"
+          @click="frontSidebarOpen = false"
+        >
+          我的購物車
+          <span
+            v-if="cart.itemCount > 0"
+            class="cart-badge"
+            :class="{ 'cart-badge--bump': badgeBump }"
+            @animationend="badgeBump = false"
+          >{{ cart.itemCount }}</span>
+        </RouterLink>
+
+        <Transition name="auth" mode="out-in">
+        <div v-if="auth.isLoggedIn" key="in" class="nav-auth__panel">
+          <div class="user-menu" @click.stop="toggleMenu" ref="menuRef">
+            <div class="user-info-row">
+              <span class="user-name" :title="auth.email">{{ displayName || auth.email }}</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'chevron-icon--open': menuOpen }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+
+            <!-- Dropup list -->
+            <Transition name="dropup">
+            <div v-if="menuOpen" class="dropdown">
+              <template v-if="activeKey === 'member' && isPureMember">
+                <RouterLink to="/member/profile" class="dropdown-item" @click="frontSidebarOpen = false">會員資料</RouterLink>
+                <RouterLink to="/member/courses" class="dropdown-item" @click="frontSidebarOpen = false">我的課程</RouterLink>
+                <RouterLink to="/reservation?tab=bookings" class="dropdown-item" @click="frontSidebarOpen = false">我的預約</RouterLink>
+                <RouterLink to="/orders" class="dropdown-item" @click="frontSidebarOpen = false">我的訂單</RouterLink>
+                <RouterLink to="/coupons" class="dropdown-item" @click="frontSidebarOpen = false">我的優惠券</RouterLink>
+                <RouterLink to="/health" class="dropdown-item" @click="frontSidebarOpen = false">我的AI健康管理</RouterLink>
+              </template>
+              <template v-else>
+                <RouterLink to="/employee/profile" class="dropdown-item" @click="frontSidebarOpen = false">基本資料</RouterLink>
+              </template>
+              <RouterLink to="/account/security" class="dropdown-item" @click="frontSidebarOpen = false">帳號設定</RouterLink>
+              <div class="dropdown-divider"></div>
+              <button type="button" class="dropdown-item dropdown-item--danger" @click="onLogout(); frontSidebarOpen = false">登出</button>
+            </div>
+            </Transition>
+          </div>
+          <ul class="nav-auth__roles" aria-label="目前身分" :title="`完整身分：${fullRoleList}`">
+            <li v-for="label in roleLabels" :key="label" class="nav-auth__role">{{ label }}</li>
+          </ul>
+        </div>
+        <div v-else key="out" class="nav-auth__panel">
+          <RouterLink
+            class="nav-auth__button nav-auth__button--primary"
+            :to="{ name: 'login', query: route.fullPath !== '/' ? { redirect: route.fullPath } : {} }"
+            @click="frontSidebarOpen = false"
+          >
+            登入
+          </RouterLink>
+          <RouterLink
+            class="nav-auth__button"
+            to="/member-register"
+            @click="frontSidebarOpen = false"
+          >
+            註冊
+          </RouterLink>
+        </div>
+        </Transition>
+      </div>
+    </aside>
+  </div>
 </template>
 
 <style scoped>
+/* Mobile Top Header Bar */
+  .mobile-top-bar {
+    display: none;
+  }
+
+  .sidebar-overlay-front {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    backdrop-filter: blur(2px);
+  }
+
+  /* Left Sidebar Navbar */
   .navbar {
     position: fixed;
     top: 0;
@@ -287,42 +507,58 @@
     width: 240px;
     display: flex;
     flex-direction: column;
-    background: #f2e8dc;
+    background: var(--bg-section);
     color: var(--text-primary);
-    padding: 1.75rem 1.25rem;
-    border-right: 2px solid #d5c2ab;
-    box-shadow: 6px 0 22px rgba(60, 48, 43, 0.22);
-    z-index: 100;
-    /* 側欄是 fixed 且上下撐滿，內容超過視窗高度時預設會被裁掉又無法捲動——
-       多重身分帳號的工作區連結較多，1280x720 這類矮視窗下底部的帳號區塊會完全點不到 */
-    overflow-y: auto;
+    padding: 1.5rem 1rem;
+    border-right: 1px solid var(--border);
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.03);
+    z-index: 1000;
+  }
+
+  .nav-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0.5rem 0;
+    flex-shrink: 0;
+  }
+
+  .nav-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 1rem;
+    overflow: hidden;
   }
 
   .brand {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    margin-bottom: 2.5rem;
+    padding: 0.25rem;
+    flex-shrink: 0;
   }
   .brand-mark {
     font-size: 1.6rem;
     font-weight: 900;
     letter-spacing: 0.1em;
     color: var(--primary-dark);
+    white-space: nowrap;
   }
   .brand-sub {
     font-size: 0.78rem;
     letter-spacing: 0.15em;
     color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .ws-switch {
     display: flex;
     gap: 0.25rem;
     padding: 0.25rem;
-    margin-bottom: 1rem;
     border-radius: var(--radius-sm);
-    background: #e6d8c6;
+    background: var(--bg-soft);
+    flex-shrink: 0;
   }
   .ws-tab {
     flex: 1;
@@ -340,33 +576,142 @@
     color: var(--primary-dark);
   }
   .ws-tab--active {
-    background: #f2e8dc;
+    background: var(--bg-section);
     color: var(--primary-dark);
-    box-shadow: 0 1px 3px rgba(60, 48, 43, 0.15);
+    box-shadow: 0 1px 3px rgba(60, 48, 43, 0.1);
   }
 
   .nav-links {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.3rem;
     flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    scrollbar-gutter: stable; /* 永遠預留滑軌空間，按鈕寬度不因滑軌出現而改變 */
+    overscroll-behavior: contain;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
   }
-  .nav-link {
-    padding: 0.65rem 0.9rem;
+
+  .nav-links::-webkit-scrollbar {
+    width: 6px;
+  }
+  .nav-links::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+  }
+  .nav-links::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* 後台摺疊分組選單 */
+  .menu-group {
+    margin-bottom: 0.2rem;
     border-radius: var(--radius-sm);
-    font-size: 0.95rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    transition: var(--transition);
+    overflow: hidden;
+    flex-shrink: 0; /* 禁止被其他分組壓縮 */
   }
-  .nav-link:hover {
-    background: #e6d8c6;
-    color: var(--primary-dark);
-  }
-  .cart-link {
+  .menu-group-header {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    text-align: left;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+  }
+  .menu-group-header:hover {
+    background: var(--bg-section);
+    border-color: var(--accent);
+  }
+  .group-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .group-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+    color: var(--text-muted);
+  }
+  .group-arrow--open {
+    transform: rotate(180deg);
+    color: var(--primary-dark);
+  }
+  .menu-group-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding-left: 0.85rem;
+    margin-top: 0.2rem;
+    border-left: 1px solid var(--border);
+    margin-left: 1.35rem;
+    margin-bottom: 0.3rem;
+  }
+  .nav-link--sub {
+    padding: 0.22rem 0.45rem;
+    font-size: 0.8rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    background: var(--bg-body);
+    transition: var(--transition);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+  .nav-link--sub:hover,
+  .nav-link--sub.nav-link--active {
+    color: var(--primary-dark);
+    background: var(--bg-soft);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  .nav-link {
+    padding: 0.55rem 0.75rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: var(--transition);
+    text-decoration: none;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-left: 3px solid transparent;
+    letter-spacing: 0.01em;
+  }
+  .nav-link:hover {
+    color: var(--text-primary);
+    background: var(--border);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+  .nav-link--active {
+    color: #ffffff;
+    background: var(--primary-dark);
+    border-left-color: var(--accent);
+    font-weight: 700;
+  }
+  .cart-link {
+    position: relative;
   }
   .cart-badge {
     display: inline-flex;
@@ -380,9 +725,9 @@
     color: #fff;
     font-size: 0.72rem;
     font-weight: 700;
+    margin-left: 0.4rem;
   }
 
-  /* 數量增加時彈跳一下。只在「變多」時播——移除商品也重播會讓刪除動作看起來像加入 */
   .cart-badge--bump {
     animation: cart-badge-bump 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
@@ -395,22 +740,22 @@
     .cart-badge--bump { animation: none; }
   }
 
-  .nav-link--active {
-    background: var(--accent);
-    color: #fff;
-    font-weight: 700;
+  .nav-auth {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+    margin-top: 0.75rem;
   }
 
-  /* nav-links 佔滿剩餘空間把這塊推到底；原本的 margin-bottom 是為了跟版權字隔開，
-     版權字移除後不再需要，留著只會讓登入區浮在離底部一段距離的地方 */
-  /* Transition 內只能有一個根節點，已登入的三個元素包成 panel */
   .nav-auth__panel {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
   }
 
-  /* 登入／登出切換：淡入淡出＋輕微位移，時間短到不拖慢操作感 */
   .auth-enter-active,
   .auth-leave-active {
     transition: opacity 0.22s ease, transform 0.22s ease;
@@ -424,11 +769,6 @@
     transform: translateY(-6px);
   }
 
-  .nav-auth {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
   .nav-auth__email {
     font-size: 0.78rem;
     color: var(--text-secondary);
@@ -456,7 +796,7 @@
   }
   .nav-auth__button {
     padding: 0.5rem 0.9rem;
-    border: 1px solid #d5c2ab;
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
@@ -467,7 +807,7 @@
     transition: var(--transition);
   }
   .nav-auth__button:hover {
-    background: #e6d8c6;
+    background: var(--bg-soft);
     color: var(--primary-dark);
   }
   .nav-auth__button--primary {
@@ -481,88 +821,161 @@
     color: #fff;
   }
 
+  /* 使用者選單 */
+  .user-menu {
+    position: relative;
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 0.6rem 0.9rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-soft);
+    user-select: none;
+  }
+  .user-info-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .user-name {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chevron-icon {
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .chevron-icon--open {
+    transform: rotate(180deg);
+  }
+  
+  /* 上拉選單 */
+  .dropdown {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: var(--bg-section);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.4rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    z-index: 10;
+  }
+  .dropup-enter-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+  .dropup-leave-active { transition: opacity 0.1s ease, transform 0.1s ease; }
+  .dropup-enter-from { opacity: 0; transform: translateY(6px); }
+  .dropup-leave-to   { opacity: 0; transform: translateY(6px); }
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.8rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-decoration: none;
+    background: none;
+    border: none;
+    width: 100%;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: left;
+    font-weight: 500;
+  }
+  .dropdown-item:hover {
+    background: var(--bg-soft);
+    color: var(--primary-dark);
+  }
+  .dropdown-item--danger {
+    color: #e03131;
+  }
+  .dropdown-item--danger:hover {
+    background: #ffe3e3;
+    color: #c01e1e;
+  }
+  .dropdown-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0.4rem 0;
+  }
 
   @media (max-width: 900px) {
-    .navbar {
-      right: 0;
-      bottom: auto;
-      width: 100%;
+    .mobile-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: fixed;
+      top: 0; left: 0; right: 0;
       height: 60px;
-      flex-direction: row;
-      align-items: center;
-      gap: 1rem;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
       padding: 0 1rem;
-      border-right: none;
-      border-bottom: 2px solid #d5c2ab;
-      box-shadow: 0 6px 22px rgba(60, 48, 43, 0.22);
+      z-index: 998;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
     }
-    .brand {
-      flex-direction: row;
-      align-items: baseline;
-      gap: 0.4rem;
-      margin-bottom: 0;
+    .btn-toggle-sidebar-front {
+      font-size: 1.5rem;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--text-primary);
     }
-    .brand-mark { font-size: 1.2rem; }
-    .brand-sub { display: none; }
-    .ws-switch {
-      margin-bottom: 0;
-      flex-shrink: 0;
-    }
-    .nav-links {
-      flex-direction: row;
-      overflow-x: auto;
-      gap: 0.25rem;
-      min-width: 0;
-    }
-    .nav-link {
-      white-space: nowrap;
-      padding: 0.4rem 0.7rem;
-      font-size: 0.88rem;
-    }
-    .nav-auth {
-      flex-direction: row;
+    .nav-logo-mobile {
+      display: flex;
       align-items: center;
-      margin-bottom: 0;
-      margin-left: auto;
-      flex-shrink: 0;
+      gap: 0.4rem;
+      text-decoration: none;
+      font-weight: 800;
+      color: var(--primary-dark);
+      font-size: 0.95rem;
     }
-    /* 頂欄寬度有限：隱藏 email，保留較有資訊量的角色徽章與登出鈕 */
-    .nav-auth__email { display: none; }
-    .nav-auth__roles { flex-wrap: nowrap; }
-    .nav-auth__role { white-space: nowrap; }
-    /* nav-auth__panel 桌面版是直向堆疊（側邊欄夠高），手機版橫向的 60px 頂欄放不下，
-       改橫向並排——同時涵蓋已登入（角色徽章＋登出）與訪客（登入＋註冊）兩種狀態 */
-    .nav-auth__panel {
-      flex-direction: row;
+    .mobile-top-actions {
+      display: flex;
       align-items: center;
       gap: 0.5rem;
     }
-    .nav-auth__button {
-      padding: 0.35rem 0.7rem;
-      font-size: 0.82rem;
-      white-space: nowrap;
+    .cart-btn-mobile {
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px;
+      color: var(--text-secondary);
     }
-  }
+    .cart-icon {
+      font-size: 1.25rem;
+    }
 
-  @media (max-width: 600px) {
+    .desktop-only {
+      display: none !important;
+    }
+
+    /* Floating drawer sidebar */
     .navbar {
-      gap: 0.4rem;
-      padding-inline: 0.5rem;
-      overflow-x: hidden;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 240px;
+      height: 100vh;
+      transform: translateX(-100%);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      background: rgba(250, 246, 240, 0.95);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      padding: 2rem 1rem 1rem;
+      border-right: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow: 4px 0 25px rgba(0, 0, 0, 0.15);
     }
-    .ws-switch { padding: 0.15rem; }
-    .ws-tab {
-      padding: 0.3rem 0.15rem;
-      font-size: 0.78rem;
-    }
-    .nav-auth__panel { gap: 0.25rem; }
-    .nav-auth__role {
-      padding-inline: 0.4rem;
-      font-size: 0.68rem;
-    }
-    .nav-auth__button {
-      padding: 0.3rem 0.45rem;
-      font-size: 0.76rem;
+    .navbar.sidebar-open {
+      transform: translateX(0);
     }
   }
 </style>
