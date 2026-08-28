@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="">
+<html lang="zh-Hant-TW">
   <head>
     <meta charset="UTF-8">
     <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- OAuth callback 頁的一次性 code／token 在 Vue 掛載前就已在網址上；no-referrer 讓
+         掛載前的同源子資源請求也不把完整 callback URL 放進 Referer（replaceState 仍保留）。 -->
+    <meta name="referrer" content="no-referrer">
     <meta name="description" content="威力健身房管理系統 — 教練預約、商城購物、AI 健康顧問一站式平台" />
     <title>威力健身房管理系統</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

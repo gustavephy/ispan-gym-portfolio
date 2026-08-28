@@ -199,6 +199,19 @@ const router = createRouter({
       name: 'employee-reapply',
       component: () => import('@/views/employee/EmployeeReapplyView.vue'),
     },
+    // Google OAuth 登入流程：後端 app.oauth.frontend-success-url／frontend-registration-url
+    // 直接把瀏覽器導到這兩個路徑，路徑名稱不可隨意更動。跟其他匿名頁一樣不掛 DefaultLayout。
+    // 失敗時後端改導 /login?oauthError=<reason>，由 LoginView 承接，不另設錯誤頁。
+    {
+      path: '/oauth/callback',
+      name: 'oauth-callback',
+      component: () => import('@/views/oauth/OAuthCallbackView.vue'),
+    },
+    {
+      path: '/oauth/register',
+      name: 'oauth-register',
+      component: () => import('@/views/oauth/OAuthRegisterView.vue'),
+    },
   ],
 })
 
