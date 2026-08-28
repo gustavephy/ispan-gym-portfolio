@@ -92,7 +92,8 @@ async function uploadFile(event) {
     }
   } catch (e) {
     console.error(e)
-    if (showToast) showToast('上傳失敗', 'error')
+    // 把後端的原因（格式不支援、超過大小上限…）顯示出來，不要一律「上傳失敗」
+    if (showToast) showToast(e.response?.data?.message || '上傳失敗', 'error')
   } finally {
     uploadingFile.value = false
   }

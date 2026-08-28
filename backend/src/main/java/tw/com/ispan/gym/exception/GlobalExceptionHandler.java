@@ -123,6 +123,16 @@ public class GlobalExceptionHandler {
      * 一個繞過程式碼的存在性檢查、直接撞上唯一索引）。不單獨列出會被下方的兜底接走，
      * 導致本該是使用者可理解的 409 變成看起來像系統壞掉的 500。
      */
+    /**
+     * 上傳檔案超過 spring.servlet.multipart.max-file-size（5MB）。Tomcat 在進 controller 之前就擋下，
+     * 不加這條會落到最下面的 Exception 兜底變成 500「系統發生錯誤」，使用者不知道是檔案太大。
+     */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleMaxUploadSize(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        return response(HttpStatus.CONTENT_TOO_LARGE, "FILE_TOO_LARGE", "檔案超過大小上限（5MB），請壓縮後再上傳");
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiErrorResponse> dataIntegrityViolation(DataIntegrityViolationException ex) {
         log.warn("資料庫限制衝突", ex);
