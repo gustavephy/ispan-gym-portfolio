@@ -46,3 +46,26 @@ export function formatImageUrl(url) {
 
   return processedUrl
 }
+
+/**
+ * 檔案上傳通用函數
+ * @param {File} file 圖片檔案
+ * @returns {Promise<string|null>} 上傳後的圖片網址
+ */
+import api from '@/api/axios.instance.js'
+
+export async function uploadImageFile(file) {
+  if (!file) return null
+  if (!file.type.startsWith('image/')) {
+    throw new Error('格式錯誤：只能上傳圖片檔案 (jpg, png, webp 等)')
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('照片檔案不能超過 5MB')
+  }
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await api.post('/api/admin/products/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  return res.url || res.data?.url || null
+}

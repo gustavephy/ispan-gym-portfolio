@@ -57,7 +57,7 @@ class EmployeeProfileControllerTest {
         return new EmployeeProfileResponse(
                 3, "employee@example.com", "小美", "王", "0922222222",
                 EmployeeRole.EMPLOYEE, EmployeeStatus.ACTIVE, LocalDate.of(2020, 1, 1),
-                false, LocalDateTime.now());
+                false, LocalDateTime.now(), null, null, null, null);
     }
 
     // === GET /api/employee/profile ==================================================
@@ -113,7 +113,11 @@ class EmployeeProfileControllerTest {
         mockMvc.perform(put("/api/employee/profile")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                { "phone": "0933333333" }
+                                { 
+                                    "firstName": "小美",
+                                    "lastName": "王",
+                                    "phone": "0933333333" 
+                                }
                                 """))
                 .andExpect(status().isOk());
 

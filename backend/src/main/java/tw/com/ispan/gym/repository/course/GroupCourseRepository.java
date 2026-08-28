@@ -36,8 +36,15 @@ public interface GroupCourseRepository extends JpaRepository<GroupCourse, Intege
 				AND (:search IS NULL OR :search = ''
 					OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))
 					OR LOWER(CONCAT(e.firstName, e.lastName)) LIKE LOWER(CONCAT('%', :search, '%')))
+				AND (:startDate IS NULL OR c.createdAt >= :startDate)
+				AND (:endDate IS NULL OR c.createdAt <= :endDate)
 			""")
-	Page<GroupCourse> searchCourses(@Param("status") CourseStatus status, @Param("search") String search, Pageable pageable);
+	Page<GroupCourse> searchCourses(
+			@Param("status") CourseStatus status, 
+			@Param("search") String search, 
+			@Param("startDate") java.time.LocalDateTime startDate,
+			@Param("endDate") java.time.LocalDateTime endDate,
+			Pageable pageable);
 
 	/**
 	 * 公開團課介紹頁用的分頁＋文字搜尋，只回傳上架中（status=ACTIVE）的課程。

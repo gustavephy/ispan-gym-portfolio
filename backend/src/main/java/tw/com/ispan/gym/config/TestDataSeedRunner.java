@@ -225,7 +225,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         log.info("測試帳號播種完成（密碼一律 {}；正式環境請以 SEED_TEST_DATA_ENABLED=false 停用）", TEST_PASSWORD);
     }
 
-    /** 帳號不存在就建立；存在則導正密碼與角色集合 */
+    /** 帳號不存在就建立；存在則導正為與密碼與角色集合 */
     private Account ensureAccount(String email, AccountType... roles) {
         Account account = accounts.findByEmailIgnoreCase(email).orElse(null);
         if (account == null) {
@@ -251,7 +251,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         return accounts.save(account);
     }
 
-    /** 會員列不存在就建立；存在則導正為 ACTIVE、未刪除 */
+    /** 會員列不存在就建立；存在則導正為 ACTIVE、未刪除、名字電話一致 */
     private Member ensureMember(Account account, String firstName, String lastName, String phone) {
         Member member = members.findByAccountId(account.getId()).orElse(null);
         if (member == null) {
@@ -264,16 +264,31 @@ public class TestDataSeedRunner implements CommandLineRunner {
             log.info("已建立測試會員 {}", account.getEmail());
             return members.save(member);
         }
+        boolean changed = false;
         if (member.getStatus() != UserStatus.ACTIVE || member.getDeletedAt() != null) {
             member.setStatus(UserStatus.ACTIVE);
             member.setDeletedAt(null);
-            member = members.save(member);
+            changed = true;
             log.info("已將測試會員 {} 導正為 ACTIVE", account.getEmail());
+        }
+        if (!firstName.equals(member.getFirstName()) || !lastName.equals(member.getLastName())) {
+            member.setFirstName(firstName);
+            member.setLastName(lastName);
+            changed = true;
+            log.info("已導正測試會員 {} 姓名 → {}{}", account.getEmail(), lastName, firstName);
+        }
+        if (!phone.equals(member.getPhone())) {
+            member.setPhone(phone);
+            changed = true;
+            log.info("已導正測試會員 {} 電話 → {}", account.getEmail(), phone);
+        }
+        if (changed) {
+            member = members.save(member);
         }
         return member;
     }
 
-    /** 員工列不存在就建立；存在則導正為 ACTIVE、指定職級、未刪除 */
+    /** 員工列不存在就建立；存在則導正為 ACTIVE、指定職級、未刪除、姓名電話一致 */
     private Employee ensureEmployee(Account account, String firstName, String lastName,
             String phone, EmployeeRole role) {
         Employee employee = employees.findByAccountId(account.getId()).orElse(null);
@@ -299,11 +314,14 @@ public class TestDataSeedRunner implements CommandLineRunner {
             employee.setRole(role);
             changed = true;
         }
-        // 導正姓名（修正舊資料殘留的「測試教練」等無效名稱）
         if (!firstName.equals(employee.getFirstName()) || !lastName.equals(employee.getLastName())) {
             employee.setFirstName(firstName);
             employee.setLastName(lastName);
+            changed = true;
             log.info("已導正測試員工 {} 姓名 → {}{}", account.getEmail(), lastName, firstName);
+        }
+        if (!phone.equals(employee.getPhone())) {
+            employee.setPhone(phone);
             changed = true;
         }
         if (changed) {
@@ -313,14 +331,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
         return employee;
     }
 
-    /** 教練列不存在就建立；存在則導正為未刪除（status 不動，UNAVAILABLE 是合法展示情境） */
+    /** 教練列不存在就建立；存在則導正為未刪除，且姓名專長與 Seed 一致 */
     private Trainer ensureTrainer(Employee employee, String specialty) {
         Trainer trainer = trainers.findByEmployeeId(employee.getId()).orElse(null);
         if (trainer == null) {
             trainer = new Trainer();
             trainer.setEmployee(employee);
-            // populate required personal info from employee/account to satisfy non-null DB
-            // constraints
             trainer.setFirstName(employee.getFirstName());
             trainer.setLastName(employee.getLastName());
             trainer.setEmail(employee.getAccount().getEmail());
@@ -331,24 +347,23 @@ public class TestDataSeedRunner implements CommandLineRunner {
             return trainers.save(trainer);
         }
         boolean changed = false;
-        // 導正姓名（修正舊資料殘留的「測試教練」等無效名稱）
         if (!employee.getFirstName().equals(trainer.getFirstName())
                 || !employee.getLastName().equals(trainer.getLastName())) {
             trainer.setFirstName(employee.getFirstName());
             trainer.setLastName(employee.getLastName());
-            log.info("已導正教練姓名 → {}{}", employee.getLastName(), employee.getFirstName());
             changed = true;
+            log.info("已導正教練姓名 → {}{}", employee.getLastName(), employee.getFirstName());
         }
         if (!specialty.equals(trainer.getSpecialty())) {
             trainer.setSpecialty(specialty);
             trainer.setBio("專注於" + specialty + "，致力於以科學且安全的方式帶領學員達到心目中的理想體態。");
-            log.info("已更新測試教練 {} 的專長為 {}", employee.getLastName() + employee.getFirstName(), specialty);
             changed = true;
+            log.info("已更新測試教練 {} 的專長為 {}", employee.getLastName() + employee.getFirstName(), specialty);
         }
         if (trainer.getDeletedAt() != null) {
             trainer.setDeletedAt(null);
-            log.info("已將測試教練（employee={}）導正為未刪除", employee.getId());
             changed = true;
+            log.info("已將測試教練（employee={}）導正為未刪除", employee.getId());
         }
         if (changed) {
             trainer = trainers.save(trainer);

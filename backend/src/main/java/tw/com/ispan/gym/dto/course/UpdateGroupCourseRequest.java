@@ -26,4 +26,5 @@ public class UpdateGroupCourseRequest {
     private String imageUrl;
     private Boolean isTrial;
     private Integer courseCategoryId;
+    private Integer trainerId;
 }

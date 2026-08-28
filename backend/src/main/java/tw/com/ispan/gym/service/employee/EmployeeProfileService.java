@@ -33,17 +33,23 @@ public class EmployeeProfileService {
 
     private final EmployeeRepository employees;
     private final TrainerRepository trainers;
+    private final tw.com.ispan.gym.repository.member.MemberRepository members;
 
-    public EmployeeProfileService(EmployeeRepository employees, TrainerRepository trainers) {
+    public EmployeeProfileService(EmployeeRepository employees, TrainerRepository trainers, tw.com.ispan.gym.repository.member.MemberRepository members) {
         this.employees = employees;
         this.trainers = trainers;
+        this.members = members;
     }
 
     public EmployeeProfileResponse getMyProfile(Integer employeeId) {
         Employee employee = employees.findById(employeeId)
                 .filter(e -> e.getDeletedAt() == null && e.getStatus() == EmployeeStatus.ACTIVE)
                 .orElseThrow(() -> new ForbiddenAccessException("此帳號沒有可用的員工資料"));
-        return EmployeeProfileResponse.from(employee, isTrainer(employee.getId()));
+        
+        tw.com.ispan.gym.entity.trainer.Trainer trainer = trainers.findByEmployeeId(employee.getId())
+                .filter(t -> t.getDeletedAt() == null)
+                .orElse(null);
+        return EmployeeProfileResponse.from(employee, trainer);
     }
 
     @Transactional
@@ -52,12 +58,47 @@ public class EmployeeProfileService {
                 .filter(e -> e.getDeletedAt() == null && e.getStatus() == EmployeeStatus.ACTIVE)
                 .orElseThrow(() -> new ForbiddenAccessException("此帳號沒有可用的員工資料"));
 
+        employee.setFirstName(request.getFirstName());
+        employee.setLastName(request.getLastName());
         employee.setPhone(request.getPhone());
 
-        return EmployeeProfileResponse.from(employee, isTrainer(employee.getId()));
+        // 同步姓名及其他教練資料到 trainer 表（若具有教練身分）
+        tw.com.ispan.gym.entity.trainer.Trainer trainer = trainers.findByEmployeeId(employee.getId())
+                .filter(t -> t.getDeletedAt() == null)
+                .orElse(null);
+
+        if (trainer != null) {
+            trainer.setFirstName(employee.getFirstName());
+            trainer.setLastName(employee.getLastName());
+            
+            // 允許教練修改頭像與自我介紹等資訊
+            if (request.getProfileImageUrl() != null) {
+                trainer.setProfileImageUrl(request.getProfileImageUrl());
+            }
+            if (request.getSpecialty() != null) {
+                trainer.setSpecialty(request.getSpecialty());
+            }
+            if (request.getExperience() != null) {
+                trainer.setExperience(request.getExperience());
+            }
+            if (request.getBio() != null) {
+                trainer.setBio(request.getBio());
+            }
+            trainers.save(trainer);
+        }
+
+        // 同步姓名到會員 (Member) 資料表
+        members.findByAccountId(accountId).ifPresent(member -> {
+            member.setFirstName(employee.getFirstName());
+            member.setLastName(employee.getLastName());
+            // 同步電話（長度 10 碼限制）
+            if (employee.getPhone() != null && employee.getPhone().length() == 10) {
+                member.setPhone(employee.getPhone());
+            }
+            members.save(member);
+        });
+
+        return EmployeeProfileResponse.from(employee, trainer);
     }
 
-    private boolean isTrainer(Integer employeeId) {
-        return trainers.findByEmployeeId(employeeId).filter(t -> t.getDeletedAt() == null).isPresent();
-    }
 }

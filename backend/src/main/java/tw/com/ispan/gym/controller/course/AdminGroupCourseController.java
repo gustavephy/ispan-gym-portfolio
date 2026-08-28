@@ -48,8 +48,10 @@ public class AdminGroupCourseController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) CourseStatus status,
-            @RequestParam(required = false) String search) {
-        PageResponse<GroupCourseResponse> resp = groupCourseService.getAllCourses(page, size, status, search);
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        PageResponse<GroupCourseResponse> resp = groupCourseService.getAllCourses(page, size, status, search, startDate, endDate);
         return ResponseEntity.status(HttpStatus.OK).body(resp);
     }
 

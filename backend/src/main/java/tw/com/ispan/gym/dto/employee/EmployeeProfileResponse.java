@@ -21,9 +21,14 @@ public record EmployeeProfileResponse(
         EmployeeStatus status,
         LocalDate hireDate,
         boolean isTrainer,
-        LocalDateTime createdAt) {
+        LocalDateTime createdAt,
+        String profileImageUrl,
+        String specialty,
+        String experience,
+        String bio) {
 
-    public static EmployeeProfileResponse from(Employee employee, boolean isTrainer) {
+    public static EmployeeProfileResponse from(Employee employee, tw.com.ispan.gym.entity.trainer.Trainer trainer) {
+        boolean hasTrainer = trainer != null && trainer.getDeletedAt() == null;
         return new EmployeeProfileResponse(
                 employee.getId(),
                 employee.getAccount().getEmail(),
@@ -33,7 +38,11 @@ public record EmployeeProfileResponse(
                 employee.getRole(),
                 employee.getStatus(),
                 employee.getHireDate(),
-                isTrainer,
-                employee.getCreatedAt());
+                hasTrainer,
+                employee.getCreatedAt(),
+                hasTrainer && trainer != null ? trainer.getProfileImageUrl() : null,
+                hasTrainer && trainer != null ? trainer.getSpecialty() : null,
+                hasTrainer && trainer != null ? trainer.getExperience() : null,
+                hasTrainer && trainer != null ? trainer.getBio() : null);
     }
 }
