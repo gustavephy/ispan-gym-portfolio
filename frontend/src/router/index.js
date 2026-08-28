@@ -236,15 +236,15 @@ const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore()
   
-  // 根據角色自訂首頁導向
-  if (to.path === '/') {
-    if (auth.isLoggedIn) {
-      if (auth.roles.includes('TRAINER')) {
-        return '/trainer/schedules'
-      }
-      if (auth.roles.includes('ADMIN') || auth.roles.includes('EMPLOYEE')) {
-        return '/admin/reports'
-      }
+  // 根據角色自訂首頁導向。只導到該角色「進得去」的頁：/admin/reports 要求 ADMIN，
+  // 純員工（非管理員、非教練）若也導過去，會被下面的角色守衛踢回 /，再被這裡導走……
+  // 形成無限重導，整站開不起來。純員工就留在首頁。
+  if (to.path === '/' && auth.isLoggedIn) {
+    if (auth.roles.includes('TRAINER')) {
+      return '/trainer/schedules'
+    }
+    if (auth.roles.includes('ADMIN')) {
+      return '/admin/reports'
     }
   }
 
