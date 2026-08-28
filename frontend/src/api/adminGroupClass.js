@@ -6,13 +6,30 @@ import api from './axios.instance.js'
 // 那邊管課程本身（教練、名稱、預設容量……），這裡管特定日期/教室的場次。
 
 /**
- * 分頁查詢團課場次列表，可依課程名稱、教練姓名或教室搜尋，需登入且為 ADMIN。
- * 後台專用端點，跟會員瀏覽用的 GroupClassController#getUpcomingSessions（行事曆用，
- * 一次回傳全部資料）分開，不要混用。
- * @param {{page?: number, size?: number, search?: string}} params page 從 0 開始
+ * 分頁查詢團課場次列表，可依課程名稱、教練姓名或教室搜尋，並可依狀態、開課日期區間篩選，
+ * 需登入且為 ADMIN。查詢範圍是全部場次（含已取消、含已結束）。後台專用端點，跟會員瀏覽用的
+ * GroupClassController#getUpcomingSessions（行事曆用，固定只回傳未來可報名的場次，一次回傳
+ * 全部資料）分開，不要混用。
+ * @param {{page?: number, size?: number, search?: string, status?: string, dateFrom?: string, dateTo?: string}} params page 從 0 開始
  */
-export const getSessions = ({ page = 0, size = 10, search = '' } = {}) =>
-  api.get('/api/admin/group-classes', { params: { page, size, search } })
+export const getSessions = ({
+  page = 0,
+  size = 10,
+  search = '',
+  status = '',
+  dateFrom = '',
+  dateTo = '',
+} = {}) =>
+  api.get('/api/admin/group-classes', {
+    params: {
+      page,
+      size,
+      search,
+      status: status || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+    },
+  })
 
 /**
  * 取得所有合法的教室選項（代碼＋中文名稱＋顏色），教室清單後端已改為固定 enum，

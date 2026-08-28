@@ -18,6 +18,13 @@ import { TIME_OPTIONS } from '@/utils/businessHours.js'
 const STATUS_MAP = {
   SCHEDULED: { label: '已排定', className: 'status-available' },
   CANCELLED: { label: '已取消', className: 'status-cancelled' },
+  ENDED: { label: '已結束', className: 'status-ended' },
+}
+
+// 判斷場次是否已經結束：SCHEDULED 但下課時間已過去，跟「已取消」是兩回事，
+// 純粹是顯示用的衍生判斷，不影響 session.status 本身，也不送回後端
+function isEnded(session) {
+  return session.status === 'SCHEDULED' && new Date(session.endAt) < new Date()
 }
 
 const courses = ref([])
@@ -52,6 +59,11 @@ const totalItems = ref(0)
 const totalPages = ref(0)
 let searchDebounceTimer = null
 
+// 狀態與開課日期區間篩選；dateFrom 預設今天，避免一開啟就顯示最古老的歷史紀錄
+const statusFilter = ref('')
+const dateFrom = ref(todayDateString())
+const dateTo = ref('')
+
 // 開始日期改到比目前結束日期更晚時，原本選的結束日期就不合法了，清空讓使用者重選
 // （寫法比照 TrainerScheduleView.vue 的同名 watch）
 watch(
@@ -81,15 +93,14 @@ watch(
   },
 )
 
-// 依開始時間排序；status 為 CANCELLED 的場次理論上後端不會回傳，這裡仍加一層防呆篩選
+// 依開始時間排序
 const visibleSessions = computed(() =>
-  [...sessions.value]
-    .filter((session) => session.status !== 'CANCELLED')
-    .sort((a, b) => new Date(a.startAt) - new Date(b.startAt)),
+  [...sessions.value].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)),
 )
 
-function statusInfo(status) {
-  return STATUS_MAP[status] || { label: status, className: '' }
+function statusInfo(session) {
+  if (isEnded(session)) return STATUS_MAP.ENDED
+  return STATUS_MAP[session.status] || { label: session.status, className: '' }
 }
 
 function formatDateTime(value) {
@@ -147,7 +158,14 @@ async function fetchRoomOptions() {
 async function fetchSessions() {
   sessionsLoading.value = true
   try {
-    const res = await getSessions({ page: page.value, size: size.value, search: search.value })
+    const res = await getSessions({
+      page: page.value,
+      size: size.value,
+      search: search.value,
+      status: statusFilter.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+    })
     sessions.value = res.data.items
     totalItems.value = res.data.totalItems
     totalPages.value = res.data.totalPages
@@ -164,6 +182,12 @@ watch(search, () => {
     page.value = 0
     fetchSessions()
   }, 400)
+})
+
+// 狀態下拉／日期輸入不像文字輸入會逐字觸發，不需要 debounce
+watch([statusFilter, dateFrom, dateTo], () => {
+  page.value = 0
+  fetchSessions()
 })
 
 function handlePageChange(newPage) {
@@ -421,6 +445,26 @@ onUnmounted(() => {
       <input id="sessionSearch" v-model="search" type="text" placeholder="搜尋課程名稱、教練或教室" />
     </div>
 
+    <div class="filters">
+      <label class="filter">
+        <span class="filter__label">狀態</span>
+        <select v-model="statusFilter" class="filter__input">
+          <option value="">全部</option>
+          <option value="SCHEDULED">已排定</option>
+          <option value="ENDED">已結束</option>
+          <option value="CANCELLED">已取消</option>
+        </select>
+      </label>
+      <label class="filter">
+        <span class="filter__label">起始日期</span>
+        <input v-model="dateFrom" type="date" class="filter__input" :max="dateTo || undefined" />
+      </label>
+      <label class="filter">
+        <span class="filter__label">結束日期</span>
+        <input v-model="dateTo" type="date" class="filter__input" :min="dateFrom || undefined" />
+      </label>
+    </div>
+
     <OperationMessage :message="sessionListMessage" />
 
     <div v-if="sessionsLoading" class="spinner"></div>
@@ -450,12 +494,12 @@ onUnmounted(() => {
             <td>{{ formatDateTime(session.endAt) }}</td>
             <td>{{ session.bookedCount }}/{{ session.capacity }}</td>
             <td>
-              <span class="status-badge" :class="statusInfo(session.status).className">
-                {{ statusInfo(session.status).label }}
+              <span class="status-badge" :class="statusInfo(session).className">
+                {{ statusInfo(session).label }}
               </span>
             </td>
             <td>
-              <div v-if="session.status !== 'CANCELLED'" class="row-actions">
+              <div v-if="session.status !== 'CANCELLED' && !isEnded(session)" class="row-actions">
                 <button class="btn btn-outline" type="button" @click="openEditModal(session)">編輯</button>
                 <button class="btn btn-outline" type="button" @click="handleCancelSession(session)">取消</button>
               </div>
@@ -596,6 +640,34 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.filter__label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.filter__input {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  min-width: 8rem;
+}
+
 .empty-state {
   color: var(--text-muted);
   padding: 2rem 0;
@@ -644,6 +716,11 @@ onUnmounted(() => {
 .status-cancelled {
   background: #f1ecea;
   color: var(--text-muted);
+}
+
+.status-ended {
+  background: #eef1f5;
+  color: #5b6b7a;
 }
 
 .row-actions {
