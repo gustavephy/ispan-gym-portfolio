@@ -424,15 +424,25 @@ class CoachSlotServiceTest {
 
     @Test
     void searchSlots_只查AVAILABLE且不需教練身分() {
+        when(trainers.existsById(TRAINER_ID)).thenReturn(true);
         CoachSlot available = slot(trainer(TRAINER_ID), SlotStatus.AVAILABLE);
-        when(slots.findByTrainerIdAndStatusOrderByStartAtAsc(TRAINER_ID, SlotStatus.AVAILABLE))
-                .thenReturn(List.of(available));
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
+        when(slots.searchAvailableSlots(TRAINER_ID, null, null, pageable))
+                .thenReturn(new PageImpl<>(List.of(available), pageable, 1));
 
-        List<CoachSlotResponse> response = service.searchSlots(TRAINER_ID);
+        PageResponse<CoachSlotResponse> response = service.searchSlots(TRAINER_ID, 0, 10, null, null);
 
-        assertThat(response).hasSize(1);
-        assertThat(response.get(0).getStatus()).isEqualTo(SlotStatus.AVAILABLE);
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).getStatus()).isEqualTo(SlotStatus.AVAILABLE);
         // 會員瀏覽任意教練的時段，不應觸發身分解析
         verify(employees, never()).findByAccountId(any());
+    }
+
+    @Test
+    void searchSlots_教練不存在時回404() {
+        when(trainers.existsById(TRAINER_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.searchSlots(TRAINER_ID, 0, 10, null, null))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }

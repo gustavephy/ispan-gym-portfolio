@@ -25,6 +25,7 @@ import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
+import tw.com.ispan.gym.enums.coach.GroupClassSessionFilterStatus;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
 import tw.com.ispan.gym.exception.BusinessRuleException;
@@ -111,20 +112,39 @@ public class GroupClassService {
         }
 
         /**
-         * 後台團課場次列表，分頁＋依課程名稱／教練姓名／教室搜尋。篩選邏輯沿用
-         * {@link #getUpcomingSessions()}（status=SCHEDULED 且尚未開始），只是多了分頁與搜尋，
-         * 這是全新的方法，{@link #getUpcomingSessions()} 本身不受影響——那支是會員瀏覽團課行事曆的
-         * 資料來源，前端依賴它一次回傳全部資料，不能改動。
+         * 後台團課場次列表，分頁＋依課程名稱／教練姓名／教室搜尋，並可依狀態、開課日期區間篩選。
+         * 查詢範圍是全部場次（含已取消、含已結束），這是全新的方法，{@link #getUpcomingSessions()}
+         * 本身不受影響——那支是會員瀏覽團課行事曆的資料來源，前端依賴它一次回傳全部資料，不能改動。
          */
         @Transactional(readOnly = true)
-        public PageResponse<GroupClassSessionResponse> getUpcomingSessionsForAdmin(int page, int size,
-                        String search) {
+        public PageResponse<GroupClassSessionResponse> searchSessionsForAdmin(int page, int size,
+                        String search, GroupClassSessionFilterStatus filterStatus, LocalDate dateFrom,
+                        LocalDate dateTo) {
                 int safePage = Math.max(page, 0);
                 int safeSize = Math.min(Math.max(size, 1), 100);
                 Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "startAt"));
 
-                Page<GroupClassSession> result = groupClassSessionRepository.searchUpcomingSessions(
-                                GroupClassSessionStatus.SCHEDULED, LocalDateTime.now(), search,
+                LocalDateTime startAtFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
+                LocalDateTime startAtTo = dateTo == null ? null : dateTo.plusDays(1).atStartOfDay();
+
+                LocalDateTime now = LocalDateTime.now();
+
+                // 把「篩選用」狀態轉譯成真正的 GroupClassSessionStatus + 是否已結束的旗標，
+                // 資料庫欄位跟 entity 完全不知道 ENDED 這個概念，轉譯只在這裡發生一次。
+                GroupClassSessionStatus effectiveStatus = switch (filterStatus) {
+                        case null -> null;
+                        case CANCELLED -> GroupClassSessionStatus.CANCELLED;
+                        case SCHEDULED, ENDED -> GroupClassSessionStatus.SCHEDULED;
+                };
+                Boolean requireEnded = switch (filterStatus) {
+                        case null -> null;
+                        case CANCELLED -> null;
+                        case SCHEDULED -> false;
+                        case ENDED -> true;
+                };
+
+                Page<GroupClassSession> result = groupClassSessionRepository.searchSessionsForAdmin(
+                                effectiveStatus, requireEnded, now, startAtFrom, startAtTo, search,
                                 matchesRoom(ClassRoom.YOGA_ROOM, search), matchesRoom(ClassRoom.BOXING_ROOM, search),
                                 matchesRoom(ClassRoom.WEIGHT_ROOM, search), pageable);
 
