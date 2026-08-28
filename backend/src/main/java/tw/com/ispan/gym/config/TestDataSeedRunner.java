@@ -100,6 +100,9 @@ public class TestDataSeedRunner implements CommandLineRunner {
     /** 樣本訂單的 order_no 前綴，用來辨識哪些是播種產生的，不會誤動真實下單流程的訂單 */
     private static final String SAMPLE_ORDER_PREFIX = "SEED-ORD-";
     private static final int SAMPLE_ORDER_COUNT = 10;
+    /** 種子私教課的課名；ensureCatalogData 用它辨識哪些私教課是種子建的、哪些是後台手動新增的 */
+    private static final List<String> SEED_PRIVATE_COURSE_NAMES = List.of(
+            "一對一重訓體驗課", "重訓入門計畫（5堂）", "重訓進階計畫（10堂）");
 
     private final AccountRepository accounts;
     private final MemberRepository members;
@@ -485,14 +488,25 @@ public class TestDataSeedRunner implements CommandLineRunner {
                 "DELETE FROM private_course WHERE course_category_id IN (SELECT course_category_id FROM course_category WHERE name = '一對一私教')");
         jdbc.execute("DELETE FROM course_category WHERE name = '一對一私教'");
 
+        // 舊版種子的殘留特徵：團課全掛在同一位教練、種子私教課掛錯專長的教練、還留著舊的「體態雕塑」課名。
+        // 只看「種子自己建的」那幾筆（依課名辨識），後台手動新增的課程不列入判斷——
+        // 先前用 privateCourses.count() != 3 當條件，管理員多建一門課就整批重播，是資料流失的來源。
         long distinctTrainers = groupCourses.findAll().stream().map(gc -> gc.getTrainer().getId()).distinct().count();
-        boolean hasInvalidPrivateTrainer = privateCourses.findAll().stream()
-                .anyMatch(pc -> pc.getTrainer() == null || !pc.getTrainer().getSpecialty().contains("重量訓練"));
-        boolean hasBodySculptingCourse = privateCourses.findAll().stream()
-                .anyMatch(pc -> pc.getName().contains("體態雕塑"));
-        if (distinctTrainers <= 1 || groupCourses.count() < 16 || privateCourses.count() != 3
-                || hasInvalidPrivateTrainer || hasBodySculptingCourse) {
-            log.info("團體課程教練未分散、私教課數不為 3、教練專長不符或含有舊私教名稱，重新清除並播種以分配至 12 位教練…");
+        List<PrivateCourse> allPrivate = privateCourses.findAll();
+        boolean hasInvalidPrivateTrainer = allPrivate.stream()
+                .filter(pc -> SEED_PRIVATE_COURSE_NAMES.contains(pc.getName()))
+                .anyMatch(pc -> pc.getTrainer() == null || pc.getTrainer().getSpecialty() == null
+                        || !pc.getTrainer().getSpecialty().contains("重量訓練"));
+        boolean hasBodySculptingCourse = allPrivate.stream().anyMatch(pc -> pc.getName().contains("體態雕塑"));
+        boolean legacySeedDetected = (groupCourses.count() > 0 && distinctTrainers <= 1)
+                || hasInvalidPrivateTrainer || hasBodySculptingCourse;
+        if (legacySeedDetected && hasLiveTransactionalData()) {
+            // 重播會把訂單、預約、已購堂數全部刪掉；資料庫裡已經有真實交易時寧可留著舊種子。
+            // 而且 member_course_quota.order_item_id 參照 order_item，硬刪會撞 FK 讓後端起不來。
+            log.warn("偵測到舊版種子課程，但資料庫已有真實訂單／預約／已購堂數，略過重播。"
+                    + "要回到乾淨種子請重建資料庫（frontend: npm run test:e2e:fresh）");
+        } else if (legacySeedDetected) {
+            log.info("偵測到舊版種子課程（團課教練未分散／私教教練專長不符／含舊私教名稱），重新清除並播種以分配至 12 位教練…");
             jdbc.execute("DELETE FROM group_class_booking");
             jdbc.execute("DELETE FROM session_deduction_log");
             jdbc.execute("DELETE FROM coach_booking");
@@ -513,6 +527,21 @@ public class TestDataSeedRunner implements CommandLineRunner {
         ensurePrivateCourses(seededTrainers);
         ensure17Coupons();
         ensureSampleOrders();
+    }
+
+    /**
+     * 資料庫裡是否已有「真實流程」產生的交易資料：私教預約、團課報名、買課得到的堂數、
+     * 非樣本訂單。有的話代表這不是一顆只有種子的展示資料庫，任何整批刪除都不該執行。
+     * 樣本訂單以 {@value #SAMPLE_ORDER_PREFIX}／{@value #SEED_SUBSCRIPTION_ORDER_NO} 前綴辨識。
+     */
+    private boolean hasLiveTransactionalData() {
+        Integer live = jdbc.queryForObject("""
+                SELECT (SELECT COUNT(*) FROM coach_booking)
+                     + (SELECT COUNT(*) FROM group_class_booking)
+                     + (SELECT COUNT(*) FROM member_course_quota WHERE order_item_id IS NOT NULL)
+                     + (SELECT COUNT(*) FROM orders WHERE order_no IS NULL OR order_no NOT LIKE 'SEED-%')
+                """, Integer.class);
+        return live != null && live > 0;
     }
 
     /**
@@ -984,9 +1013,9 @@ public class TestDataSeedRunner implements CommandLineRunner {
         record Seed(String name, String desc, int price, int sessions, boolean trial) {
         }
         List<Seed> seeds = List.of(
-                new Seed("一對一重訓體驗課", "首次體驗，單堂一對一指導，評估體能並初步規劃重訓方向。", 800, 1, true),
-                new Seed("重訓入門計畫（5堂）", "從姿勢與呼吸打底，建立深蹲、硬舉、臥推三大動作基礎。", 6500, 5, false),
-                new Seed("重訓進階計畫（10堂）", "依 InBody 數據客製課表，系統化進行進階重訓，十堂完成階段性目標。", 12000, 10, false));
+                new Seed(SEED_PRIVATE_COURSE_NAMES.get(0), "首次體驗，單堂一對一指導，評估體能並初步規劃重訓方向。", 800, 1, true),
+                new Seed(SEED_PRIVATE_COURSE_NAMES.get(1), "從姿勢與呼吸打底，建立深蹲、硬舉、臥推三大動作基礎。", 6500, 5, false),
+                new Seed(SEED_PRIVATE_COURSE_NAMES.get(2), "依 InBody 數據客製課表，系統化進行進階重訓，十堂完成階段性目標。", 12000, 10, false));
 
         List<Trainer> weightTrainers = seededTrainers.stream()
                 .filter(t -> t.getSpecialty() != null && t.getSpecialty().contains("重量訓練"))
