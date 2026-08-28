@@ -186,7 +186,7 @@ class OrderQueryServiceTest {
         assertThat(item.productId()).isNull();
         assertThat(item.sessionPerUnit()).isEqualTo(5);
         assertThat(item.totalSessions()).isEqualTo(10); // 5 堂/單位 × 2 單位
-        assertThat(item.trainerName()).isEqualTo("阿肌陳");
+        assertThat(item.trainerName()).isEqualTo("陳阿肌"); // 統一「姓 + 名」
         assertThat(item.lineAmount()).isEqualByComparingTo("13000");
     }
 

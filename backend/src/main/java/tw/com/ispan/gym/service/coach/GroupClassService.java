@@ -91,9 +91,7 @@ public class GroupClassService {
                                                 session.getId(),
                                                 session.getCourse().getId(),
                                                 session.getCourse().getTrainer().getId(),
-                                                session.getCourse().getTrainer().getEmployee().getFirstName() + " "
-                                                                + session.getCourse().getTrainer().getEmployee()
-                                                                                .getLastName(),
+                                                session.getCourse().getTrainer().getEmployee().getDisplayName(),
                                                 session.getCourse().getName(),
                                                 session.getRoomName(),
                                                 session.getRoomName().getDisplayName(),
@@ -135,9 +133,7 @@ public class GroupClassService {
                                                 session.getId(),
                                                 session.getCourse().getId(),
                                                 session.getCourse().getTrainer().getId(),
-                                                session.getCourse().getTrainer().getEmployee().getFirstName() + " "
-                                                                + session.getCourse().getTrainer().getEmployee()
-                                                                                .getLastName(),
+                                                session.getCourse().getTrainer().getEmployee().getDisplayName(),
                                                 session.getCourse().getName(),
                                                 session.getRoomName(),
                                                 session.getRoomName().getDisplayName(),
@@ -232,8 +228,7 @@ public class GroupClassService {
                 GroupClassSession saved = groupClassSessionRepository.save(groupClassSession);
                 return new GroupClassSessionResponse(saved.getId(), groupCourse.getId(),
                                 groupCourse.getTrainer().getId(),
-                                groupCourse.getTrainer().getEmployee().getFirstName() + " "
-                                                + groupCourse.getTrainer().getEmployee().getLastName(),
+                                groupCourse.getTrainer().getEmployee().getDisplayName(),
                                 groupCourse.getName(), saved.getRoomName(), saved.getRoomName().getDisplayName(),
                                 saved.getRoomName().getColorHex(), saved.getStartAt(), saved.getEndAt(),
                                 saved.getCapacity(),
@@ -312,8 +307,7 @@ public class GroupClassService {
                 GroupClassSession saved = groupClassSessionRepository.saveAndFlush(session);
                 return new GroupClassSessionResponse(saved.getId(), saved.getCourse().getId(),
                                 saved.getCourse().getTrainer().getId(),
-                                saved.getCourse().getTrainer().getEmployee().getFirstName() + " "
-                                                + saved.getCourse().getTrainer().getEmployee().getLastName(),
+                                saved.getCourse().getTrainer().getEmployee().getDisplayName(),
                                 saved.getCourse().getName(), saved.getRoomName(), saved.getRoomName().getDisplayName(),
                                 saved.getRoomName().getColorHex(), saved.getStartAt(), saved.getEndAt(),
                                 saved.getCapacity(),
@@ -547,8 +541,7 @@ public class GroupClassService {
 
                 return new GroupClassSessionResponse(saved.getId(), saved.getCourse().getId(),
                                 saved.getCourse().getTrainer().getId(),
-                                saved.getCourse().getTrainer().getEmployee().getFirstName() + " "
-                                                + saved.getCourse().getTrainer().getEmployee().getLastName(),
+                                saved.getCourse().getTrainer().getEmployee().getDisplayName(),
                                 saved.getCourse().getName(), saved.getRoomName(), saved.getRoomName().getDisplayName(),
                                 saved.getRoomName().getColorHex(), saved.getStartAt(),
                                 saved.getEndAt(), saved.getCapacity(), saved.getBookedCount(),

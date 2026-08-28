@@ -86,6 +86,6 @@ public class AdminOrderQueryService {
     }
 
     private String memberName(Order order) {
-        return order.getMember().getFirstName() + order.getMember().getLastName();
+        return order.getMember().getDisplayName();
     }
 }
