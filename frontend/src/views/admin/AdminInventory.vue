@@ -27,7 +27,7 @@
     </div>
 
     <!-- 篩選標籤 -->
-    <div class="inventory-tabs">
+    <div class="erp-tabs" style="display: flex; gap: 1.5rem; border-bottom: 1.5px solid var(--border, #e2e8f0); margin-bottom: 1.5rem;">
       <button 
         class="tab-btn" 
         :class="{ active: currentTab === 'low' }" 
@@ -45,94 +45,101 @@
     </div>
 
     <!-- 商品列表 -->
-    <div class="admin-table card">
-      <div class="product-table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>商品圖片</th>
-              <th>品項名稱 & 說明</th>
-              <th>類型</th>
-              <th>定價金額</th>
-              <th>當前庫存</th>
-              <th>最低安全庫存</th>
-              <th>庫存狀態</th>
-              <th style="text-align: center;">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in filteredProducts" :key="p.productId">
-              <td>#{{ p.productId }}</td>
-              <td>
-                <img :src="getProductImage(p)" class="product-thumb" alt="Product Image"
-                     @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" />
-              </td>
-              <td class="product-name-cell">
-                <div class="name-text">{{ p.name }}</div>
-                <div class="desc-text" :title="p.description">{{ p.description || '無詳細說明' }}</div>
-                <div v-if="p.type === 'COURSE'" class="trainer-name-label" style="font-size: 0.72rem; color: var(--primary); font-weight: 700; margin-top: 0.2rem;">
-                  指導教練: {{ p.trainerName || '多位教練/未分配' }}
-                </div>
-              </td>
-              <td>
-                <span :class="['badge', p.type === 'COURSE' ? 'badge-course' : p.type === 'SUBSCRIPTION' ? 'badge-subscription' : 'badge-goods']">
-                  {{ p.type === 'COURSE' ? '課程' : p.type === 'SUBSCRIPTION' ? '訂閱' : '商品' }}
-                </span>
-              </td>
-              <td class="price-text">NT$ {{ Number(p.price).toLocaleString() }}</td>
-              <td class="stock-text" :class="{ 'low-stock': p.stock <= safetyThreshold }">
-                {{ p.stock }}
-              </td>
-              <td>
-                <span class="safety-threshold-label">{{ safetyThreshold }} 件</span>
-              </td>
-              <td>
-                <div class="status-cell-wrap">
-                  <span :class="['status-dot', p.stock <= 0 ? 'critical' : p.stock <= safetyThreshold ? 'warning' : 'success']"></span>
-                  <span :class="['status-text-label', p.stock <= 0 ? 'text-critical' : p.stock <= safetyThreshold ? 'text-warning' : 'text-success']">
-                    {{ p.stock <= 0 ? '已售罄' : p.stock <= safetyThreshold ? '庫存緊張' : '充足' }}
-                  </span>
-                </div>
-              </td>
-              <td style="text-align: center;">
-                <RouterLink to="/admin/products" class="btn btn-primary btn-xs" style="text-decoration: none;">
-                  前往補貨
-                </RouterLink>
-              </td>
-            </tr>
-            <tr v-if="filteredProducts.length === 0">
-              <td colspan="9" style="text-align: center; padding: 3rem; color: #94a3b8;">
-                無符合篩選條件的商品資料
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <AdminTable
+      v-model:currentPage="currentPage"
+      v-model:itemsPerPage="itemsPerPage"
+      :data="paginatedProducts"
+      :columns="tableColumns"
+      :totalItems="totalItems"
+      rowKey="productId"
+    >
+      <template #productId="{ value }">
+        #{{ value }}
+      </template>
+
+      <template #imageUrl="{ row }">
+        <img :src="getProductImage(row)" class="product-thumb" alt="Product Image"
+             @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" />
+      </template>
+
+      <template #name="{ row }">
+        <div class="product-name-cell">
+          <div class="name-text">{{ row.name }}</div>
+          <div class="desc-text" :title="row.description">{{ row.description || '無詳細說明' }}</div>
+          <div v-if="row.type === 'COURSE'" class="trainer-name-label" style="font-size: 0.72rem; color: var(--primary); font-weight: 700; margin-top: 0.2rem;">
+            指導教練: {{ row.trainerName || '多位教練/未分配' }}
+          </div>
+        </div>
+      </template>
+
+      <template #price="{ value }">
+        <span class="price-text">NT$ {{ Number(value).toLocaleString() }}</span>
+      </template>
+
+      <template #stock="{ value }">
+        <span class="stock-text" :class="{ 'low-stock': value <= safetyThreshold }">
+          {{ value }}
+        </span>
+      </template>
+
+      <template #safetyThreshold>
+        <span class="safety-threshold-label">{{ safetyThreshold }} 件</span>
+      </template>
+
+      <template #status="{ row }">
+        <div class="status-cell-wrap">
+          <span :class="['status-dot', row.stock <= 0 ? 'critical' : row.stock <= safetyThreshold ? 'warning' : 'success']"></span>
+          <span :class="['status-text-label', row.stock <= 0 ? 'text-critical' : row.stock <= safetyThreshold ? 'text-warning' : 'text-success']">
+            {{ row.stock <= 0 ? '已售罄' : row.stock <= safetyThreshold ? '庫存緊張' : '充足' }}
+          </span>
+        </div>
+      </template>
+
+      <template #actions>
+        <RouterLink to="/admin/products" class="btn btn-primary btn-xs" style="text-decoration: none;">
+          前往補貨
+        </RouterLink>
+      </template>
+    </AdminTable>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import api from '@/api/axios.instance.js'
 import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
+import AdminTable from '@/components/AdminTable.vue'
 
-// [響應式狀態] products (products)
-// 為什麼要這麼做：在架商品清單，提供頁面渲染商品列表的資料來源。
+// [響應式狀態] products
 const products = ref([])
-// [響應式狀態] currentTab (currenttab)
-// 為什麼要這麼做：目前選取的資料，以便進行單一資料展示、編輯或預約操作。
+// [響應式狀態] currentTab
 const currentTab = ref('low')
-// [響應式狀態] safetyThreshold (safetythreshold)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const safetyThreshold = ref(null)  // null = 尚未從後端載入
-// [響應式狀態] tempThreshold (tempthreshold)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
+// [響應式狀態] safetyThreshold
+const safetyThreshold = ref(null)
+// [響應式狀態] tempThreshold
 const tempThreshold = ref(20)
 
-// [功能方法] loadProducts (載入products)
-// 為什麼要這麼做：向後端 API 請求最新數據，確保頁面載入或重新整理時，使用者能看到最即時且正確的資料。
+// 分頁狀態
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+
+const tableColumns = [
+  { key: 'productId', label: 'ID', width: '60px' },
+  { key: 'imageUrl', label: '商品圖片', width: '110px' },
+  { key: 'name', label: '品項名稱 & 說明', width: '220px' },
+  { key: 'price', label: '定價金額', width: '100px' },
+  { key: 'stock', label: '當前庫存', width: '85px' },
+  { key: 'safetyThreshold', label: '最低安全庫存', width: '100px' },
+  { key: 'status', label: '庫存狀態', width: '100px' },
+  { key: 'actions', label: '操作', width: '120px' }
+]
+
+// 當篩選標籤或每頁筆數改變時，重置頁碼
+watch([currentTab, itemsPerPage], () => {
+  currentPage.value = 1
+})
+
+// [功能方法] loadProducts
 async function loadProducts() {
   try {
     const res = await api.get('/api/products', { params: { size: 100 } })
@@ -149,8 +156,7 @@ async function loadThreshold() {
   tempThreshold.value = defaultVal
 }
 
-// [功能方法] saveThreshold (儲存threshold)
-// 為什麼要這麼做：將當前編輯完成的配置或資料儲存至本地，以確保變更不會因頁面重整而遺失。
+// [功能方法] saveThreshold
 async function saveThreshold() {
   if (!tempThreshold.value || tempThreshold.value < 1) {
     alert('請輸入有效的門檻數量 (大於 0)')
@@ -161,21 +167,18 @@ async function saveThreshold() {
   alert(`安全庫存門檻已成功更新為 ${tempThreshold.value} 件！`)
 }
 
-// [計算屬性] activeProducts (activeproducts)
-// 為什麼要這麼做：在架商品清單，提供頁面渲染商品列表的資料來源。
+// [計算屬性] activeProducts
 const activeProducts = computed(() => {
   return products.value.filter(p => p.status === 'ACTIVE')
 })
 
-// [計算屬性] lowStockProducts (lowstockproducts)
-// 為什麼要這麼做：在架商品清單，提供頁面渲染商品列表的資料來源。
+// [計算屬性] lowStockProducts
 const lowStockProducts = computed(() => {
   if (safetyThreshold.value === null) return []
   return activeProducts.value.filter(p => p.stock <= safetyThreshold.value)
 })
 
-// [計算屬性] filteredProducts (filteredproducts)
-// 為什麼要這麼做：依據指定屬性將不符合條件的陣列元素濾除，確保畫面只呈現使用者感興趣的資料。
+// [計算屬性] filteredProducts
 const filteredProducts = computed(() => {
   if (currentTab.value === 'low') {
     return lowStockProducts.value
@@ -183,16 +186,21 @@ const filteredProducts = computed(() => {
   return activeProducts.value
 })
 
-// [功能方法] getProductImage (取得productimage)
-// 為什麼要這麼做：向伺服器查詢並獲取指定資料，以供畫面渲染或後續邏輯判斷使用。
-// 這頁列的是商品，沒有圖時用商品預設圖；原本誤用課程的預設圖。
+const totalItems = computed(() => filteredProducts.value.length)
+
+const paginatedProducts = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return filteredProducts.value.slice(start, end)
+})
+
+// [功能方法] getProductImage
 function getProductImage(product) {
   if (product.imageUrl) return formatImageUrl(product.imageUrl)
   return DEFAULT_PRODUCT_IMAGE
 }
 
-// [生命週期掛載] 組件初始化載入
-// 為什麼要這麼做：在 Vue 元件完全掛載至網頁 DOM 後，立即向後端發送請求載入初始頁面資料，提供即時的視覺展現。
+// [生命週期掛載]
 onMounted(() => {
   loadProducts()
   loadThreshold()
@@ -200,34 +208,23 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.inventory-tabs {
-  display: flex;
-  gap: 0.5rem;
-  margin: 1.5rem 0 1rem 0;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 0.5rem;
-}
-
-.tab-btn {
-  background: transparent;
+.erp-tabs .tab-btn {
+  background: none;
   border: none;
-  color: #64748b;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-secondary, #64748b);
   cursor: pointer;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  border-bottom: 3px solid transparent;
+  transition: all 0.25s ease;
 }
-
-.tab-btn:hover {
-  color: #0f172a;
-  background: #f1f5f9;
+.erp-tabs .tab-btn:hover {
+  color: var(--primary, #5a4a42);
 }
-
-.tab-btn.active {
-  color: #ffffff;
-  background: #3c302b;
-  font-weight: 600;
+.erp-tabs .tab-btn.active {
+  color: var(--primary, #5a4a42);
+  border-bottom-color: var(--primary, #5a4a42);
 }
 
 .safety-threshold-label {
@@ -235,116 +232,7 @@ onMounted(() => {
   font-size: 0.85rem;
 }
 
-.status-dot.critical {
-  background-color: #ef4444;
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
-}
-
-.status-dot.warning {
-  background-color: #f59e0b;
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
-}
-
-.status-dot.success {
-  background-color: #10b981;
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
-}
-
-.text-critical {
-  color: #ef4444;
-}
-
-.text-warning {
-  color: #f59e0b;
-}
-
-.text-success {
-  color: #10b981;
-}
-
-.btn-xs {
-  font-size: 0.72rem;
-  padding: 0.35rem 0.6rem;
-  border-radius: 6px;
-}
-
-/* ===== 後台通用資料表格樣式===== */
-.admin-table {
-  border-radius: 16px;
-  padding: 0;
-  overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  margin-top: 1rem;
-}
-.admin-table table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.admin-table table th {
-  background: #f8fafc;
-  color: #475569;
-  font-weight: 700;
-  padding: 0.75rem 1rem;
-  text-align: center;
-  border-bottom: 1px solid #e2e8f0;
-  font-size: 0.85rem;
-  letter-spacing: 0.3px;
-  vertical-align: middle;
-}
-.admin-table table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #f1f5f9;
-  color: #334155; /* 深灰色字體，避免白色 */
-  font-size: 0.85rem;
-  vertical-align: middle;
-  text-align: center;
-}
-
-/* 九個欄位擠在固定寬度裡，品項名稱與說明本來就需要折行才看得完，
-   所以不對整列下 nowrap——只讓「本來就該一行講完」的數字欄不折。
-   「前往補貨」按鈕的不折行由 main.css 的 .btn 統一處理，這裡不必重複。
-   （先前為了修按鈕折行對整個 td 下 nowrap，結果把名稱欄的文字截斷了） */
-.admin-table table td.price-text,
-.admin-table table td.stock-text {
-  white-space: nowrap;
-}
-
-/* 儲存格不折行後，視窗窄時改由表格自己橫向捲動，不讓整頁跟著左右跑。
-   .admin-table 的 overflow:hidden 是給圓角用的，捲動要放在內層這一層 */
-.product-table-wrap {
-  overflow-x: auto;
-}
-.admin-table table tr:hover td {
-  background: #f8fafc;
-}
-.product-thumb {
-  width: 50px;
-  height: 50px;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-.product-name-cell {
-  text-align: left !important;
-}
-.product-name-cell .name-text {
-  font-weight: 700;
-  color: #0f172a; /* 黑色字體，避免白色 */
-  margin-bottom: 0.25rem;
-  /* 商品名稱可能很長（尤其含規格描述），欄位又只有一百多 px，
-     跟底下的說明一樣讓它折行，不要截斷成看不出是哪個商品 */
-  white-space: normal;
-  word-break: break-word;
-}
-.product-name-cell .desc-text {
-  font-size: 0.75rem;
-  color: #64748b;
-  white-space: normal;
-  word-break: break-word;
-  line-height: 1.4;
-}
+/* ===== 狀態標籤與徽章樣式 ===== */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -365,6 +253,83 @@ onMounted(() => {
   background: #dcfce7;
   color: #15803d;
 }
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.critical {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+.status-dot.warning {
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+.status-dot.success {
+  background-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.status-cell-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.status-text-label {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.text-critical {
+  color: #ef4444;
+}
+.text-warning {
+  color: #f59e0b;
+}
+.text-success {
+  color: #10b981;
+}
+
+.btn-xs {
+  font-size: 0.72rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+}
+
+.product-thumb {
+  width: 70px;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  margin: 0 auto;
+}
+.product-name-cell {
+  text-align: center;
+}
+.product-name-cell .name-text {
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+}
+.product-name-cell .desc-text {
+  font-size: 0.72rem;
+  color: #64748b;
+  white-space: normal !important;
+  word-break: break-word !important;
+  overflow: visible !important;
+  text-align: center;
+  line-height: 1.5;
+  margin-top: 0.2rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .price-text {
   font-weight: 600;
   color: #0f172a;

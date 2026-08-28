@@ -150,4 +150,34 @@ class GroupCourseServiceTest {
         verify(trainerService, never()).lockAndAssertAvailableForNewBusiness(any());
         verify(courses, never()).save(any());
     }
+
+    @Test
+    void updateCourse_可以成功更新教練() {
+        GroupCourse course = course(CourseStatus.ACTIVE);
+        when(courses.findById(COURSE_ID)).thenReturn(Optional.of(course));
+        
+        tw.com.ispan.gym.dto.course.UpdateGroupCourseRequest updateReq = new tw.com.ispan.gym.dto.course.UpdateGroupCourseRequest();
+        updateReq.setName("新課程名稱");
+        updateReq.setMaxCapacity(20);
+        updateReq.setTrainerId(99); // new trainer
+        
+        Trainer newTrainer = new Trainer();
+        newTrainer.setId(99);
+        Employee employee = new Employee();
+        employee.setFirstName("大同");
+        employee.setLastName("王");
+        Account account = new Account();
+        account.setEmail("wang@example.com");
+        employee.setAccount(account);
+        newTrainer.setEmployee(employee);
+        
+        when(trainerService.lockAndAssertAvailableForNewBusiness(99)).thenReturn(newTrainer);
+        when(courses.save(any(GroupCourse.class))).thenAnswer(inv -> inv.getArgument(0));
+        
+        GroupCourseResponse response = service.updateCourse(COURSE_ID, updateReq);
+        
+        assertThat(response.getName()).isEqualTo("新課程名稱");
+        assertThat(response.getTrainerId()).isEqualTo(99);
+        verify(trainerService).lockAndAssertAvailableForNewBusiness(99);
+    }
 }

@@ -84,102 +84,64 @@
     />
 
     <!-- 商品列表表格 -->
-    <div class="admin-table card">
-      <!-- 控制列：商品顯示數量與分頁頁碼 (Top) -->
-      <div class="list-control-header bg-none" style="margin: 1rem 1rem 1.5rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-        <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
-          <span class="total-count-text">共 {{ totalItems }} 筆商品</span>
-          <div class="page-size-selector">
-            <label for="itemsPerPageSelect">顯示數量：</label>
-            <select id="itemsPerPageSelect" v-model.number="itemsPerPage" class="select-sm">
-              <option :value="5">5 筆</option>
-              <option :value="10">10 筆</option>
-              <option :value="20">20 筆</option>
-              <option :value="50">50 筆</option>
-            </select>
-          </div>
+    <AdminTable
+      v-model:currentPage="currentPage"
+      v-model:itemsPerPage="itemsPerPage"
+      :data="paginatedProducts"
+      :columns="tableColumns"
+      :totalItems="totalItems"
+      rowKey="productId"
+      emptyText="沒有符合當前篩選條件的商品項目"
+    >
+      <template #productId="{ value }">
+        #{{ value }}
+      </template>
+
+      <template #imageUrl="{ row }">
+        <img :src="getProductImage(row)" class="product-thumb" alt="Product Image"
+             @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" />
+      </template>
+
+      <template #name="{ row }">
+        <div class="product-name-cell">
+          <div class="name-text">{{ row.name }}</div>
+          <div class="desc-text" :title="row.description">{{ row.description || '無詳細說明' }}</div>
         </div>
+      </template>
 
-        <!-- 分頁頁碼 (Top) -->
-        <div class="pagination" v-if="totalPages > 1" style="margin: 0;">
-          <button type="button" class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
-          <template v-for="n in visiblePages" :key="n">
-            <span v-if="n === '...'" class="page-ellipsis">...</span>
-            <button v-else type="button" :class="['page-btn', { active: currentPage === n }]" @click="currentPage = n">{{ n }}</button>
-          </template>
-          <button type="button" class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
+      <template #categoryName="{ value }">
+        <span class="badge badge-success">
+          {{ value || '無分類' }}
+        </span>
+      </template>
+
+      <template #price="{ value }">
+        <span class="price-text">NT$ {{ Number(value).toLocaleString() }}</span>
+      </template>
+
+      <template #stock="{ row }">
+        <span :class="['stock-text', { 'low-stock': row.stock <= 5 }]">
+          {{ row.stock }}
+          <span v-if="row.stock <= 5" class="low-stock-label" style="font-size: 0.65rem; color: #ef4444; margin-left: 0.2rem;">緊張</span>
+        </span>
+      </template>
+
+      <template #status="{ value }">
+        <div class="status-cell-wrap">
+          <span :class="['status-dot', value === 1 || value === 'ACTIVE' ? 'active' : 'inactive']"></span>
+          <span :class="['status-text-label', value === 1 || value === 'ACTIVE' ? 'text-active' : 'text-inactive']">
+            {{ value === 1 || value === 'ACTIVE' ? '上架中' : '已下架' }}
+          </span>
         </div>
-      </div>
+      </template>
 
-      <div class="product-table-wrap">
-      <table style="table-layout: fixed; width: 100%;">
-        <thead>
-          <tr>
-            <th style="width: 60px;">ID</th>
-            <th style="width: 90px;">商品圖片</th>
-            <th style="width: 240px;">商品名稱 &amp; 說明</th>
-            <th style="width: 100px;">所屬分類</th>
-            <th style="width: 100px;">定價金額</th>
-            <th style="width: 80px;">目前庫存</th>
-            <th style="width: 90px;">狀態</th>
-            <th style="width: 120px;">功能操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="p in paginatedProducts" :key="p.productId">
-            <td class="hide-md">#{{ p.productId }}</td>
-            <td>
-              <img :src="getProductImage(p)" class="product-thumb" alt="Product Image"
-                   @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" />
-            </td>
-            <td class="product-name-cell">
-              <div class="name-text">{{ p.name }}</div>
-              <div class="desc-text hide-sm" :title="p.description">{{ p.description || '無詳細說明' }}</div>
-            </td>
-            <td class="hide-sm">
-              <span class="badge badge-success">
-                {{ p.categoryName || '無分類' }}
-              </span>
-            </td>
-            <td class="price-text">NT$ {{ Number(p.price).toLocaleString() }}</td>
-            <td :class="['stock-text', { 'low-stock': p.stock <= 5 }]">
-              {{ p.stock }}
-              <span v-if="p.stock <= 5" class="low-stock-label">緊張</span>
-            </td>
-            <td class="hide-md">
-              <div class="status-cell-wrap">
-                <span :class="['status-dot', p.status === 1 || p.status === 'ACTIVE' ? 'active' : 'inactive']"></span>
-                <span :class="['status-text-label', p.status === 1 || p.status === 'ACTIVE' ? 'text-active' : 'text-inactive']">
-                  {{ p.status === 1 || p.status === 'ACTIVE' ? '上架中' : '已下架' }}
-                </span>
-              </div>
-            </td>
-            <td>
-              <div class="action-buttons-wrap">
-                <button class="btn btn-edit edit-btn-style btn-sm" @click="openEditModal(p)">編輯</button>
-                <button v-if="p.status === 1 || p.status === 'ACTIVE'" class="btn btn-danger deactive-btn-style btn-sm" @click="deleteProduct(p.productId)">下架</button>
-              </div>
-            </td>
-          </tr>
-          <tr v-if="filteredTableProducts.length === 0">
-            <td colspan="8" style="text-align: center; padding: 3rem; color: #94a3b8;">
-              沒有符合當前篩選條件的商品項目
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      </div><!-- /.product-table-wrap -->
-
-      <!-- 分頁頁碼 (Bottom) -->
-      <div class="pagination" v-if="totalPages > 1" style="margin: 1rem 0;">
-        <button type="button" class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
-        <template v-for="n in visiblePages" :key="n">
-          <span v-if="n === '...'" class="page-ellipsis">...</span>
-          <button v-else type="button" :class="['page-btn', { active: currentPage === n }]" @click="currentPage = n">{{ n }}</button>
-        </template>
-        <button type="button" class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
-      </div>
-    </div>
+      <template #actions="{ row }">
+        <div class="action-buttons-wrap">
+          <button class="btn btn-edit edit-btn-style btn-sm" @click="openEditModal(row)">編輯</button>
+          <button v-if="row.status === 1 || row.status === 'ACTIVE'" class="btn btn-danger deactive-btn-style btn-sm" @click="deleteProduct(row.productId)">下架</button>
+        </div>
+      </template>
+    </AdminTable>
 
     <!-- 編輯商品 Modal -->
     <AppModal v-model:visible="showEditProduct" title="編輯商品內容" icon="" size="md">
@@ -279,8 +241,20 @@ import AppModal from '@/components/AppModal.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'
 import AdminFormCard from '@/components/AdminFormCard.vue'
-import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
+import AdminTable from '@/components/AdminTable.vue'
+import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE, uploadImageFile } from '@/utils/image.js'
 import api from '@/api/axios.instance.js'
+
+const tableColumns = [
+  { key: 'productId', label: 'ID', width: '60px' },
+  { key: 'imageUrl', label: '商品圖片', width: '110px' },
+  { key: 'name', label: '商品名稱 & 說明', width: '220px' },
+  { key: 'categoryName', label: '所屬分類', width: '100px' },
+  { key: 'price', label: '定價金額', width: '100px' },
+  { key: 'stock', label: '目前庫存', width: '85px' },
+  { key: 'status', label: '狀態', width: '90px' },
+  { key: 'actions', label: '功能操作', width: '120px' }
+]
 
 const showToastInject = inject('showToast', null)
 const showToast = (msg, type = 'success') => {
@@ -392,40 +366,11 @@ const currentPage = ref(1)
 const itemsPerPage = ref(10)
 
 const totalItems = computed(() => filteredTableProducts.value.length)
-const totalPages = computed(() => Math.ceil(totalItems.value / itemsPerPage.value) || 1)
 
 const paginatedProducts = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   const end = start + itemsPerPage.value
   return filteredTableProducts.value.slice(start, end)
-})
-
-const visiblePages = computed(() => {
-  const current = currentPage.value
-  const total = totalPages.value
-  if (total <= 7) {
-    return Array.from({ length: total }, (_, i) => i + 1)
-  }
-  const pages = []
-  pages.push(1)
-  let start = Math.max(2, current - 2)
-  let end = Math.min(total - 1, current + 2)
-  if (current <= 4) {
-    end = 5
-  } else if (current >= total - 3) {
-    start = total - 4
-  }
-  if (start > 2) {
-    pages.push('...')
-  }
-  for (let i = start; i <= end; i++) {
-    pages.push(i)
-  }
-  if (end < total - 1) {
-    pages.push('...')
-  }
-  pages.push(total)
-  return pages
 })
 
 function getProductImage(p) {
@@ -437,24 +382,10 @@ function getProductImage(p) {
 async function uploadFile(event, mode) {
   const file = event.target.files[0]
   if (!file) return
-  if (file.size > 5 * 1024 * 1024) {
-    showToast('照片檔案不能超過 5MB', 'error')
-    return
-  }
   uploadingFile.value = true
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await api.post('/api/admin/products/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
-    uploadingFile.value = false
-    // 攔截器成功時回傳的是完整 response 物件，內容在 res.data（見 api/axios.instance.js）
-    const uploadedUrl = res.data?.url
+    const uploadedUrl = await uploadImageFile(file)
     if (!uploadedUrl) {
-      // 取不到網址就等於沒上傳成功，這裡要明講；否則會靜默存成沒有圖片的商品
       showToast('上傳圖片失敗：伺服器未回傳圖片位址', 'error')
       return
     }
@@ -465,8 +396,9 @@ async function uploadFile(event, mode) {
     }
     showToast('圖片上傳成功')
   } catch (e) {
+    showToast(e.message || '上傳圖片失敗', 'error')
+  } finally {
     uploadingFile.value = false
-    showToast('上傳圖片失敗', 'error')
   }
 }
 
@@ -634,7 +566,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 .admin-table table tbody tr {
-  height: 72px;
+  height: 90px;
 }
 .admin-table table tr:hover td {
   background: #f8fafc;
@@ -1016,5 +948,13 @@ onMounted(() => {
 }
 .category-manager-content table tr:hover td {
   background: #f8fafc;
+}
+.product-thumb {
+  width: 70px;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  margin: 0 auto;
 }
 </style>

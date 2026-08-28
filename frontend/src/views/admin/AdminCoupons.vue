@@ -126,124 +126,88 @@
     />
 
     <!-- 優惠券清單表格 -->
-    <div class="admin-table card">
-      <!-- 控制列 -->
-      <div class="list-control-header bg-none" style="margin: 1rem 1rem 1.5rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-        <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
-          <span class="total-count-text">共 {{ totalElements }} 筆優惠券</span>
-          <div class="page-size-selector">
-            <label>顯示數量：</label>
-            <select v-model.number="itemsPerPage" class="select-sm">
-              <option :value="5">5 筆</option>
-              <option :value="10">10 筆</option>
-              <option :value="20">20 筆</option>
-              <option :value="50">50 筆</option>
-            </select>
+    <AdminTable
+      v-model:currentPage="currentPage"
+      v-model:itemsPerPage="itemsPerPage"
+      :data="paginatedCoupons"
+      :columns="tableColumns"
+      :totalItems="totalElements"
+      rowKey="couponId"
+      emptyText="目前未發佈任何促銷優惠活動"
+    >
+      <template #code="{ value }">
+        <span class="coupon-code-val">{{ value }}</span>
+      </template>
+
+      <template #name="{ value }">
+        <span style="font-weight: 700;">{{ value }}</span>
+      </template>
+
+      <template #description="{ row }">
+        <span class="desc-cell" :title="row.description">{{ row.description || '無' }}</span>
+      </template>
+
+      <template #type="{ value }">
+        <span :class="['type-tag', value === 'PERCENT' ? 'type-percent' : 'type-cash']">
+          {{ value === 'PERCENT' ? '比例折抵' : '現金折抵' }}
+        </span>
+      </template>
+
+      <template #value="{ row }">
+        <div style="font-weight: 700; color: var(--accent);">
+          <div>{{ row.type === 'PERCENT' ? row.value + '%' : 'NT$ ' + Number(row.value).toLocaleString() }}</div>
+          <div style="font-size: 0.85em; color: #64748b; font-weight: normal; margin-top: 2px;">
+            {{ row.minSpend > 0 ? '滿 NT$ ' + Number(row.minSpend).toLocaleString() : '無門檻' }}
           </div>
         </div>
+      </template>
 
-        <!-- 分頁 (Top) -->
-        <div class="pagination" v-if="totalPages > 1" style="margin: 0; display: flex; gap: 0.5rem;">
-          <button type="button" class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
-          <template v-for="n in visiblePages" :key="n">
-            <span v-if="n === '...'" class="page-ellipsis">...</span>
-            <button v-else type="button" :class="['page-btn', { active: currentPage === n }]" @click="currentPage = n">{{ n }}</button>
-          </template>
-          <button type="button" class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
+      <template #applicableType="{ value }">
+        <span class="badge badge-scope">
+          {{ value === 'PRODUCT' ? '僅商品' : value === 'COURSE' ? '僅課程' : '全部適用' }}
+        </span>
+      </template>
+
+      <template #claimedQuantity="{ row }">
+        <div class="progress-bar-container">
+          <div class="progress-bar" :style="{ width: (row.claimedQuantity / row.totalQuantity * 100) + '%' }"></div>
+          <span class="progress-text">{{ row.claimedQuantity }} / {{ row.totalQuantity }}</span>
         </div>
-      </div>
+        <div style="font-size: 0.75rem; color: #64748b; text-align: center; margin-top: 4px; font-weight: 600;">
+          已領取 {{ Math.round((row.claimedQuantity / row.totalQuantity) * 100) }}%
+        </div>
+      </template>
 
-      <div class="coupon-table-wrap">
-      <table style="table-layout: fixed; width: 100%;">
-        <thead>
-          <tr>
-            <th style="width: 80px;">代碼</th>
-            <th style="width: 140px;">促銷活動名稱</th>
-            <th style="width: 140px;">優惠券描述</th>
-            <th style="width: 90px;">折扣類型</th>
-            <th style="width: 150px;">折抵金額或比例 (最低門檻)</th>
-            <th style="width: 90px;">適用範圍</th>
-            <th style="width: 120px;">已領取/發行總數</th>
-            <th style="width: 110px;">有效期限</th>
-            <th style="width: 80px;">狀態</th>
-            <th style="width: 100px;">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="c in paginatedCoupons" :key="c.couponId">
-            <td class="coupon-code-val">{{ c.code }}</td>
-            <td style="font-weight: 700;">{{ c.name }}</td>
-            <td class="desc-cell" :title="c.description">{{ c.description || '無' }}</td>
-            <td>
-              <span :class="['type-tag', c.type === 'PERCENT' ? 'type-percent' : 'type-cash']">
-                {{ c.type === 'PERCENT' ? '比例折抵' : '現金折抵' }}
-              </span>
-            </td>
-            <td style="font-weight: 700; color: var(--accent);">
-              <div>{{ c.type === 'PERCENT' ? c.value + '%' : 'NT$ ' + Number(c.value).toLocaleString() }}</div>
-              <div style="font-size: 0.85em; color: #64748b; font-weight: normal; margin-top: 2px;">
-                {{ c.minSpend > 0 ? '滿 NT$ ' + Number(c.minSpend).toLocaleString() : '無門檻' }}
-              </div>
-            </td>
-            <td>
-              <span class="badge badge-scope">
-                {{ c.applicableType === 'PRODUCT' ? '僅商品' : c.applicableType === 'COURSE' ? '僅課程' : '全部適用' }}
-              </span>
-            </td>
-            <td>
-              <div class="progress-bar-container">
-                <div class="progress-bar" :style="{ width: (c.claimedQuantity / c.totalQuantity * 100) + '%' }"></div>
-                <span class="progress-text">{{ c.claimedQuantity }} / {{ c.totalQuantity }}</span>
-              </div>
-              <div style="font-size: 0.75rem; color: #64748b; text-align: center; margin-top: 4px; font-weight: 600;">
-                已領取 {{ Math.round((c.claimedQuantity / c.totalQuantity) * 100) }}%
-              </div>
-            </td>
-            <td class="coupon-date-text">
-              <div>{{ c.startDate }}</div>
-              <div style="font-size: 0.85em; color: #64748b; margin-top: 2px;">至 {{ c.endDate || '永久有效' }}</div>
-            </td>
-            <td>
-              <div class="status-cell-wrap">
-                <span :class="['status-dot', (c.status === 'ACTIVE' || c.status === '1') ? 'active' : 'inactive']"></span>
-                <span :class="['status-text-label', (c.status === 'ACTIVE' || c.status === '1') ? 'text-active' : 'text-inactive']">
-                  {{ (c.status === 'ACTIVE' || c.status === '1') ? '發行中' : '已失效' }}
-                </span>
-              </div>
-            </td>
-            <td>
-              <div class="action-buttons-wrap" style="display: flex; flex-direction: column; gap: 4px; align-items: stretch; padding: 4px 0;">
-                <button class="btn btn-sm btn-edit" @click="openEditCouponModal(c)" title="編輯">編輯</button>
-                <button v-if="c.status === 'ACTIVE' || c.status === '1'" class="btn btn-sm btn-danger" @click="deleteCoupon(c.couponId)" title="下架">下架</button>
-              </div>
-            </td>
-          </tr>
-          <tr v-if="coupons.length === 0">
-            <td colspan="10" style="text-align: center; padding: 3rem; color: #94a3b8;">
-              目前未發佈任何促銷優惠活動
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      </div><!-- /.coupon-table-wrap -->
+      <template #startDate="{ row }">
+        <div class="coupon-date-text">
+          <div>{{ row.startDate }}</div>
+          <div style="font-size: 0.85em; color: #64748b; margin-top: 2px;">至 {{ row.endDate || '永久有效' }}</div>
+        </div>
+      </template>
 
-      <!-- 分頁 (Bottom) -->
-      <div class="pagination" v-if="totalPages > 1" style="margin: 1rem 0; display: flex; justify-content: center; gap: 0.5rem;">
-        <button type="button" class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
-        <template v-for="n in visiblePages" :key="n">
-          <span v-if="n === '...'" class="page-ellipsis">...</span>
-          <button v-else type="button" :class="['page-btn', { active: currentPage === n }]" @click="currentPage = n">{{ n }}</button>
-        </template>
-        <button type="button" class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
-      </div>
-    </div>
+      <template #status="{ row }">
+        <div class="status-cell-wrap">
+          <span :class="['status-dot', (row.status === 'ACTIVE' || row.status === '1') ? 'active' : 'inactive']"></span>
+          <span :class="['status-text-label', (row.status === 'ACTIVE' || row.status === '1') ? 'text-active' : 'text-inactive']">
+            {{ (row.status === 'ACTIVE' || row.status === '1') ? '發行中' : '已失效' }}
+          </span>
+        </div>
+      </template>
+
+      <template #actions="{ row }">
+        <div class="action-buttons-wrap">
+          <button class="btn btn-edit btn-sm" @click="openEditCouponModal(row)" title="編輯">編輯</button>
+          <button v-if="row.status === 'ACTIVE' || row.status === '1'" class="btn btn-danger btn-sm" @click="deleteCoupon(row.couponId)" title="下架">下架</button>
+        </div>
+      </template>
+    </AdminTable>
 
     <!-- 編輯優惠券 Modal -->
     <AppModal v-model:visible="showEditCoupon" title="修改優惠券內容" icon="" size="md">
       <form id="editCouponForm" @submit.prevent="updateCoupon">
         <div class="form-group">
           <label class="form-label">代碼 (無法修改)</label>
-          <input v-model="editCouponForm.code" class="form-input" disabled />
+          <input v-model="editCouponForm.code" class="form-input" disabled style="background: var(--bg-section, #f1f5f9); color: var(--text-secondary, #94a3b8); cursor: not-allowed; opacity: 0.7;" />
         </div>
         <div class="form-group">
           <label class="form-label">活動名稱</label>
@@ -337,6 +301,7 @@
 import { ref, computed, onMounted, inject, watch } from 'vue'
 import api from '@/api/axios.instance.js'
 import AppModal from '@/components/AppModal.vue'
+import AdminTable from '@/components/AdminTable.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'
 import AdminFormCard from '@/components/AdminFormCard.vue'
@@ -431,36 +396,24 @@ function getTabCount(value) {
 }
 
 // 分頁與監聽
-// [響應式狀態] currentPage (currentpage)
-// 為什麼要這麼做：目前選取的資料，以便進行單一資料展示、編輯或預約操作。
 const currentPage = ref(1)
-// [響應式狀態] itemsPerPage (itemsperpage)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const itemsPerPage = ref(10)
 const totalElements = ref(0)
-// [計算屬性] totalPages (totalpages)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const totalPages = computed(() => Math.ceil(totalElements.value / itemsPerPage.value) || 1)
-// [計算屬性] paginatedCoupons (paginatedcoupons)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
 const paginatedCoupons = computed(() => coupons.value)
-// [計算屬性] visiblePages (visiblepages)
-// 為什麼要這麼做：處理或儲存與其關聯的資料狀態，以維持頁面運作與業務邏輯的正確性。
-const visiblePages = computed(() => {
-  const current = currentPage.value
-  const total = totalPages.value
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const pages = []
-  pages.push(1)
-  let start = Math.max(2, current - 2)
-  let end = Math.min(total - 1, current + 2)
-  if (current <= 4) { end = 5 } else if (current >= total - 3) { start = total - 4 }
-  if (start > 2) pages.push('...')
-  for (let i = start; i <= end; i++) pages.push(i)
-  if (end < total - 1) pages.push('...')
-  pages.push(total)
-  return pages
-})
+
+// AdminTable columns 定義
+const tableColumns = [
+  { key: 'code', label: '代碼', width: '80px' },
+  { key: 'name', label: '促銷活動名稱', width: '140px' },
+  { key: 'description', label: '優惠券描述', width: '140px' },
+  { key: 'type', label: '折扣類型', width: '90px' },
+  { key: 'value', label: '折抵金額或比例 (最低門檻)', width: '150px' },
+  { key: 'applicableType', label: '適用範圍', width: '90px' },
+  { key: 'claimedQuantity', label: '已領取/發行總數', width: '120px' },
+  { key: 'startDate', label: '有效期限', width: '110px' },
+  { key: 'status', label: '狀態', width: '80px' },
+  { key: 'actions', label: '操作', width: '100px' }
+]
 
 // [監聽器] 監聽特定狀態變化
 // 為什麼要這麼做：當監聽的數據或屬性發生異動時，即時觸發與其關聯的連動業務邏輯、重新計算數值或重新載入資料。

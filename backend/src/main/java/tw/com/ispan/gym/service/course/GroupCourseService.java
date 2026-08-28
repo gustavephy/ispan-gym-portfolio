@@ -82,12 +82,25 @@ public class GroupCourseService {
      * （理由見 {@link tw.com.ispan.gym.repository.course.GroupCourseRepository#searchCourses}）。
      */
     @Transactional(readOnly = true)
-    public PageResponse<GroupCourseResponse> getAllCourses(int page, int size, CourseStatus status, String search) {
+    public PageResponse<GroupCourseResponse> getAllCourses(int page, int size, CourseStatus status, String search, String startDate, String endDate) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
 
+        java.time.LocalDateTime start = null;
+        java.time.LocalDateTime end = null;
+        if (startDate != null && !startDate.isBlank()) {
+            try {
+                start = java.time.LocalDate.parse(startDate).atStartOfDay();
+            } catch (Exception e) {}
+        }
+        if (endDate != null && !endDate.isBlank()) {
+            try {
+                end = java.time.LocalDate.parse(endDate).atTime(23, 59, 59);
+            } catch (Exception e) {}
+        }
+
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<GroupCourse> result = groupCourseRepository.searchCourses(status, search, pageable);
+        Page<GroupCourse> result = groupCourseRepository.searchCourses(status, search, start, end, pageable);
 
         List<GroupCourseResponse> items = result.getContent().stream()
                  .map(this::toResponse)
@@ -143,8 +156,8 @@ public class GroupCourseService {
 
     /**
      * 修改團課主檔。name、maxCapacity 為必填，全量覆蓋；description、imageUrl、isTrial、
-     * courseCategoryId 允許不填，request 對應欄位為 null 時維持 Entity 現有值，不會被清空。
-     * 不接受變更 trainerId／status：授課教練換人需另開課程，狀態只走既有的下架端點。
+     * courseCategoryId、trainerId 允許不填，request 對應欄位為 null 時維持 Entity 現有值，不會被清空。
+     * 不接受變更 status：狀態只走既有的下架端點。
      */
     @Transactional
     public GroupCourseResponse updateCourse(Integer id, UpdateGroupCourseRequest request) {
@@ -167,6 +180,10 @@ public class GroupCourseService {
             CourseCategory category = courseCategoryRepository.findById(request.getCourseCategoryId())
                     .orElseThrow(() -> new ResourceNotFoundException("查無此課程分類"));
             groupCourse.setCategory(category);
+        }
+        if (request.getTrainerId() != null) {
+            Trainer trainer = trainerService.lockAndAssertAvailableForNewBusiness(request.getTrainerId());
+            groupCourse.setTrainer(trainer);
         }
 
         GroupCourse saved = groupCourseRepository.save(groupCourse);

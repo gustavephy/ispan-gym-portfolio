@@ -78,11 +78,10 @@
       ],
     },
     {
-      // 工作區本身只要求 EMPLOYEE：員工申請審核是同儕審核（後端 hasRole('EMPLOYEE')），
-      // 一般員工也要看得到。其餘管理功能仍是管理者專屬，各自標 requires: 'ADMIN'。
+      // 工作區改為要求 ADMIN：防止純教練 (也是 EMPLOYEE) 看到管理工作區
       key: 'admin',
       label: '管理',
-      requires: 'EMPLOYEE',
+      requires: 'ADMIN',
       links: [
         { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' },
         { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
@@ -134,6 +133,9 @@
   const availableWorkspaces = computed(() =>
     WORKSPACES.filter((w) => {
       if (w.key === 'member') {
+        if (auth.isLoggedIn && auth.isTrainer) {
+          return false
+        }
         return !auth.isLoggedIn || auth.isMember
       }
       return !w.requires || auth.roles.includes(w.requires)
@@ -305,10 +307,12 @@
 
   onMounted(() => {
     document.addEventListener('click', handleClickOutside)
+    window.addEventListener('profile-updated', fetchDisplayName)
   })
 
   onBeforeUnmount(() => {
     document.removeEventListener('click', handleClickOutside)
+    window.removeEventListener('profile-updated', fetchDisplayName)
   })
 
   function onLogout() {
@@ -372,26 +376,41 @@
           <!-- 管理後台專屬的摺疊分組選單 -->
           <template v-if="currentWorkspace?.key === 'admin'">
             <div v-for="group in visibleAdminGroups" :key="group.key" class="menu-group">
-              <button type="button" class="menu-group-header" @click="toggleGroup(group.key)">
-                <span class="group-title">{{ group.label }}</span>
-                <span class="group-arrow" :class="{ 'group-arrow--open': openGroups[group.key] }">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </span>
-              </button>
-              <div v-show="openGroups[group.key]" class="menu-group-content">
+              <!-- 單一連結時扁平顯示 -->
+              <template v-if="group.links.length === 1">
                 <RouterLink
-                  v-for="link in group.links"
-                  :key="link.to"
-                  :to="link.to"
-                  class="nav-link nav-link--sub"
-                  :class="{ 'nav-link--active': isLinkActive(link.to) }"
+                  :to="group.links[0].to"
+                  class="nav-link"
+                  :class="{ 'nav-link--active': isLinkActive(group.links[0].to) }"
                   @click="frontSidebarOpen = false"
                 >
-                  {{ link.label }}
+                  {{ group.label }}
                 </RouterLink>
-              </div>
+              </template>
+              
+              <!-- 複數連結時維持摺疊分組 -->
+              <template v-else>
+                <button type="button" class="menu-group-header" @click="toggleGroup(group.key)">
+                  <span class="group-title">{{ group.label }}</span>
+                  <span class="group-arrow" :class="{ 'group-arrow--open': openGroups[group.key] }">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </span>
+                </button>
+                <div v-show="openGroups[group.key]" class="menu-group-content">
+                  <RouterLink
+                    v-for="link in group.links"
+                    :key="link.to"
+                    :to="link.to"
+                    class="nav-link nav-link--sub"
+                    :class="{ 'nav-link--active': isLinkActive(link.to) }"
+                    @click="frontSidebarOpen = false"
+                  >
+                    {{ link.label }}
+                  </RouterLink>
+                </div>
+              </template>
             </div>
           </template>
 

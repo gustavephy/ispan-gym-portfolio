@@ -409,7 +409,11 @@ class AdminEmployeeMethodSecurityTest {
                         .header("Authorization", "Bearer " + memberToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                { "phone": "0912345678" }
+                                { 
+                                    "firstName": "小美",
+                                    "lastName": "王",
+                                    "phone": "0912345678" 
+                                }
                                 """))
                 .andExpect(status().isForbidden());
 
@@ -422,7 +426,11 @@ class AdminEmployeeMethodSecurityTest {
                         .header("Authorization", "Bearer " + employeeToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                { "phone": "0912345678" }
+                                { 
+                                    "firstName": "小美",
+                                    "lastName": "王",
+                                    "phone": "0912345678" 
+                                }
                                 """))
                 .andExpect(status().isOk());
 

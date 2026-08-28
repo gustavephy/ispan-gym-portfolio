@@ -39,6 +39,8 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
 
+defineOptions({ inheritAttrs: false })
+
 // defineModel 取代手動的 prop + emit('update:visible') 模式 (Vue 3.4+)
 const visible = defineModel('visible', { type: Boolean, default: false })
 

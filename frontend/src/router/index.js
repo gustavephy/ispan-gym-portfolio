@@ -235,6 +235,19 @@ const router = createRouter({
  */
 router.beforeEach((to) => {
   const auth = useAuthStore()
+  
+  // 根據角色自訂首頁導向
+  if (to.path === '/') {
+    if (auth.isLoggedIn) {
+      if (auth.roles.includes('TRAINER')) {
+        return '/trainer/schedules'
+      }
+      if (auth.roles.includes('ADMIN') || auth.roles.includes('EMPLOYEE')) {
+        return '/admin/reports'
+      }
+    }
+  }
+
   if (!to.meta.requiresAuth) {
     return true
   }

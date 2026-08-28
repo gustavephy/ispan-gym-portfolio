@@ -24,6 +24,7 @@ import tw.com.ispan.gym.enums.employee.EmployeeStatus;
 import tw.com.ispan.gym.exception.ForbiddenAccessException;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.trainer.TrainerRepository;
+import tw.com.ispan.gym.repository.member.MemberRepository;
 
 /**
  * 純 Mockito 單元測試（比照 MemberProfileServiceTest），不連資料庫。
@@ -37,7 +38,8 @@ class EmployeeProfileServiceTest {
 
     private final EmployeeRepository employees = mock(EmployeeRepository.class);
     private final TrainerRepository trainers = mock(TrainerRepository.class);
-    private final EmployeeProfileService service = new EmployeeProfileService(employees, trainers);
+    private final MemberRepository members = mock(MemberRepository.class);
+    private final EmployeeProfileService service = new EmployeeProfileService(employees, trainers, members);
 
     private Employee employeeOf(EmployeeStatus status) {
         Account account = new Account();
@@ -59,6 +61,8 @@ class EmployeeProfileServiceTest {
 
     private EmployeeProfileUpdateRequest validRequest() {
         EmployeeProfileUpdateRequest request = new EmployeeProfileUpdateRequest();
+        request.setFirstName("小美");
+        request.setLastName("王");
         request.setPhone("0933333333");
         return request;
     }

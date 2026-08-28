@@ -1,8 +1,5 @@
 package tw.com.ispan.gym.controller.employee;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.security.MessageDigest;
 import java.util.Map;
 
 import org.springframework.data.domain.Page;
@@ -25,7 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.product.ProductRequest;
 import tw.com.ispan.gym.dto.product.ProductResponse;
 import tw.com.ispan.gym.enums.product.ProductStatus;
-import tw.com.ispan.gym.exception.FileUploadException;
+import tw.com.ispan.gym.service.file.FileService;
 import tw.com.ispan.gym.service.product.ProductService;
 
 @RestController
@@ -36,6 +33,7 @@ import tw.com.ispan.gym.service.product.ProductService;
 public class AdminProductController {
 
     private final ProductService productService;
+    private final FileService fileService;
 
     /**
      * 後台商品列表：不限狀態，已下架的商品也會回傳。
@@ -69,47 +67,8 @@ public class AdminProductController {
     @PostMapping("/upload")
     public ResponseEntity<Map<String, String>> uploadImage(@RequestParam("file") MultipartFile file) {
         log.info("Request to upload product image: name={}", file.getOriginalFilename());
-        try {
-            File uploadDir = new File("uploads");
-            if (!uploadDir.exists()) {
-                uploadDir.mkdirs();
-            }
-
-            String originalName = file.getOriginalFilename();
-            String ext = "";
-            if (originalName != null && originalName.contains(".")) {
-                ext = originalName.substring(originalName.lastIndexOf(".")).toLowerCase();
-            }
-
-            byte[] fileBytes = file.getBytes();
-
-            // 用 MD5 hash 當檔名，相同圖片只存一份
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            byte[] hashBytes = md.digest(fileBytes);
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hashBytes) {
-                sb.append(String.format("%02x", b));
-            }
-            String filename = sb.toString() + ext;
-            File dest = new File(uploadDir, filename);
-
-            // 若相同檔案已存在，直接回傳 URL，不重複寫入
-            if (!dest.exists()) {
-                try (FileOutputStream fos = new FileOutputStream(dest)) {
-                    fos.write(fileBytes);
-                }
-                log.info("Product image saved: {}", filename);
-            } else {
-                log.info("Duplicate image detected, reusing existing file: {}", filename);
-            }
-
-            String fileUrl = "/uploads/" + filename;
-            log.info("Product image upload complete: {}", fileUrl);
-            return ResponseEntity.ok(Map.of("url", fileUrl));
-        } catch (Exception e) {
-            log.error("Failed to upload product image", e);
-            throw new FileUploadException("檔案上傳失敗，請確保檔案格式正確且大小合理");
-        }
+        String fileUrl = fileService.saveImage(file);
+        return ResponseEntity.ok(Map.of("url", fileUrl));
     }
 
     // 修改商品
