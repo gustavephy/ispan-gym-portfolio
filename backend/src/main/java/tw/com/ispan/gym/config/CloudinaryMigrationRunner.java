@@ -32,6 +32,10 @@ public class CloudinaryMigrationRunner implements CommandLineRunner {
     private final TrainerRepository trainerRepository;
     private final Cloudinary cloudinary;
 
+    /** 未設定 CLOUDINARY_* 時為空字串——此時整個遷移直接略過，圖片維持本地 /uploads/ 提供 */
+    @org.springframework.beans.factory.annotation.Value("${app.cloudinary.cloud-name:}")
+    private String cloudName;
+
     public CloudinaryMigrationRunner(
             ProductRepository productRepository,
             GroupCourseRepository groupCourseRepository,
@@ -47,6 +51,10 @@ public class CloudinaryMigrationRunner implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
+        if (cloudName == null || cloudName.isBlank()) {
+            log.info("未設定 Cloudinary 金鑰（CLOUDINARY_*），略過雲端圖片遷移；圖片維持本地 /uploads/ 提供");
+            return;
+        }
         log.info("Starting Cloudinary migration check for existing local images...");
 
         // 1. Migrate Products

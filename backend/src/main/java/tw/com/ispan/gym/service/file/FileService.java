@@ -1,8 +1,13 @@
 package tw.com.ispan.gym.service.file;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -23,8 +28,16 @@ public class FileService {
 
     private final Cloudinary cloudinary;
 
+    /** 未設定 CLOUDINARY_* 環境變數時為空字串，此時退回本地 uploads/ 存檔，組員沒申請金鑰也能用上傳功能 */
+    @Value("${app.cloudinary.cloud-name:}")
+    private String cloudName;
+
     public FileService(Cloudinary cloudinary) {
         this.cloudinary = cloudinary;
+    }
+
+    private boolean cloudinaryEnabled() {
+        return cloudName != null && !cloudName.isBlank();
     }
 
     public UploadResult saveImage(MultipartFile file) {
@@ -60,6 +73,11 @@ public class FileService {
             }
             String publicId = sb.toString();
 
+            // 沒有 Cloudinary 金鑰就走本地存檔備援（行為同上雲前的舊版）
+            if (!cloudinaryEnabled()) {
+                return saveToLocalDisk(fileBytes, publicId + ext);
+            }
+
             // 4. 檢查 Cloudinary 內是否已存在相同的 public_id
             boolean isDuplicate = false;
             String secureUrl = null;
@@ -88,8 +106,34 @@ public class FileService {
 
             return new UploadResult(secureUrl, isDuplicate);
         } catch (Exception e) {
-            log.error("Failed to save uploaded image to Cloudinary", e);
-            throw new FileUploadException("檔案上傳至雲端失敗，請重試");
+            log.error("Failed to save uploaded image", e);
+            throw new FileUploadException("檔案儲存失敗，請重試");
         }
+    }
+
+    /**
+     * 無 Cloudinary 金鑰時的本地存檔備援：MD5 檔名去重、回傳 /uploads/ 相對路徑，
+     * 行為與上雲前的舊版一致。目錄解析與 {@link tw.com.ispan.gym.config.UploadedFileConfig}
+     * 的優先序相同（先 cwd 的 uploads/，再上一層），寫進去的檔案才會是靜態路由對外提供的那份。
+     */
+    private UploadResult saveToLocalDisk(byte[] fileBytes, String filename) throws IOException {
+        File uploadDir = new File("uploads");
+        if (!uploadDir.exists() && new File("../uploads").exists()) {
+            uploadDir = new File("../uploads");
+        }
+        if (!uploadDir.exists()) {
+            uploadDir.mkdirs();
+        }
+        File dest = new File(uploadDir, filename);
+        boolean isDuplicate = dest.exists();
+        if (!isDuplicate) {
+            try (FileOutputStream fos = new FileOutputStream(dest)) {
+                fos.write(fileBytes);
+            }
+            log.info("未設定 Cloudinary，圖片存到本地：{}", dest.getPath());
+        } else {
+            log.info("未設定 Cloudinary，本地已有相同圖片，直接沿用：{}", dest.getPath());
+        }
+        return new UploadResult("/uploads/" + filename, isDuplicate);
     }
 }

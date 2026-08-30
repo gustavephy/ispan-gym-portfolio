@@ -160,6 +160,10 @@ class AdminEmployeeMethodSecurityTest {
         @Bean @Primary EmployeeProfileService employeeProfileService() {
             return Mockito.mock(EmployeeProfileService.class);
         }
+        // EmployeeProfileController 自 feat/private-course-improvements 起注入 FileService（頭像上傳）
+        @Bean @Primary tw.com.ispan.gym.service.file.FileService fileService() {
+            return Mockito.mock(tw.com.ispan.gym.service.file.FileService.class);
+        }
     }
 
     @Autowired MockMvc mockMvc;
