@@ -16,3 +16,6 @@
 # 資料庫的 image_url 仍會保留路徑，clone 後檔案不存在時前端會退回預設圖
 # （見 utils/image.js 的 useFallbackImage）
 /backend/uploads/
+
+# Claude Code 的專案指引（各層目錄都可能有），先當個人本機設定不進版控
+CLAUDE.md
