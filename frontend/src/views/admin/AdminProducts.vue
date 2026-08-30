@@ -5,12 +5,12 @@
     <p class="section-desc">管理補給商城的商品項目，包含新增、編輯商品資料與上下架操作。</p>
 
     <div class="page-header-row" style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-      <button class="btn btn-primary btn-sm" @click="showAddProduct = !showAddProduct">
+      <AppButton variant="primary" class="btn-sm" @click="showAddProduct = !showAddProduct">
         <span>{{ showAddProduct ? '✕ 取消新增' : '＋ 新增商品' }}</span>
-      </button>
-      <button class="btn btn-outline btn-sm" @click="showCategoryManager = true">
+      </AppButton>
+      <AppButton variant="outline" class="btn-sm" @click="showCategoryManager = true">
         <span>⚙ 管理商品分類</span>
-      </button>
+      </AppButton>
     </div>
 
     <!-- 新增商品表單 -->
@@ -41,20 +41,43 @@
           <label class="form-label">目前庫存數量</label>
           <input v-model.number="productForm.stock" type="number" class="form-input" min="0" placeholder="庫存數量" required />
         </div>
+        
+        <!-- 商品規格欄位 -->
+        <div style="grid-column: span 2; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; width: 100%;">
+          <div class="form-group">
+            <label class="form-label">品牌</label>
+            <input v-model="productForm.brand" class="form-input" placeholder="例如: Nike" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">重量 (kg)</label>
+            <input v-model.number="productForm.weight" type="number" step="0.01" class="form-input" placeholder="例如: 0.5" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">口味</label>
+            <input v-model="productForm.flavor" class="form-input" placeholder="例如: 巧克力" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">尺寸</label>
+            <input v-model="productForm.size" class="form-input" placeholder="例如: XL" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">顏色</label>
+            <input v-model="productForm.color" class="form-input" placeholder="例如: 藍色" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">材質</label>
+            <input v-model="productForm.material" class="form-input" placeholder="例如: 橡膠" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">產地</label>
+            <input v-model="productForm.origin" class="form-input" placeholder="例如: 臺灣" />
+          </div>
+        </div>
 
         <template #extra>
           <div class="form-group file-upload-group" style="width: 100%;">
             <label class="form-label">商品照片 <span style="color:#94a3b8;font-size:0.8em">（限 5MB 以內）</span></label>
-            <div class="file-upload-wrapper">
-              <label class="custom-file-btn">
-                選擇照片
-                <input type="file" @change="e => uploadFile(e, 'add')" accept="image/*" class="hidden-file-input" />
-              </label>
-              <span v-if="uploadingFile" class="loading-spinner-inline"></span>
-              <span class="file-status-text" v-if="productForm.imageUrl">已上傳圖片</span>
-              <img v-if="productForm.imageUrl" :src="formatImageUrl(productForm.imageUrl)" class="form-preview-thumb" alt="Preview" />
-            </div>
-            <input v-model="productForm.imageUrl" class="form-input url-input" placeholder="或直接貼上外部圖片的 URL 網址..." />
+            <AppImageUpload v-model="productForm.imageUrl" buttonText="選擇照片" placeholder="或直接貼上外部圖片的 URL 網址..." />
           </div>
           <div class="form-group" style="margin-top: 1rem; width: 100%;">
             <label class="form-label">詳細說明介紹</label>
@@ -63,7 +86,7 @@
         </template>
 
         <template #actions>
-          <button type="submit" class="btn btn-primary">確認發佈上架</button>
+          <AppButton type="submit" variant="primary">確認發佈上架</AppButton>
         </template>
       </AdminFormCard>
     </Transition>
@@ -98,8 +121,10 @@
       </template>
 
       <template #imageUrl="{ row }">
-        <img :src="getProductImage(row)" class="product-thumb" alt="Product Image"
-             @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" />
+        <div style="width: 70px; height: 70px; overflow: hidden; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: #fafafa;">
+          <img :src="getProductImage(row)" class="product-thumb" alt="Product Image"
+               @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" style="width: 100%; height: 100%; object-fit: contain;" />
+        </div>
       </template>
 
       <template #name="{ row }">
@@ -137,8 +162,8 @@
 
       <template #actions="{ row }">
         <div class="action-buttons-wrap">
-          <button class="btn btn-edit edit-btn-style btn-sm" @click="openEditModal(row)">編輯</button>
-          <button v-if="row.status === 1 || row.status === 'ACTIVE'" class="btn btn-danger deactive-btn-style btn-sm" @click="deleteProduct(row.productId)">下架</button>
+          <AppButton variant="edit" class="edit-btn-style btn-sm" @click="openEditModal(row)">編輯</AppButton>
+          <AppButton v-if="row.status === 1 || row.status === 'ACTIVE'" variant="danger" class="deactive-btn-style btn-sm" @click="deleteProduct(row.productId)">下架</AppButton>
         </div>
       </template>
     </AdminTable>
@@ -167,17 +192,41 @@
             <input v-model.number="editForm.stock" type="number" class="form-input" min="0" required />
           </div>
         </div>
+        
+        <!-- 商品規格欄位 -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1rem; width: 100%;">
+          <div class="form-group">
+            <label class="form-label">品牌</label>
+            <input v-model="editForm.brand" class="form-input" placeholder="例如: Nike" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">重量 (kg)</label>
+            <input v-model.number="editForm.weight" type="number" step="0.01" class="form-input" placeholder="例如: 0.5" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">口味</label>
+            <input v-model="editForm.flavor" class="form-input" placeholder="例如: 巧克力" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">尺寸</label>
+            <input v-model="editForm.size" class="form-input" placeholder="例如: XL" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">顏色</label>
+            <input v-model="editForm.color" class="form-input" placeholder="例如: 藍色" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">材質</label>
+            <input v-model="editForm.material" class="form-input" placeholder="例如: 橡膠" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">產地</label>
+            <input v-model="editForm.origin" class="form-input" placeholder="例如: 臺灣" />
+          </div>
+        </div>
         <div class="form-group" style="margin-top: 1rem;">
           <label class="form-label">照片設定 <span style="color:#94a3b8;font-size:0.8em">（限 5MB 以內）</span></label>
-          <div class="file-upload-wrapper">
-            <label class="custom-file-btn">
-              重新上傳
-              <input type="file" @change="e => uploadFile(e, 'edit')" accept="image/*" class="hidden-file-input" />
-            </label>
-            <span v-if="uploadingFile" class="loading-spinner-inline"></span>
-            <img v-if="editForm.imageUrl" :src="formatImageUrl(editForm.imageUrl)" class="form-preview-thumb" alt="Preview" />
-          </div>
-          <input v-model="editForm.imageUrl" class="form-input url-input" placeholder="圖片位址 URL" />
+          <AppImageUpload v-model="editForm.imageUrl" buttonText="重新上傳" placeholder="圖片位址 URL" />
         </div>
         <div class="form-group" style="margin-top: 1rem;">
           <label class="form-label">詳細說明介紹</label>
@@ -185,8 +234,8 @@
         </div>
       </form>
       <template #footer>
-        <button type="button" class="btn btn-ghost" @click="showEditProduct = false">取消</button>
-        <button type="submit" form="editProductForm" class="btn btn-primary">保存修改資料</button>
+        <AppButton type="button" variant="outline" class="btn-ghost" @click="showEditProduct = false">取消</AppButton>
+        <AppButton type="submit" form="editProductForm" variant="primary">保存修改資料</AppButton>
       </template>
     </AppModal>
 
@@ -198,7 +247,7 @@
           <h5 style="margin-bottom: 0.75rem; font-weight: 700;">新增分類</h5>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <input v-model="newCategoryForm.name" class="form-input" style="flex: 2; min-width: 150px;" placeholder="分類名稱，例如：健身器材" required />
-            <button type="submit" class="btn btn-primary" style="padding: 0.5rem 1rem;">新增</button>
+            <AppButton type="submit" variant="primary" style="padding: 0.5rem 1rem;">新增</AppButton>
           </div>
         </form>
 
@@ -216,7 +265,7 @@
               <tr v-for="cat in goodsCategories" :key="cat.productCategoryId" style="border-bottom: 1px solid var(--border-light);">
                 <td style="padding: 0.5rem; font-weight: 600;">{{ cat.name }}</td>
                 <td style="padding: 0.5rem; text-align: right;">
-                  <button @click="deleteCategory(cat)" class="btn btn-danger btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">刪除</button>
+                  <AppButton @click="deleteCategory(cat)" variant="danger" class="btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">刪除</AppButton>
                 </td>
               </tr>
               <tr v-if="goodsCategories.length === 0">
@@ -227,7 +276,7 @@
         </div>
       </div>
       <template #footer>
-        <button type="button" class="btn btn-primary" @click="showCategoryManager = false">完成</button>
+        <AppButton type="button" variant="primary" @click="showCategoryManager = false">完成</AppButton>
       </template>
     </AppModal>
 
@@ -242,7 +291,9 @@ import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'
 import AdminFormCard from '@/components/AdminFormCard.vue'
 import AdminTable from '@/components/AdminTable.vue'
-import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE, uploadImageFile } from '@/utils/image.js'
+import AppButton from '@/components/AppButton.vue'
+import AppImageUpload from '@/components/AppImageUpload.vue'
+import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
 import api from '@/api/axios.instance.js'
 
 const tableColumns = [
@@ -295,8 +346,8 @@ watch([activeTableFilter, () => filterParams.value.keyword, () => filterParams.v
   currentPage.value = 1
 })
 
-const productForm = ref({ name: '', price: null, stock: null, description: '', imageUrl: '', productCategoryId: null })
-const editForm = ref({ id: null, name: '', price: null, stock: null, description: '', imageUrl: '', productCategoryId: null })
+const productForm = ref({ name: '', price: null, stock: null, description: '', imageUrl: '', productCategoryId: null, brand: '', weight: null, flavor: '', size: '', color: '', material: '', origin: '' })
+const editForm = ref({ id: null, name: '', price: null, stock: null, description: '', imageUrl: '', productCategoryId: null, brand: '', weight: null, flavor: '', size: '', color: '', material: '', origin: '' })
 const newCategoryForm = ref({ name: '', categoryType: 'PHYSICAL', iconUrl: '', sortOrder: 0 })
 
 // 篩選出實體商品的分類
@@ -378,29 +429,7 @@ function getProductImage(p) {
   return DEFAULT_PRODUCT_IMAGE
 }
 
-// 圖片上傳
-async function uploadFile(event, mode) {
-  const file = event.target.files[0]
-  if (!file) return
-  uploadingFile.value = true
-  try {
-    const uploadedUrl = await uploadImageFile(file)
-    if (!uploadedUrl) {
-      showToast('上傳圖片失敗：伺服器未回傳圖片位址', 'error')
-      return
-    }
-    if (mode === 'add') {
-      productForm.value.imageUrl = uploadedUrl
-    } else {
-      editForm.value.imageUrl = uploadedUrl
-    }
-    showToast('圖片上傳成功')
-  } catch (e) {
-    showToast(e.message || '上傳圖片失敗', 'error')
-  } finally {
-    uploadingFile.value = false
-  }
-}
+// 圖片上傳方法已由共用組件 AppImageUpload 處理
 
 // 新增商品
 async function createProduct() {
@@ -415,6 +444,13 @@ async function createProduct() {
     description: productForm.value.description || '',
     imageUrl: productForm.value.imageUrl || '',
     productCategoryId: categoryIdVal,
+    brand: productForm.value.brand || '',
+    weight: productForm.value.weight ? Number(productForm.value.weight) : null,
+    flavor: productForm.value.flavor || '',
+    size: productForm.value.size || '',
+    color: productForm.value.color || '',
+    material: productForm.value.material || '',
+    origin: productForm.value.origin || '',
     classSize: '',
     isTrial: false,
     sessionsPerUnit: 1
@@ -424,7 +460,7 @@ async function createProduct() {
     await api.post('/api/admin/products', payload)
     showToast('新商品上架成功！')
     showAddProduct.value = false
-    productForm.value = { name: '', price: null, stock: null, description: '', imageUrl: '', productCategoryId: null }
+    productForm.value = { name: '', price: null, stock: null, description: '', imageUrl: '', productCategoryId: null, brand: '', weight: null, flavor: '', size: '', color: '', material: '', origin: '' }
     await loadProducts()
   } catch (e) {
     showToast('新增商品失敗', 'error')
@@ -439,7 +475,14 @@ function openEditModal(p) {
     stock: p.stock,
     description: p.description || '',
     imageUrl: p.imageUrl || '',
-    productCategoryId: p.productCategoryId || null
+    productCategoryId: p.productCategoryId || null,
+    brand: p.brand || '',
+    weight: p.weight || null,
+    flavor: p.flavor || '',
+    size: p.size || '',
+    color: p.color || '',
+    material: p.material || '',
+    origin: p.origin || ''
   }
   showEditProduct.value = true
 }
@@ -529,6 +572,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
+
 /* ===== 後台通用資料表格樣式===== */
 .admin-table {
   border-radius: 16px;
@@ -592,6 +636,7 @@ onMounted(() => {
   margin-top: 0.2rem;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 

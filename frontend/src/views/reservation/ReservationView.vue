@@ -10,6 +10,7 @@ import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import Pagination from '@/components/Pagination.vue'
+import { getMyQuotas } from '@/api/member/booking.js'
 
 // 預約狀態對照表：後端回傳 PENDING/COMPLETED/CANCELLED，畫面顯示中文與顏色
 const BOOKING_STATUS_MAP = {
@@ -91,9 +92,20 @@ function formatDateTime(value) {
 async function fetchTrainers() {
   trainersLoading.value = true
   try {
-    const res = await getTrainers()
-    // 新 API 會回傳 UNAVAILABLE 教練，這裡過濾只留 ACTIVE，維持跟舊 API（只回傳在職教練）一致的既有行為
-    trainers.value = res.data.filter((trainer) => trainer.status === 'ACTIVE')
+    const [trainersRes, quotasRes] = await Promise.all([
+      getTrainers(),
+      getMyQuotas()
+    ])
+    const activeQuotas = quotasRes.data || []
+    const eligibleTrainerIds = activeQuotas
+      .filter(q => q.remainingCourse > 0)
+      .map(q => q.trainer?.id)
+      .filter(Boolean)
+
+    // 新 API 會回傳 UNAVAILABLE 教練，這裡過濾只留 ACTIVE 且擁有名下剩餘額度的教練
+    trainers.value = trainersRes.data.filter((trainer) => 
+      trainer.status === 'ACTIVE' && eligibleTrainerIds.includes(trainer.trainerId)
+    )
   } finally {
     trainersLoading.value = false
   }

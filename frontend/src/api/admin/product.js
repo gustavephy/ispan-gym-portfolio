@@ -14,4 +14,4 @@ export const adminUpdateProduct = (id, data) => api.put(`/api/admin/products/${i
 // 刪除商品
 export const adminDeleteProduct = (id) => api.delete(`/api/admin/products/${id}`)
 // 上傳圖片
-export const adminUploadProductImage = (formData, config) => api.post('/api/admin/products/upload', formData, config)
+export const adminUploadProductImage = (formData, config) => api.post('/api/admin/files/upload', formData, config)

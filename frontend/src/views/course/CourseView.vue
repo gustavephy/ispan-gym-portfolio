@@ -2,9 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCoursesStore } from '@/stores/courses.js'
-import { useCartStore } from '@/stores/cart.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { useRoute } from 'vue-router'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 import CourseCard from '@/components/CourseCard.vue'
@@ -12,11 +10,10 @@ import CourseSearchBar from '@/components/CourseSearchBar.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import { getGroupCoursesPublic, getPrivateCoursesPublicPaged } from '@/api/course/course.js'
 import { getMySubscription } from '@/api/subscription.js'
+import { getMyQuotas } from '@/api/member/booking.js'
 
 const coursesStore = useCoursesStore()
-const cartStore = useCartStore()
 const authStore = useAuthStore()
-const route = useRoute()
 
 const { 
   loading,
@@ -250,8 +247,30 @@ async function checkMemberSubscription() {
   }
 }
 
+const myQuotas = ref([])
+
+async function fetchMyQuotas() {
+  if (!authStore.isLoggedIn || !authStore.isMember) {
+    myQuotas.value = []
+    return
+  }
+  try {
+    const res = await getMyQuotas()
+    myQuotas.value = res.data || []
+  } catch (err) {
+    console.error('fetchMyQuotas failed:', err)
+  }
+}
+
+function isCoursePurchased(course) {
+  if (!course) return false
+  const courseId = course.id || course.privateCourseId
+  return myQuotas.value.some(q => q.productId === courseId && q.remainingCourse > 0)
+}
+
 onMounted(async () => {
   await checkMemberSubscription()
+  await fetchMyQuotas()
   await coursesStore.loadCategories()
   // 私教分頁的教練下拉靠 store 的未篩選課程清單（見 displayedDropdownTrainers）。
   // 那份清單原本只有首頁會載，直接開這頁或重新整理時是空的，下拉就只剩「全部教練」。
@@ -421,6 +440,15 @@ onUnmounted(() => {
                   </p>
 
                   <button
+                    v-if="isCoursePurchased(trainer.courses.find(c => c.id === selectedCoursesMap[trainer.id]))"
+                    class="btn"
+                    style="width: 100%; border-radius: 999px; background: var(--border); color: var(--text-secondary); cursor: not-allowed;"
+                    disabled
+                  >
+                    已購買此課程
+                  </button>
+                  <button
+                    v-else
                     class="btn btn-accent"
                     style="width: 100%; border-radius: 999px;"
                     @click="handleAddToCart(trainer.courses.find(c => c.id === selectedCoursesMap[trainer.id]))"
@@ -581,7 +609,6 @@ onUnmounted(() => {
   height: 80px;
   border-radius: 50%;
   overflow: hidden;
-  border: 3px solid var(--primary-light, #fef3c7);
   flex-shrink: 0;
   box-shadow: var(--shadow-sm);
 }

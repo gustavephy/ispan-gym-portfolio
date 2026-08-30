@@ -27,6 +27,10 @@ public class UploadedFileConfig implements WebMvcConfigurer {
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         Path uploadPath = Paths.get(UPLOAD_DIR).toAbsolutePath().normalize();
+        // 如果本機執行時，工作目錄在 backend/，則向上尋找根目錄的 uploads
+        if (!uploadPath.toFile().exists() && Paths.get("../" + UPLOAD_DIR).toFile().exists()) {
+            uploadPath = Paths.get("../" + UPLOAD_DIR).toAbsolutePath().normalize();
+        }
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations(uploadPath.toUri().toString());
     }

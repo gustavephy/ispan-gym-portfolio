@@ -41,9 +41,9 @@
     </div>
 
     <div class="page-header-row" style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-      <button class="btn btn-primary btn-sm" @click="showAddCoupon = !showAddCoupon">
+      <AppButton variant="primary" class="btn-sm" @click="showAddCoupon = !showAddCoupon">
         <span>{{ showAddCoupon ? '✕ 取消新增' : '＋ 新增優惠券' }}</span>
-      </button>
+      </AppButton>
     </div>
 
     <!-- 新增優惠券表單 -->
@@ -103,7 +103,7 @@
         </div>
 
         <template #actions>
-          <button type="submit" class="btn btn-primary">確認發佈發行</button>
+          <AppButton type="submit" variant="primary">確認發佈發行</AppButton>
         </template>
       </AdminFormCard>
     </Transition>
@@ -196,8 +196,8 @@
 
       <template #actions="{ row }">
         <div class="action-buttons-wrap">
-          <button class="btn btn-edit btn-sm" @click="openEditCouponModal(row)" title="編輯">編輯</button>
-          <button v-if="row.status === 'ACTIVE' || row.status === '1'" class="btn btn-danger btn-sm" @click="deleteCoupon(row.couponId)" title="下架">下架</button>
+          <AppButton variant="edit" class="btn-sm" @click="openEditCouponModal(row)" title="編輯">編輯</AppButton>
+          <AppButton v-if="row.status === 'ACTIVE' || row.status === '1'" variant="danger" class="btn-sm" @click="deleteCoupon(row.couponId)" title="下架">下架</AppButton>
         </div>
       </template>
     </AdminTable>
@@ -256,8 +256,8 @@
         </div>
       </form>
       <template #footer>
-        <button type="button" class="btn btn-ghost" @click="showEditCoupon = false">取消</button>
-        <button type="submit" form="editCouponForm" class="btn btn-primary">保存修改活動</button>
+        <AppButton type="button" variant="outline" class="btn-ghost" @click="showEditCoupon = false">取消</AppButton>
+        <AppButton type="submit" form="editCouponForm" variant="primary">保存修改活動</AppButton>
       </template>
     </AppModal>
 
@@ -281,15 +281,15 @@
         </p>
       </div>
       <template #footer>
-        <button type="button" class="btn btn-ghost" @click="showDistributeModal = false">取消</button>
-        <button
+        <AppButton type="button" variant="outline" class="btn-ghost" @click="showDistributeModal = false">取消</AppButton>
+        <AppButton
           type="button"
-          class="btn btn-primary"
+          variant="primary"
           :disabled="parsedMemberIds.length === 0 || isDistributing"
           @click="distributeToMembers"
         >
           {{ isDistributing ? '發放中...' : `確認發放 (${parsedMemberIds.length} 人)` }}
-        </button>
+        </AppButton>
       </template>
     </AppModal>
 
@@ -301,6 +301,7 @@
 import { ref, computed, onMounted, inject, watch } from 'vue'
 import api from '@/api/axios.instance.js'
 import AppModal from '@/components/AppModal.vue'
+import AppButton from '@/components/AppButton.vue'
 import AdminTable from '@/components/AdminTable.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'

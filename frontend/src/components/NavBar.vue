@@ -138,7 +138,7 @@
         }
         return !auth.isLoggedIn || auth.isMember
       }
-      return !w.requires || auth.roles.includes(w.requires)
+      return !w.requires || (auth.roles && auth.roles.includes(w.requires))
     }),
   )
 
@@ -199,7 +199,7 @@
 
   const visibleLinks = computed(() =>
     (currentWorkspace.value?.links ?? []).filter(
-      (link) => !link.requires || auth.roles.includes(link.requires),
+      (link) => !link.requires || (auth.roles && auth.roles.includes(link.requires)),
     ),
   )
 
@@ -209,7 +209,7 @@
   const ROLE_LABELS = { MEMBER: '會員', EMPLOYEE: '員工', ADMIN: '管理員', TRAINER: '教練' }
   const KNOWN_ROLES = Object.keys(ROLE_LABELS)
   const roleLabels = computed(() => {
-    const roles = new Set(auth.roles)
+    const roles = new Set(auth.roles || [])
     const labels = []
     // 對外徽章使用簡稱；完整身分提示仍顯示「管理員」
     if (roles.has('ADMIN')) labels.push('管理')
@@ -222,7 +222,7 @@
     }
     return labels
   })
-  const fullRoleList = computed(() => auth.roles.map((role) => ROLE_LABELS[role] ?? role).join('、'))
+  const fullRoleList = computed(() => (auth.roles || []).map((role) => ROLE_LABELS[role] ?? role).join('、'))
   const isPureMember = computed(() => auth.isMember && !auth.isTrainer && !auth.isEmployee && !auth.isAdmin)
 
   const ADMIN_GROUPS = [
@@ -291,7 +291,7 @@
   const visibleAdminGroups = computed(() => {
     return ADMIN_GROUPS.map((g) => {
       const links = g.links.filter(
-        (link) => !link.requires || auth.roles.includes(link.requires)
+        (link) => !link.requires || (auth.roles && auth.roles.includes(link.requires))
       )
       return { ...g, links }
     }).filter((g) => g.links.length > 0)

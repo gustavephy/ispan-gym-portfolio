@@ -13,6 +13,13 @@ import tw.com.ispan.gym.dto.employee.EmployeeProfileUpdateRequest;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.employee.EmployeeProfileService;
 
+import java.util.Map;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+import tw.com.ispan.gym.service.file.FileService;
+
 /**
  * 員工自助查詢／修改個人資料。
  *
@@ -34,10 +41,19 @@ public class EmployeeProfileController {
 
     private final EmployeeProfileService profileService;
     private final CurrentUserProvider currentUser;
+    private final FileService fileService;
 
-    public EmployeeProfileController(EmployeeProfileService profileService, CurrentUserProvider currentUser) {
+    public EmployeeProfileController(EmployeeProfileService profileService, CurrentUserProvider currentUser, FileService fileService) {
         this.profileService = profileService;
         this.currentUser = currentUser;
+        this.fileService = fileService;
+    }
+
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    @PostMapping("/profile/upload")
+    public ResponseEntity<Map<String, String>> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        String fileUrl = fileService.saveImage(file).url();
+        return ResponseEntity.ok(Map.of("url", fileUrl));
     }
 
     @PreAuthorize("hasRole('EMPLOYEE')")
