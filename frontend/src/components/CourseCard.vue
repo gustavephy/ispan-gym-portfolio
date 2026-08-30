@@ -5,6 +5,7 @@
     import { useAuthStore } from '@/stores/auth.js'
     import { formatImageUrl, useFallbackImage, DEFAULT_COURSE_IMAGE } from '@/utils/image.js'
     import { useCoursesStore } from '@/stores/courses.js'
+    import AppButton from '@/components/AppButton.vue'
 
     // 接收父組件傳入的資料
     const props = defineProps({
@@ -88,32 +89,36 @@
                  <span v-else-if="isPrivate" class="price">NT$ {{ formatPrice(course.price || 0) }}</span>
             
                  <!-- 團課按鈕：已訂閱 → 立即預約 -->
-                 <button
+                 <AppButton
                      v-if = "!isPrivate && hasActiveSubscription"
+                     variant="accent"
                      class="action-btn sub-btn"
                      @click.stop="$router.push(`/group-classes?keyword=${encodeURIComponent(course.name)}`)"
-                 >立即預約</button>
+                 >立即預約</AppButton>
 
                  <!-- 團課按鈕：未訂閱 → 前往訂閱頁 -->
-                 <button
+                 <AppButton
                      v-else-if="!isPrivate"
+                     variant="accent"
                      class="action-btn sub-btn"
                      @click.stop="$router.push('/subscription')"
-                 >立即訂閱</button>
+                 >立即訂閱</AppButton>
                  
                  <!-- 私教課按鈕：已購買 → 立即預約 -->
-                 <button
+                 <AppButton
                      v-else-if="isPrivate && hasQuota"
+                     variant="accent"
                      class="action-btn sub-btn"
                      @click.stop="$router.push(`/reservation?keyword=${encodeURIComponent(course.name)}`)"
-                 >立即預約</button>
+                 >立即預約</AppButton>
                  
                  <!-- 私教課按鈕：未購買 → 直接購買 -->
-                 <button
+                 <AppButton
                      v-else
+                     variant="accent"
                      class="action-btn"
                      @click.stop="handlePurchase"
-                 >立即購買</button>
+                 >立即購買</AppButton>
             </div>
         </div>
     </div>

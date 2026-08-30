@@ -22,7 +22,7 @@
       <div class="threshold-tweak-box" style="display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 0.5rem 1rem; border-radius: 10px; border: 1px solid #e2e8f0;">
         <label style="color: #475569; font-size: 0.85rem; white-space: nowrap; font-weight: 600;">自訂安全庫存門檻:</label>
         <input type="number" v-model.number="tempThreshold" min="1" max="100" style="width: 70px; text-align: center; background: #ffffff; border: 1px solid #cbd5e1; color: #0f172a; padding: 0.3rem 0.5rem; border-radius: 6px; font-weight: bold; outline: none;" />
-        <button class="btn btn-primary btn-xs" @click="saveThreshold">儲存門檻</button>
+        <AppButton variant="primary" class="btn-xs" @click="saveThreshold">儲存門檻</AppButton>
       </div>
     </div>
 
@@ -58,8 +58,10 @@
       </template>
 
       <template #imageUrl="{ row }">
-        <img :src="getProductImage(row)" class="product-thumb" alt="Product Image"
-             @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" />
+        <div style="width: 70px; height: 70px; overflow: hidden; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: #fafafa;">
+          <img :src="getProductImage(row)" class="product-thumb" alt="Product Image"
+               @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" style="width: 100%; height: 100%; object-fit: contain;" />
+        </div>
       </template>
 
       <template #name="{ row }">
@@ -109,6 +111,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import api from '@/api/axios.instance.js'
 import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
 import AdminTable from '@/components/AdminTable.vue'
+import AppButton from '@/components/AppButton.vue'
 
 // [響應式狀態] products
 const products = ref([])

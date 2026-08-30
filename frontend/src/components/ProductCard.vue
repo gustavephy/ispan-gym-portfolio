@@ -8,6 +8,8 @@ import { useFeedback } from '@/composables/useFeedback.js';
 import FeedbackToast from '@/components/FeedbackToast.vue';
 import { useRouter } from 'vue-router';
 
+import AppButton from '@/components/AppButton.vue';
+
 const props = defineProps({
   product: { type: Object, required: true }
 })
@@ -41,10 +43,16 @@ const addToCart = async () => {
   }
 }
 
+// 停用預設的屬性繼承，避免 id/class 被綁到外層額外的 div
+defineOptions({
+  inheritAttrs: false
+})
 </script>
 
 <template>
-    <div class="item-card" @click="$router.push(`/products/${product.productId}`)">
+  <div>
+    <!-- 手動將繼承的屬性 (包含 id, class) 綁到真正代表卡片的元素上 -->
+    <div v-bind="$attrs" class="item-card" @click="$router.push(`/products/${product.productId}`)">
         <div class="item-cover" :style="!product.imageUrl ? {background: 'linear-gradient(135deg, #fce4d6, #f9d5c5)' }: {} ">
             <img v-if = "product.imageUrl" :src="formatImageUrl(product.imageUrl)" class="cover-image" alt="商品封面"
                  @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)">
@@ -61,17 +69,19 @@ const addToCart = async () => {
                     <span v-if = "product.stock <= 5 && product.stock > 0" class="stock-warn" >僅剩 {{ product.stock }}</span>
                     <span v-if = "product.stock ==0" class="stock-empty" >已售完</span>
                 </div>
-                <button
+                <AppButton
                 class="action-btn"
-                :disabled="product.stock == 0 || adding"
+                :disabled="product.stock == 0"
+                :loading="adding"
                 @click.stop="addToCart">
                     <i class="fas fa-shopping-cart"></i>
-                    {{ product.stock === 0 ? '售完' : adding ? '加入中…' : '加入購物車' }}
-                </button>
+                    {{ product.stock === 0 ? '售完' : '加入購物車' }}
+                </AppButton>
             </div>
         </div>
     </div>
     <FeedbackToast :feedback="feedback" />
+  </div>
 </template>
 
 <style scoped>

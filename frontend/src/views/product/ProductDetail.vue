@@ -7,6 +7,9 @@ import { useCartStore } from '@/stores/cart.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
+import AppButton from '@/components/AppButton.vue'
+
+import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -103,7 +106,7 @@ onUnmounted(() => clearTimeout(justAddedTimer))
 
     <div class="detail-layout">
       <div class="product-image">
-        <img v-if="product.imageUrl" :src="product.imageUrl" :alt="product.name" />
+        <img v-if="product.imageUrl" :src="formatImageUrl(product.imageUrl)" :alt="product.name" @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)" />
         <span v-else class="product-image-fallback">{{ product.name?.[0] }}</span>
       </div>
 
@@ -138,14 +141,15 @@ onUnmounted(() => clearTimeout(justAddedTimer))
             />
             <button class="qty-btn" aria-label="增加數量" @click="increaseQty">＋</button>
           </div>
-          <button
-            class="btn btn-accent add-btn"
+          <AppButton
+            variant="accent"
+            class="add-btn"
             :class="{ 'add-btn--added': justAdded }"
             :disabled="product.stock === 0"
             @click="addToCart"
           >
             {{ product.stock === 0 ? '已售完' : justAdded ? '已加入 ✓' : '加入購物車' }}
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>
@@ -187,11 +191,13 @@ onUnmounted(() => clearTimeout(justAddedTimer))
   justify-content: center;
   overflow: hidden;
 }
+
 .product-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
+
 .product-image-fallback {
   font-size: 4rem;
   color: var(--text-muted);

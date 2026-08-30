@@ -1,24 +1,33 @@
 package tw.com.ispan.gym.service.file;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import tw.com.ispan.gym.exception.FileUploadException;
 import tw.com.ispan.gym.exception.InvalidRequestException;
+
+import tw.com.ispan.gym.dto.file.UploadResult;
 
 @Service
 public class FileService {
 
     private static final Logger log = LoggerFactory.getLogger(FileService.class);
-    private static final List<String> ALLOWED_IMAGE_TYPES = List.of("image/jpeg", "image/png", "image/gif", "image/webp");
-    private static final List<String> ALLOWED_EXTENSIONS = List.of(".jpg", ".jpeg", ".png", ".gif", ".webp");
+    private static final List<String> ALLOWED_IMAGE_TYPES = List.of("image/jpeg", "image/png", "image/gif", "image/webp", "image/avif");
+    private static final List<String> ALLOWED_EXTENSIONS = List.of(".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif");
 
-    public String saveImage(MultipartFile file) {
+    private final Cloudinary cloudinary;
+
+    public FileService(Cloudinary cloudinary) {
+        this.cloudinary = cloudinary;
+    }
+
+    public UploadResult saveImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new InvalidRequestException("上傳檔案不可為空");
         }
@@ -40,36 +49,47 @@ public class FileService {
         }
 
         try {
-            File uploadDir = new File("uploads");
-            if (!uploadDir.exists()) {
-                uploadDir.mkdirs();
-            }
-
             byte[] fileBytes = file.getBytes();
 
-            // 3. 計算 MD5 Hash 作為檔名，重複檔案不重複存入
+            // 3. 計算 MD5 Hash
             MessageDigest md = MessageDigest.getInstance("MD5");
             byte[] hashBytes = md.digest(fileBytes);
             StringBuilder sb = new StringBuilder();
             for (byte b : hashBytes) {
                 sb.append(String.format("%02x", b));
             }
-            String filename = sb.toString() + ext;
-            File dest = new File(uploadDir, filename);
+            String publicId = sb.toString();
 
-            if (!dest.exists()) {
-                try (FileOutputStream fos = new FileOutputStream(dest)) {
-                    fos.write(fileBytes);
+            // 4. 檢查 Cloudinary 內是否已存在相同的 public_id
+            boolean isDuplicate = false;
+            String secureUrl = null;
+            try {
+                Map<?, ?> resource = cloudinary.api().resource(publicId, ObjectUtils.emptyMap());
+                if (resource != null && resource.containsKey("secure_url")) {
+                    secureUrl = (String) resource.get("secure_url");
+                    isDuplicate = true;
+                    log.info("Duplicate image detected on Cloudinary, reusing: {}", secureUrl);
                 }
-                log.info("Image file saved successfully: {}", filename);
-            } else {
-                log.info("Duplicate image detected, reusing existing file: {}", filename);
+            } catch (com.cloudinary.api.exceptions.NotFound e) {
+                // 不存在，將進行上傳
+            } catch (Exception e) {
+                log.warn("Failed to check duplicate on Cloudinary, proceeding to upload", e);
             }
 
-            return "/uploads/" + filename;
+            // 5. 如果不存在，上傳至 Cloudinary
+            if (!isDuplicate) {
+                Map<?, ?> uploadResult = cloudinary.uploader().upload(fileBytes, ObjectUtils.asMap(
+                        "public_id", publicId,
+                        "overwrite", true
+                ));
+                secureUrl = (String) uploadResult.get("secure_url");
+                log.info("Image uploaded successfully to Cloudinary: {}", secureUrl);
+            }
+
+            return new UploadResult(secureUrl, isDuplicate);
         } catch (Exception e) {
-            log.error("Failed to save uploaded image", e);
-            throw new FileUploadException("檔案儲存失敗，請重試");
+            log.error("Failed to save uploaded image to Cloudinary", e);
+            throw new FileUploadException("檔案上傳至雲端失敗，請重試");
         }
     }
 }

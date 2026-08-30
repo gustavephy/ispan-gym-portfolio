@@ -138,7 +138,7 @@
         }
         return !auth.isLoggedIn || auth.isMember
       }
-      return !w.requires || auth.roles.includes(w.requires)
+      return !w.requires || (auth.roles && auth.roles.includes(w.requires))
     }),
   )
 
@@ -199,7 +199,7 @@
 
   const visibleLinks = computed(() =>
     (currentWorkspace.value?.links ?? []).filter(
-      (link) => !link.requires || auth.roles.includes(link.requires),
+      (link) => !link.requires || (auth.roles && auth.roles.includes(link.requires)),
     ),
   )
 
@@ -209,7 +209,7 @@
   const ROLE_LABELS = { MEMBER: '會員', EMPLOYEE: '員工', ADMIN: '管理員', TRAINER: '教練' }
   const KNOWN_ROLES = Object.keys(ROLE_LABELS)
   const roleLabels = computed(() => {
-    const roles = new Set(auth.roles)
+    const roles = new Set(auth.roles || [])
     const labels = []
     // 對外徽章使用簡稱；完整身分提示仍顯示「管理員」
     if (roles.has('ADMIN')) labels.push('管理')
@@ -222,7 +222,7 @@
     }
     return labels
   })
-  const fullRoleList = computed(() => auth.roles.map((role) => ROLE_LABELS[role] ?? role).join('、'))
+  const fullRoleList = computed(() => (auth.roles || []).map((role) => ROLE_LABELS[role] ?? role).join('、'))
   const isPureMember = computed(() => auth.isMember && !auth.isTrainer && !auth.isEmployee && !auth.isAdmin)
 
   const ADMIN_GROUPS = [
@@ -291,7 +291,7 @@
   const visibleAdminGroups = computed(() => {
     return ADMIN_GROUPS.map((g) => {
       const links = g.links.filter(
-        (link) => !link.requires || auth.roles.includes(link.requires)
+        (link) => !link.requires || (auth.roles && auth.roles.includes(link.requires))
       )
       return { ...g, links }
     }).filter((g) => g.links.length > 0)
@@ -532,6 +532,8 @@
     border-right: 1px solid var(--border);
     box-shadow: 2px 0 12px rgba(0, 0, 0, 0.03);
     z-index: 1000;
+    overflow-y: auto;
+    scrollbar-width: thin;
   }
 
   .nav-divider {
@@ -545,9 +547,9 @@
     display: flex;
     flex-direction: column;
     flex: 1;
-    min-height: 0;
+    /* 移除 min-height: 0 與 overflow: hidden 讓整支側欄或內部容器在高度不足時可以被撐開滑動，
+       或是搭配 flex-shrink: 0 防止子組件擠壓 */
     gap: 1rem;
-    overflow: hidden;
   }
 
   .brand {
@@ -716,6 +718,7 @@
     text-overflow: ellipsis;
     border-left: 3px solid transparent;
     letter-spacing: 0.01em;
+    flex-shrink: 0; /* 防止垂直空間壓縮按鈕高度 */
   }
   .nav-link:hover {
     color: var(--text-primary);
