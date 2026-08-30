@@ -12,6 +12,8 @@ import com.cloudinary.utils.ObjectUtils;
 import tw.com.ispan.gym.exception.FileUploadException;
 import tw.com.ispan.gym.exception.InvalidRequestException;
 
+import tw.com.ispan.gym.dto.file.UploadResult;
+
 @Service
 public class FileService {
 
@@ -24,8 +26,6 @@ public class FileService {
     public FileService(Cloudinary cloudinary) {
         this.cloudinary = cloudinary;
     }
-
-    public static record UploadResult(String url, @com.fasterxml.jackson.annotation.JsonProperty("isDuplicate") boolean isDuplicate) {}
 
     public UploadResult saveImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {

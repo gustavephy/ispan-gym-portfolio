@@ -47,9 +47,10 @@ class EmployeeProfileControllerTest {
 
     private final EmployeeProfileService profileService = mock(EmployeeProfileService.class);
     private final CurrentUserProvider currentUser = mock(CurrentUserProvider.class);
+    private final tw.com.ispan.gym.service.file.FileService fileService = mock(tw.com.ispan.gym.service.file.FileService.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new EmployeeProfileController(profileService, currentUser))
+            .standaloneSetup(new EmployeeProfileController(profileService, currentUser, fileService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 

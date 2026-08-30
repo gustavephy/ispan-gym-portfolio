@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.service.file.FileService;
+import tw.com.ispan.gym.dto.file.UploadResult;
 
 /**
  * 員工（含教練）自助上傳圖片，目前只給員工個資頁的教練頭像用。
@@ -36,6 +37,7 @@ public class EmployeeUploadController {
     @PostMapping("/images")
     public ResponseEntity<Map<String, String>> uploadImage(@RequestParam("file") MultipartFile file) {
         log.info("Employee image upload: name={}", file.getOriginalFilename());
-        return ResponseEntity.ok(Map.of("url", fileService.saveImage(file)));
+        UploadResult result = fileService.saveImage(file);
+        return ResponseEntity.ok(Map.of("url", result.url()));
     }
 }

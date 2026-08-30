@@ -532,6 +532,8 @@
     border-right: 1px solid var(--border);
     box-shadow: 2px 0 12px rgba(0, 0, 0, 0.03);
     z-index: 1000;
+    overflow-y: auto;
+    scrollbar-width: thin;
   }
 
   .nav-divider {
@@ -545,9 +547,9 @@
     display: flex;
     flex-direction: column;
     flex: 1;
-    min-height: 0;
+    /* 移除 min-height: 0 與 overflow: hidden 讓整支側欄或內部容器在高度不足時可以被撐開滑動，
+       或是搭配 flex-shrink: 0 防止子組件擠壓 */
     gap: 1rem;
-    overflow: hidden;
   }
 
   .brand {
@@ -716,6 +718,7 @@
     text-overflow: ellipsis;
     border-left: 3px solid transparent;
     letter-spacing: 0.01em;
+    flex-shrink: 0; /* 防止垂直空間壓縮按鈕高度 */
   }
   .nav-link:hover {
     color: var(--text-primary);

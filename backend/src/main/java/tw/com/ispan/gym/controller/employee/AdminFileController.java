@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.service.file.FileService;
+import tw.com.ispan.gym.dto.file.UploadResult;
 
 @RestController
 @RequiredArgsConstructor
@@ -25,9 +26,9 @@ public class AdminFileController {
      * 後台共用圖片上傳端點
      */
     @PostMapping("/upload")
-    public ResponseEntity<FileService.UploadResult> uploadImage(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<UploadResult> uploadImage(@RequestParam("file") MultipartFile file) {
         log.info("Request to upload image: name={}", file.getOriginalFilename());
-        FileService.UploadResult result = fileService.saveImage(file);
+        UploadResult result = fileService.saveImage(file);
         return ResponseEntity.ok(result);
     }
 }
