@@ -19,7 +19,7 @@ const NEW_PASSWORD = `Rst${Date.now()}Pw`
 
 const sha256Hex = (s) => createHash('sha256').update(s, 'utf8').digest('hex')
 
-/** 把該帳號最新一筆未使用的重設申請換成我們自己的 token，回傳原始 token */
+/** 把該帳號最新一筆未使用的重設申請換成我們自己的 token，回傳原始 token；改不到回 null */
 function hijackLatestResetToken(email) {
   const raw = randomBytes(32).toString('base64url')
   // sqlcmd 的「N 個資料列受影響」訊息會隨語系變動，改用 @@ROWCOUNT 回傳數字
@@ -28,8 +28,23 @@ function hijackLatestResetToken(email) {
     WHERE a.email = '${email}' AND t.used_at IS NULL AND t.invalidated_at IS NULL
       AND t.password_reset_token_id = (SELECT MAX(x.password_reset_token_id) FROM password_reset_token x WHERE x.account_id = t.account_id);
     SELECT @@ROWCOUNT;`)
-  expect(out, '應剛好改到一筆重設申請').toBe('1')
-  return raw
+  return out === '1' ? raw : null
+}
+
+/**
+ * 申請重設並攔下 token。forgot-password 有 60 秒 email 冷卻：冷卻內的申請為了防帳號列舉
+ * 一樣回 202，但靜默不產生新 token（同一小時內跑過本 spec、或有人剛幫這個帳號申請過就會遇到）。
+ * 攔不到就等冷卻過再申請一次。
+ */
+async function requestAndHijackToken(request, email) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await request.post(`${API}/api/auth/forgot-password`, { data: { email } })
+    expect(res.ok()).toBeTruthy()
+    const raw = hijackLatestResetToken(email)
+    if (raw) return raw
+    await new Promise((r) => setTimeout(r, 61_000))
+  }
+  throw new Error('等過冷卻仍攔不到重設 token')
 }
 
 async function login(request, email, password) {
@@ -38,6 +53,7 @@ async function login(request, email, password) {
 
 test.describe('C7 重設密碼', () => {
   test('申請 → 重設頁改密碼 → 舊密碼失效、新密碼可登入、連結不能重用', async ({ page, request }) => {
+    test.setTimeout(180_000) // 撞到 forgot-password 的 60 秒冷卻時要原地等一輪，預設 60 秒不夠
     await page.goto('/forgot-password')
     await page.locator('#forgot-email').fill(EMAIL)
     const requested = page.waitForResponse(
@@ -46,7 +62,8 @@ test.describe('C7 重設密碼', () => {
     await page.locator('form button[type="submit"]').first().click()
     expect((await requested).ok()).toBeTruthy()
 
-    const raw = hijackLatestResetToken(EMAIL)
+    // 頁面申請的那筆可能因 60 秒冷卻沒產生 token（見 requestAndHijackToken），helper 會自行補申請
+    const raw = hijackLatestResetToken(EMAIL) ?? (await requestAndHijackToken(request, EMAIL))
     let changed = false
     try {
       await page.goto(`/reset-password?token=${raw}`)

@@ -1,4 +1,4 @@
-import { test, expect, ACCOUNTS, loginAs, apiToken } from './fixtures.js'
+import { test, expect, ACCOUNTS, loginAs, apiToken, ensureQuotaWithTrainer } from './fixtures.js'
 
 /**
  * B3 私教課時段與預約，跨教練與會員兩種身分。
@@ -103,8 +103,10 @@ test.describe('B3 會員預約私教課', () => {
     const slot = futureSlot()
     await createSlot(request, slot)
 
+    // 種子已不再直接發放堂數（刻意的——demo 要展示「未購課看不到教練」），
+    // 先確保 wendy 對教練 1 名下買過課、有剩餘額度，預約頁的教練卡才會出現
+    await ensureQuotaWithTrainer(request, 1)
     const before = await remainingQuota(request)
-    expect(before, '播種的 wendy 應該有可用堂數').toBeGreaterThan(0)
 
     await loginAs(page, ACCOUNTS.member)
     await page.goto('/reservation')
@@ -159,6 +161,8 @@ test.describe('B3 會員預約私教課', () => {
     const slotId = await createSlot(request, slot)
 
     const memberToken = await apiToken(ACCOUNTS.member)
+    // 種子不發放堂數，沒買過課會因額度不足預約失敗
+    await ensureQuotaWithTrainer(request, 1)
     const before = await remainingQuota(request)
 
     const booked = await request.post(`${API}/api/member/schedules/${slotId}/booking`, {

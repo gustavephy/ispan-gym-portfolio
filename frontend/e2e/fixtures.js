@@ -217,6 +217,93 @@ export async function pickInStockProduct(request, minStock = 3) {
   return list.sort((a, b) => b.stock - a.stock)[0]
 }
 
+/**
+ * 確保 wendy 對指定教練名下還有剩餘私教堂數。種子已不再直接發放堂數
+ *（刻意的——demo 要展示「未購課的會員在預約頁看不到教練」），堂數只能靠真的買課產生：
+ * 找該教練的私教課 → 直購建單 → 管理端模擬付款 → 履約發放。已有剩餘就不再買
+ *（前台也擋重複購買），所以每顆乾淨資料庫最多只會多買一次。回傳目前剩餘總數。
+ */
+export async function ensureQuotaWithTrainer(request, trainerId, minRemaining = 1) {
+  const auth = (t) => ({ headers: { Authorization: `Bearer ${t}` } })
+  const memberToken = await apiToken(ACCOUNTS.member)
+  const remainingFor = async () => {
+    const res = await request.get(`${API}/api/member/quotas`, auth(memberToken))
+    expect(res.ok()).toBeTruthy()
+    return (await res.json())
+      .filter((q) => q.trainer?.id === trainerId)
+      .reduce((sum, q) => sum + (q.remainingCourse ?? 0), 0)
+  }
+  let remaining = await remainingFor()
+  if (remaining >= minRemaining) return remaining
+
+  const body = await (await request.get(`${API}/api/private-courses`)).json()
+  const courses = Array.isArray(body) ? body : body.items ?? body.content ?? []
+  const course = courses.find((c) => c.trainer?.id === trainerId && Number(c.price) > 0)
+  expect(course, `教練 ${trainerId} 名下應有可購買的私教課方案`).toBeTruthy()
+  const created = await request.post(`${API}/api/orders/direct`, {
+    ...auth(memberToken),
+    data: { privateCourseId: course.privateCourseId ?? course.id, quantity: 1 },
+  })
+  expect(created.ok(), `直購建單失敗：${await created.text()}`).toBeTruthy()
+  const order = await created.json()
+  const adminToken = await apiToken(ACCOUNTS.admin)
+  const paid = await request.post(`${API}/api/admin/orders/${order.orderId}/simulate-payment`, auth(adminToken))
+  expect(paid.ok(), `模擬付款失敗：${await paid.text()}`).toBeTruthy()
+  remaining = await remainingFor()
+  expect(remaining, '付款後應發放私教堂數').toBeGreaterThanOrEqual(minRemaining)
+  return remaining
+}
+
+/**
+ * 註冊並完成 Email 驗證的全新會員，回傳 { email, session }。
+ * 給「不能用 wendy」的流程用：重複購買限制、訂閱限制等——wendy 名下的既有狀態會擋路。
+ * 驗證 token 沒有 API 可查（刻意的），直接讀資料庫。
+ */
+export async function registerActivatedMember(request, prefix = 'e2e') {
+  const email = `${prefix}-${uniqueSuffix()}@local.test`
+  const res = await request.post(`${API}/api/members/register`, {
+    data: { email, password: PASSWORD, lastName: '測', firstName: '試', phone: `09${String(Date.now()).slice(-8)}`, dob: '1995-05-05' },
+  })
+  expect(res.ok(), `註冊失敗：${await res.text()}`).toBeTruthy()
+  const token = sql(`SET NOCOUNT ON; SELECT TOP 1 CAST(v.token AS VARCHAR(40))
+    FROM email_verification v JOIN account a ON a.account_id = v.account_id
+    WHERE a.email = '${email}' AND v.verified_at IS NULL ORDER BY v.id DESC;`)
+  expect(token, '取不到驗證 token').toBeTruthy()
+  const verified = await request.get(`${API}/api/accounts/verify-email?token=${token}`)
+  expect(verified.ok(), `驗證失敗：${await verified.text()}`).toBeTruthy()
+  const login = await request.post(`${API}/api/auth/login`, { data: { email, password: PASSWORD } })
+  expect(login.ok(), `新會員登入失敗：${await login.text()}`).toBeTruthy()
+  return { email, session: await login.json() }
+}
+
+/**
+ * 確保會員名下有生效中的會籍訂閱——購買私教課的前置條件（SUBSCRIPTION_REQUIRED）。
+ * 沒有就買最便宜的方案並模擬付款。給 registerActivatedMember 產生的新會員用；
+ * wendy 有播種的 ACTIVE 訂閱，不需要呼叫這支。
+ */
+export async function ensureActiveSubscription(request, memberToken) {
+  const auth = (t) => ({ headers: { Authorization: `Bearer ${t}` } })
+  const mine = await request.get(`${API}/api/me/subscription`, auth(memberToken))
+  if (mine.ok()) {
+    const body = await mine.json().catch(() => null)
+    if (body && (body.status === 'ACTIVE' || body.subscriptionId || body.id)) return
+  }
+  const plans = await (await request.get(`${API}/api/subscription-plans`)).json()
+  const plan = (Array.isArray(plans) ? plans : plans.items ?? plans.content ?? [])
+    .filter((p) => p.status === 'ACTIVE')
+    .sort((a, b) => a.price - b.price)[0]
+  expect(plan, '種子裡應有可購買的會籍方案').toBeTruthy()
+  const created = await request.post(`${API}/api/orders/direct/subscription/checkout`, {
+    ...auth(memberToken), data: { subscriptionPlanId: plan.subscriptionPlanId },
+  })
+  expect(created.ok(), `訂閱建單失敗：${await created.text()}`).toBeTruthy()
+  // 回應是 { order: OrderDetailResponse, ecpayForm }，訂單編號在 order 裡
+  const orderId = (await created.json()).order.orderId
+  const adminToken = await apiToken(ACCOUNTS.admin)
+  const paid = await request.post(`${API}/api/admin/orders/${orderId}/simulate-payment`, auth(adminToken))
+  expect(paid.ok(), `訂閱模擬付款失敗：${await paid.text()}`).toBeTruthy()
+}
+
 /** 用目前的 token 改密碼，回傳後端換發的新 token */
 export async function changePassword(request, token, from, to) {
   const res = await request.post(`${API}/api/account/me/change-password`, {

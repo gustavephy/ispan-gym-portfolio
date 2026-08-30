@@ -1,4 +1,4 @@
-import { test, expect, ACCOUNTS, loginAs, apiToken } from './fixtures.js'
+import { test, expect, ACCOUNTS, loginAs, apiToken, registerActivatedMember, ensureActiveSubscription } from './fixtures.js'
 
 /**
  * B6 課程方案頁：私教／團課兩個分頁的篩選，以及私教課直接購買 → 額度發放。
@@ -65,8 +65,18 @@ test.describe('B6 課程方案篩選', () => {
 
 test.describe('B6 私教課購買', () => {
   test('購買方案後模擬付款，會員額度多出該課程的堂數', async ({ page, request }) => {
-    await loginAs(page, ACCOUNTS.member)
-    const token = await apiToken(ACCOUNTS.member)
+    // 前台會把「已購且還有剩餘堂數」的方案鎖成不可購買（feat/private-course-improvements），
+    // wendy 跑過一輪就買不了第二次；每輪改用全新註冊的會員，順便驗新會員的完整購買路徑
+    const { session } = await registerActivatedMember(request, 'e2e-buy')
+    // 買私教課要先有生效中的會籍（SUBSCRIPTION_REQUIRED），新會員先訂閱一個方案
+    await ensureActiveSubscription(request, session.accessToken)
+    await page.goto('/')
+    await page.evaluate((s) => {
+      localStorage.setItem('auth', JSON.stringify({
+        token: s.accessToken, accountId: s.accountId, email: s.email, roles: s.roles,
+      }))
+    }, session)
+    const token = session.accessToken
     const quotasBefore = (await (await request.get(`${API}/api/member/quotas`, {
       headers: { Authorization: `Bearer ${token}` },
     })).json())

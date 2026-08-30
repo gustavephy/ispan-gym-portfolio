@@ -1,4 +1,4 @@
-import { test, expect, ACCOUNTS, loginAs, apiToken } from './fixtures.js'
+import { test, expect, ACCOUNTS, loginAs, apiToken, ensureQuotaWithTrainer } from './fixtures.js'
 
 /**
  * B4 從「我的課程」預約：額度卡的「立即預約」→ 該教練的獨立時段頁 → 預約成功。
@@ -54,7 +54,9 @@ test.describe('B4 我的課程 → 立即預約', () => {
   test('立即預約導到額度綁定教練的時段頁，預約後該額度少一堂', async ({ page, request }) => {
     await createSlot(request)
 
-    // 找一份有剩餘堂數且綁定教練的額度（播種的 wendy 對教練 id=1 有 10 堂）
+    // 種子已不再直接發放堂數（demo 要展示「未購課的閘門」），先確保 wendy 對教練 1 買過課，
+    // 再找一份有剩餘堂數且綁定教練的額度
+    await ensureQuotaWithTrainer(request, 1)
     const target = (await myQuotas(request)).find((q) => q.trainer?.id && q.remainingCourse > 0)
     expect(target, 'wendy 應有綁定教練且仍有剩餘堂數的額度').toBeTruthy()
     const trainerId = target.trainer.id
