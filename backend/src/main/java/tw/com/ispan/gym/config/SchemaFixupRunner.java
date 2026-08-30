@@ -78,33 +78,32 @@ public class SchemaFixupRunner implements CommandLineRunner {
         // 先加寬欄位，後面才塞得下 PENDING_APPROVAL（16 字元，原欄位僅 varchar(10)）
         widenVarchar("employee", "status", 20);
 
-        // Hibernate 在 ddl-auto=update 建表當時，會依 @Enumerated(STRING) 欄位「當下」的
-        // enum 值域自動產生一個雜湊命名的 CHECK 約束——跟 orders.status 當初遇到的問題
-        // 一樣（見 widenOrderStatusCheck()）。enum 改了新值域，ddl-auto 不會回頭更新這個
-        // 約束，下面的搬移 UPDATE 寫入新值就會直接被舊約束擋下，必須先拆掉。
-        //
-        // 拆舊約束跟建新約束中間、資料還沒搬完的空窗期，故意不讓 status/role 完全沒有
-        // 約束就去新增涵蓋新值域的版本——SQL Server 的 ADD CONSTRAINT CHECK 預設會拿
-        // 新約束驗證資料表裡既有的資料，資料還是舊值時一定會被新約束本身擋下（ALTER TABLE
-        // 那個當下就失敗）。正確順序是：拆舊約束 → 搬資料 → 資料已經是新值域了才建新約束。
         dropOtherCheckConstraintsOnColumn("employee", "status", "CK_employee_status");
         dropOtherCheckConstraintsOnColumn("employee", "role", "CK_employee_role");
 
         // 值域改名的既有資料搬移；必須排在加寬、拆約束之後，否則會被截斷或舊約束擋下
-        backfill("employee.status（PENDING 併入 PENDING_APPROVAL）",
-                "UPDATE employee SET status = 'PENDING_APPROVAL' WHERE status = 'PENDING'");
-        backfill("employee.role（TRAINER 併入 EMPLOYEE）",
-                "UPDATE employee SET role = 'EMPLOYEE' WHERE role = 'TRAINER'");
+        if (columnExists("employee", "status")) {
+            backfill("employee.status（PENDING 併入 PENDING_APPROVAL）",
+                    "UPDATE employee SET status = 'PENDING_APPROVAL' WHERE status = 'PENDING'");
+        }
+        if (columnExists("employee", "role")) {
+            backfill("employee.role（TRAINER 併入 EMPLOYEE）",
+                    "UPDATE employee SET role = 'EMPLOYEE' WHERE role = 'TRAINER'");
+        }
 
         // 資料已經是新值域，這裡才建可以順利通過驗證的新 CHECK 約束
-        createCheckIfAbsent("employee", "CK_employee_status", """
-                ALTER TABLE employee ADD CONSTRAINT CK_employee_status CHECK (
-                    status IN ('PENDING_APPROVAL','ACTIVE','REJECTED','INACTIVE'))
-                """);
-        createCheckIfAbsent("employee", "CK_employee_role", """
-                ALTER TABLE employee ADD CONSTRAINT CK_employee_role CHECK (
-                    role IN ('EMPLOYEE','ADMIN'))
-                """);
+        if (columnExists("employee", "status")) {
+            createCheckIfAbsent("employee", "CK_employee_status", """
+                    ALTER TABLE employee ADD CONSTRAINT CK_employee_status CHECK (
+                        status IN ('PENDING_APPROVAL','ACTIVE','REJECTED','INACTIVE'))
+                    """);
+        }
+        if (columnExists("employee", "role")) {
+            createCheckIfAbsent("employee", "CK_employee_role", """
+                    ALTER TABLE employee ADD CONSTRAINT CK_employee_role CHECK (
+                        role IN ('EMPLOYEE','ADMIN'))
+                    """);
+        }
 
         // 審核欄位改名：approve 與 reject 共用同一組欄位，不再各自一套
         renameColumnIfExists("employee", "approved_by", "reviewed_by");
@@ -634,36 +633,39 @@ public class SchemaFixupRunner implements CommandLineRunner {
                     log.warn("courses 有 {} 列但缺 course_type 欄，無法自動分流，請人工處理", rows);
                     return;
                 }
+                String maxCapacityCol = columnExists("courses", "max_capacity") ? "max_capacity" : (columnExists("courses", "maxCapacity") ? "maxCapacity" : "20 AS maxCapacity");
+                String isTrialCol = columnExists("courses", "is_trial") ? "is_trial" : (columnExists("courses", "isTrial") ? "isTrial" : "0 AS isTrial");
+                
                 // SET IDENTITY_INSERT 與 INSERT 必須同一批次執行，走 execute 而非 update
                 jdbc.execute("""
                         SET IDENTITY_INSERT private_course ON;
                         INSERT INTO private_course (private_course_id, name, description, image_url,
                                 price, session_per_unit, trainer_id, course_category_id,
-                                max_capacity, is_trial, status, created_at, updated_at)
+                                maxCapacity, isTrial, status, created_at, updated_at)
                         SELECT course_id, name, description, image_url,
                                 price, session_per_unit, trainer_id, course_category_id,
-                                max_capacity, is_trial, status, created_at, updated_at
+                                %s, %s, status, created_at, updated_at
                             FROM courses c
                             WHERE c.course_type = 'PRIVATE'
                               AND NOT EXISTS (SELECT 1 FROM private_course p
                                                   WHERE p.private_course_id = c.course_id);
                         SET IDENTITY_INSERT private_course OFF;
-                        """);
+                        """.formatted(maxCapacityCol, isTrialCol));
                 log.info("已將 courses 的 PRIVATE 列分流至 private_course");
                 jdbc.execute("""
                         SET IDENTITY_INSERT group_course ON;
                         INSERT INTO group_course (group_course_id, trainer_id, name, description, image_url,
-                                course_category_id, max_capacity, is_trial,
+                                course_category_id, maxCapacity, isTrial,
                                 status, created_at, updated_at)
                         SELECT course_id, trainer_id, name, description, image_url,
-                                course_category_id, max_capacity, is_trial,
+                                course_category_id, %s, %s,
                                 status, created_at, updated_at
                             FROM courses c
                             WHERE c.course_type = 'GROUP'
                               AND NOT EXISTS (SELECT 1 FROM group_course g
                                                   WHERE g.group_course_id = c.course_id);
                         SET IDENTITY_INSERT group_course OFF;
-                        """);
+                        """.formatted(maxCapacityCol, isTrialCol));
                 log.info("已將 courses 的 GROUP 列分流至 group_course（主檔綁預設教練、價格捨棄）");
             }
         }
@@ -824,6 +826,14 @@ public class SchemaFixupRunner implements CommandLineRunner {
     // 關聯），ddl-auto 不會自動生成這個外鍵，必須自己補。
 
     private void addForeignKeys() {
+        if (tableExists("ai_health_plan") && tableExists("inbody_record")) {
+            jdbc.execute("""
+                UPDATE ai_health_plan 
+                SET inbody_record_id = NULL 
+                WHERE inbody_record_id IS NOT NULL 
+                  AND inbody_record_id NOT IN (SELECT id FROM inbody_record)
+                """);
+        }
         addForeignKeyIfMissing("FK_plan_inbody", """
                 ALTER TABLE ai_health_plan
                     ADD CONSTRAINT FK_plan_inbody FOREIGN KEY (inbody_record_id)
@@ -868,12 +878,14 @@ public class SchemaFixupRunner implements CommandLineRunner {
 
         // 場次容量沿用所屬團課的預設值（課程域拆分後場次改指 group_course）
         if (columnExists("group_class_session", "group_course_id") && tableExists("group_course")) {
+            // group_course 的容量欄名依命名策略可能是 maxCapacity 或 max_capacity
+            String capCol = columnExists("group_course", "maxCapacity") ? "maxCapacity" : "max_capacity";
             backfill("group_class_session.capacity", """
-                    UPDATE s SET s.capacity = c.max_capacity
+                    UPDATE s SET s.capacity = c.%s
                         FROM group_class_session s
                         JOIN group_course c ON c.group_course_id = s.group_course_id
                         WHERE s.capacity IS NULL
-                    """);
+                    """.formatted(capCol));
         }
     }
 

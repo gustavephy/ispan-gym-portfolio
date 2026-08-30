@@ -7,7 +7,7 @@
         <h5 style="margin-bottom: 0.75rem; font-weight: 700; font-size: 0.9rem; margin-top: 0;">新增分類</h5>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
           <input v-model="newCategoryName" class="form-input" style="flex: 2; min-width: 150px; padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1;" placeholder="分類名稱，例如：瑜珈" required />
-          <button type="submit" class="btn btn-primary" style="padding: 0.5rem 1rem;">新增</button>
+          <AppButton type="submit" variant="primary" style="padding: 0.5rem 1rem;">新增</AppButton>
         </div>
       </form>
 
@@ -25,7 +25,7 @@
             <tr v-for="cat in categories" :key="cat.id" style="border-bottom: 1px solid var(--border-light, #f1f5f9); font-size: 0.85rem;">
               <td style="padding: 0.5rem; font-weight: 600; color: #334155;">{{ cat.name }}</td>
               <td style="padding: 0.5rem; text-align: right;">
-                <button type="button" @click="deleteCategory(cat)" class="btn btn-danger btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">刪除</button>
+                <AppButton type="button" @click="deleteCategory(cat)" variant="danger" class="btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">刪除</AppButton>
               </td>
             </tr>
             <tr v-if="categories.length === 0">
@@ -36,7 +36,7 @@
       </div>
     </div>
     <template #footer>
-      <button type="button" class="btn btn-primary" @click="$emit('update:visible', false)">完成</button>
+      <AppButton type="button" variant="primary" @click="$emit('update:visible', false)">完成</AppButton>
     </template>
   </AppModal>
 </template>
@@ -44,6 +44,7 @@
 <script setup>
 import { ref, inject } from 'vue'
 import AppModal from '@/components/AppModal.vue'
+import AppButton from '@/components/AppButton.vue'
 import api from '@/api/axios.instance.js'
 
 const props = defineProps({

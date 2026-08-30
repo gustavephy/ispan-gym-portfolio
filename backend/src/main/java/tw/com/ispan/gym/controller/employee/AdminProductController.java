@@ -1,7 +1,5 @@
 package tw.com.ispan.gym.controller.employee;
 
-import java.util.Map;
-
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,7 +12,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import tw.com.ispan.gym.dto.product.ProductRequest;
 import tw.com.ispan.gym.dto.product.ProductResponse;
 import tw.com.ispan.gym.enums.product.ProductStatus;
-import tw.com.ispan.gym.service.file.FileService;
 import tw.com.ispan.gym.service.product.ProductService;
 
 @RestController
@@ -33,7 +29,6 @@ import tw.com.ispan.gym.service.product.ProductService;
 public class AdminProductController {
 
     private final ProductService productService;
-    private final FileService fileService;
 
     /**
      * 後台商品列表：不限狀態，已下架的商品也會回傳。
@@ -63,13 +58,7 @@ public class AdminProductController {
         return ResponseEntity.ok(productService.createProduct(request));
     }
 
-    // 上傳商品圖片
-    @PostMapping("/upload")
-    public ResponseEntity<Map<String, String>> uploadImage(@RequestParam("file") MultipartFile file) {
-        log.info("Request to upload product image: name={}", file.getOriginalFilename());
-        String fileUrl = fileService.saveImage(file);
-        return ResponseEntity.ok(Map.of("url", fileUrl));
-    }
+
 
     // 修改商品
     @PutMapping("/{productId}")

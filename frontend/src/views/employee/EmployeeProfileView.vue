@@ -220,17 +220,9 @@ async function onSubmit() {
             <span v-if="phone && !isPhoneValid" class="field-error">請輸入正確的 10 位手機格式</span>
           </div>
 
-          <div class="form-actions">
-            <button
-              type="submit"
-              class="btn-submit"
-              :disabled="saving || !isFormValid"
-            >
-              {{ saving ? '儲存中...' : '儲存變更' }}
-            </button>
-          </div>
+          <!-- 移除原本在卡片內部的按鈕 -->
         </div>
-
+ 
         <!-- 教練專用基本資料 (頭像、專長、經歷、簡介) -->
         <div v-if="isTrainer" class="card trainer-card" style="grid-column: span 2;">
           <h3 class="card-title">教練專屬公開資訊</h3>
@@ -248,7 +240,7 @@ async function onSubmit() {
                 <input type="file" @change="uploadFile" accept="image/*" style="display: none;" />
               </label>
             </div>
-
+ 
             <!-- 文字資料區 -->
             <div style="flex: 2; min-width: 300px; display: flex; flex-direction: column; gap: 1rem;">
               <div class="form-group">
@@ -260,7 +252,7 @@ async function onSubmit() {
                 <label for="experience" class="form-label">教學經歷 <span class="required">*</span></label>
                 <textarea id="experience" v-model="experience" rows="3" placeholder="例如: 1. 健身房個人教練 3 年&#10;2. 瑜珈會館指導老師" class="form-control" :required="isTrainer" style="resize: vertical;"></textarea>
               </div>
-
+ 
               <div class="form-group">
                 <label for="bio" class="form-label">個人簡介 <span class="required">*</span></label>
                 <textarea id="bio" v-model="bio" rows="3" placeholder="請用簡短、吸引人的文字介紹你自己..." class="form-control" :required="isTrainer" style="resize: vertical;"></textarea>
@@ -268,6 +260,18 @@ async function onSubmit() {
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- 全局表單送出按鈕 -->
+      <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end;">
+        <button
+          type="submit"
+          class="btn-submit"
+          style="padding: 0.75rem 2.5rem; font-size: 1rem;"
+          :disabled="saving || !isFormValid"
+        >
+          {{ saving ? '儲存中...' : '儲存變更' }}
+        </button>
       </div>
     </form>
   </div>

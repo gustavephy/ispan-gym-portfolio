@@ -1,12 +1,12 @@
 <template>
   <div>
     <div class="page-header-row" style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-      <button class="btn btn-primary btn-sm" @click="showAddGroupCourse = !showAddGroupCourse">
+      <AppButton variant="primary" class="btn-sm" @click="showAddGroupCourse = !showAddGroupCourse">
         <span>{{ showAddGroupCourse ? '✕ 取消新增' : '＋ 新增團體課程' }}</span>
-      </button>
-      <button class="btn btn-outline btn-sm" @click="$emit('openCategoryManager')">
+      </AppButton>
+      <AppButton variant="outline" class="btn-sm" @click="$emit('openCategoryManager')">
         <span>⚙ 管理課程分類</span>
-      </button>
+      </AppButton>
     </div>
 
     <!-- 新增團體課程表單 -->
@@ -55,16 +55,7 @@
         <template #extra>
           <div class="form-group file-upload-group" style="margin-top: 1rem; width: 100%;">
             <label class="form-label">課程照片</label>
-            <div class="file-upload-wrapper" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-              <label class="custom-file-btn" style="background: var(--primary, #5a4a42); color: #ffffff; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: inline-block;">
-                選擇照片
-                <input type="file" @change="e => uploadFile(e, 'addGroupCourse')" accept="image/*" style="display: none;" />
-              </label>
-              <span v-if="uploadingFile" class="loading-spinner-inline"></span>
-              <span class="file-status-text" v-if="groupCourseForm.imageUrl" style="font-size: 0.8rem; color: #10b981;">已上傳圖片</span>
-              <img v-if="groupCourseForm.imageUrl" :src="formatImageUrl(groupCourseForm.imageUrl)" class="form-preview-thumb" alt="Preview" style="width: 90px; height: 90px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border, #e2e8f0);" />
-            </div>
-            <input v-model="groupCourseForm.imageUrl" class="form-input url-input" placeholder="圖片位址 URL" style="width: 100%; margin-top: 0.5rem;" />
+            <AppImageUpload v-model="groupCourseForm.imageUrl" buttonText="選擇照片" placeholder="圖片位址 URL" />
           </div>
           <div class="form-group" style="margin-top: 1rem; width: 100%;">
             <label class="form-label">詳細說明介紹</label>
@@ -73,7 +64,7 @@
         </template>
 
         <template #actions>
-          <button type="submit" class="btn btn-primary" :disabled="saving">確認新增上傳</button>
+          <AppButton type="submit" variant="primary" :disabled="saving">確認新增上傳</AppButton>
         </template>
       </AdminFormCard>
     </Transition>
@@ -110,8 +101,10 @@
         #{{ value }}
       </template>
       <template #imageUrl="{ row }">
-        <img :src="row.imageUrl ? formatImageUrl(row.imageUrl) : DEFAULT_COURSE_IMAGE" class="product-thumb" alt="Course Image"
-             @error="useFallbackImage($event, DEFAULT_COURSE_IMAGE)" />
+        <div style="width: 70px; height: 70px; overflow: hidden; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: #fafafa;">
+          <img :src="row.imageUrl ? formatImageUrl(row.imageUrl) : DEFAULT_COURSE_IMAGE" class="product-thumb" alt="Course Image"
+               @error="useFallbackImage($event, DEFAULT_COURSE_IMAGE)" style="width: 100%; height: 100%; object-fit: contain;" />
+        </div>
       </template>
       <template #name="{ row }">
         <div class="name-text">{{ row.name }}</div>
@@ -139,9 +132,9 @@
       </template>
       <template #actions="{ row }">
         <div class="action-buttons-wrap">
-          <button class="btn btn-edit edit-btn-style btn-sm" @click="openEditGroupCourseModal(row)">編輯</button>
-          <button v-if="row.status === 'ACTIVE'" class="btn btn-danger deactive-btn-style btn-sm" @click="deleteGroupCourse(row.id)">下架</button>
-          <button v-if="row.status === 'INACTIVE'" class="btn btn-edit edit-btn-style btn-sm" @click="activateGroupCourse(row.id)">上架</button>
+          <AppButton variant="edit" class="edit-btn-style btn-sm" @click="openEditGroupCourseModal(row)">編輯</AppButton>
+          <AppButton v-if="row.status === 'ACTIVE'" variant="danger" class="deactive-btn-style btn-sm" @click="deleteGroupCourse(row.id)">下架</AppButton>
+          <AppButton v-if="row.status === 'INACTIVE'" variant="edit" class="edit-btn-style btn-sm" @click="activateGroupCourse(row.id)">上架</AppButton>
         </div>
       </template>
     </AdminTable>
@@ -164,7 +157,9 @@ import AdminFormCard from '@/components/AdminFormCard.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'
 import AdminTable from '@/components/AdminTable.vue'
+import AppButton from '@/components/AppButton.vue'
 import GroupCourseModal from '@/components/admin/GroupCourseModal.vue'
+import AppImageUpload from '@/components/AppImageUpload.vue'
 import { formatImageUrl, useFallbackImage, DEFAULT_COURSE_IMAGE } from '@/utils/image.js'
 import api from '@/api/axios.instance.js'
 
@@ -179,7 +174,6 @@ const showToast = inject('showToast', null)
 const saving = ref(false)
 const showAddGroupCourse = ref(false)
 const showEditGroupCourse = ref(false)
-const uploadingFile = ref(false)
 
 const groupCourseForm = ref({
   name: '',
@@ -291,18 +285,10 @@ async function createGroupCourse() {
     })
     if (showToast) showToast('團體課程新增成功！')
     showAddGroupCourse.value = false
-    groupCourseForm.value = {
-      name: '',
-      trainerId: null,
-      maxCapacity: 20,
-      categoryId: null,
-      description: '',
-      imageUrl: '',
-      isTrial: false
-    }
+    groupCourseForm.value = { name: '', trainerId: null, maxCapacity: 20, categoryId: null, description: '', imageUrl: '', isTrial: false }
     await loadGroupCourses()
   } catch (e) {
-    if (showToast) showToast(e.message || '新增失敗', 'error')
+    if (showToast) showToast('新增失敗', 'error')
   } finally {
     saving.value = false
   }
@@ -367,30 +353,7 @@ async function updateGroupCourse(updatedCourse) {
   }
 }
 
-async function uploadFile(event) {
-  const file = event.target.files[0]
-  if (!file) return
-  if (file.size > 5 * 1024 * 1024) {
-    if (showToast) showToast('照片檔案不能超過 5MB', 'error')
-    return
-  }
-  uploadingFile.value = true
-  try {
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await api.post('/api/admin/products/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    const url = res.url || res.data?.url
-    if (url) {
-      groupCourseForm.value.imageUrl = url
-    }
-  } catch (e) {
-    console.error(e)
-  } finally {
-    uploadingFile.value = false
-  }
-}
+// 圖片上傳已交由 AppImageUpload 元件處理
 
 watch([gcActiveFilter, gcCurrentPage, gcItemsPerPage], () => {
   loadGroupCourses()

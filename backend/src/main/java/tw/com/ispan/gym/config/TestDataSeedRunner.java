@@ -33,12 +33,15 @@ import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
 import tw.com.ispan.gym.repository.order.OrderRepository;
 import tw.com.ispan.gym.repository.order.OrderItemRepository;
 import tw.com.ispan.gym.repository.payment.PaymentTransactionRepository;
+import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
+import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
+import tw.com.ispan.gym.entity.coach.CoachSlot;
+import tw.com.ispan.gym.enums.coach.SlotStatus;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
 import tw.com.ispan.gym.repository.coach.MemberCourseQuotaRepository;
 import tw.com.ispan.gym.entity.payment.PaymentTransaction;
 import tw.com.ispan.gym.entity.member.MemberSubscription;
 import tw.com.ispan.gym.entity.coach.MemberCourseQuota;
-import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
 import tw.com.ispan.gym.entity.order.OrderItem;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.entity.product.ProductCategory;
@@ -121,6 +124,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final MemberSubscriptionRepository memberSubscriptions;
     private final MemberCourseQuotaRepository memberCourseQuotas;
     private final CouponRepository couponRepository;
+    private final CoachSlotRepository coachSlots;
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
@@ -143,6 +147,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             MemberSubscriptionRepository memberSubscriptions,
             MemberCourseQuotaRepository memberCourseQuotas,
             CouponRepository couponRepository,
+            CoachSlotRepository coachSlots,
             JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
             @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
@@ -163,6 +168,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         this.memberSubscriptions = memberSubscriptions;
         this.memberCourseQuotas = memberCourseQuotas;
         this.couponRepository = couponRepository;
+        this.coachSlots = coachSlots;
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
@@ -220,7 +226,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         // 放在種子最後而不是併進 ensureCatalogData：目錄資料是「大家看的展示資料」，
         // 這兩樣是「wendy 這個帳號的個人狀態」，語意不同。
         ensureActiveSubscription(wendyMember);
-        ensureCourseQuota(wendyMember, seededTrainers.get(0));
+        // ensureCourseQuota(wendyMember, seededTrainers.get(0));
 
         // 樣本訂單（含上面的訂閱訂單）都是直接建單、沒走 OrderService，補上狀態時間軸
         ensureSampleOrderHistory();
@@ -527,6 +533,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         ensurePrivateCourses(seededTrainers);
         ensure17Coupons();
         ensureSampleOrders();
+        ensureCoachSlots(seededTrainers);
     }
 
     /**
@@ -781,22 +788,22 @@ public class TestDataSeedRunner implements CommandLineRunner {
                         0.3),
                 new Seed("多功能實心藥球 4kg", "750", 15, "Alex", "黑黃", "核心訓練與爆發力投擲。", "器材", "4kg", "黑黃", "橡膠", "臺灣", 4.0),
                 new Seed("多功能實心藥球 6kg", "950", 12, "Alex", "黑紅", "核心訓練與爆發力投擲。", "器材", "6kg", "黑紅", "橡膠", "臺灣", 6.0),
-                new Seed("高彈力抗暴瑜珈球", "620", 25, "Nike", "藍", "核心穩定訓練與伸展。", "器材", "65cm", "藍", "PVC", "中國", 0.8),
+                new Seed("高彈力抗暴瑜珈球", "620", 25, "Nike", "藍", "核心穩定訓練與伸展。", "器材", "65cm", "藍", "PVC", "臺灣", 0.8),
 
                 // 配件 (15 items)
                 new Seed("牛皮健身腰帶", "1580", 20, "Valeo", "棕色", "硬舉深蹲核心支撐，厚度10mm。", "配件", "M", "棕", "真皮", "美國", 0.9),
                 new Seed("專業重訓拉力帶", "450", 60, "Harbinger", "黑色", "護腕拉力帶一體，防滑耐磨。", "配件", "均碼", "黑", "尼龍", "美國", 0.15),
-                new Seed("透氣運動防滑手套", "520", 50, "Nike", "灰黑", "透氣網布，掌心避震橡膠。", "配件", "M", "灰黑", "尼龍橡膠", "中國", 0.1),
+                new Seed("透氣運動防滑手套", "520", 50, "Nike", "灰黑", "透氣網布，掌心避震橡膠。", "配件", "M", "灰黑", "尼龍橡膠", "臺灣", 0.1),
                 new Seed("加壓型針織護膝(一對)", "780", 40, "Bauerfeind", "藍灰", "3D針織加壓保護，減輕膝蓋負擔。", "配件", "M", "藍灰", "針織", "德國",
                         0.2),
                 new Seed("專業運動防滑粉", "150", 150, "Rogue", "白", "強力吸汗防滑，舉重體操專用。", "配件", "150g", "白", "碳酸鎂粉", "美國", 0.15),
                 new Seed("高階運動水壺 1000ml", "290", 80, "Nalgene", "透明灰", "Tritan安全材質，防漏耐摔。", "配件", "1000ml", "透明灰",
                         "Tritan", "美國", 0.2),
-                new Seed("多功能乾濕分離運動包", "1280", 30, "UnderArmour", "深藍", "底部獨立鞋袋，乾濕分離設計。", "配件", "35L", "深藍", "尼龍", "中國",
+                new Seed("多功能乾濕分離運動包", "1280", 30, "UnderArmour", "深藍", "底部獨立鞋袋，乾濕分離設計。", "配件", "35L", "深藍", "尼龍", "臺灣",
                         0.8),
                 new Seed("超細纖維吸汗運動毛巾", "180", 100, "Willy", "綠色", "吸水快乾，健身房擦汗必備。", "配件", "100x20cm", "綠", "超細纖維", "臺灣",
                         0.1),
-                new Seed("運動排汗止汗頭帶", "150", 120, "Nike", "白色", "高彈力排汗材質，防止汗水入眼。", "配件", "均碼", "白", "彈性纖維", "中國", 0.05),
+                new Seed("運動排汗止汗頭帶", "150", 120, "Nike", "白色", "高彈力排汗材質，防止汗水入眼。", "配件", "均碼", "白", "彈性纖維", "臺灣", 0.05),
                 new Seed("便攜式滾輪按摩棒", "480", 40, "TriggerPoint", "黑綠", "便攜手動滾輪，隨時舒緩肌肉。", "配件", "40cm", "黑綠", "ABS橡膠",
                         "美國", 0.3),
                 new Seed("專業重訓護腕(一對)", "380", 50, "Schiek", "黑紅", "大重量支撐，高彈力帶。", "配件", "均碼", "黑紅", "棉彈力布", "美國", 0.2),
@@ -817,23 +824,34 @@ public class TestDataSeedRunner implements CommandLineRunner {
                 // 補齊缺漏的規格欄位（冪等：已有值則不覆蓋）
                 Product p = existing.get();
                 boolean changed = false;
-                if (p.getSize() == null) {
+                if (p.getBrand() == null || p.getBrand().trim().isEmpty()) {
+                    p.setBrand(seed.brand());
+                    changed = true;
+                }
+                if (p.getFlavor() == null || p.getFlavor().trim().isEmpty()) {
+                    p.setFlavor(seed.flavor());
+                    changed = true;
+                }
+                if (p.getSize() == null || p.getSize().trim().isEmpty()) {
                     p.setSize(seed.size());
                     changed = true;
                 }
-                if (p.getColor() == null) {
+                if (p.getColor() == null || p.getColor().trim().isEmpty()) {
                     p.setColor(seed.color());
                     changed = true;
                 }
-                if (p.getMaterial() == null) {
+                if (p.getMaterial() == null || p.getMaterial().trim().isEmpty()) {
                     p.setMaterial(seed.material());
                     changed = true;
                 }
-                if (p.getOrigin() == null) {
+                if (p.getOrigin() == null || p.getOrigin().trim().isEmpty()) {
                     p.setOrigin(seed.origin());
                     changed = true;
+                } else if ("中國".equals(p.getOrigin())) {
+                    p.setOrigin("臺灣");
+                    changed = true;
                 }
-                if (p.getWeight() == null) {
+                if (p.getWeight() == null || p.getWeight() == 0) {
                     p.setWeight(seed.weight());
                     changed = true;
                 }
@@ -1081,7 +1099,18 @@ public class TestDataSeedRunner implements CommandLineRunner {
 
         int created = 0;
         for (CouponSeed seed : seeds) {
-            if (couponRepository.findByCode(seed.code()).isPresent()) {
+            java.util.Optional<Coupon> existing = couponRepository.findByCode(seed.code());
+            if (existing.isPresent()) {
+                // 如果是 FIRSTFREE 且數量不是剩餘 1 張，我們自動修正它，確保錄影每次都對
+                if ("FIRSTFREE".equals(seed.code())) {
+                    Coupon coupon = existing.get();
+                    if (coupon.getTotalQuantity() != 10 || coupon.getClaimedQuantity() != 9) {
+                        coupon.setTotalQuantity(10);
+                        coupon.setClaimedQuantity(9);
+                        couponRepository.save(coupon);
+                        log.info("已修正 FIRSTFREE 優惠券為剩餘 1 張（總數 10，已領取 9）以供錄影");
+                    }
+                }
                 continue;
             }
             Coupon coupon = new Coupon();
@@ -1093,8 +1122,16 @@ public class TestDataSeedRunner implements CommandLineRunner {
             coupon.setApplicableType(seed.applicableType());
             coupon.setDescription(seed.description());
             coupon.setStatus(CouponStatus.ACTIVE);
-            coupon.setTotalQuantity(1000); // 限量 1000 張
-            coupon.setClaimedQuantity(0);
+            
+            // 如果是 FIRSTFREE，預設設為 10 張，且已被領取 9 張（剩餘 1 張）
+            if ("FIRSTFREE".equals(seed.code())) {
+                coupon.setTotalQuantity(10);
+                coupon.setClaimedQuantity(9);
+            } else {
+                coupon.setTotalQuantity(1000); // 限量 1000 張
+                coupon.setClaimedQuantity(0);
+            }
+            
             coupon.setStartDate(LocalDate.now());
             coupon.setEndDate(LocalDate.now().plusYears(1));
             couponRepository.save(coupon);
@@ -1103,5 +1140,54 @@ public class TestDataSeedRunner implements CommandLineRunner {
         if (created > 0) {
             log.info("已建立 {} 筆測試優惠券（總共 17 項，分屬產品、課程、會籍、全館）", created);
         }
+    }
+
+    private void ensureCoachSlots(List<Trainer> seededTrainers) {
+        if (seededTrainers.isEmpty()) {
+            return;
+        }
+        if (coachSlots.count() > 0) {
+            return;
+        }
+
+        log.info("開始播種 6 月至 10 月的教練私教預約時段...");
+        int count = 0;
+        java.time.LocalDate startDate = java.time.LocalDate.of(2026, 6, 1);
+        java.time.LocalDate endDate = java.time.LocalDate.of(2026, 10, 31);
+
+        java.time.LocalDate currentWeekStart = startDate;
+        while (!currentWeekStart.isAfter(endDate)) {
+            for (Trainer trainer : seededTrainers) {
+                int firstDayOffset = Math.abs((trainer.getId() * 7 + currentWeekStart.hashCode())) % 5;
+                int secondDayOffset = (firstDayOffset + 2) % 5;
+                
+                int firstHour = 9 + Math.abs((trainer.getId() * 3 + currentWeekStart.hashCode())) % 8;
+                int secondHour = 9 + Math.abs((trainer.getId() * 5 + currentWeekStart.hashCode())) % 8;
+
+                java.time.LocalDate day1 = currentWeekStart.plusDays(firstDayOffset);
+                if (!day1.isBefore(startDate) && !day1.isAfter(endDate)) {
+                    CoachSlot slot1 = new CoachSlot();
+                    slot1.setTrainer(trainer);
+                    slot1.setStartAt(LocalDateTime.of(day1, java.time.LocalTime.of(firstHour, 0)));
+                    slot1.setEndAt(LocalDateTime.of(day1, java.time.LocalTime.of(firstHour + 1, 0)));
+                    slot1.setStatus(SlotStatus.AVAILABLE);
+                    coachSlots.save(slot1);
+                    count++;
+                }
+
+                java.time.LocalDate day2 = currentWeekStart.plusDays(secondDayOffset);
+                if (!day2.isBefore(startDate) && !day2.isAfter(endDate)) {
+                    CoachSlot slot2 = new CoachSlot();
+                    slot2.setTrainer(trainer);
+                    slot2.setStartAt(LocalDateTime.of(day2, java.time.LocalTime.of(secondHour, 0)));
+                    slot2.setEndAt(LocalDateTime.of(day2, java.time.LocalTime.of(secondHour + 1, 0)));
+                    slot2.setStatus(SlotStatus.AVAILABLE);
+                    coachSlots.save(slot2);
+                    count++;
+                }
+            }
+            currentWeekStart = currentWeekStart.plusWeeks(1);
+        }
+        log.info("已成功播種 {} 筆教練預約時段 (6月-10月)！", count);
     }
 }

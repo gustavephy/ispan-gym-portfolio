@@ -1,9 +1,9 @@
 <template>
   <div>
     <div class="page-header-row" style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-      <button class="btn btn-primary btn-sm" @click="showAddPrivateCourse = !showAddPrivateCourse">
+      <AppButton variant="primary" class="btn-sm" @click="showAddPrivateCourse = !showAddPrivateCourse">
         <span>{{ showAddPrivateCourse ? '✕ 取消新增' : '＋ 新增私教課程' }}</span>
-      </button>
+      </AppButton>
     </div>
 
     <!-- 新增私教課程表單 -->
@@ -62,15 +62,7 @@
         <template #extra>
           <div class="form-group file-upload-group" style="margin-top: 1rem; width: 100%;">
             <label class="form-label">課程照片</label>
-            <div class="file-upload-wrapper" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-              <label class="custom-file-btn" style="background: var(--primary, #5a4a42); color: #ffffff; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: inline-block;">
-                上傳照片
-                <input type="file" @change="e => uploadFile(e, 'addPrivateCourse')" accept="image/*" style="display: none;" />
-              </label>
-              <span v-if="uploadingFile" class="loading-spinner-inline"></span>
-              <img v-if="privateCourseForm.imageUrl" :src="formatImageUrl(privateCourseForm.imageUrl)" class="form-preview-thumb" alt="Preview" style="width: 90px; height: 90px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border, #e2e8f0);" />
-            </div>
-            <input v-model="privateCourseForm.imageUrl" class="form-input url-input" placeholder="圖片位址 URL" style="width: 100%; margin-top: 0.5rem;" />
+            <AppImageUpload v-model="privateCourseForm.imageUrl" buttonText="上傳照片" placeholder="圖片位址 URL" />
           </div>
           <div class="form-group" style="margin-top: 1rem; width: 100%;">
             <label class="form-label">詳細說明</label>
@@ -79,7 +71,7 @@
         </template>
 
         <template #actions>
-          <button type="submit" class="btn btn-primary" :disabled="saving">確認新增上傳</button>
+          <AppButton type="submit" variant="primary" :disabled="saving">確認新增上傳</AppButton>
         </template>
       </AdminFormCard>
     </Transition>
@@ -116,8 +108,10 @@
         #{{ row.id || row.privateCourseId }}
       </template>
       <template #imageUrl="{ row }">
-        <img :src="row.imageUrl ? formatImageUrl(row.imageUrl) : DEFAULT_COURSE_IMAGE" class="product-thumb" alt="Course Image"
-             @error="useFallbackImage($event, DEFAULT_COURSE_IMAGE)" />
+        <div style="width: 70px; height: 70px; overflow: hidden; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: #fafafa;">
+          <img :src="row.imageUrl ? formatImageUrl(row.imageUrl) : DEFAULT_COURSE_IMAGE" class="product-thumb" alt="Course Image"
+               @error="useFallbackImage($event, DEFAULT_COURSE_IMAGE)" style="width: 100%; height: 100%; object-fit: contain;" />
+        </div>
       </template>
       <template #name="{ row }">
         <div class="name-text">{{ row.name }}</div>
@@ -143,9 +137,9 @@
       </template>
       <template #actions="{ row }">
         <div class="action-buttons-wrap">
-          <button class="btn btn-edit edit-btn-style btn-sm" @click="openEditPrivateCourseModal(row)">編輯</button>
-          <button v-if="row.status === 'ACTIVE' || row.status === undefined" class="btn btn-danger deactive-btn-style btn-sm" @click="deactivatePrivateCourse(row.id || row.privateCourseId)">下架</button>
-          <button v-if="row.status === 'INACTIVE'" class="btn btn-edit edit-btn-style btn-sm" @click="activatePrivateCourse(row.id || row.privateCourseId)">上架</button>
+          <AppButton variant="edit" class="edit-btn-style btn-sm" @click="openEditPrivateCourseModal(row)">編輯</AppButton>
+          <AppButton v-if="row.status === 'ACTIVE' || row.status === undefined" variant="danger" class="deactive-btn-style btn-sm" @click="deactivatePrivateCourse(row.id || row.privateCourseId)">下架</AppButton>
+          <AppButton v-if="row.status === 'INACTIVE'" variant="edit" class="edit-btn-style btn-sm" @click="activatePrivateCourse(row.id || row.privateCourseId)">上架</AppButton>
         </div>
       </template>
     </AdminTable>
@@ -168,7 +162,9 @@ import AdminFormCard from '@/components/AdminFormCard.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import CategoryFilter from '@/components/CategoryFilter.vue'
 import AdminTable from '@/components/AdminTable.vue'
+import AppButton from '@/components/AppButton.vue'
 import PrivateCourseModal from '@/components/admin/PrivateCourseModal.vue'
+import AppImageUpload from '@/components/AppImageUpload.vue'
 import { formatImageUrl, useFallbackImage, DEFAULT_COURSE_IMAGE } from '@/utils/image.js'
 import api from '@/api/axios.instance.js'
 
@@ -182,7 +178,6 @@ const showToast = inject('showToast', null)
 const saving = ref(false)
 const showAddPrivateCourse = ref(false)
 const showEditPrivateCourse = ref(false)
-const uploadingFile = ref(false)
 
 const privateCourseForm = ref({
   name: '',
@@ -266,17 +261,7 @@ async function createPrivateCourse() {
     })
     if (showToast) showToast('私教課程新增成功')
     showAddPrivateCourse.value = false
-    privateCourseForm.value = {
-      name: '',
-      trainerId: null,
-      maxCapacity: 1,
-      sessionPerUnit: 1,
-      price: 0,
-      description: '',
-      imageUrl: '',
-      isTrial: false,
-      courseCategoryId: null
-    }
+    privateCourseForm.value = { name: '', trainerId: null, maxCapacity: 1, sessionPerUnit: 1, price: 0, description: '', imageUrl: '', isTrial: false, courseCategoryId: null }
     await loadPrivateCourses()
   } catch (e) {
     if (showToast) showToast('新增失敗', 'error')
@@ -346,30 +331,7 @@ async function updatePrivateCourse(updatedCourse) {
   }
 }
 
-async function uploadFile(event) {
-  const file = event.target.files[0]
-  if (!file) return
-  if (file.size > 5 * 1024 * 1024) {
-    if (showToast) showToast('照片檔案不能超過 5MB', 'error')
-    return
-  }
-  uploadingFile.value = true
-  try {
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await api.post('/api/admin/products/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    const url = res.url || res.data?.url
-    if (url) {
-      privateCourseForm.value.imageUrl = url
-    }
-  } catch (e) {
-    console.error(e)
-  } finally {
-    uploadingFile.value = false
-  }
-}
+// 圖片上傳已由 AppImageUpload 元件處理
 
 const filteredPrivateCourses = computed(() => {
   let list = rawPrivateCourses.value

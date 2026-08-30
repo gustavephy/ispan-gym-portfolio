@@ -7,6 +7,7 @@ import { submitEcpayForm } from '@/utils/ecpay.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
+import AppButton from '@/components/AppButton.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -82,9 +83,6 @@ async function purchase(plan) {
   }
 }
 
-const subscriptionEndDate = computed(() => {
-  return mySubscription.value ? formatDate(mySubscription.value.endDate) : ''
-})
 
 onMounted(() => {
   loadPlans()
@@ -163,15 +161,17 @@ onMounted(() => {
             </div>
 
             <!-- 訂閱結帳按鈕 -->
-            <button
-              class="btn btn-primary btn-checkout-submit"
-              :disabled="purchasingId !== null || hasActiveSubscription"
+            <AppButton
+              variant="primary"
+              class="btn-checkout-submit"
+              :disabled="hasActiveSubscription"
+              :loading="purchasingId === plan.subscriptionPlanId"
               @click="purchase(plan)"
               :class="{ 'btn-disabled': hasActiveSubscription }"
               style="margin-top: 1.5rem; width: 100%;"
             >
-              {{ purchasingId === plan.subscriptionPlanId ? '訂閱處理中...' : hasActiveSubscription ? '您已是訂閱會員' : '確認完成線上訂閱與付費' }}
-            </button>
+              {{ hasActiveSubscription ? '您已是訂閱會員' : '確認完成線上訂閱與付費' }}
+            </AppButton>
           </div>
         </div>
       </div>
@@ -184,7 +184,7 @@ onMounted(() => {
         <div class="faq-list">
           <div class="faq-item">
             <h6>如何計算訂閱效期？</h6>
-            <p>付費成功後效期立即生效。例如訂閱 30 天方案，則從當天起算 30 天內可入場通行。</p>
+            <p>付費成功後效期立即生效。系統會根據您購買的方案天數（如 30 天、90 天或 365 天），自付費當天起算對應天數作為有效通行期。</p>
           </div>
           <div class="faq-item">
             <h6>可以重複訂閱嗎？</h6>

@@ -4,6 +4,7 @@ import { ref, onMounted, onActivated, computed } from 'vue'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 import AppPagination from '@/components/AppPagination.vue'
+import AppButton from '@/components/AppButton.vue'
 import {
   getAvailableCounpons,
   getClaimCoupon,
@@ -79,6 +80,23 @@ async function handleClaim(couponId) {
   }
 }
 
+const claimingAll = ref(false)
+async function claimAll() {
+  if (claimableList.value.length === 0) return
+  claimingAll.value = true
+  try {
+    const promises = claimableList.value.map(c => getClaimCoupon(c.couponId))
+    await Promise.allSettled(promises)
+    showFeedback('已嘗試領取本頁所有優惠券！', 'success')
+    await loadClaimable(claimPage.value)
+    await loadMyCoupons(myPage.value)
+  } catch (e) {
+    showFeedback(e.message || '領取失敗', 'error')
+  } finally {
+    claimingAll.value = false
+  }
+}
+
 // 狀態切換時將分頁重設為第一頁
 function handleStatusFilter(status) {
   statusFilter.value = status
@@ -126,7 +144,14 @@ onActivated(() => {
                 <p>太熱烈了！目前沒有可領取的優惠券</p>
             </div>
 
-            <div v-else class="coupon-grid">
+            <div v-else>
+                <div class="action-bar" style="display: flex; justify-content: center; margin-bottom: 1.2rem;">
+                    <AppButton variant="accent" :loading="claimingAll" @click="claimAll">
+                        <i class="fas fa-gifts"></i>
+                        一鍵領取全部
+                    </AppButton>
+                </div>
+                <div class="coupon-grid">
                 <div v-for="c in claimableList" :key="c.couponId" class="coupon-card claimable">
                     <div class="coupon-left">
                         <div class="discount-value">
@@ -140,11 +165,12 @@ onActivated(() => {
                         <p v-if="c.description" class="coupon-desc">{{ c.description }}</p>
                         <p class="coupon-code">代碼：<span>{{ c.code }}</span></p>
                         <p class="coupon-date">效期至 {{ c.endDate || '無期限' }}</p>
-                        <button class="btn btn-accent claim-btn" @click="handleClaim(c.couponId)">
+                        <AppButton variant="accent" class="claim-btn" @click="handleClaim(c.couponId)">
                             立即領取
-                        </button>
+                        </AppButton>
                     </div>
                 </div>
+            </div>
             </div>
 
             <!-- 領券中心分頁按鈕 (使用 AppPagination 組件) -->
@@ -279,8 +305,8 @@ onActivated(() => {
 /* 優惠券卡片 */
 .coupon-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr); /* 固定一排 4 個 */
-  grid-auto-rows: 160px; /* 每排固定 160px，確保所有卡片大小一致 */
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* 自動填滿換列，支援響應式伸縮 */
+  grid-auto-rows: 210px; /* 每排固定 210px，確保有充足空間容納優惠券內容 */
   gap: 1rem;
   margin-bottom: 2rem;
   min-height: 380px;
