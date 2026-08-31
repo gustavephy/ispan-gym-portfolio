@@ -166,7 +166,7 @@ async function handleCheckout() {
     // 只有信用卡是「幾乎即時」的付款體驗，回 /orders 後才需要 OrderListView 短輪詢確認付款結果；
     // ATM／超商代碼要等消費者之後自行完成繳費，短輪詢不會有結果，改由 OrderListView 顯示待繳費資訊
     if (paymentMethod.value === 'Credit') {
-      sessionStorage.setItem('pendingPaymentOrderId', String(orderId))
+      localStorage.setItem('pendingPaymentOrderId', String(orderId))
     }
     submitEcpayForm(formRes.data)
     // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 submitting，避免使用者在轉導期間重複點擊

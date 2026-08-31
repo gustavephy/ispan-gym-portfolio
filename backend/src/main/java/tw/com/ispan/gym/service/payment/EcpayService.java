@@ -144,6 +144,13 @@ public class EcpayService {
      */
     @Transactional
     public Map<String, String> buildCheckoutForm(Order order, String choosePayment) {
+        // 只有待付款訂單能組付款表單。少了這道檢查時，已付款訂單的 renewMerchantTradeNo()
+        // 會靜默略過換號、把已付清的舊編號原樣送去綠界，使用者（畫面停在舊狀態、按下「前往付款」）
+        // 會看到綠界的「訂單編號重覆」交易失敗頁——實際發生過：付款與返回幾乎同秒，
+        // 返回當下的自動查詢還查不到入帳、畫面維持待付款，幾秒後訂單已翻成已付款。
+        if (order.getStatus() != OrderStatus.UNPAID) {
+            throw new BusinessRuleException("這筆訂單不是待付款狀態，不需要再付款；請重新整理訂單列表確認最新狀態");
+        }
         if (!SUPPORTED_PAYMENT_METHODS.contains(choosePayment)) {
             throw new BusinessRuleException("不支援的付款方式：" + choosePayment);
         }

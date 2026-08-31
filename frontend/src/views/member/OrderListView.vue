@@ -127,12 +127,15 @@ async function payForOrder(order) {
   try {
     const res = await getEcpayCheckoutForm(order.orderId)
     // 記下這筆待確認的訂單，從綠界返回 /orders 後主動查詢一次它的付款結果（見 syncPendingPayment）
-    sessionStorage.setItem('pendingPaymentOrderId', String(order.orderId))
+    localStorage.setItem('pendingPaymentOrderId', String(order.orderId))
     submitEcpayForm(res.data)
     // 送出表單後瀏覽器即將導向綠界，故意不重設 payingId
   } catch (err) {
     showFeedback(err.message || '無法前往付款，請稍後再試', 'error')
     payingId.value = null
+    // 最常見的失敗原因是「這筆其實已付款，畫面還停在舊狀態」（付款與返回同秒、
+    // 自動查詢慢半拍）——重載列表讓狀態自己校正，使用者不用手動重新整理
+    await loadOrders({ silent: true })
   }
 }
 
@@ -145,7 +148,7 @@ const pendingPaymentOrderId = ref(null)
 
 function clearPendingPayment() {
   pendingPaymentOrderId.value = null
-  sessionStorage.removeItem('pendingPaymentOrderId')
+  localStorage.removeItem('pendingPaymentOrderId')
 }
 
 async function syncPendingPayment() {
@@ -443,8 +446,11 @@ onMounted(async () => {
     }, 2400)
   }
 
-  // 從綠界返回：若有待確認付款的訂單，主動查詢一次真實付款結果
-  const pending = sessionStorage.getItem('pendingPaymentOrderId')
+  // 從綠界返回：若有待確認付款的訂單，主動查詢一次真實付款結果。
+  // 記號存 localStorage 而不是 sessionStorage——sessionStorage 是分頁隔離的，
+  // 使用者若沒走綠界的「返回特店」、而是在別的分頁自己打開訂單頁，記號就看不到，
+  // 自動查詢永遠不會發生（實際發生過，訂單一直顯示待付款）。
+  const pending = localStorage.getItem('pendingPaymentOrderId')
   if (pending) {
     const pendingId = Number(pending)
     const order = orders.value.find((o) => o.orderId === pendingId)
@@ -452,7 +458,7 @@ onMounted(async () => {
       pendingPaymentOrderId.value = pendingId
       await syncPendingPayment()
     } else {
-      sessionStorage.removeItem('pendingPaymentOrderId')
+      localStorage.removeItem('pendingPaymentOrderId')
     }
   }
 })

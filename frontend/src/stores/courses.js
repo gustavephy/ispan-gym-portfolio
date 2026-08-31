@@ -169,7 +169,7 @@ export const useCoursesStore = defineStore('courses', () => {
         // 記下這筆訂單，讓使用者從綠界返回 /orders 時主動查一次付款結果
         // （本機收不到綠界的 server-to-server 通知，見 OrderListView#syncPendingPayment）。
         // 課程走的是信用卡即時付款，跟購物車的 Credit 分支同樣需要這個標記。
-        sessionStorage.setItem('pendingPaymentOrderId', String(orderData.orderId))
+        localStorage.setItem('pendingPaymentOrderId', String(orderData.orderId))
         // 同分頁導向：開新分頁的話綠界「返回商店」會停在新分頁，原本的頁面不會重新載入
         // /orders，上面那個標記就永遠不會被消化，訂單看起來就一直是未付款
         submitEcpayForm(ecpayRes.data)
