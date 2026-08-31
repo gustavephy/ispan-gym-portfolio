@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { test, expect, ACCOUNTS, PASSWORD, loginAs, apiToken, uniqueSuffix } from './fixtures.js'
+import { test, expect, ACCOUNTS, PASSWORD, loginAs, apiToken, uniqueSuffix, registerActivatedMember } from './fixtures.js'
 
 /**
  * 直接查資料庫拿 email 驗證 token。
@@ -174,5 +174,45 @@ test.describe('B2 會籍訂閱', () => {
     const disabledButtons = page.getByRole('button', { name: '您已是訂閱會員' })
     await expect(disabledButtons.first()).toBeDisabled()
     await expect(disabledButtons).toHaveCount(await page.locator('.plan-card').count())
+  })
+
+  /**
+   * 防重複建單：按了訂閱 → 到綠界按上一頁 → 回來再按一次，曾經 10 秒建出兩張未付款訂單。
+   * 現在第二次按會找到既有的未付款訂單直接續付（重新拿綠界表單），不再建新單。
+   */
+  test('重複按訂閱不會建出第二張未付款訂單', async ({ page, request }) => {
+    const { session } = await registerActivatedMember(request, 'e2e-dup')
+    const auth = { headers: { Authorization: `Bearer ${session.accessToken}` } }
+
+    // 模擬「上次按了訂閱沒付完」：先由 API 建一張未付款的訂閱訂單
+    const plans = await (await request.get(`${API}/api/subscription-plans`)).json()
+    const plan = plans.filter((p) => p.status === 'ACTIVE').sort((a, b) => a.price - b.price)[0]
+    const created = await request.post(`${API}/api/orders/direct/subscription/checkout`, {
+      ...auth, data: { subscriptionPlanId: plan.subscriptionPlanId },
+    })
+    expect(created.ok(), `建單失敗：${await created.text()}`).toBeTruthy()
+    const firstOrderId = (await created.json()).order.orderId
+
+    // UI 再按一次同方案的訂閱
+    await page.goto('/')
+    await page.evaluate((s) => {
+      localStorage.setItem('auth', JSON.stringify({
+        token: s.accessToken, accountId: s.accountId, email: s.email, roles: s.roles,
+      }))
+    }, session)
+    await page.route(/ecpay\.com\.tw/, (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: 'ECPAY_STUB' }),
+    )
+    await page.goto('/subscription')
+    const card = page.locator('.plan-card').filter({ hasText: plan.name }).first()
+    await expect(card).toBeVisible()
+    await card.getByRole('button').click()
+    // 走「續付既有訂單」：拿新表單導向綠界（被 stub 攔下）
+    await page.waitForURL(/ecpay\.com\.tw/)
+
+    // 名下這個方案的未付款訂單仍只有原來那一張
+    const orders = await (await request.get(`${API}/api/orders`, auth)).json()
+    const unpaidSubs = orders.filter((o) => o.status === 'UNPAID' && o.title === plan.name)
+    expect(unpaidSubs.map((o) => o.orderId)).toEqual([firstOrderId])
   })
 })

@@ -101,4 +101,38 @@ test.describe('B7 優惠券結帳', () => {
     await expect(page).toHaveURL(/\/checkout/)
     await expect(page.locator('.form-error, .op-message, [role="alert"]').first()).toBeVisible()
   })
+
+  /**
+   * 「一鍵領取全部」要一次領完整份可領清單，不是只領畫面上這一頁——
+   * 清單一頁 8 張，改壞的話會退化成「每按一次領一頁」（發生過）。
+   * 先由管理端建一張新券保證清單非空，按完斷言清單清空、新券進到名下。
+   */
+  test('一鍵領取全部：按一次就領完，清單清空', async ({ page, request }) => {
+    const adminToken = await apiToken(ACCOUNTS.admin)
+    const memberToken = await apiToken(ACCOUNTS.member)
+    const code = `E2E${Date.now().toString(36).toUpperCase()}A`
+    const iso = (d) => d.toISOString().slice(0, 10)
+    const start = new Date()
+    start.setDate(start.getDate() - 1)
+    const end = new Date()
+    end.setFullYear(end.getFullYear() + 1)
+    const created = await request.post(`${API}/api/admin/coupons`, {
+      ...auth(adminToken),
+      data: { code, name: `E2E 一鍵領取 ${code}`, type: 'CASH', value: 30, minSpend: 100,
+        totalQuantity: 50, startDate: iso(start), endDate: iso(end), applicableType: 'PRODUCT' },
+    })
+    expect(created.ok(), `建券失敗：${await created.text()}`).toBeTruthy()
+    const couponId = (await created.json()).couponId
+
+    await loginAs(page, ACCOUNTS.member)
+    await page.goto('/coupons')
+    await page.getByRole('button', { name: /一鍵領取全部/ }).click()
+    await expect(page.getByText('目前沒有可領取的優惠券')).toBeVisible()
+
+    const unused = await (await request.get(`${API}/api/coupons/my-unused`, auth(memberToken))).json()
+    const got = (Array.isArray(unused) ? unused : unused.items ?? [])
+      .map((x) => x.coupon ?? x)
+      .some((c) => c.couponId === couponId)
+    expect(got, '剛建立的券應出現在名下未使用').toBeTruthy()
+  })
 })

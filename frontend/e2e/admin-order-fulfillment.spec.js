@@ -107,6 +107,12 @@ test.describe('A6 管理端履約', () => {
     const order = await createCourseOrder(request, memberToken)
     await simulatePayment(request, adminToken, order.orderId)
 
+    // 已付款訂單不能再產生綠界付款表單——否則已付清的舊編號會被原樣重送，
+    // 使用者在綠界看到「訂單編號重覆」交易失敗頁（發生過：畫面停在舊狀態按了「前往付款」）
+    const form = await request.post(`${API}/api/payments/ecpay/checkout/${order.orderId}`, auth(memberToken))
+    expect(form.ok()).toBeFalsy()
+    expect(await form.text()).toContain('不是待付款')
+
     const done = await request.post(`${API}/api/admin/orders/${order.orderId}/complete`, auth(adminToken))
     expect(done.ok(), `完成失敗：${await done.text()}`).toBeTruthy()
     expect(await adminStatus(request, adminToken, order.orderId)).toBe('COMPLETED')
