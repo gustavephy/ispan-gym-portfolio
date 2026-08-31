@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getSubscriptionPlans, getMySubscription } from '@/api/subscription.js'
-import { checkoutDirectSubscriptionWithEcpay } from '@/api/order.js'
+import { checkoutDirectSubscriptionWithEcpay, getMyOrders } from '@/api/order.js'
+import { getEcpayCheckoutForm } from '@/api/payment.js'
 import { submitEcpayForm } from '@/utils/ecpay.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useFeedback } from '@/composables/useFeedback.js'
@@ -51,7 +52,22 @@ async function loadMySubscription() {
   }
 }
 
+/**
+ * 每個方案一把「建單意圖」的冪等金鑰：請求失敗重試時沿用同一把（後端 IdempotencyService
+ * 保證同金鑰只真正建一次單），成功建單後即丟棄——下次訂閱是新的意圖、用新金鑰。
+ */
+function checkoutKeyFor(planId) {
+  const storageKey = `subCheckoutKey:${planId}`
+  let key = localStorage.getItem(storageKey)
+  if (!key) {
+    key = crypto.randomUUID()
+    localStorage.setItem(storageKey, key)
+  }
+  return { key, clear: () => localStorage.removeItem(storageKey) }
+}
+
 async function purchase(plan) {
+  if (purchasingId.value) return // 防重入：等待回應或轉導綠界期間的連點直接忽略
   if (!auth.isLoggedIn) {
     router.push({ name: 'login', query: { redirect: '/subscription' } })
     return
@@ -65,14 +81,27 @@ async function purchase(plan) {
   }
   purchasingId.value = plan.subscriptionPlanId
   try {
+    // 已有同方案的未付款訂單就直接對它續付，不再建第二張——
+    // 「按了訂閱 → 到綠界按上一頁 → 回來再按一次」的情境曾經 10 秒建出兩張單
+    const mine = await getMyOrders()
+    const existing = (mine.data || []).find((o) => o.status === 'UNPAID' && o.title === plan.name)
+    if (existing) {
+      const form = await getEcpayCheckoutForm(existing.orderId)
+      localStorage.setItem('pendingPaymentOrderId', String(existing.orderId))
+      submitEcpayForm(form.data)
+      return // 即將導向綠界，不重設 purchasingId
+    }
+
+    const { key, clear } = checkoutKeyFor(plan.subscriptionPlanId)
     const res = await checkoutDirectSubscriptionWithEcpay({
       subscriptionPlanId: plan.subscriptionPlanId,
       couponCode: null,
-    })
+    }, key)
+    clear() // 建單成功，這個意圖完結
     // 記下這筆訂單，讓使用者從綠界返回 /orders 時主動查一次付款結果
     // （本機收不到綠界的 server-to-server 通知，見 OrderListView#syncPendingPayment）
     if (res.data.order?.orderId) {
-      sessionStorage.setItem('pendingPaymentOrderId', String(res.data.order.orderId))
+      localStorage.setItem('pendingPaymentOrderId', String(res.data.order.orderId))
     }
     submitEcpayForm(res.data.ecpayForm)
     // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 purchasingId，避免使用者在轉導期間重複點擊

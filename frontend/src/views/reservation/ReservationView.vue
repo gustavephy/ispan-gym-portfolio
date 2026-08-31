@@ -89,6 +89,9 @@ function formatDateTime(value) {
   })
 }
 
+/** 名下是否有任何剩餘私教堂數——決定空清單要顯示「去買課」還是「沒有教練」的文案 */
+const hasAnyQuota = ref(false)
+
 async function fetchTrainers() {
   trainersLoading.value = true
   try {
@@ -101,6 +104,7 @@ async function fetchTrainers() {
       .filter(q => q.remainingCourse > 0)
       .map(q => q.trainer?.id)
       .filter(Boolean)
+    hasAnyQuota.value = eligibleTrainerIds.length > 0
 
     // 新 API 會回傳 UNAVAILABLE 教練，這裡過濾只留 ACTIVE 且擁有名下剩餘額度的教練
     trainers.value = trainersRes.data.filter((trainer) => 
@@ -224,7 +228,14 @@ onMounted(() => {
       <div v-if="trainersLoading" class="spinner"></div>
 
       <template v-else>
-        <p v-if="trainers.length === 0" class="empty-state">目前沒有在職教練。</p>
+        <!-- 這頁只列出「名下有剩餘堂數」的教練：清單空的時候，絕大多數是還沒買課，
+             不是真的沒有教練——文案要說實話並給出下一步，不能怪到教練頭上 -->
+        <p v-if="trainers.length === 0 && !hasAnyQuota" class="empty-state">
+          您目前沒有可預約的私教堂數，請先到
+          <RouterLink to="/courses">課程方案</RouterLink>
+          購買私教課，購買後即可在此預約該教練的時段。
+        </p>
+        <p v-else-if="trainers.length === 0" class="empty-state">目前沒有可預約的在職教練。</p>
 
         <div v-else class="trainer-grid">
           <button

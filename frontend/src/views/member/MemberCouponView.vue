@@ -82,13 +82,21 @@ async function handleClaim(couponId) {
 
 const claimingAll = ref(false)
 async function claimAll() {
-  if (claimableList.value.length === 0) return
+  if (claimingAll.value) return
   claimingAll.value = true
   try {
-    const promises = claimableList.value.map(c => getClaimCoupon(c.couponId))
-    await Promise.allSettled(promises)
-    showFeedback('已嘗試領取本頁所有優惠券！', 'success')
-    await loadClaimable(claimPage.value)
+    // 按鈕叫「全部」就要領全部：畫面上的 claimableList 只有目前這一頁（8 張），
+    // 直接領它會變成「每按一次領一頁」；先把整份可領清單抓下來再逐張領
+    const res = await getAvailableCounpons({ page: 0, size: 100 })
+    const all = (res.data.content || []).filter(c => c !== null)
+    if (all.length === 0) {
+      showFeedback('目前沒有可領取的優惠券', 'error')
+      return
+    }
+    await Promise.allSettled(all.map(c => getClaimCoupon(c.couponId)))
+    showFeedback(`已領取全部 ${all.length} 張優惠券！`, 'success')
+    claimPage.value = 1
+    await loadClaimable(1)
     await loadMyCoupons(myPage.value)
   } catch (e) {
     showFeedback(e.message || '領取失敗', 'error')
