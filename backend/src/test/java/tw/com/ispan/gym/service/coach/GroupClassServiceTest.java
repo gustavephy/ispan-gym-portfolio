@@ -298,6 +298,25 @@ class GroupClassServiceTest {
     }
 
     @Test
+    void 報名_場次時間已過去回409且不建立報名紀錄() {
+        GroupClassSession session = session(GroupClassSessionStatus.SCHEDULED, 10, 3, LocalDateTime.now().minusDays(1));
+        when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(subscriptions.findFirstByMemberIdAndEndDateAfterAndStatusOrderByEndDateDesc(eq(MEMBER_ID),
+                any(LocalDateTime.class), eq(SubscriptionStatus.ACTIVE)))
+                .thenReturn(Optional.of(new MemberSubscription()));
+        when(classBookings.findBySessionIdAndMemberIdAndStatus(SESSION_ID, MEMBER_ID, GroupClassBookingStatus.BOOKED))
+                .thenReturn(Optional.empty());
+        when(members.findById(MEMBER_ID)).thenReturn(Optional.of(member(MEMBER_ID)));
+
+        assertThatThrownBy(() -> service.bookSession(MEMBER_ID, SESSION_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("已開始或已結束");
+        assertThat(session.getBookedCount()).isEqualTo(3);
+        verify(sessions, never()).save(any());
+        verify(classBookings, never()).save(any());
+    }
+
+    @Test
     void 報名_儲存場次時樂觀鎖衝突例外往外拋且不建立報名紀錄() {
         GroupClassSession session = session(GroupClassSessionStatus.SCHEDULED, 10, 3, LocalDateTime.now().plusDays(5));
         when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(session));
