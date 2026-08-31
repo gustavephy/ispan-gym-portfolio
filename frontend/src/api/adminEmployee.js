@@ -2,7 +2,7 @@ import api from './axios.instance.js'
 
 // 管理員維護員工資料，對應後端 AdminEmployeeController 的 /api/admin/employees（皆需 ADMIN）。
 // 跟員工自助的 employeeProfile.js 職責分開：那是員工改自己（只有電話），這裡是管理員代改別人
-// 並管理角色與在職狀態。不含員工申請／同儕審核（employeeReview.js，權限模型不同）。
+// 並管理角色與在職狀態。不含員工申請／員工審核（employeeReview.js，屬審核流程；兩者現皆需 ADMIN）。
 
 /**
  * 分頁查詢員工，需 ADMIN。回應是 Spring 的 Page 結構（content／totalElements／totalPages），

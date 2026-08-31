@@ -22,7 +22,7 @@ import tw.com.ispan.gym.repository.employee.EmployeeRepository;
  * 員工自助申請（含日後的重新申請）。審核（核准／拒絕）在獨立的 {@link EmployeeReviewService}。
  *
  * <p>員工沒有 email 驗證迴圈（不像 Member 有 purpose/token/resend 那一整套）——
- * 新帳號直接 PENDING_APPROVAL，改靠任一 ACTIVE 員工人工審核轉 ACTIVE/REJECTED。
+ * 新帳號直接 PENDING_APPROVAL，改靠管理員人工審核轉 ACTIVE/REJECTED。
  */
 @Service
 @Transactional(readOnly = true)

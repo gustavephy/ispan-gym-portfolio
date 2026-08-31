@@ -104,7 +104,7 @@ async function onSubmit() {
 
       <template v-else>
         <h1 class="auth-card__title">員工申請</h1>
-        <p class="auth-card__subtitle">填寫以下資料送出員工帳號申請，將由在職員工審核</p>
+        <p class="auth-card__subtitle">填寫以下資料送出員工帳號申請，將由管理員審核</p>
 
         <form @submit.prevent="onSubmit">
           <div class="form-group">

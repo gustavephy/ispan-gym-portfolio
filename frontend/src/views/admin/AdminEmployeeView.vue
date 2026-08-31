@@ -594,7 +594,7 @@ onMounted(fetchList)
           管理員可使用所有後台管理功能，包含員工與教練管理。
         </p>
         <p v-else class="confirm-note">
-          降為一般員工後將失去後台管理權限（仍可使用一般員工與同儕審核功能）。
+          降為一般員工後，將失去管理員權限，但仍可使用一般員工功能；員工審核為管理員專屬功能。
         </p>
         <p v-if="isSelf(roleTarget.email)" class="confirm-note confirm-note--warn">
           這是你目前登入的帳號，調整後你的選單與可用頁面會立即變動。
