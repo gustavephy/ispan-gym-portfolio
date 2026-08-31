@@ -151,6 +151,11 @@ public class OrderController {
         Order order = orders.findByIdAndMemberId(orderId, memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
         Map<String, String> ecpayForm = ecpayService.buildCheckoutForm(order);
+        // buildCheckoutForm 會換一組新的 MerchantTradeNo（送給綠界的就是新號），必須明確存檔。
+        // 這裡不能依賴 dirty checking 隱式寫回：本端點前面先經過 findMineById 的唯讀交易，
+        // 實測換號後的新號寫不進資料庫（訂單留在舊號＋attempt=0），之後所有付款結果查詢
+        // 都拿舊號去問綠界、永遠「查無交易」，訂單就卡在待付款（demo1 的 2089 實際發生）。
+        orders.save(order);
         return new SubscriptionCheckoutResponse(detail, ecpayForm);
     }
 

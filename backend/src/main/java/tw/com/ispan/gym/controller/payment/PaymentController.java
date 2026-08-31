@@ -38,7 +38,12 @@ public class PaymentController {
             @RequestParam(defaultValue = "Credit") String method) {
         Order order = orders.findByIdAndMemberId(orderId, currentUser.requireCurrentMemberId())
                 .orElseThrow(() -> new ResourceNotFoundException("找不到訂單資料"));
-        return ecpayService.buildCheckoutForm(order, method);
+        Map<String, String> form = ecpayService.buildCheckoutForm(order, method);
+        // buildCheckoutForm 換了 MerchantTradeNo，明確存檔——送給綠界的號和資料庫的號
+        // 必須一致，否則之後的付款結果查詢會拿舊號問綠界、永遠查無交易
+        //（訂閱結帳端點就踩過隱式寫回失效，見 OrderController#checkoutDirectSubscriptionWithEcpay）
+        orders.save(order);
+        return form;
     }
 
     /**
