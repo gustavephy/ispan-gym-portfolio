@@ -532,21 +532,23 @@ class EndpointAuthorizationTest {
         mockMvc.perform(get("/api/products")).andExpect(status().isOk());
     }
 
-    // === EMPLOYEE：員工審核與優惠券 =============================================
+    // === ADMIN：員工審核與優惠券 ================================================
 
     @Test
-    void 員工審核需在職員工身分() throws Exception {
+    void 員工審核需管理者身分() throws Exception {
+        // 2026-08-31 政策定案：員工審核改 ADMIN-only，一般在職員工不再能審核
         expectUnauthorizedWhenAnonymous(get("/api/employees/reviews/pending"));
         expectForbidden(get("/api/employees/reviews/pending"), memberToken());
-        expectAuthorized(get("/api/employees/reviews/pending"), employeeToken());
-        // 管理者本身也是員工，同樣可以審核
+        expectForbidden(get("/api/employees/reviews/pending"), employeeToken());
         expectAuthorized(get("/api/employees/reviews/pending"), adminToken());
     }
 
     @Test
-    void 核准與拒絕員工申請需員工身分() throws Exception {
+    void 核准與拒絕員工申請需管理者身分() throws Exception {
         expectForbidden(post("/api/employees/reviews/9/approve"), memberToken());
         expectForbidden(post("/api/employees/reviews/9/reject"), memberToken());
+        expectForbidden(post("/api/employees/reviews/9/approve"), employeeToken());
+        expectForbidden(post("/api/employees/reviews/9/reject"), employeeToken());
     }
 
     @Test

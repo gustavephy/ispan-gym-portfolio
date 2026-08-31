@@ -156,10 +156,12 @@ public class SecurityConfig {
                         // 教練本人專業資料：ROLE_TRAINER 由 AccountAuthorityResolver 算出
                         // （員工 ACTIVE 且有對應未軟刪除的 Trainer 資料列才授予），不與 EMPLOYEE/ADMIN 互斥
                         .requestMatchers("/api/trainer/**").hasRole("TRAINER")
-                        // 員工審核：任何在職員工皆可審核，不限管理者，獨立於 /api/admin/** 之外
-                        // （/api/admin/** 還掛著訂單、商品等真正的管理員專屬後台，不能共用同一條規則）
-                        .requestMatchers("/api/employees/reviews/**").hasRole("EMPLOYEE")
-                        // 員工升級為教練：限管理者，與上面的員工審核（任何在職員工皆可）是不同動作的不同權限
+                        // 員工審核：ADMIN-only（2026-08-31 政策定案）。路徑仍獨立於 /api/admin/** 之外
+                        // ——那條 prefix 掛著訂單、商品等其他後台功能，保留獨立 matcher 方便日後若要
+                        // 放寬回「任何在職員工皆可審核」只需改這一行。角色為疊加式，ADMIN 帳號必同時
+                        // 具 ROLE_EMPLOYEE，故 hasRole("ADMIN") 已足夠。
+                        .requestMatchers("/api/employees/reviews/**").hasRole("ADMIN")
+                        // 員工升級為教練：同為限管理者
                         .requestMatchers(HttpMethod.POST, "/api/employees/*/trainer").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 // filter 層的 401／403 不會經過 GlobalExceptionHandler，

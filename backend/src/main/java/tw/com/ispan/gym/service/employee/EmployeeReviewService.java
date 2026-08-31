@@ -14,9 +14,11 @@ import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 
 /**
- * 員工審核：任何 ACTIVE 的員工都能核准或拒絕其他人的申請，不限管理者
- * （目前規模小、還沒有正式分層；未來要限縮時只需把 SecurityConfig／Controller 的
- * hasRole("EMPLOYEE") 改成 hasRole("ADMIN")，不需要動這裡的邏輯）。
+ * 員工審核：核准或拒絕其他人的申請。權限為 <strong>ADMIN-only</strong>（2026-08-31 政策定案，
+ * 把關在 SecurityConfig 的 /api/employees/reviews/** matcher 與 EmployeeReviewController 的
+ * @PreAuthorize）——這層 Service 不看角色，reviewingEmployeeId 由 Controller 從登入身分解出後傳入，
+ * ADMIN 帳號本身也有 Employee 資料列故一切照常。日後若放寬回「任何在職員工皆可審核」，
+ * 只需把那兩處改回 hasRole("EMPLOYEE")，這裡不用動。
  */
 @Service
 @Transactional(readOnly = true)
