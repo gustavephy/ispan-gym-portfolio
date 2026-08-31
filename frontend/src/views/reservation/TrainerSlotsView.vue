@@ -54,6 +54,11 @@ function timeOnly(iso) {
   return (timePart || '').slice(0, 5)
 }
 
+// 時段開始時間是否已過去；頁面開著不會自動重抓資料，這裡只在渲染/點擊當下即時比對
+function isPastSlot(slot) {
+  return new Date(slot.startAt).getTime() < Date.now()
+}
+
 // 教練資訊沒有單獨查詢的後端端點，一律用既有的 getTrainers() 在前端過濾找出這一位；
 // 只留 ACTIVE，跟原本 ReservationView.vue 的 fetchTrainers 是同一套慣例——
 // 找不到（含教練已離職、或網址被亂改成不存在的 id）就顯示「查無此教練」
@@ -189,10 +194,10 @@ onMounted(() => {
                   <button
                     class="btn btn-accent"
                     type="button"
-                    :disabled="bookingSlotId === slot.id"
+                    :disabled="bookingSlotId === slot.id || isPastSlot(slot)"
                     @click="handleBook(slot)"
                   >
-                    {{ bookingSlotId === slot.id ? '預約中…' : '預約' }}
+                    {{ bookingSlotId === slot.id ? '預約中…' : isPastSlot(slot) ? '已截止' : '預約' }}
                   </button>
                 </td>
               </tr>

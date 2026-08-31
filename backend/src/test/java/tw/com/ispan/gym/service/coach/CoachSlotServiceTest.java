@@ -3,6 +3,8 @@ package tw.com.ispan.gym.service.coach;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -358,6 +361,18 @@ class CoachSlotServiceTest {
         verify(slots, never()).save(any());
     }
 
+    @Test
+    void markAsBooked_開始時間已過去的時段不可預約() {
+        CoachSlot slot = slot(trainer(TRAINER_ID), SlotStatus.AVAILABLE);
+        slot.setStartAt(LocalDateTime.now().minusHours(1));
+        when(slots.findById(SLOT_ID)).thenReturn(Optional.of(slot));
+
+        assertThatThrownBy(() -> service.markAsBooked(SLOT_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("已過期");
+        verify(slots, never()).save(any());
+    }
+
     // === markAsAvailable ====================================================
 
     @Test
@@ -427,7 +442,9 @@ class CoachSlotServiceTest {
         when(trainers.existsById(TRAINER_ID)).thenReturn(true);
         CoachSlot available = slot(trainer(TRAINER_ID), SlotStatus.AVAILABLE);
         Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
-        when(slots.searchAvailableSlots(TRAINER_ID, null, null, pageable))
+        // dateFrom 沒帶時，service 會補上目前時間當下界（見 CoachSlotService#searchSlots），
+        // 不再是 null，這裡用 any(LocalDateTime.class) 比對，不比對確切值
+        when(slots.searchAvailableSlots(any(), any(LocalDateTime.class), isNull(), any()))
                 .thenReturn(new PageImpl<>(List.of(available), pageable, 1));
 
         PageResponse<CoachSlotResponse> response = service.searchSlots(TRAINER_ID, 0, 10, null, null);
@@ -436,6 +453,21 @@ class CoachSlotServiceTest {
         assertThat(response.getItems().get(0).getStatus()).isEqualTo(SlotStatus.AVAILABLE);
         // 會員瀏覽任意教練的時段，不應觸發身分解析
         verify(employees, never()).findByAccountId(any());
+    }
+
+    @Test
+    void searchSlots_dateFrom為過去日期時以目前時間為下界() {
+        when(trainers.existsById(TRAINER_ID)).thenReturn(true);
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "startAt"));
+        when(slots.searchAvailableSlots(any(), any(LocalDateTime.class), isNull(), any()))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+        ArgumentCaptor<LocalDateTime> startAtFromCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+
+        service.searchSlots(TRAINER_ID, 0, 10, LocalDate.of(2020, 1, 1), null);
+
+        verify(slots).searchAvailableSlots(eq(TRAINER_ID), startAtFromCaptor.capture(), isNull(), eq(pageable));
+        // 即使使用者自己選了過去的 dateFrom，實際查詢下界仍要以目前時間為準，不能沿用使用者指定的過去日期
+        assertThat(startAtFromCaptor.getValue()).isAfter(LocalDateTime.of(2020, 1, 2, 0, 0));
     }
 
     @Test

@@ -186,9 +186,16 @@ function detachEventTooltip(info) {
   info.el._tippy?.destroy()
 }
 
+// 場次開始時間是否已過去；頁面開著不會自動重抓資料，這裡只在使用者實際互動
+// （渲染按鈕、點擊當下）才即時比對，不需要額外的計時器
+function isPastSession(session) {
+  return new Date(session.startAt).getTime() < Date.now()
+}
+
 const bookButtonLabel = computed(() => {
   if (!selectedSession.value) return ''
   if (selectedSession.value.isFull) return '已額滿'
+  if (isPastSession(selectedSession.value)) return '已截止'
   if (bookingSubmitting.value) return '報名中…'
   return '報名'
 })
@@ -328,8 +335,8 @@ const calendarOptions = computed(() => ({
     const bookBtn = document.createElement('button')
     bookBtn.type = 'button'
     bookBtn.className = 'btn btn-accent gcs-list-book-btn'
-    bookBtn.textContent = session.isFull ? '已額滿' : '報名'
-    bookBtn.disabled = session.isFull
+    bookBtn.textContent = session.isFull ? '已額滿' : isPastSession(session) ? '已截止' : '報名'
+    bookBtn.disabled = session.isFull || isPastSession(session)
     bookBtn.addEventListener('click', (e) => {
       e.stopPropagation()
       openSessionDetail(session)
@@ -572,7 +579,8 @@ onUnmounted(() => {
         </div>
         <OperationMessage :message="bookingError" />
         <div class="modal-actions">
-          <button class="btn btn-accent" type="button" :disabled="selectedSession.isFull || bookingSubmitting"
+          <button class="btn btn-accent" type="button"
+            :disabled="selectedSession.isFull || isPastSession(selectedSession) || bookingSubmitting"
             @click="handleBookInModal">
             {{ bookButtonLabel }}
           </button>

@@ -330,6 +330,9 @@ public class CoachSlotService {
                 if (coachSlot.getStatus() != SlotStatus.AVAILABLE) {
                         throw new BusinessRuleException("此時段目前無法預約");
                 }
+                if (coachSlot.getStartAt().isBefore(LocalDateTime.now())) {
+                        throw new BusinessRuleException("此時段已過期，無法預約");
+                }
 
                 coachSlot.setStatus(SlotStatus.BOOKED);
                 coachSlotRepository.save(coachSlot);
@@ -384,7 +387,12 @@ public class CoachSlotService {
                 int safeSize = Math.min(Math.max(size, 1), 100);
                 Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "startAt"));
 
-                LocalDateTime startAtFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
+                // 會員瀏覽一律排除已過去的時段：即使沒帶 dateFrom，也不能把「今天以前」的
+                // AVAILABLE 時段（例如教練排了班卻沒人約、時間就這樣過去的舊資料）秀出來讓人以為能約；
+                // 若使用者自己選了更晚的 dateFrom，仍以使用者指定的為準
+                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime requestedFrom = dateFrom == null ? null : dateFrom.atStartOfDay();
+                LocalDateTime startAtFrom = requestedFrom == null || requestedFrom.isBefore(now) ? now : requestedFrom;
                 LocalDateTime startAtTo = dateTo == null ? null : dateTo.plusDays(1).atStartOfDay();
 
                 Page<CoachSlot> result = coachSlotRepository.searchAvailableSlots(trainerId, startAtFrom, startAtTo, pageable);

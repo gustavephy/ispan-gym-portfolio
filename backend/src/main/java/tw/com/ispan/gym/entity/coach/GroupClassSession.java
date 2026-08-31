@@ -75,6 +75,8 @@ public class GroupClassSession extends TaipeiTimestampEntity {
     public void book() {
         if (status != GroupClassSessionStatus.SCHEDULED)
             throw new BusinessRuleException("此場次已取消，無法報名");
+        if (startAt.isBefore(LocalDateTime.now()))
+            throw new BusinessRuleException("此場次已開始或已結束，無法報名");
         if (bookedCount >= capacity)
             throw new BusinessRuleException("此場次已額滿");
         this.bookedCount++;
