@@ -126,5 +126,12 @@ test.describe('B6 私教課購買', () => {
     // 前台「我的課程」也看得到這門課的額度卡
     await page.goto('/member/courses')
     await expect(page.locator('.quota-card, [class*=quota]').filter({ hasText: courseName }).first()).toBeVisible()
+
+    // 回到課程頁：剛買、還有剩餘堂數的方案，購買鈕變成禁用的「已購買此課程」（不可重複購買的前端閘門）
+    await page.goto('/courses')
+    const boughtCard = page.locator('.coach-card').filter({ hasText: courseName }).first()
+    await expect(boughtCard).toBeVisible()
+    await boughtCard.locator('select').selectOption({ label: optionText })
+    await expect(boughtCard.getByRole('button', { name: '已購買此課程' })).toBeDisabled()
   })
 })

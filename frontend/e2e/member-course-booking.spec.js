@@ -17,7 +17,8 @@ const auth = (token) => ({ headers: { Authorization: `Bearer ${token}` } })
 function futureSlot() {
   const d = new Date()
   d.setDate(d.getDate() + 30 + Math.floor(Math.random() * 60))
-  const hour = 10 + Math.floor(Math.random() * 11)
+  // 種子會幫每位教練播 9:00–17:00 的時段，測試開在 18:00 以後才不會隨機撞「已有重疊時段」
+  const hour = 18 + Math.floor(Math.random() * 3)
   const date = d.toISOString().slice(0, 10)
   return {
     startAt: `${date}T${String(hour).padStart(2, '0')}:00:00`,
@@ -27,9 +28,14 @@ function futureSlot() {
 
 async function createSlot(request) {
   const token = await apiToken(ACCOUNTS.trainer)
-  const res = await request.post(`${API}/api/trainer/schedules`, { ...auth(token), data: futureSlot() })
-  expect(res.ok(), `建立時段失敗：${await res.text()}`).toBeTruthy()
-  return (await res.json()).id
+  // 歷輪測試留下的時段不會被清掉，隨機時間偶爾撞「已有重疊時段」——撞到就換一個重試
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res = await request.post(`${API}/api/trainer/schedules`, { ...auth(token), data: futureSlot() })
+    if (res.ok()) return (await res.json()).id
+    const text = await res.text()
+    expect(text, `建立時段失敗（非重疊原因不重試）：${text}`).toContain('重疊')
+  }
+  throw new Error('重試 5 次仍撞到重疊時段，該清一清測試留下的時段了（npm run test:e2e:fresh）')
 }
 
 /** 會員名下所有額度（含綁定教練） */

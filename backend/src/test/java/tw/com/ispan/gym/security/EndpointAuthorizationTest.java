@@ -114,6 +114,7 @@ class EndpointAuthorizationTest {
         tw.com.ispan.gym.controller.employee.AdminEmployeeController.class,
         tw.com.ispan.gym.controller.employee.EmployeeProfileController.class,
         tw.com.ispan.gym.controller.employee.EmployeeUploadController.class,
+        tw.com.ispan.gym.controller.employee.AdminFileController.class,
         tw.com.ispan.gym.controller.coupon.AdminCouponController.class,
         tw.com.ispan.gym.controller.member.AdminMemberController.class,
         tw.com.ispan.gym.controller.member.MemberProfileController.class,
@@ -882,6 +883,28 @@ class EndpointAuthorizationTest {
         expectUnauthorizedWhenAnonymous(post("/api/employee/uploads/images"));
         expectForbidden(post("/api/employee/uploads/images"), memberToken());
         expectAuthorized(post("/api/employee/uploads/images"), employeeToken());
+    }
+
+    /**
+     * feat/private-course-improvements 新增的後台共用上傳端點。方法層雖標
+     * {@code hasAnyRole('ADMIN','EMPLOYEE')}，但 URL 層的 {@code /api/admin/**} 只放行 ADMIN，
+     * 先到先擋——EMPLOYEE 實際上進不來，方法層的 EMPLOYEE 是死字。呼叫端也全是管理端頁面
+     *（AdminProducts 與 utils/image.js 的 uploadImageFile），所以這裡釘住「實際」行為：員工 403。
+     * 員工要上傳走自己的 /api/employee/uploads/images 或 /profile/upload。
+     */
+    @Test
+    void 後台共用上傳僅管理員可用() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/admin/files/upload"));
+        expectForbidden(post("/api/admin/files/upload"), memberToken());
+        expectForbidden(post("/api/admin/files/upload"), employeeToken());
+        expectAuthorized(post("/api/admin/files/upload"), adminToken());
+    }
+
+    @Test
+    void 員工頭像上傳需在職員工身分() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/employee/profile/upload"));
+        expectForbidden(post("/api/employee/profile/upload"), memberToken());
+        expectAuthorized(post("/api/employee/profile/upload"), employeeToken());
     }
 
     /**

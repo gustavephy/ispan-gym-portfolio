@@ -1,4 +1,4 @@
-import { test, expect, ACCOUNTS, loginAs, apiToken, ensureQuotaWithTrainer } from './fixtures.js'
+import { test, expect, ACCOUNTS, loginAs, apiToken, ensureQuotaWithTrainer, registerActivatedMember } from './fixtures.js'
 
 /**
  * B3 私教課時段與預約，跨教練與會員兩種身分。
@@ -18,10 +18,11 @@ const API = 'http://localhost:8080'
  */
 function futureSlot() {
   const d = new Date()
-  d.setDate(d.getDate() + 30 + Math.floor(Math.random() * 60))
-  // 時間必須落在營業時間內（10:00–22:00，見 utils/businessHours.js），
-  // 否則下拉選單根本沒有那個選項；取 10–20 點，留一小時給結束時間
-  const hour = 10 + Math.floor(Math.random() * 11)
+  d.setDate(d.getDate() + 30 + Math.floor(Math.random() * 180))
+  // 時間必須落在營業時間內（10:00–22:00，見 utils/businessHours.js），否則下拉選單沒有那個選項。
+  // 另外種子會幫每位教練播 9:00–17:00 的時段（TestDataSeedRunner.ensureCoachSlots），
+  // 取 18–20 點避開種子；跟「歷輪測試自己留下的時段」相撞則由 createSlot 的重試處理
+  const hour = 18 + Math.floor(Math.random() * 3)
   const date = d.toISOString().slice(0, 10)
   return {
     date,
@@ -32,18 +33,28 @@ function futureSlot() {
   }
 }
 
-/** 以 API 建立一個可預約時段，回傳 slotId */
-async function createSlot(request, slot) {
+/**
+ * 以 API 建立一個可預約時段，回傳 { id, slot }。
+ * 時段不會被測試清掉，歷輪留下的越積越多，隨機時間偶爾會撞「已有重疊時段」——撞到就換一個重試。
+ */
+async function createSlot(request) {
   const token = await apiToken(ACCOUNTS.trainer)
-  const res = await request.post(`${API}/api/trainer/schedules`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data: {
-      startAt: `${slot.date}T${slot.startTime}:00`,
-      endAt: `${slot.date}T${slot.endTime}:00`,
-    },
-  })
-  expect(res.ok(), `建立時段失敗：${await res.text()}`).toBeTruthy()
-  return (await res.json()).id
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const slot = futureSlot()
+    const res = await request.post(`${API}/api/trainer/schedules`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        startAt: `${slot.date}T${slot.startTime}:00`,
+        endAt: `${slot.date}T${slot.endTime}:00`,
+      },
+    })
+    if (res.ok()) {
+      return { id: (await res.json()).id, slot }
+    }
+    const text = await res.text()
+    expect(text, `建立時段失敗（非重疊原因不重試）：${text}`).toContain('重疊')
+  }
+  throw new Error('重試 5 次仍撞到重疊時段，該清一清測試留下的時段了（npm run test:e2e:fresh）')
 }
 
 /** 查詢會員名下對 trainer 1 的可用堂數 */
@@ -61,18 +72,27 @@ test.describe('B3 教練排班', () => {
     await loginAs(page, ACCOUNTS.trainer)
     await page.goto('/trainer/schedules')
 
-    const slot = futureSlot()
-    await page.locator('#startDate').fill(slot.date)
-    await page.locator('#startTime').selectOption(slot.startTime)
-    await page.locator('#endDate').fill(slot.date)
-    await page.locator('#endTime').selectOption(slot.endTime)
+    // 表單建立也可能撞歷輪留下的時段，同樣換時間重試
+    let slot
+    let createdOk = false
+    for (let attempt = 0; attempt < 5 && !createdOk; attempt++) {
+      slot = futureSlot()
+      await page.locator('#startDate').fill(slot.date)
+      await page.locator('#startTime').selectOption(slot.startTime)
+      await page.locator('#endDate').fill(slot.date)
+      await page.locator('#endTime').selectOption(slot.endTime)
 
-    const created = page.waitForResponse(
-      (r) => r.url().includes('/api/trainer/schedules') && r.request().method() === 'POST',
-    )
-    await page.getByRole('button', { name: '建立時段' }).click()
-    const res = await created
-    expect(res.ok(), `建立失敗：${await res.text()}`).toBeTruthy()
+      const created = page.waitForResponse(
+        (r) => r.url().includes('/api/trainer/schedules') && r.request().method() === 'POST',
+      )
+      await page.getByRole('button', { name: '建立時段' }).click()
+      const res = await created
+      createdOk = res.ok()
+      if (!createdOk) {
+        expect(await res.text(), '建立失敗（非重疊原因不重試）').toContain('重疊')
+      }
+    }
+    expect(createdOk, '重試 5 次仍撞到重疊時段').toBeTruthy()
 
     // 列表分頁且已有十幾筆時段，新建的落在哪一頁不一定——用日期篩選縮到只剩它
     await page.locator('#slotsDateFrom').fill(slot.date)
@@ -81,8 +101,7 @@ test.describe('B3 教練排班', () => {
   })
 
   test('重疊時段會被擋下', async ({ page, request }) => {
-    const slot = futureSlot()
-    await createSlot(request, slot)
+    const { slot } = await createSlot(request)
 
     await loginAs(page, ACCOUNTS.trainer)
     await page.goto('/trainer/schedules')
@@ -99,9 +118,25 @@ test.describe('B3 教練排班', () => {
 })
 
 test.describe('B3 會員預約私教課', () => {
+  /**
+   * 新閘門（feat/private-course-improvements）：預約頁只列出「名下有剩餘額度」的教練，
+   * 沒買過課的會員一位都看不到。用全新註冊的會員驗——wendy 名下永遠有額度，演不出這個情境。
+   */
+  test('沒買過課的會員在預約頁看不到任何教練', async ({ page, request }) => {
+    const { session } = await registerActivatedMember(request, 'e2e-noquota')
+    await page.goto('/')
+    await page.evaluate((s) => {
+      localStorage.setItem('auth', JSON.stringify({
+        token: s.accessToken, accountId: s.accountId, email: s.email, roles: s.roles,
+      }))
+    }, session)
+    await page.goto('/reservation')
+    await expect(page.locator('.empty-state').first()).toBeVisible()
+    await expect(page.locator('.trainer-card')).toHaveCount(0)
+  })
+
   test('預約後扣一堂額度，且出現在我的預約', async ({ page, request }) => {
-    const slot = futureSlot()
-    await createSlot(request, slot)
+    await createSlot(request)
 
     // 種子已不再直接發放堂數（刻意的——demo 要展示「未購課看不到教練」），
     // 先確保 wendy 對教練 1 名下買過課、有剩餘額度，預約頁的教練卡才會出現
@@ -157,8 +192,7 @@ test.describe('B3 會員預約私教課', () => {
    * 這裡的時段都開在 30 天後，走的是退還那條分支。
    */
   test('取消預約後堂數退回', async ({ page, request }) => {
-    const slot = futureSlot()
-    const slotId = await createSlot(request, slot)
+    const { id: slotId, slot } = await createSlot(request)
 
     const memberToken = await apiToken(ACCOUNTS.member)
     // 種子不發放堂數，沒買過課會因額度不足預約失敗
