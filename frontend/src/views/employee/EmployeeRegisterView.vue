@@ -2,6 +2,12 @@
 import { computed, ref } from 'vue'
 import { registerEmployee } from '@/api/auth.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import {
+  TW_MOBILE_MAXLENGTH,
+  TW_MOBILE_PLACEHOLDER,
+  TW_MOBILE_ERROR,
+  isValidTwMobile,
+} from '@/utils/phone.js'
 
 /**
  * 員工申請頁。對應 POST /api/employees/register（EmployeeRegisterRequest）。
@@ -43,13 +49,14 @@ const isPasswordConfirmed = computed(
   () => confirmPassword.value.length > 0 && password.value === confirmPassword.value,
 )
 const isEmailValid = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value))
+const isPhoneValid = computed(() => isValidTwMobile(phone.value))
 
 const isFormValid = computed(
   () =>
     firstName.value.trim() !== '' &&
     lastName.value.trim() !== '' &&
     isEmailValid.value &&
-    phone.value.trim() !== '' &&
+    isPhoneValid.value &&
     isPasswordValid.value &&
     isPasswordConfirmed.value &&
     hireDate.value !== '',
@@ -145,10 +152,12 @@ async function onSubmit() {
               v-model.trim="phone"
               class="form-input"
               type="tel"
-              maxlength="20"
+              :maxlength="TW_MOBILE_MAXLENGTH"
+              :placeholder="TW_MOBILE_PLACEHOLDER"
               required
               autocomplete="tel"
             />
+            <p v-if="phone && !isPhoneValid" class="form-error">✗ {{ TW_MOBILE_ERROR }}</p>
           </div>
 
           <div class="form-group">

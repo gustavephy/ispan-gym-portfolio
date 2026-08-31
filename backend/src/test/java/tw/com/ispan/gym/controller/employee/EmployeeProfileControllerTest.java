@@ -16,6 +16,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -148,13 +150,25 @@ class EmployeeProfileControllerTest {
         verify(profileService, never()).updateMyProfile(any(), any());
     }
 
-    @Test
-    void updateMyProfile_phone超過20字元時回400() throws Exception {
+    /**
+     * 台灣手機格式（^09\d{8}$、固定 10 碼）：非 09 開頭／不足 10／超過 10／含非數字
+     * 一律回 400 且不呼叫 Service。空白已由 {@link #updateMyProfile_phone為空白時回400()} 覆蓋。
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "0812345678",            // 非 09 開頭
+            "091234567",             // 不足 10 碼
+            "09123456789",           // 超過 10 碼
+            "123456789012345678901", // 遠超過長度上限
+            "09abcdefgh",            // 含非數字
+            "0912-345678"            // 含符號
+    })
+    void updateMyProfile_phone格式不符時回400(String badPhone) throws Exception {
         mockMvc.perform(put("/api/employee/profile")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                { "phone": "123456789012345678901" }
-                                """))
+                                { "firstName": "小美", "lastName": "王", "phone": "%s" }
+                                """.formatted(badPhone)))
                 .andExpect(status().isBadRequest());
 
         verify(profileService, never()).updateMyProfile(any(), any());
