@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
-import { getTrainers, getTrainerSchedules, createBooking } from '@/api/coachBooking.js'
+import { getTrainer, getTrainerSchedules, createBooking } from '@/api/coachBooking.js'
 import { isInlineError } from '@/api/api-error.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
@@ -59,14 +59,17 @@ function isPastSlot(slot) {
   return new Date(slot.startAt).getTime() < Date.now()
 }
 
-// 教練資訊沒有單獨查詢的後端端點，一律用既有的 getTrainers() 在前端過濾找出這一位；
-// 只留 ACTIVE，跟原本 ReservationView.vue 的 fetchTrainers 是同一套慣例——
-// 找不到（含教練已離職、或網址被亂改成不存在的 id）就顯示「查無此教練」
+// 用公開的單筆端點 GET /api/trainers/{id}（TrainerController，permitAll）查這一位教練。
+// 這頁是「預約」入口，只有 ACTIVE 能預約：UNAVAILABLE 或已離職（後端回 404）一律
+// 視為 null，顯示「查無此教練」，跟原本用清單過濾的行為一致。
 async function fetchTrainerInfo() {
   trainerLoading.value = true
   try {
-    const res = await getTrainers()
-    trainer.value = res.data.find((t) => t.status === 'ACTIVE' && t.trainerId === trainerId) ?? null
+    const res = await getTrainer(trainerId)
+    trainer.value = res.data?.status === 'ACTIVE' ? res.data : null
+  } catch (e) {
+    // 404（不存在／已軟刪除）等一律當作查無此教練，不跳全域錯誤
+    trainer.value = null
   } finally {
     trainerLoading.value = false
   }

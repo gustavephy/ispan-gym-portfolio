@@ -74,6 +74,7 @@
       requires: 'TRAINER',
       links: [
         { to: '/trainer/schedules', label: '教練排班' },
+        { to: '/trainer/profile', label: '教練資料' },
         { to: '/employee/chat', label: '學員訊息' },
       ],
     },
@@ -85,6 +86,8 @@
       links: [
         { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' },
         { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
+        { to: '/admin/employees', label: '員工管理', requires: 'ADMIN' },
+        { to: '/admin/trainers', label: '教練管理', requires: 'ADMIN' },
         { to: '/admin/trainer-schedules', label: '教練排課查詢', requires: 'ADMIN' },
         { to: '/admin/courses', label: '課程方案', requires: 'ADMIN' },
         { to: '/admin/coupons', label: '優惠券管理', requires: 'ADMIN' },
@@ -94,7 +97,8 @@
         { to: '/admin/orders', label: '訂單管理', requires: 'ADMIN' },
         { to: '/admin/refunds', label: '退款處理', requires: 'ADMIN' },
         { to: '/admin/payments', label: '交易紀錄', requires: 'ADMIN' },
-        { to: '/admin/employee-reviews', label: '員工審核' },
+        // 員工審核 2026-08-31 起改 ADMIN-only（見 router 與後端 SecurityConfig）
+        { to: '/admin/employee-reviews', label: '員工審核', requires: 'ADMIN' },
       ],
     },
   ]
@@ -238,7 +242,10 @@
       label: '人事與會員',
       links: [
         { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
-        { to: '/admin/employee-reviews', label: '員工審核' },
+        { to: '/admin/employees', label: '員工管理', requires: 'ADMIN' },
+        { to: '/admin/trainers', label: '教練管理', requires: 'ADMIN' },
+        // 員工審核 2026-08-31 起改 ADMIN-only（見 router 與後端 SecurityConfig）
+        { to: '/admin/employee-reviews', label: '員工審核', requires: 'ADMIN' },
         { to: '/admin/payments', label: '交易紀錄', requires: 'ADMIN' }
       ]
     },

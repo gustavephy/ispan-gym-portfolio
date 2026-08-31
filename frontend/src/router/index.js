@@ -81,6 +81,12 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresRole: 'TRAINER' },
         },
         {
+          // 教練自助「專業資料」頁（專長／經歷／自我介紹／個人圖片網址）
+          path: 'trainer/profile',
+          component: () => import('@/views/trainer/TrainerProfileView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'TRAINER' },
+        },
+        {
           path: 'admin/courses',
           component: () => import('@/views/admin/AdminCourses.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
@@ -111,6 +117,16 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
+          path: 'admin/employees',
+          component: () => import('@/views/admin/AdminEmployeeView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
+          path: 'admin/trainers',
+          component: () => import('@/views/admin/AdminTrainerView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
           path: 'admin/trainer-schedules',
           component: () => import('@/views/admin/AdminTrainerScheduleView.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
@@ -138,8 +154,10 @@ const router = createRouter({
         {
           path: 'admin/employee-reviews',
           component: () => import('@/views/admin/EmployeeReviewView.vue'),
-          // 同儕審核：任何在職員工皆可審核，不限管理者（後端也是 hasRole('EMPLOYEE')）
-          meta: { requiresAuth: true, requiresRole: 'EMPLOYEE' },
+          // 員工審核：ADMIN-only（2026-08-31 政策定案，後端 SecurityConfig 與
+          // EmployeeReviewController 皆同步改為 hasRole('ADMIN')）。角色為疊加式，
+          // ADMIN 帳號必同時具 EMPLOYEE，故只需檢查 ADMIN
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
           path: 'health',
