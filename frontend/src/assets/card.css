@@ -93,6 +93,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.6rem; /* 文字與按鈕之間至少留這麼寬，不要貼在一起 */
   margin-top: 0.4rem;
 }
 .item-footer .price {
@@ -102,6 +103,12 @@
 }
 .item-footer .price.subscribed {
   color: var(--primary-dark);
+  /* 「✓ 已訂閱・免費預約」比價格長，原字級在窄卡片會被擠成兩行：縮一號並禁止折行 */
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.item-footer .action-btn {
+  flex-shrink: 0; /* 空間不夠時擠的是文字那側，按鈕不能被壓扁 */
 }
 .item-footer .stock-warn  { font-size: 0.65rem; color: #d97706; margin-left: 0.3rem; }
 .item-footer .stock-empty { font-size: 0.65rem; color: var(--text-muted); margin-left: 0.3rem; }
