@@ -17,8 +17,10 @@ const router = createRouter({
         { path: 'courses', component: () => import('@/views/course/CourseView.vue') },
         {
           path: 'reservation',
+          // requiresRole:'MEMBER'——這頁 onMounted 會打 Member-only API（getMyQuotas），
+          // 純 Employee/Admin/Trainer 帳號進來會 401 連帶被登出，改由路由守衛先擋回首頁
           component: () => import('@/views/reservation/ReservationView.vue'),
-          meta: { requiresAuth: true },
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
         },
         {
           path: 'reservation/trainer/:trainerId',
@@ -40,17 +42,21 @@ const router = createRouter({
         {
           path: 'checkout',
           component: () => import('@/views/cart/CheckoutView.vue'),
-          meta: { requiresAuth: true },
+          // requiresRole:'MEMBER'——onMounted 會打 Member-only API（會員資料／結帳資訊），
+          // 非會員角色進來會 401 誤登出
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
         },
         {
           path: 'orders/:id?',
           component: () => import('@/views/member/OrderListView.vue'),
-          meta: { requiresAuth: true },
+          // 同上：訂單清單為 Member-only
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
         },
         {
           path: 'coupons',
           component: () => import('@/views/member/MemberCouponView.vue'),
-          meta: { requiresAuth: true },
+          // 同上：我的優惠券為 Member-only
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
         },
         {
           path: 'member/courses',
