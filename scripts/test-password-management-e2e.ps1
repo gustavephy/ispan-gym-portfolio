@@ -613,7 +613,7 @@ VALUES (@accountId, @tokenHash, DATEADD(MINUTE, 15, SYSDATETIME()), SYSDATETIME(
     Start-Sleep -Milliseconds 200
 
     $firstTokenId = Invoke-SqlScalar -Sql @"
-SELECT TOP 1 id FROM password_reset_token
+SELECT TOP 1 password_reset_token_id FROM password_reset_token
     WHERE account_id = @id AND used_at IS NULL AND invalidated_at IS NULL
     ORDER BY created_at DESC
 "@ -Params @{ id = $accountIdB }
@@ -629,7 +629,7 @@ SELECT TOP 1 id FROM password_reset_token
     Test-Case "第二次忘記密碼申請（冷卻時間後）回 202" ($forgot2.StatusCode -eq 202)
     Start-Sleep -Milliseconds 200
 
-    $firstTokenInvalidatedAt = Invoke-SqlScalar -Sql "SELECT invalidated_at FROM password_reset_token WHERE id = @id" -Params @{ id = $firstTokenId }
+    $firstTokenInvalidatedAt = Invoke-SqlScalar -Sql "SELECT invalidated_at FROM password_reset_token WHERE password_reset_token_id = @id" -Params @{ id = $firstTokenId }
     Test-Case "新申請讓第一筆舊 Token 被標記作廢" ($firstTokenInvalidatedAt -ne [DBNull]::Value)
 
     $stillValidCount = Invoke-SqlScalar -Sql @"
