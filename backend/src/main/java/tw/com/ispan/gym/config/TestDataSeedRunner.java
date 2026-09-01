@@ -107,6 +107,110 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private static final List<String> SEED_PRIVATE_COURSE_NAMES = List.of(
             "一對一重訓體驗課", "重訓入門計畫（5堂）", "重訓進階計畫（10堂）");
 
+    /**
+     * 種子圖片：全組共用的 Cloudinary 帳號（cloud mksmqzij）上既有的資源，public_id 是檔案 MD5。
+     * 圖檔 2026-08-30 就從後台上傳過，但「哪張圖對哪個商品」只存在上傳者本機的資料庫，
+     * 重建資料庫就全部消失；把對應寫進種子，任何人重建或首次啟動都會有圖。
+     * 交付網址不需要金鑰，沒設 CLOUDINARY_* 的組員一樣看得到。原檔為 avif 的改用 .jpg 副檔名交付
+     *（Cloudinary 依副檔名轉格式），避免舊瀏覽器不支援。
+     * 既有資料只在圖片為空時回填，不覆蓋後台自行上傳的圖。
+     */
+    private static final String CLOUD_IMG_BASE = "https://res.cloudinary.com/mksmqzij/image/upload/";
+
+    private static String cloudImg(String publicIdWithExt) {
+        return CLOUD_IMG_BASE + publicIdWithExt;
+    }
+
+    /** 商品名稱 → 圖片；46 筆與 ensure46Products 的清單一一對應 */
+    private static final java.util.Map<String, String> SEED_PRODUCT_IMAGES = java.util.Map.ofEntries(
+            // 補給品
+            java.util.Map.entry("分離乳清蛋白-巧克力", cloudImg("223916c7013b4fbfa7d269535fcd5806.webp")),
+            java.util.Map.entry("分離乳清蛋白-香草", cloudImg("174ac8166d0379b57ef3a4497c5ac852.webp")),
+            java.util.Map.entry("植物性蛋白粉-草莓", cloudImg("294f0c0a75dd4e64a5bf9a4969a1bf56.webp")),
+            java.util.Map.entry("微粉化肌酸", cloudImg("c66decdb11070319aea0665eb116fbf0.webp")),
+            java.util.Map.entry("發泡錠-維生素C", cloudImg("16d08f76b307e3d229dfc5476f2cb540.webp")),
+            java.util.Map.entry("電解質補給粉-檸檬", cloudImg("4f35696c2d716b21520a6e8318f487ce.webp")),
+            java.util.Map.entry("左旋肉鹼液", cloudImg("ac489f57a4eee03bc51400f91228ad2e.jpg")),
+            java.util.Map.entry("高效氮泵前訓練-西瓜", cloudImg("ce7aca75266a470e02d091322443ae2a.jpg")),
+            java.util.Map.entry("綜合維他命加強錠", cloudImg("150f156d0d1696699c1ddf528f51e511.jpg")),
+            java.util.Map.entry("鋅鎂膠囊(ZMA)", cloudImg("d4eeba29502ad49f7c8a55fc055f91bc.webp")),
+            java.util.Map.entry("魚油軟膠囊", cloudImg("4a99e8460f4981c1dd015e552f1ed4fe.webp")),
+            java.util.Map.entry("高蛋白能量棒-花生", cloudImg("07216050141bfae7cc2037b4f3f4e646.webp")),
+            java.util.Map.entry("高蛋白曲奇餅", cloudImg("ed5d718d9e7a5ad60b722bb2c9cc1661.jpg")),
+            java.util.Map.entry("BCAA 3:1:2 膠囊", cloudImg("9a9bf3ed14ff20a5c621bae06cb50587.webp")),
+            java.util.Map.entry("穀氨醯胺粉", cloudImg("541065957d11203feefb7c38506315ea.webp")),
+            java.util.Map.entry("關節保養葡萄糖胺", cloudImg("635f4056197ea2f7ca2379861fe167e3.webp")),
+            // 器材
+            java.util.Map.entry("環保瑜珈墊 6mm", cloudImg("3d1da279adc8ff292edf1ed7b0ac9158.webp")),
+            java.util.Map.entry("防滑乳膠阻力圈", cloudImg("abab4c345a925efc6f6aba73914a2c2e.jpg")),
+            java.util.Map.entry("奧林匹克長槓 2.2m", cloudImg("22c189c0d56f09cfa5338a0ff1b4bcae.webp")),
+            java.util.Map.entry("專業環保壺鈴 8kg", cloudImg("13b61bd35bffcdc35700ee10ccd23cec.jpg")),
+            java.util.Map.entry("專業環保壺鈴 12kg", cloudImg("305f5a25702d44597878ff6908aa46e5.webp")),
+            java.util.Map.entry("專業環保壺鈴 16kg", cloudImg("3fe1b8911d8435adcfe3fb6b5412f749.webp")),
+            java.util.Map.entry("六角橡膠啞鈴 5kg", cloudImg("4c34b61a5f08212036e79d764f772478.webp")),
+            java.util.Map.entry("六角橡膠啞鈴 10kg", cloudImg("80e56b061d6258b2b44571c3d45cda31.webp")),
+            java.util.Map.entry("六角橡膠啞鈴 15kg", cloudImg("aa33611fc2b3afb8f66355c18c637019.jpg")),
+            java.util.Map.entry("六角橡膠啞鈴 20kg", cloudImg("b711e45d416e2ada85911ae01ee1bbec.webp")),
+            java.util.Map.entry("高密度泡沫按摩滾軸", cloudImg("02d713a3fd62d2ead6a34a30d0887a3c.webp")),
+            java.util.Map.entry("加厚阻力帶-拉力繩", cloudImg("0578840247515744601d418c0473fd6e.webp")),
+            java.util.Map.entry("多功能實心藥球 4kg", cloudImg("2e5e6dc1c9e4726fa064304a1bc68367.webp")),
+            java.util.Map.entry("多功能實心藥球 6kg", cloudImg("1211391728c12544f5957373567114af.webp")),
+            java.util.Map.entry("高彈力抗暴瑜珈球", cloudImg("34a5fa7539d2021898fc1a9f010eec9c.webp")),
+            // 配件
+            java.util.Map.entry("牛皮健身腰帶", cloudImg("c2cedea03b5813db5c66023fe8e7243e.webp")),
+            java.util.Map.entry("專業重訓拉力帶", cloudImg("75afc6dea97b488401781319196f85f1.webp")),
+            java.util.Map.entry("透氣運動防滑手套", cloudImg("180eaad4c3b757c65c7b7af0ec65af2e.webp")),
+            java.util.Map.entry("加壓型針織護膝(一對)", cloudImg("b9fb1a56dc8250bb05e78d0bb8f26dd2.webp")),
+            java.util.Map.entry("專業運動防滑粉", cloudImg("748aed176ded7c20db099409d5333864.webp")),
+            java.util.Map.entry("高階運動水壺 1000ml", cloudImg("e7b8fcdb1514249951c871071e3b0343.webp")),
+            java.util.Map.entry("多功能乾濕分離運動包", cloudImg("26578813fbcda306de3a6e85bf5a0e9b.webp")),
+            java.util.Map.entry("超細纖維吸汗運動毛巾", cloudImg("7799cadf60fb935d7b8c570bd342b0a5.webp")),
+            java.util.Map.entry("運動排汗止汗頭帶", cloudImg("b14eaf596fb9559e91982f9e0abbcb1a.webp")),
+            java.util.Map.entry("便攜式滾輪按摩棒", cloudImg("1f9b742b8d1d58e088c731bbde901f0d.webp")),
+            java.util.Map.entry("專業重訓護腕(一對)", cloudImg("9f133847697b1ee22b666d7fb751a5d1.webp")),
+            java.util.Map.entry("阻力帶專用收納袋", cloudImg("4fb5bacb3aa06b0e35c66d2824b7d448.webp")),
+            java.util.Map.entry("專業鋼絲跳繩", cloudImg("cfb884ead154d8f7f944db27ca14c1c8.jpg")),
+            java.util.Map.entry("運動護肘加壓帶(一對)", cloudImg("6726364369d6da80549282e3039217df.webp")),
+            java.util.Map.entry("防滑瑜珈鋪巾", cloudImg("ca0e8c173d9cf81bf8aca7bd05378ae4.webp")));
+
+    /** 團課名稱 → 封面；與 ensureGroupCourseAndSession 的 16 筆對應 */
+    private static final java.util.Map<String, String> SEED_GROUP_COURSE_IMAGES = java.util.Map.ofEntries(
+            java.util.Map.entry("高強度燃脂班", cloudImg("6bf78c2fe9967da6a9f97d10556dccbe.jpg")),
+            java.util.Map.entry("舞動有氧", cloudImg("b5f8dc9cdfcc159daab4139a096bc865.jpg")),
+            java.util.Map.entry("跳繩體能訓練", cloudImg("5b6ff076e0d1a79d3262d818f792b2bd.webp")),
+            java.util.Map.entry("自行車有氧", cloudImg("73d26355b583f30c26278af3984ee501.jpg")),
+            java.util.Map.entry("基礎槓鈴訓練", cloudImg("12158c3b2462f2b1e2aada8e5ef63bff.jpg")),
+            java.util.Map.entry("壺鈴全身訓練", cloudImg("20714275339cce85fbd629c3b579ef98.jpg")),
+            java.util.Map.entry("啞鈴雕塑班", cloudImg("9b09789487aaeec3c55232022bb4115a.jpg")),
+            java.util.Map.entry("TRX 懸吊訓練", cloudImg("212c9530475f42424c5ea385390ce913.png")),
+            java.util.Map.entry("哈達瑜珈入門", cloudImg("c30311e023df888c90770478c1419f66.jpg")),
+            java.util.Map.entry("陰瑜珈深層放鬆", cloudImg("08a7525f6b9c7a7f0a901d51421f6c80.jpg")),
+            java.util.Map.entry("流動瑜珈", cloudImg("6d10bd14e48d3d2781c1a20ae67dd708.jpg")),
+            java.util.Map.entry("瑜珈伸展舒壓班", cloudImg("db8be5dc41ba52ab6427cba56e4a8dab.png")),
+            java.util.Map.entry("體能循環訓練", cloudImg("2e0cf2678ac0615f180f613af03b7b11.jpg")),
+            java.util.Map.entry("核心穩定訓練", cloudImg("d3ed63a2b149f908f697777628b3cf55.jpg")),
+            java.util.Map.entry("敏捷速度訓練", cloudImg("fd71863859f9840ee84f5baaf29d00a5.webp")),
+            java.util.Map.entry("體重訓練入門", cloudImg("3e1d2b8d4a3dbccc56a0771ad3c4ba48.jpg")));
+
+    /** 私教課名稱 → 封面 */
+    private static final java.util.Map<String, String> SEED_PRIVATE_COURSE_IMAGES = java.util.Map.of(
+            "一對一重訓體驗課", cloudImg("c0d6d1c284ddc82f0067d9eb4920baa2.jpg"),
+            "重訓入門計畫（5堂）", cloudImg("f7bc072162fa8171efe1cf54f77acc07.jpg"),
+            "重訓進階計畫（10堂）", cloudImg("9b2bd23ceb1e8baba80679884280bcde.jpg"));
+
+    /**
+     * 教練帳號 → 頭像。雲端只有三張真人照，給三位「重量訓練」專長、會出現在私教課頁的教練
+     *（林志強、王志明、黃冠宇）；其餘教練維持姓氏字首的預設頭像。
+     */
+    private static final java.util.Map<String, String> SEED_TRAINER_AVATARS = java.util.Map.of(
+            "emp-trainer@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg"),
+            "emp-trainer2@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg"),
+            "emp-trainer6@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg"));
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
     private final AccountRepository accounts;
     private final MemberRepository members;
     private final EmployeeRepository employees;
@@ -352,6 +456,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             trainer.setSpecialty(specialty);
             trainer.setExperience("五年一對一私人教練經驗");
             trainer.setBio("專注於" + specialty + "，致力於以科學且安全的方式帶領學員達到心目中的理想體態。");
+            trainer.setProfileImageUrl(SEED_TRAINER_AVATARS.get(employee.getAccount().getEmail()));
             log.info("已建立專業教練（employee={}）", employee.getId());
             return trainers.save(trainer);
         }
@@ -373,6 +478,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
             trainer.setDeletedAt(null);
             changed = true;
             log.info("已將測試教練（employee={}）導正為未刪除", employee.getId());
+        }
+        // 頭像只回填空值，教練自己上傳過的不動
+        String avatar = SEED_TRAINER_AVATARS.get(employee.getAccount().getEmail());
+        if (avatar != null && isBlank(trainer.getProfileImageUrl())) {
+            trainer.setProfileImageUrl(avatar);
+            changed = true;
         }
         if (changed) {
             trainer = trainers.save(trainer);
@@ -855,6 +966,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
                     p.setWeight(seed.weight());
                     changed = true;
                 }
+                // 圖片只回填空值，後台自行換過的圖不動
+                String image = SEED_PRODUCT_IMAGES.get(seed.name());
+                if (image != null && isBlank(p.getImageUrl())) {
+                    p.setImageUrl(image);
+                    changed = true;
+                }
                 if (changed) {
                     products.save(p);
                     updated++;
@@ -875,6 +992,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             product.setMaterial(seed.material());
             product.setOrigin(seed.origin());
             product.setWeight(seed.weight());
+            product.setImageUrl(SEED_PRODUCT_IMAGES.get(seed.name()));
             products.save(product);
             created++;
         }
@@ -947,6 +1065,19 @@ public class TestDataSeedRunner implements CommandLineRunner {
      */
     private void ensureGroupCourseAndSession(List<Trainer> seededTrainers, CourseCategory ignoredCategory) {
         if (!groupCourses.findAll().isEmpty()) {
+            // 已有團課就不重播，只把種子課程缺的封面回填（舊資料庫升級後才會有圖）
+            int filled = 0;
+            for (GroupCourse gc : groupCourses.findAll()) {
+                String image = SEED_GROUP_COURSE_IMAGES.get(gc.getName());
+                if (image != null && isBlank(gc.getImageUrl())) {
+                    gc.setImageUrl(image);
+                    groupCourses.save(gc);
+                    filled++;
+                }
+            }
+            if (filled > 0) {
+                log.info("已回填 {} 筆種子團課的封面圖", filled);
+            }
             return;
         }
         if (seededTrainers.isEmpty()) {
@@ -996,6 +1127,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             gc.setCategory(seed.cat());
             gc.setMaxCapacity(seed.cap());
             gc.setStatus(CourseStatus.ACTIVE);
+            gc.setImageUrl(SEED_GROUP_COURSE_IMAGES.get(seed.name()));
             GroupCourse saved = groupCourses.save(gc);
 
             LocalDateTime start = LocalDateTime.now().plusDays(dayOffset)
@@ -1018,6 +1150,19 @@ public class TestDataSeedRunner implements CommandLineRunner {
      */
     private void ensurePrivateCourses(List<Trainer> seededTrainers) {
         if (!privateCourses.findByStatus(CourseStatus.ACTIVE).isEmpty()) {
+            // 已有私教課就不重播，只把種子課程缺的封面回填
+            int filled = 0;
+            for (PrivateCourse pc : privateCourses.findAll()) {
+                String image = SEED_PRIVATE_COURSE_IMAGES.get(pc.getName());
+                if (image != null && isBlank(pc.getImageUrl())) {
+                    pc.setImageUrl(image);
+                    privateCourses.save(pc);
+                    filled++;
+                }
+            }
+            if (filled > 0) {
+                log.info("已回填 {} 筆種子私教課的封面圖", filled);
+            }
             return;
         }
         if (seededTrainers.isEmpty()) {
@@ -1052,6 +1197,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             course.setCategory(category);
             course.setIsTrial(seed.trial());
             course.setStatus(CourseStatus.ACTIVE);
+            course.setImageUrl(SEED_PRIVATE_COURSE_IMAGES.get(seed.name()));
             privateCourses.save(course);
         }
         log.info("已建立 {} 筆私教課方案（分類：重量訓練）", seeds.size());
