@@ -16,6 +16,13 @@ export const CODE_CONFIRMATION_REQUIRED = 'CONFIRMATION_REQUIRED'
 export const CODE_SUBSCRIPTION_REQUIRED = 'SUBSCRIPTION_REQUIRED'
 
 /**
+ * 帳號安全的敏感操作（Google 綁定／解除）要求重新輸入目前密碼，密碼錯誤時後端回
+ * 401 REAUTHENTICATION_REQUIRED——這是「這次操作要再驗證一次」，不是「登入 token 失效」，
+ * 攔截器不可把它當 session 過期而清掉登入狀態，交由呼叫端就地顯示在 Modal 裡。
+ */
+export const CODE_REAUTHENTICATION_REQUIRED = 'REAUTHENTICATION_REQUIRED'
+
+/**
  * 這些錯誤屬於「使用者操作結果」，畫面上該由呼叫端就地顯示（表單旁、按鈕下方），
  * 不該跳全域錯誤視窗洗版。其餘未列出的才視為系統層級錯誤。
  */
@@ -24,6 +31,7 @@ const INLINE_ERROR_CODES = new Set([
   'BUSINESS_RULE_VIOLATION',
   'CONFIRMATION_REQUIRED',
   'SUBSCRIPTION_REQUIRED',
+  'REAUTHENTICATION_REQUIRED',
   'INSUFFICIENT_STOCK',
   'INVALID_QUANTITY',
   'PRODUCT_UNAVAILABLE',
