@@ -71,9 +71,15 @@ test.describe('B4 我的課程 → 立即預約', () => {
     await loginAs(page, ACCOUNTS.member)
     await page.goto('/member/courses')
 
-    // 額度卡上有教練名字；用它鎖定那一張，避免點到別份額度
+    // 額度卡上有教練名字；用它鎖定那一張，避免點到別份額度。
+    // 同一位教練可能有多張額度卡（歷輪測試買過課、用罄的那張會顯示「額度已用完」），
+    // 只挑還有「立即預約」按鈕的那張，不要 .first() 就點。
     const trainerName = target.trainer.displayName ?? target.trainer.name ?? ''
-    const card = page.locator('.quota-card').filter({ hasText: trainerName }).first()
+    const card = page
+      .locator('.quota-card')
+      .filter({ hasText: trainerName })
+      .filter({ has: page.getByRole('button', { name: '立即預約' }) })
+      .first()
     await expect(card).toBeVisible()
     await card.getByRole('button', { name: '立即預約' }).click()
 
@@ -81,9 +87,25 @@ test.describe('B4 我的課程 → 立即預約', () => {
     await page.waitForURL(new RegExp(`/reservation/trainer/${trainerId}$`))
     await expect(page.getByRole('heading', { name: /的可預約時段/ })).toBeVisible()
 
-    // 時段列表有分頁，剛開的那筆不一定在第一頁：預約畫面上第一個可預約時段即可
-    const row = page.locator('.slot-table tbody tr').filter({ hasText: '預約' }).first()
-    await expect(row).toBeVisible()
+    // 時段列表有分頁，剛開的那筆不一定在第一頁：預約畫面上「第一個可預約時段」即可——
+    // 但不能真的拿第一列：後端 cancelBooking 在上課前 72 小時內取消是「視同消耗、不退堂」，
+    // 收尾要退回額度，所以挑第一頁裡第一個距今至少 4 天的可預約列
+    //（種子每位教練每週只播 2 個時段、每頁 10 列依時間排序，第一頁一定有）。
+    const bookableRows = page
+      .locator('.slot-table tbody tr')
+      .filter({ has: page.getByRole('button', { name: '預約', exact: true }) })
+    await expect(bookableRows.first()).toBeVisible()
+    const minStartMs = Date.now() + 4 * 24 * 60 * 60 * 1000
+    let row = null
+    for (let i = 0; i < (await bookableRows.count()); i++) {
+      // 第一格是 formatDateTime(startAt)：zh-TW 兩位數格式，例如 2026/09/03 11:00
+      const m = (await bookableRows.nth(i).innerText()).match(/(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/)
+      if (m && new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime() >= minStartMs) {
+        row = bookableRows.nth(i)
+        break
+      }
+    }
+    expect(row, '第一頁應有距今 ≥4 天的可預約時段（否則取消不會退堂）').toBeTruthy()
     page.on('dialog', (d) => d.accept()) // 預約前 confirm、成功後 alert 核銷碼
     const booked = page.waitForResponse((r) => r.url().includes('/booking') && r.request().method() === 'POST')
     await row.getByRole('button', { name: '預約' }).click()
@@ -99,7 +121,9 @@ test.describe('B4 我的課程 → 立即預約', () => {
       await expect(page.locator('.quota-card').filter({ hasText: trainerName }).first()).toBeVisible()
     } finally {
       const memberToken = await apiToken(ACCOUNTS.member)
-      await request.delete(`${API}/api/member/schedules/${bookingId}/cancel`, auth(memberToken))
+      const cancelRes = await request.delete(`${API}/api/member/schedules/${bookingId}/cancel`, auth(memberToken))
+      // 取消失敗會讓預約卡在 PENDING、額度不退，下一輪就找不到可用額度——要在這裡看到原因
+      expect(cancelRes.ok(), `取消預約失敗：${await cancelRes.text()}`).toBeTruthy()
       expect(await remainingFor(request, trainerId), '收尾取消後額度應退回').toBe(before)
     }
   })

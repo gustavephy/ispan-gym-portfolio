@@ -58,8 +58,13 @@ class CoachSlotServiceTest {
     private static final Integer TRAINER_ID = 1;
     private static final Integer OTHER_TRAINER_ID = 2;
     private static final Integer SLOT_ID = 10;
-    private static final LocalDateTime START = LocalDateTime.of(2026, 9, 1, 10, 0);
-    private static final LocalDateTime END = LocalDateTime.of(2026, 9, 1, 11, 0);
+    /**
+     * 固定為未來一週後的整點，不寫死日期：markAsBooked 會擋掉已過期的時段，
+     * 原本寫死的 2026-09-01 10:00 在當天下午就過期，整支測試變成時間炸彈。
+     */
+    private static final LocalDateTime START = LocalDateTime.now().plusDays(7)
+            .withHour(10).withMinute(0).withSecond(0).withNano(0);
+    private static final LocalDateTime END = START.plusHours(1);
 
     private final CoachSlotRepository slots = mock(CoachSlotRepository.class);
     private final TrainerRepository trainers = mock(TrainerRepository.class);
