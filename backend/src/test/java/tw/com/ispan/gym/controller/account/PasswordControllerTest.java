@@ -20,8 +20,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import tw.com.ispan.gym.dto.account.ChangePasswordRequest;
 import tw.com.ispan.gym.dto.account.ChangePasswordResponse;
+import tw.com.ispan.gym.dto.account.SetPasswordResponse;
 import tw.com.ispan.gym.exception.CurrentPasswordIncorrectException;
 import tw.com.ispan.gym.exception.GlobalExceptionHandler;
+import tw.com.ispan.gym.exception.PasswordAlreadyConfiguredException;
 import tw.com.ispan.gym.exception.PasswordChangeRateLimitedException;
 import tw.com.ispan.gym.exception.PasswordNotConfiguredException;
 import tw.com.ispan.gym.exception.PasswordReusedException;
@@ -206,5 +208,100 @@ class PasswordControllerTest {
                         .content(VALID_BODY))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_RATE_LIMITED"));
+    }
+
+    // === set-password：OAuth-only 設定第一組本機密碼（第五批）====================
+
+    private static final String SET_PASSWORD_BODY = """
+            {
+              "newPassword": "Firstpass@2026",
+              "confirmPassword": "Firstpass@2026"
+            }
+            """;
+
+    @Test
+    void setPassword_正確委派並帶入CurrentUserProvider的accountId_回傳新Token() throws Exception {
+        when(currentUser.requireCurrentUserId()).thenReturn(ACCOUNT_ID);
+        when(passwordService.setPassword(eq(ACCOUNT_ID), any()))
+                .thenReturn(new SetPasswordResponse("new-token", ACCOUNT_ID, "oauth-user@local.test",
+                        List.of("MEMBER")));
+
+        mockMvc.perform(post("/api/account/me/set-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(SET_PASSWORD_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new-token"))
+                .andExpect(jsonPath("$.accountId").value(ACCOUNT_ID))
+                .andExpect(jsonPath("$.roles[0]").value("MEMBER"));
+    }
+
+    @Test
+    void setPassword_body即使帶accountId也被忽略() throws Exception {
+        when(currentUser.requireCurrentUserId()).thenReturn(ACCOUNT_ID);
+        when(passwordService.setPassword(eq(ACCOUNT_ID), any()))
+                .thenReturn(new SetPasswordResponse("t", ACCOUNT_ID, "e@x.com", List.of()));
+
+        mockMvc.perform(post("/api/account/me/set-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accountId": 999,
+                                  "newPassword": "Firstpass@2026",
+                                  "confirmPassword": "Firstpass@2026"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        verify(passwordService).setPassword(eq(ACCOUNT_ID), any());
+        verify(passwordService, never()).setPassword(eq(999), any());
+    }
+
+    @Test
+    void setPassword_缺newPassword時回400且不呼叫Service() throws Exception {
+        mockMvc.perform(post("/api/account/me/set-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "confirmPassword": "Firstpass@2026" }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(passwordService, never()).setPassword(any(), any());
+    }
+
+    @Test
+    void setPassword_新密碼不符ValidPassword規則時回400() throws Exception {
+        mockMvc.perform(post("/api/account/me/set-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "newPassword": "short", "confirmPassword": "short" }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(passwordService, never()).setPassword(any(), any());
+    }
+
+    @Test
+    void setPassword_新密碼與確認密碼不一致時回400() throws Exception {
+        mockMvc.perform(post("/api/account/me/set-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "newPassword": "Firstpass@2026", "confirmPassword": "Different@2026" }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(passwordService, never()).setPassword(any(), any());
+    }
+
+    @Test
+    void setPassword_已有密碼時映射409_PASSWORD_ALREADY_CONFIGURED() throws Exception {
+        when(currentUser.requireCurrentUserId()).thenReturn(ACCOUNT_ID);
+        when(passwordService.setPassword(eq(ACCOUNT_ID), any()))
+                .thenThrow(new PasswordAlreadyConfiguredException("此帳號已設定本機密碼，如需變更請使用「修改密碼」"));
+
+        mockMvc.perform(post("/api/account/me/set-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(SET_PASSWORD_BODY))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PASSWORD_ALREADY_CONFIGURED"));
     }
 }

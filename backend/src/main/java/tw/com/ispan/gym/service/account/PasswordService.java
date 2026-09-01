@@ -24,10 +24,13 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import tw.com.ispan.gym.dto.account.ChangePasswordRequest;
 import tw.com.ispan.gym.dto.account.ChangePasswordResponse;
+import tw.com.ispan.gym.dto.account.SetPasswordRequest;
+import tw.com.ispan.gym.dto.account.SetPasswordResponse;
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.account.PasswordHistory;
 import tw.com.ispan.gym.entity.account.PasswordResetToken;
 import tw.com.ispan.gym.exception.CurrentPasswordIncorrectException;
+import tw.com.ispan.gym.exception.PasswordAlreadyConfiguredException;
 import tw.com.ispan.gym.exception.PasswordChangeRateLimitedException;
 import tw.com.ispan.gym.exception.PasswordNotConfiguredException;
 import tw.com.ispan.gym.exception.PasswordReusedException;
@@ -145,6 +148,43 @@ public class PasswordService {
 
         String newToken = jwtUtil.generateToken(locked);
         return new ChangePasswordResponse(newToken, locked.getId(), locked.getEmail(),
+                authorityResolver.resolveRoleNames(locked));
+    }
+
+    // === OAuth-only 帳號設定第一組本機密碼 =====================================
+
+    /**
+     * OAuth-only 帳號（{@code passwordHash == null}）設定它的第一組本機密碼。
+     *
+     * <p>刻意不做 {@code changePassword()} 後半段的三件事，因為它們在「第一組密碼」情境下
+     * 沒有意義或無法執行：
+     * <ul>
+     *   <li>不比對 currentPassword、不套 currentPassword 的 reserve-then-clear 限流——
+     *       這種帳號根本沒有目前密碼，沒有密碼猜測面。</li>
+     *   <li>不呼叫 {@code assertNotReused()}——目前密碼是 null，無從比對。</li>
+     *   <li>不呼叫 {@code recordOutgoingPasswordAndTrim()}——沒有「被取代的舊密碼」可以寫入歷史。</li>
+     * </ul>
+     *
+     * <p>沿用的是帳號安全域固定的部分：Account 悲觀寫鎖、{@code credentialsVersion + 1}
+     * 讓 OAuth 登入簽發的所有舊 JWT 失效、以遞增後版本簽發新 JWT 回傳。
+     *
+     * <p>併發：兩個請求同時進來時 Account 鎖序列化它們——第一個成功設定，第二個取得鎖之後
+     * 看到 {@code passwordHash != null}，穩定回 {@link PasswordAlreadyConfiguredException}，
+     * 不覆寫、也不再次遞增版本。判斷「能不能設定」只看 {@code passwordHash == null}，是唯一依據。
+     */
+    @Transactional
+    public SetPasswordResponse setPassword(Integer accountId, SetPasswordRequest request) {
+        Account locked = accounts.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new ResourceNotFoundException("帳號不存在"));
+        if (locked.getPasswordHash() != null) {
+            throw new PasswordAlreadyConfiguredException("此帳號已設定本機密碼，如需變更請使用「修改密碼」");
+        }
+
+        locked.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        locked.setCredentialsVersion(locked.getCredentialsVersion() + 1);
+
+        String newToken = jwtUtil.generateToken(locked);
+        return new SetPasswordResponse(newToken, locked.getId(), locked.getEmail(),
                 authorityResolver.resolveRoleNames(locked));
     }
 

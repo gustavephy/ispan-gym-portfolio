@@ -25,6 +25,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import tw.com.ispan.gym.dto.account.ChangePasswordRequest;
 import tw.com.ispan.gym.dto.account.ChangePasswordResponse;
+import tw.com.ispan.gym.dto.account.SetPasswordRequest;
+import tw.com.ispan.gym.dto.account.SetPasswordResponse;
+import tw.com.ispan.gym.exception.PasswordAlreadyConfiguredException;
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.account.PasswordHistory;
 import tw.com.ispan.gym.entity.account.PasswordResetToken;
@@ -293,6 +296,83 @@ class PasswordServiceTest {
         history.setId(id);
         history.setPasswordHash("hash-" + id);
         return history;
+    }
+
+    // === setPassword()：OAuth-only 設定第一組本機密碼（第五批）===================
+
+    private SetPasswordRequest setRequest(String newPassword) {
+        SetPasswordRequest request = new SetPasswordRequest();
+        request.setNewPassword(newPassword);
+        request.setConfirmPassword(newPassword);
+        return request;
+    }
+
+    @Test
+    void setPassword_OAuthOnly帳號成功_直接鎖Account_遞增版本_回傳新Token_不寫歷史() {
+        Account account = accountOf(null); // passwordHash == null → OAuth-only
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(passwordEncoder.encode("Newpass@2026")).thenReturn("first-hash");
+        when(jwtUtil.generateToken(account)).thenReturn("brand-new-token");
+        when(authorityResolver.resolveRoleNames(account)).thenReturn(List.of("MEMBER"));
+
+        SetPasswordResponse response = service.setPassword(ACCOUNT_ID, setRequest("Newpass@2026"));
+
+        assertThat(account.getPasswordHash()).isEqualTo("first-hash");
+        assertThat(account.getCredentialsVersion()).isEqualTo(3); // accountOf() 起始值是 2
+        assertThat(response.accessToken()).isEqualTo("brand-new-token");
+        assertThat(response.accountId()).isEqualTo(ACCOUNT_ID);
+        assertThat(response.roles()).containsExactly("MEMBER");
+
+        // 沒有 currentPassword 可驗、沒有舊密碼可寫入歷史、沒有 reuse 檢查、不套限流
+        verify(accounts, never()).findById(any());
+        verify(passwordEncoder, never()).matches(any(), any());
+        verify(passwordHistories, never()).save(any());
+        verify(rateLimiter, never()).tryAcquire(any(), org.mockito.ArgumentMatchers.anyInt(), any());
+    }
+
+    @Test
+    void setPassword_已有密碼時丟PasswordAlreadyConfigured_不覆寫_不遞增版本() {
+        Account account = accountOf("existing-hash");
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> service.setPassword(ACCOUNT_ID, setRequest("Newpass@2026")))
+                .isInstanceOf(PasswordAlreadyConfiguredException.class);
+
+        assertThat(account.getPasswordHash()).isEqualTo("existing-hash");
+        assertThat(account.getCredentialsVersion()).isEqualTo(2);
+        verify(passwordEncoder, never()).encode(any());
+        verify(jwtUtil, never()).generateToken(any(Account.class));
+    }
+
+    @Test
+    void setPassword_帳號不存在丟ResourceNotFound() {
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.setPassword(ACCOUNT_ID, setRequest("Newpass@2026")))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    /**
+     * 併發：第一個請求成功設定後，第二個請求（同帶合法密碼）取得鎖時看到的是已設定狀態，
+     * 穩定回 PASSWORD_ALREADY_CONFIGURED，不會再改一次密碼。
+     */
+    @Test
+    void setPassword_併發下第二個請求取得鎖後看到已設定_穩定拒絕() {
+        Account firstView = accountOf(null);
+        Account alreadySetByFirstRequest = accountOf("hash-set-by-first-request");
+        when(accounts.findByIdForUpdate(ACCOUNT_ID))
+                .thenReturn(Optional.of(firstView))
+                .thenReturn(Optional.of(alreadySetByFirstRequest));
+        when(passwordEncoder.encode(any())).thenReturn("hash-set-by-first-request");
+        when(jwtUtil.generateToken(firstView)).thenReturn("t1");
+        when(authorityResolver.resolveRoleNames(firstView)).thenReturn(List.of("MEMBER"));
+
+        service.setPassword(ACCOUNT_ID, setRequest("Newpass@2026"));
+
+        assertThatThrownBy(() -> service.setPassword(ACCOUNT_ID, setRequest("Another@2026")))
+                .isInstanceOf(PasswordAlreadyConfiguredException.class);
+        assertThat(alreadySetByFirstRequest.getPasswordHash()).isEqualTo("hash-set-by-first-request");
+        assertThat(alreadySetByFirstRequest.getCredentialsVersion()).isEqualTo(2);
     }
 
     // === requestPasswordReset()：限流閘門 =======================================
