@@ -678,6 +678,67 @@ VALUES (@accountId, @tokenHash, DATEADD(MINUTE, 15, SYSDATETIME()), SYSDATETIME(
         $httpClient.Dispose()
     }
 
+    # ------------------------------------------------------------------
+    # 第十段（帳號 C）：OAuth-only 帳號並行設定第一組本地密碼——只有一個成功（悲觀鎖）
+    #   對應第五批 POST /api/account/me/set-password。Mockito 單元測試只能證明分支邏輯，
+    #   證明不了資料庫的 PESSIMISTIC_WRITE 真的把兩個同時請求序列化——這裡打真實 DB。
+    # ------------------------------------------------------------------
+    Write-Host ""
+    Write-Host "--- 並行設定第一組密碼：同一 OAuth-only 帳號只有一個請求成功 ---" -ForegroundColor Cyan
+
+    $emailC = "$emailPrefix-c@test.local"
+    $accountIdC = New-TestMemberAccount -Email $emailC -Password $initialPassword -Phone "0900000003"
+    # 先用密碼登入拿 JWT（cv 此刻是初始值），再把 password_hash 清成 NULL 模擬 OAuth-only 帳號。
+    # 沒有動 credentials_version，所以這個 JWT 的 cv claim 仍相符、仍有效。
+    $tokenC = Get-AuthToken -Email $emailC -Password $initialPassword
+    Invoke-SqlNonQuery -Sql "UPDATE account SET password_hash = NULL WHERE account_id = @id" -Params @{ id = $accountIdC } | Out-Null
+    $cvBeforeC = [int](Invoke-SqlScalar -Sql "SELECT credentials_version FROM account WHERE account_id = @id" -Params @{ id = $accountIdC })
+
+    Add-Type -AssemblyName System.Net.Http
+    $spClient = New-Object System.Net.Http.HttpClient
+    $spClient.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", $tokenC)
+    try {
+        $spBody1 = New-Object System.Net.Http.StringContent(
+            (@{ newPassword = "E2eSetA@01"; confirmPassword = "E2eSetA@01" } | ConvertTo-Json),
+            [System.Text.Encoding]::UTF8, "application/json")
+        $spBody2 = New-Object System.Net.Http.StringContent(
+            (@{ newPassword = "E2eSetB@02"; confirmPassword = "E2eSetB@02" } | ConvertTo-Json),
+            [System.Text.Encoding]::UTF8, "application/json")
+
+        $spTask1 = $spClient.PostAsync("$BaseUrl/api/account/me/set-password", $spBody1)
+        $spTask2 = $spClient.PostAsync("$BaseUrl/api/account/me/set-password", $spBody2)
+        [System.Threading.Tasks.Task]::WaitAll(@($spTask1, $spTask2))
+
+        $spStatus1 = [int]$spTask1.Result.StatusCode
+        $spStatus2 = [int]$spTask2.Result.StatusCode
+        $spStatuses = @($spStatus1, $spStatus2)
+        $spSuccessCount = ($spStatuses | Where-Object { $_ -eq 200 }).Count
+        $spConflictCount = ($spStatuses | Where-Object { $_ -eq 409 }).Count
+
+        Test-Case "並行設定第一組密碼：恰好一個 200" ($spSuccessCount -eq 1) "狀態碼=$spStatus1,$spStatus2"
+        Test-Case "並行設定第一組密碼：另一個 409" ($spConflictCount -eq 1) "狀態碼=$spStatus1,$spStatus2"
+
+        $conflictTask = if ($spStatus1 -eq 409) { $spTask1 } else { $spTask2 }
+        $conflictBody = $conflictTask.Result.Content.ReadAsStringAsync().Result
+        Test-Case "409 的錯誤碼是 PASSWORD_ALREADY_CONFIGURED" ($conflictBody -match "PASSWORD_ALREADY_CONFIGURED") "body=$conflictBody"
+
+        $cvAfterC = [int](Invoke-SqlScalar -Sql "SELECT credentials_version FROM account WHERE account_id = @id" -Params @{ id = $accountIdC })
+        Test-Case "credentials_version 只遞增一次" (($cvAfterC - $cvBeforeC) -eq 1) "before=$cvBeforeC after=$cvAfterC"
+
+        $hashAfterC = Invoke-SqlScalar -Sql "SELECT password_hash FROM account WHERE account_id = @id" -Params @{ id = $accountIdC }
+        Test-Case "password_hash 已被設定（不再是 NULL）" ($hashAfterC -ne [DBNull]::Value -and -not [string]::IsNullOrEmpty([string]$hashAfterC))
+
+        # 舊 OAuth JWT：credentials_version 已遞增，受保護端點應回 401
+        Test-Case "設定密碼後原 OAuth JWT 立即失效（401）" (-not (Test-ProfileReachable -Token $tokenC))
+
+        # 成功方回應內的新 JWT 可用
+        $successTask = if ($spStatus1 -eq 200) { $spTask1 } else { $spTask2 }
+        $newTokenC = ($successTask.Result.Content.ReadAsStringAsync().Result | ConvertFrom-Json).accessToken
+        Test-Case "設定密碼成功回應內含新 JWT 且可用" ((-not [string]::IsNullOrEmpty($newTokenC)) -and (Test-ProfileReachable -Token $newTokenC))
+    } finally {
+        $spClient.Dispose()
+    }
+
     Write-Host ""
     Write-Host "=== 驗證完成：$($script:TotalCases) 個案例，$($script:FailedCases) 個失敗 ===" -ForegroundColor $(if ($script:FailedCases -eq 0) { "Green" } else { "Red" })
 }
