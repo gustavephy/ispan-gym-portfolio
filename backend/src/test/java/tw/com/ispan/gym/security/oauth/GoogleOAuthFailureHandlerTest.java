@@ -33,6 +33,7 @@ class GoogleOAuthFailureHandlerTest {
     private static final String RAW_STATE = "raw-state";
     private static final String STATE_HASH = "hash-of-state";
     private static final String ERROR_URL = "https://frontend.example/login";
+    private static final String LINK_RESULT_URL = "https://frontend.example/account/oauth/callback";
 
     private final OAuthTransactionRepository transactions = mock(OAuthTransactionRepository.class);
     private final OpaqueTokenGenerator tokenGenerator = mock(OpaqueTokenGenerator.class);
@@ -116,6 +117,54 @@ class GoogleOAuthFailureHandlerTest {
 
         assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store");
         assertThat(response.getHeader("Referrer-Policy")).isEqualTo("no-referrer");
+    }
+
+    /**
+     * LINK 流程的協定失敗（使用者在 Google 取消、Google error 等）要依 server-side
+     * transaction 的 purpose 導回「帳號安全頁」的 callback，不是共用 /login——
+     * 已登入者進 /login 會被 router beforeEnter 導走，看不到失敗原因。第五批新增。
+     */
+    @Test
+    void onFailure_LINK流程的協定失敗_依purpose導向LinkResultUrl() throws Exception {
+        when(properties.frontendLinkResultUrl()).thenReturn(LINK_RESULT_URL);
+        when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
+        when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(java.util.Optional.of(
+                new tw.com.ispan.gym.repository.account.OAuthTransactionView(
+                        STATE_HASH, tw.com.ispan.gym.enums.account.OAuthProvider.GOOGLE,
+                        tw.com.ispan.gym.enums.account.OAuthTransactionPurpose.LINK,
+                        tw.com.ispan.gym.enums.account.OAuthTransactionStatus.PENDING,
+                        30, null, java.time.LocalDateTime.now().plusMinutes(5))));
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addParameter("state", RAW_STATE);
+        request.addParameter("error", "access_denied");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        handler.onAuthenticationFailure(request, response, new BadCredentialsException("x"));
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(LINK_RESULT_URL + "?oauthError=access_denied");
+    }
+
+    /** LOGIN 流程失敗維持導向共用錯誤頁（/login），由 LoginView 承接 oauthError。 */
+    @Test
+    void onFailure_LOGIN流程失敗_維持導向ErrorUrl() throws Exception {
+        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+        when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
+        when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(java.util.Optional.of(
+                new tw.com.ispan.gym.repository.account.OAuthTransactionView(
+                        STATE_HASH, tw.com.ispan.gym.enums.account.OAuthProvider.GOOGLE,
+                        tw.com.ispan.gym.enums.account.OAuthTransactionPurpose.LOGIN,
+                        tw.com.ispan.gym.enums.account.OAuthTransactionStatus.PENDING,
+                        null, null, java.time.LocalDateTime.now().plusMinutes(5))));
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addParameter("state", RAW_STATE);
+        request.addParameter("error", "access_denied");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        handler.onAuthenticationFailure(request, response, new BadCredentialsException("x"));
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=access_denied");
     }
 
     /** 對應 step 3「Callback 成功或失敗後清除 OAuth Session」 */

@@ -19,7 +19,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import tw.com.ispan.gym.config.GoogleOAuthProperties;
 import tw.com.ispan.gym.enums.account.OAuthRedirectReason;
+import tw.com.ispan.gym.enums.account.OAuthTransactionPurpose;
 import tw.com.ispan.gym.repository.account.OAuthTransactionRepository;
+import tw.com.ispan.gym.repository.account.OAuthTransactionView;
 import tw.com.ispan.gym.security.OpaqueTokenGenerator;
 
 /**
@@ -52,20 +54,33 @@ public class GoogleOAuthFailureHandler implements AuthenticationFailureHandler {
             OAuthRedirectReason reason = classify(request, exception);
             String correlationId = UUID.randomUUID().toString();
 
+            // 依 server-side transaction 的 purpose 決定導向，不相信 client query 自稱 LINK／LOGIN：
+            //   LINK  → 帳號安全頁 callback（frontendLinkResultUrl）
+            //   LOGIN / state 缺失 / 查不到 → 共用錯誤頁（frontendErrorUrl，目前是 /login）
+            // 協定失敗（使用者取消、Google error、state 驗證失敗）也可能發生在 LINK 流程，
+            // 那些訊息一樣要讓已登入的使用者在帳號安全頁看得到。
             String rawState = request.getParameter("state");
+            OAuthTransactionPurpose purpose = null;
             if (rawState != null) {
-                transactions.markFailedIfPending(tokenGenerator.hash(rawState), LocalDateTime.now(clock),
-                        reason.name());
+                String stateHash = tokenGenerator.hash(rawState);
+                transactions.markFailedIfPending(stateHash, LocalDateTime.now(clock), reason.name());
+                purpose = transactions.findViewByStateHash(stateHash)
+                        .map(OAuthTransactionView::purpose)
+                        .orElse(null);
             }
 
             // 刻意只記內部分類、例外類別與 correlation ID：exception message 來自
             // Google 回傳的 error/error_description，屬於外部輸入，不該原樣進正式 log
-            log.info("Google OAuth 授權失敗：reason={} exception={} correlationId={}",
-                    reason, exception.getClass().getSimpleName(), correlationId);
+            log.info("Google OAuth 授權失敗：reason={} purpose={} exception={} correlationId={}",
+                    reason, purpose, exception.getClass().getSimpleName(), correlationId);
+
+            String baseUrl = purpose == OAuthTransactionPurpose.LINK
+                    ? properties.frontendLinkResultUrl()
+                    : properties.frontendErrorUrl();
 
             response.setHeader("Cache-Control", "no-store");
             response.setHeader("Referrer-Policy", "no-referrer");
-            String url = UriComponentsBuilder.fromUriString(properties.frontendErrorUrl())
+            String url = UriComponentsBuilder.fromUriString(baseUrl)
                     .queryParam("oauthError", reason.name().toLowerCase(Locale.ROOT))
                     .build().toUriString();
             response.sendRedirect(url);

@@ -184,6 +184,20 @@ class GoogleOAuthAuthorizationRequestResolverTest {
         assertThat(result.getState()).isEqualTo("raw-link-transaction");
         // LINK 沿用既有 transaction，不應該再建立一筆新的
         verify(transactions, never()).save(any());
+        // 第五批：LINK 帶 prompt=select_account，強制顯示 Google 帳號選擇器
+        assertThat(result.getAdditionalParameters()).containsEntry("prompt", "select_account");
+    }
+
+    /** LOGIN 刻意不加 prompt=select_account（那會改變全站登入體驗，屬第五批範圍外的另行決定）*/
+    @Test
+    void resolve_Login不帶prompt參數() {
+        when(tokenGenerator.generate()).thenReturn("raw-state");
+        when(properties.transactionTtl()).thenReturn(Duration.ofMinutes(10));
+
+        OAuth2AuthorizationRequest result = resolver.resolve(loginRequest(null));
+
+        assertThat(result).isNotNull();
+        assertThat(result.getAdditionalParameters()).doesNotContainKey("prompt");
     }
 
     @Test
