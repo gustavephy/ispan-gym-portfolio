@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -13,6 +15,7 @@ import static org.mockito.Mockito.when;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import tw.com.ispan.gym.entity.account.Account;
@@ -38,9 +41,10 @@ class GoogleOAuthUnlinkServiceTest {
     private final OauthAccountRepository oauthAccounts = mock(OauthAccountRepository.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final InMemoryRateLimiter rateLimiter = mock(InMemoryRateLimiter.class);
+    private final jakarta.persistence.EntityManager entityManager = mock(jakarta.persistence.EntityManager.class);
 
     private final GoogleOAuthUnlinkService service =
-            new GoogleOAuthUnlinkService(accounts, oauthAccounts, passwordEncoder, rateLimiter);
+            new GoogleOAuthUnlinkService(accounts, oauthAccounts, passwordEncoder, rateLimiter, entityManager);
 
     @Test
     void unlink_Account不存在_丟ResourceNotFound() {
@@ -84,17 +88,47 @@ class GoogleOAuthUnlinkServiceTest {
         verify(accounts, never()).findByIdForUpdate(any());
     }
 
+    /**
+     * OSIV stale entity 回歸（2026-09-01 真實 DB E2E 抓到）：findByIdForUpdate 拿到鎖前舊實例
+     * （passwordHash 仍是舊值），是 {@code entityManager.refresh()} 讓它看到並行 change-password
+     * 剛把密碼改成的新值——拿鎖後的重新驗證因此用新 hash 比對、擋下已失效的舊密碼。
+     */
     @Test
-    void unlink_鎖前通過但鎖後密碼不符_丟ReauthenticationRequired() {
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("hash")));
+    void unlink_拿鎖後refresh讀到並行改過的密碼_舊密碼重驗被擋下() {
+        Account staleInstance = accountOf("hash");
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(staleInstance));
         when(rateLimiter.tryAcquire(anyString(), org.mockito.ArgumentMatchers.anyInt(), any())).thenReturn(true);
         when(passwordEncoder.matches(CURRENT_PASSWORD, "hash")).thenReturn(true);
-        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("changed-hash")));
-        when(passwordEncoder.matches(CURRENT_PASSWORD, "changed-hash")).thenReturn(false);
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(staleInstance));
+        doAnswer(inv -> {
+            ((Account) inv.getArgument(0)).setPasswordHash("changed-by-concurrent-request");
+            return null;
+        }).when(entityManager).refresh(any(Account.class));
+        when(passwordEncoder.matches(CURRENT_PASSWORD, "changed-by-concurrent-request")).thenReturn(false);
 
         assertThatThrownBy(() -> service.unlink(ACCOUNT_ID, CURRENT_PASSWORD))
                 .isInstanceOf(ReauthenticationRequiredException.class);
         verify(oauthAccounts, never()).delete(any());
+    }
+
+    /** refresh 必須在拿鎖之後、鎖後密碼重驗之前 */
+    @Test
+    void unlink_refresh順序_在findByIdForUpdate之後_在鎖後重驗之前() {
+        Account locked = accountOf("hash");
+        OauthAccount binding = new OauthAccount();
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(locked));
+        when(rateLimiter.tryAcquire(anyString(), org.mockito.ArgumentMatchers.anyInt(), any())).thenReturn(true);
+        when(passwordEncoder.matches(CURRENT_PASSWORD, "hash")).thenReturn(true);
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(locked));
+        when(oauthAccounts.findByAccountIdAndOauthProvider(ACCOUNT_ID, OAuthProvider.GOOGLE))
+                .thenReturn(Optional.of(binding));
+
+        service.unlink(ACCOUNT_ID, CURRENT_PASSWORD);
+
+        InOrder inOrder = inOrder(accounts, entityManager, oauthAccounts);
+        inOrder.verify(accounts).findByIdForUpdate(ACCOUNT_ID);
+        inOrder.verify(entityManager).refresh(locked);
+        inOrder.verify(oauthAccounts).delete(binding);
     }
 
     @Test

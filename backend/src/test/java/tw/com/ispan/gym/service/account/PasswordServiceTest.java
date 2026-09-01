@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -19,6 +21,7 @@ import java.util.concurrent.Executor;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -69,10 +72,11 @@ class PasswordServiceTest {
     private final InMemoryRateLimiter rateLimiter = mock(InMemoryRateLimiter.class);
     private final MailService mailService = mock(MailService.class);
     private final Executor mailTaskExecutor = mock(Executor.class);
+    private final jakarta.persistence.EntityManager entityManager = mock(jakarta.persistence.EntityManager.class);
 
     private final PasswordService service = new PasswordService(
             accounts, passwordHistories, passwordResetTokens, passwordEncoder, jwtUtil,
-            authorityResolver, rateLimiter, mailService, mailTaskExecutor,
+            authorityResolver, rateLimiter, mailService, mailTaskExecutor, entityManager,
             TOKEN_TTL_MINUTES, RESEND_COOLDOWN_SECONDS);
 
     private Account accountOf(String passwordHash) {
@@ -95,6 +99,20 @@ class PasswordServiceTest {
     /** 允許限流通過，所有 tryAcquire 呼叫一律回 true（除非個別測試另外覆寫） */
     private void rateLimiterAlwaysAllows() {
         when(rateLimiter.tryAcquire(any(), org.mockito.ArgumentMatchers.anyInt(), any())).thenReturn(true);
+    }
+
+    /**
+     * 模擬 {@code entityManager.refresh(account)}：把傳入的 Account 的 passwordHash／
+     * credentialsVersion 就地更新成「鎖定後從 DB 讀到的最新值」。重現 OSIV + JwtAuthFilter
+     * 下 findByIdForUpdate 拿到的是鎖前舊實例、必須 refresh 才看得到並行請求已 commit 的變更。
+     */
+    private void refreshUpdatesTo(String freshPasswordHash, int freshCredentialsVersion) {
+        doAnswer(inv -> {
+            Account a = inv.getArgument(0);
+            a.setPasswordHash(freshPasswordHash);
+            a.setCredentialsVersion(freshCredentialsVersion);
+            return null;
+        }).when(entityManager).refresh(any(Account.class));
     }
 
     /** 模擬「commit 後才觸發」的 TransactionSynchronization——沒有真實交易時必須手動跑一次 */
@@ -175,19 +193,21 @@ class PasswordServiceTest {
     }
 
     /**
-     * 並行覆寫漏洞的回歸測試（code review 抓到的原始 bug）：拿鎖前用來驗證的
-     * account 物件跟拿鎖後真正要修改的 locked 物件刻意給不同的 passwordHash，
-     * 模擬「驗證通過與實際修改之間，密碼已被另一個請求改掉」的情境——
-     * 必須在拿鎖後用最新值重新擋下，不能只憑第一次驗證的結果就放行修改。
+     * 並行覆寫漏洞的回歸測試（code review 抓到的原始 bug + 2026-09-01 真實 DB E2E 抓到的
+     * 「悲觀鎖被 OSIV stale entity 打穿」）：findById 與 findByIdForUpdate 回傳「同一個」鎖前
+     * 舊實例（重現 persistence context 汙染），是 {@code entityManager.refresh()} 把 passwordHash
+     * 更新成並行請求剛 commit 的新值——拿鎖後的重新驗證因此會用新 hash 比對、擋下舊密碼，
+     * 不會覆寫別人剛設定的密碼。
      */
     @Test
-    void changePassword_拿鎖後密碼已被並行請求改掉時擋下並保留最新雜湊() {
-        Account unlockedSnapshot = accountOf("stale-hash");
-        Account locked = accountOf("fresher-hash-set-by-another-request");
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(unlockedSnapshot));
-        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(locked));
+    void changePassword_拿鎖後refresh讀到並行請求已改的密碼_用舊密碼重驗被擋下() {
+        Account staleInstance = accountOf("stale-hash");
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(staleInstance));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(staleInstance));
         rateLimiterAlwaysAllows();
-        // 第一次（拿鎖前）比對用舊 hash 能過；拿鎖後用新 hash 比對就不該再過
+        // refresh 把 stale 實例更新成「並行請求剛設定的新 hash」
+        refreshUpdatesTo("fresher-hash-set-by-another-request", 2);
+        // 拿鎖前用舊 hash 比對能過；refresh 之後用新 hash 比對就不該再過
         when(passwordEncoder.matches("stale-current-password", "stale-hash")).thenReturn(true);
         when(passwordEncoder.matches("stale-current-password", "fresher-hash-set-by-another-request"))
                 .thenReturn(false);
@@ -197,8 +217,31 @@ class PasswordServiceTest {
                 .isInstanceOf(CurrentPasswordIncorrectException.class);
 
         // 沒有覆寫掉另一個請求剛設定的密碼
-        assertThat(locked.getPasswordHash()).isEqualTo("fresher-hash-set-by-another-request");
+        assertThat(staleInstance.getPasswordHash()).isEqualTo("fresher-hash-set-by-another-request");
         verify(passwordHistories, never()).save(any());
+    }
+
+    /** refresh 必須在拿鎖之後、任何針對 locked 的業務判斷（重驗目前密碼）之前 */
+    @Test
+    void changePassword_refresh順序_在findByIdForUpdate之後_在重驗目前密碼之前() {
+        Account account = accountOf("hashed-current");
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        rateLimiterAlwaysAllows();
+        when(passwordEncoder.matches("correct", "hashed-current")).thenReturn(true);
+        when(passwordEncoder.encode(any())).thenReturn("new-hash");
+        when(passwordHistories.findTop4ByAccountIdOrderByCreatedAtDescIdDesc(ACCOUNT_ID)).thenReturn(List.of());
+        when(passwordHistories.findByAccountIdOrderByCreatedAtDescIdDesc(ACCOUNT_ID)).thenReturn(List.of());
+        when(jwtUtil.generateToken(account)).thenReturn("t");
+        when(authorityResolver.resolveRoleNames(account)).thenReturn(List.of("MEMBER"));
+
+        service.changePassword(ACCOUNT_ID, changeRequest("correct", "Newpass@2026"));
+
+        InOrder inOrder = inOrder(accounts, entityManager, passwordEncoder);
+        inOrder.verify(accounts).findByIdForUpdate(ACCOUNT_ID);
+        inOrder.verify(entityManager).refresh(account);
+        // refresh 之後才是「拿鎖後重驗目前密碼」那一次 matches
+        inOrder.verify(passwordEncoder).matches("correct", "hashed-current");
     }
 
     // === changePassword()：新密碼重用檢查 =======================================
@@ -323,11 +366,30 @@ class PasswordServiceTest {
         assertThat(response.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(response.roles()).containsExactly("MEMBER");
 
+        // 拿鎖後一定 refresh，才用鎖後最新的 passwordHash 判斷
+        verify(entityManager).refresh(account);
         // 沒有 currentPassword 可驗、沒有舊密碼可寫入歷史、沒有 reuse 檢查、不套限流
         verify(accounts, never()).findById(any());
         verify(passwordEncoder, never()).matches(any(), any());
         verify(passwordHistories, never()).save(any());
         verify(rateLimiter, never()).tryAcquire(any(), org.mockito.ArgumentMatchers.anyInt(), any());
+    }
+
+    /** refresh 必須在拿鎖之後、「passwordHash != null」判斷之前 */
+    @Test
+    void setPassword_refresh順序_在findByIdForUpdate之後_在已設定判斷之前() {
+        Account account = accountOf(null);
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
+        when(passwordEncoder.encode(any())).thenReturn("first-hash");
+        when(jwtUtil.generateToken(account)).thenReturn("t");
+        when(authorityResolver.resolveRoleNames(account)).thenReturn(List.of());
+
+        service.setPassword(ACCOUNT_ID, setRequest("Newpass@2026"));
+
+        InOrder inOrder = inOrder(accounts, entityManager, passwordEncoder);
+        inOrder.verify(accounts).findByIdForUpdate(ACCOUNT_ID);
+        inOrder.verify(entityManager).refresh(account);
+        inOrder.verify(passwordEncoder).encode("Newpass@2026"); // 判斷通過後才會走到 encode
     }
 
     @Test
@@ -353,26 +415,25 @@ class PasswordServiceTest {
     }
 
     /**
-     * 併發：第一個請求成功設定後，第二個請求（同帶合法密碼）取得鎖時看到的是已設定狀態，
-     * 穩定回 PASSWORD_ALREADY_CONFIGURED，不會再改一次密碼。
+     * 併發（2026-09-01 真實 DB E2E 抓到的核心情境）：findByIdForUpdate 因 OSIV stale entity
+     * 拿到的是鎖前舊實例（passwordHash 仍是 null），是 {@code entityManager.refresh()} 讓它看到
+     * 並行請求剛 commit 的 passwordHash。沒有 refresh，這個請求會誤以為自己是第一個而重複設定；
+     * 有 refresh 後，穩定回 PASSWORD_ALREADY_CONFIGURED，不遞增 cv、不簽 JWT、不覆寫密碼。
      */
     @Test
-    void setPassword_併發下第二個請求取得鎖後看到已設定_穩定拒絕() {
-        Account firstView = accountOf(null);
-        Account alreadySetByFirstRequest = accountOf("hash-set-by-first-request");
-        when(accounts.findByIdForUpdate(ACCOUNT_ID))
-                .thenReturn(Optional.of(firstView))
-                .thenReturn(Optional.of(alreadySetByFirstRequest));
-        when(passwordEncoder.encode(any())).thenReturn("hash-set-by-first-request");
-        when(jwtUtil.generateToken(firstView)).thenReturn("t1");
-        when(authorityResolver.resolveRoleNames(firstView)).thenReturn(List.of("MEMBER"));
+    void setPassword_拿鎖後refresh讀到並行請求已設定的密碼_回PasswordAlreadyConfigured() {
+        Account staleInstance = accountOf(null); // 鎖前舊實例：passwordHash 還是 null
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(staleInstance));
+        // refresh 把它更新成「並行請求剛 commit 的狀態」：已有密碼、版本已 +1
+        refreshUpdatesTo("hash-set-by-concurrent-request", 3);
 
-        service.setPassword(ACCOUNT_ID, setRequest("Newpass@2026"));
-
-        assertThatThrownBy(() -> service.setPassword(ACCOUNT_ID, setRequest("Another@2026")))
+        assertThatThrownBy(() -> service.setPassword(ACCOUNT_ID, setRequest("Newpass@2026")))
                 .isInstanceOf(PasswordAlreadyConfiguredException.class);
-        assertThat(alreadySetByFirstRequest.getPasswordHash()).isEqualTo("hash-set-by-first-request");
-        assertThat(alreadySetByFirstRequest.getCredentialsVersion()).isEqualTo(2);
+
+        assertThat(staleInstance.getPasswordHash()).isEqualTo("hash-set-by-concurrent-request");
+        assertThat(staleInstance.getCredentialsVersion()).isEqualTo(3); // 沒有再 +1
+        verify(passwordEncoder, never()).encode(any());
+        verify(jwtUtil, never()).generateToken(any(Account.class));
     }
 
     // === requestPasswordReset()：限流閘門 =======================================

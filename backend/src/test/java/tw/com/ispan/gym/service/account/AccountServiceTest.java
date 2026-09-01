@@ -2,6 +2,9 @@ package tw.com.ispan.gym.service.account;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -10,6 +13,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import tw.com.ispan.gym.dto.account.AccountMeResponse;
 import tw.com.ispan.gym.entity.account.Account;
@@ -23,8 +27,9 @@ class AccountServiceTest {
 
     private final AccountRepository accounts = mock(AccountRepository.class);
     private final AccountAuthorityResolver authorityResolver = mock(AccountAuthorityResolver.class);
+    private final jakarta.persistence.EntityManager entityManager = mock(jakarta.persistence.EntityManager.class);
 
-    private final AccountService service = new AccountService(accounts, authorityResolver);
+    private final AccountService service = new AccountService(accounts, authorityResolver, entityManager);
 
     // === getMe ================================================================
 
@@ -84,6 +89,41 @@ class AccountServiceTest {
         service.logoutAllDevices(ACCOUNT_ID);
 
         assertThat(account.getCredentialsVersion()).isEqualTo(4);
+    }
+
+    /**
+     * OSIV stale entity 回歸（2026-09-01 真實 DB E2E 抓到）：findByIdForUpdate 拿到鎖前舊實例，
+     * refresh 才讓它看到並行 change/set-password 剛把 credentialsVersion 推到的新值。
+     * 遞增必須以「刷新後的值」為基準（refreshed 4 → 5），不是「舊值 +1」（3 → 4）。
+     */
+    @Test
+    void logoutAllDevices_拿鎖後refresh讀到並行請求推進的版本_以刷新值為基準遞增() {
+        Account staleInstance = accountOf();
+        staleInstance.setCredentialsVersion(3); // 鎖前舊值
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(staleInstance));
+        // refresh 把它更新成並行請求剛 commit 的版本
+        doAnswer(inv -> {
+            ((Account) inv.getArgument(0)).setCredentialsVersion(4);
+            return null;
+        }).when(entityManager).refresh(any(Account.class));
+
+        service.logoutAllDevices(ACCOUNT_ID);
+
+        assertThat(staleInstance.getCredentialsVersion()).isEqualTo(5); // 4 + 1，不是 3 + 1
+    }
+
+    /** refresh 必須在拿鎖之後、遞增 credentialsVersion 之前 */
+    @Test
+    void logoutAllDevices_refresh順序_在findByIdForUpdate之後() {
+        Account account = accountOf();
+        account.setCredentialsVersion(3);
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(account));
+
+        service.logoutAllDevices(ACCOUNT_ID);
+
+        InOrder inOrder = inOrder(accounts, entityManager);
+        inOrder.verify(accounts).findByIdForUpdate(ACCOUNT_ID);
+        inOrder.verify(entityManager).refresh(account);
     }
 
     private Account accountOf() {

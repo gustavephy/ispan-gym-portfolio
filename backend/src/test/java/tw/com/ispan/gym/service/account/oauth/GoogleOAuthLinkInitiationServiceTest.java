@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -18,6 +20,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import tw.com.ispan.gym.config.GoogleOAuthProperties;
@@ -53,10 +56,12 @@ class GoogleOAuthLinkInitiationServiceTest {
     private final InMemoryRateLimiter rateLimiter = mock(InMemoryRateLimiter.class);
     private final OpaqueTokenGenerator tokenGenerator = mock(OpaqueTokenGenerator.class);
     private final GoogleOAuthProperties properties = mock(GoogleOAuthProperties.class);
+    private final jakarta.persistence.EntityManager entityManager = mock(jakarta.persistence.EntityManager.class);
     private final Clock clock = Clock.systemDefaultZone();
 
     private final GoogleOAuthLinkInitiationService service = new GoogleOAuthLinkInitiationService(
-            accounts, oauthAccounts, transactions, passwordEncoder, rateLimiter, tokenGenerator, properties, clock);
+            accounts, oauthAccounts, transactions, passwordEncoder, rateLimiter, tokenGenerator, properties,
+            entityManager, clock);
 
     /** 其他案例都測「功能已啟用」下的行為，停用本身的行為見下面獨立案例 */
     @BeforeEach
@@ -123,18 +128,48 @@ class GoogleOAuthLinkInitiationServiceTest {
         verify(accounts, never()).findByIdForUpdate(any());
     }
 
-    /** 鎖後複查：驗證通過到取得鎖之間密碼被別的請求改掉 */
+    /**
+     * 鎖後複查 + OSIV stale entity 回歸（2026-09-01 真實 DB E2E）：findByIdForUpdate 因
+     * persistence context 汙染拿到鎖前舊實例，是 {@code entityManager.refresh()} 讓它看到並行
+     * change-password 剛改過的新密碼 hash——鎖後重驗因此用新 hash 比對、擋下已失效的舊密碼。
+     */
     @Test
-    void initiate_鎖前通過但鎖後密碼不符_丟ReauthenticationRequired() {
-        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("hash")));
+    void initiate_拿鎖後refresh讀到並行改過的密碼_舊密碼重驗被擋下() {
+        Account staleInstance = accountOf("hash");
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(staleInstance));
         when(rateLimiter.tryAcquire(anyString(), org.mockito.ArgumentMatchers.anyInt(), any())).thenReturn(true);
         when(passwordEncoder.matches(CURRENT_PASSWORD, "hash")).thenReturn(true);
-        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(accountOf("changed-hash")));
-        when(passwordEncoder.matches(CURRENT_PASSWORD, "changed-hash")).thenReturn(false);
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(staleInstance));
+        doAnswer(inv -> {
+            ((Account) inv.getArgument(0)).setPasswordHash("changed-by-concurrent-request");
+            return null;
+        }).when(entityManager).refresh(any(Account.class));
+        when(passwordEncoder.matches(CURRENT_PASSWORD, "changed-by-concurrent-request")).thenReturn(false);
 
         assertThatThrownBy(() -> service.initiate(ACCOUNT_ID, CURRENT_PASSWORD))
                 .isInstanceOf(ReauthenticationRequiredException.class);
         verify(transactions, never()).save(any());
+    }
+
+    /** refresh 必須在拿鎖之後、鎖後密碼重驗之前 */
+    @Test
+    void initiate_refresh順序_在findByIdForUpdate之後_在鎖後重驗之前() {
+        Account locked = accountOf("hash");
+        when(accounts.findById(ACCOUNT_ID)).thenReturn(Optional.of(locked));
+        when(rateLimiter.tryAcquire(anyString(), org.mockito.ArgumentMatchers.anyInt(), any())).thenReturn(true);
+        when(passwordEncoder.matches(CURRENT_PASSWORD, "hash")).thenReturn(true);
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(locked));
+        when(oauthAccounts.findByAccountIdAndOauthProvider(ACCOUNT_ID, OAuthProvider.GOOGLE))
+                .thenReturn(Optional.empty());
+        when(tokenGenerator.generate()).thenReturn("raw-state");
+        when(properties.transactionTtl()).thenReturn(Duration.ofMinutes(10));
+
+        service.initiate(ACCOUNT_ID, CURRENT_PASSWORD);
+
+        InOrder inOrder = inOrder(accounts, entityManager, transactions);
+        inOrder.verify(accounts).findByIdForUpdate(ACCOUNT_ID);
+        inOrder.verify(entityManager).refresh(locked);
+        inOrder.verify(transactions).save(any());
     }
 
     /** 對應必補案例「已綁定不能重複發起」 */
