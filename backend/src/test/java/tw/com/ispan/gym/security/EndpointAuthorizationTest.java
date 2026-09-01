@@ -532,21 +532,23 @@ class EndpointAuthorizationTest {
         mockMvc.perform(get("/api/products")).andExpect(status().isOk());
     }
 
-    // === EMPLOYEE：員工審核與優惠券 =============================================
+    // === ADMIN：員工審核與優惠券 ================================================
 
     @Test
-    void 員工審核需在職員工身分() throws Exception {
+    void 員工審核需管理者身分() throws Exception {
+        // 2026-08-31 政策定案：員工審核改 ADMIN-only，一般在職員工不再能審核
         expectUnauthorizedWhenAnonymous(get("/api/employees/reviews/pending"));
         expectForbidden(get("/api/employees/reviews/pending"), memberToken());
-        expectAuthorized(get("/api/employees/reviews/pending"), employeeToken());
-        // 管理者本身也是員工，同樣可以審核
+        expectForbidden(get("/api/employees/reviews/pending"), employeeToken());
         expectAuthorized(get("/api/employees/reviews/pending"), adminToken());
     }
 
     @Test
-    void 核准與拒絕員工申請需員工身分() throws Exception {
+    void 核准與拒絕員工申請需管理者身分() throws Exception {
         expectForbidden(post("/api/employees/reviews/9/approve"), memberToken());
         expectForbidden(post("/api/employees/reviews/9/reject"), memberToken());
+        expectForbidden(post("/api/employees/reviews/9/approve"), employeeToken());
+        expectForbidden(post("/api/employees/reviews/9/reject"), employeeToken());
     }
 
     @Test
@@ -766,7 +768,7 @@ class EndpointAuthorizationTest {
     // /api/admin/** 在正式 SecurityConfig 有 URL matcher hasRole("ADMIN")，filter 階段就會
     // 攔截非 ADMIN，AdminEmployeeController 方法上的 @PreAuthorize 永遠執行不到——這支測試因此
     // 只能證明「URL 層規則生效」，不能宣稱已驗證方法層 @PreAuthorize 本身是否正確（跟
-    // 會員管理那組測試的分工說明相同）。不動既有的員工申請、同儕審核、拒絕後重新申請測試。
+    // 會員管理那組測試的分工說明相同）。不動既有的員工申請、員工審核、拒絕後重新申請測試。
 
     @Test
     void 員工列表僅限管理者() throws Exception {

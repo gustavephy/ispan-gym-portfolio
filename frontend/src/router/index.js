@@ -17,8 +17,10 @@ const router = createRouter({
         { path: 'courses', component: () => import('@/views/course/CourseView.vue') },
         {
           path: 'reservation',
+          // requiresRole:'MEMBER'——這頁 onMounted 會打 Member-only API（getMyQuotas），
+          // 純 Employee/Admin/Trainer 帳號進來會 401 連帶被登出，改由路由守衛先擋回首頁
           component: () => import('@/views/reservation/ReservationView.vue'),
-          meta: { requiresAuth: true },
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
         },
         {
           path: 'reservation/trainer/:trainerId',
@@ -40,17 +42,21 @@ const router = createRouter({
         {
           path: 'checkout',
           component: () => import('@/views/cart/CheckoutView.vue'),
-          meta: { requiresAuth: true },
+          // requiresRole:'MEMBER'——onMounted 會打 Member-only API（會員資料／結帳資訊），
+          // 非會員角色進來會 401 誤登出
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
         },
         {
           path: 'orders/:id?',
           component: () => import('@/views/member/OrderListView.vue'),
-          meta: { requiresAuth: true },
+          // 同上：訂單清單為 Member-only
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
         },
         {
           path: 'coupons',
           component: () => import('@/views/member/MemberCouponView.vue'),
-          meta: { requiresAuth: true },
+          // 同上：我的優惠券為 Member-only
+          meta: { requiresAuth: true, requiresRole: 'MEMBER' },
         },
         {
           path: 'member/courses',
@@ -72,6 +78,12 @@ const router = createRouter({
         {
           path: 'trainer/schedules',
           component: () => import('@/views/trainer/TrainerScheduleView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'TRAINER' },
+        },
+        {
+          // 教練自助「專業資料」頁（專長／經歷／自我介紹／個人圖片網址）
+          path: 'trainer/profile',
+          component: () => import('@/views/trainer/TrainerProfileView.vue'),
           meta: { requiresAuth: true, requiresRole: 'TRAINER' },
         },
         {
@@ -105,6 +117,16 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
+          path: 'admin/employees',
+          component: () => import('@/views/admin/AdminEmployeeView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
+          path: 'admin/trainers',
+          component: () => import('@/views/admin/AdminTrainerView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
           path: 'admin/trainer-schedules',
           component: () => import('@/views/admin/AdminTrainerScheduleView.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
@@ -132,8 +154,10 @@ const router = createRouter({
         {
           path: 'admin/employee-reviews',
           component: () => import('@/views/admin/EmployeeReviewView.vue'),
-          // 同儕審核：任何在職員工皆可審核，不限管理者（後端也是 hasRole('EMPLOYEE')）
-          meta: { requiresAuth: true, requiresRole: 'EMPLOYEE' },
+          // 員工審核：ADMIN-only（2026-08-31 政策定案，後端 SecurityConfig 與
+          // EmployeeReviewController 皆同步改為 hasRole('ADMIN')）。角色為疊加式，
+          // ADMIN 帳號必同時具 EMPLOYEE，故只需檢查 ADMIN
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
           path: 'health',

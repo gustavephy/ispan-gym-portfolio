@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -32,7 +33,8 @@ public class EmployeeReapplyRequest {
     private String lastName;
 
     @NotBlank(message = "電話為必填")
-    @Size(max = 20, message = "電話不可超過20個字元")
+    @Size(max = 10, message = "電話不可超過10個字元")
+    @Pattern(regexp = "^09\\d{8}$", message = "電話格式不正確，請輸入09開頭的10碼手機號碼")
     private String phone;
 
     @NotNull(message = "到職日為必填")

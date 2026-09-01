@@ -12,6 +12,15 @@ import api from './axios.instance.js'
 export const getTrainers = () => api.get('/api/trainers')
 
 /**
+ * 查詢單一公開教練的完整介紹（含 experience／bio／profileImageUrl），不需登入即可呼叫。
+ * 走 TrainerController 的公開端點；已軟刪除的教練不會回傳（後端回 404）。
+ * 回應 TrainerResponse：{ trainerId, displayName, specialty, experience, bio, profileImageUrl, status }
+ * 不含 employeeId／email／電話等內部資料。
+ * @param {number} trainerId 教練 id
+ */
+export const getTrainer = (trainerId) => api.get(`/api/trainers/${trainerId}`)
+
+/**
  * 分頁查詢指定教練目前可預約（AVAILABLE）的時段，可依日期區間篩選，不需登入即可呼叫。
  * 不開放狀態篩選：這支端點固定只回傳 AVAILABLE，是設計決定。
  * @param {number} trainerId 教練 id

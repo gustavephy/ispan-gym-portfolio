@@ -187,7 +187,7 @@ class JwtSecuritySmokeTest {
         }
 
         // 不加方法層級標註——這條要驗證的是 SecurityConfig 自己的 URL matcher
-        // （/api/employees/reviews/** → hasRole(EMPLOYEE)），比照 /api/orders 的寫法
+        // （/api/employees/reviews/** → hasRole(ADMIN)，2026-08-31 起），比照 /api/orders 的寫法
         @GetMapping("/api/employees/reviews/probe")
         String employeeReviewProbe() {
             return "ok";
@@ -416,8 +416,9 @@ class JwtSecuritySmokeTest {
     }
 
     @Test
-    void 員工審核路徑與api_admin互不相通() throws Exception {
-        // 純 EMPLOYEE 帳號能進 /api/employees/reviews/**，純 MEMBER 帳號進不去
+    void 員工審核路徑為ADMIN專屬() throws Exception {
+        // 2026-08-31 政策定案：/api/employees/reviews/** 改 ADMIN-only。
+        // 純 EMPLOYEE 與純 MEMBER 都進不去，只有 ADMIN 可以。
         Account employeeAccount = employeeAccount();
         Employee employee = activeEmployee(employeeAccount, EmployeeRole.EMPLOYEE);
         Mockito.when(accounts.findById(8)).thenReturn(Optional.of(employeeAccount));
@@ -425,7 +426,7 @@ class JwtSecuritySmokeTest {
         Mockito.when(trainers.findByEmployeeId(80)).thenReturn(Optional.empty());
         String employeeToken = jwtUtil.generateToken(employeeAccount);
         mockMvc.perform(get("/api/employees/reviews/probe").header("Authorization", "Bearer " + employeeToken))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
 
         Account memberOnlyAccount = memberAccount();
         Mockito.when(accounts.findById(7)).thenReturn(Optional.of(memberOnlyAccount));
@@ -433,6 +434,14 @@ class JwtSecuritySmokeTest {
         String memberToken = jwtUtil.generateToken(memberOnlyAccount);
         mockMvc.perform(get("/api/employees/reviews/probe").header("Authorization", "Bearer " + memberToken))
                 .andExpect(status().isForbidden());
+
+        Account adminAccount = employeeAccount();
+        Employee admin = activeEmployee(adminAccount, EmployeeRole.ADMIN);
+        Mockito.when(accounts.findById(8)).thenReturn(Optional.of(adminAccount));
+        Mockito.when(employees.findByAccountId(8)).thenReturn(Optional.of(admin));
+        String adminToken = jwtUtil.generateToken(adminAccount);
+        mockMvc.perform(get("/api/employees/reviews/probe").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
     }
 
     @Test

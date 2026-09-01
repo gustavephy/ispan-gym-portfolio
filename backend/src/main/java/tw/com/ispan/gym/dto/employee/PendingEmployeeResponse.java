@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 
 import tw.com.ispan.gym.entity.employee.Employee;
 
-/** 員工審核清單用——這條路徑已受 hasRole(EMPLOYEE) 保護（任何在職員工皆可審核），帶真實資料供審核判斷 */
+/** 員工審核清單用——這條路徑已受 hasRole(ADMIN) 保護（2026-08-31 起 ADMIN-only），帶真實資料供審核判斷 */
 public record PendingEmployeeResponse(
         Integer employeeId,
         String firstName,

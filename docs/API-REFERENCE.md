@@ -78,7 +78,7 @@
 
 登入回應的 `roles` 是去掉 `ROLE_` 前綴的清單，僅供前端導流；實際授權後端每請求檢查。
 
-**角色是疊加的，不是互斥的。** `EMPLOYEE` 是所有在職員工的基底角色，`ADMIN` 與 `TRAINER` 都在其之上**額外加發**而非取代 —— 因為 `/api/employee/**`、`/api/employees/reviews/**` 這類端點只認 `EMPLOYEE`，若管理員不同時具備 `EMPLOYEE` 反而會被擋在門外。
+**角色是疊加的，不是互斥的。** `EMPLOYEE` 是所有在職員工的基底角色，`ADMIN` 與 `TRAINER` 都在其之上**額外加發**而非取代 —— 因為 `/api/employee/**`、`/api/trainer/**` 這類端點只認基底角色，若管理員／教練不同時具備 `EMPLOYEE`／對應角色反而會被擋在門外。（`/api/employees/reviews/**` 自 2026-08-31 起改認 `ADMIN`，ADMIN 帳號本就有 `EMPLOYEE` 基底，`approve`／`reject` 記錄審核者仍正常。）
 
 實際會出現的組合：
 
@@ -139,8 +139,8 @@ POST    /api/payments/ecpay/notify
 |---|---|
 | `/api/admin/**` | `hasRole("ADMIN")` |
 | `/api/employee/**` | `hasRole("EMPLOYEE")` |
-| `/api/employees/reviews/**` | `hasRole("EMPLOYEE")`（任何在職員工皆可審核，刻意獨立於 `/api/admin/**` 之外） |
-| `POST /api/employees/*/trainer` | `hasRole("ADMIN")`（員工升級教練限管理者，與員工審核是不同動作的不同權限） |
+| `/api/employees/reviews/**` | `hasRole("ADMIN")`（2026-08-31 起 ADMIN-only；仍刻意獨立於 `/api/admin/**` matcher 之外，方便日後放寬只改一行） |
+| `POST /api/employees/*/trainer` | `hasRole("ADMIN")`（員工升級教練限管理者） |
 
 > `/api/member/**` 刻意沒有整段放行 —— 同前綴下還有 `GET /api/member/bookings` 等個人資料端點，
 > 一併放行會使其變成匿名可讀。放行的是逐條精確列出的公開排班資訊。
@@ -217,15 +217,17 @@ POST    /api/payments/ecpay/notify
 | `AI_SERVICE_UNAVAILABLE` | 503 | Gemini 服務異常 |
 | `PDF_GENERATION_FAILED` | 500 | PDF 產生失敗 |
 
-### 1.7 ⚠️ dev profile 全放行
+### 1.7 dev profile（預設關閉）
 
-`application.properties` 目前寫死 `spring.profiles.active=dev`，此時：
+`application.properties` 的 `spring.profiles.active=dev` **預設已註解掉**，正式的 `SecurityConfig`
+與 `@PreAuthorize` 生效，本文件所有授權規則皆有效。真實登入／JWT 為必要。
 
-- `DevSecurityConfig` 以 `anyRequest().permitAll()` 取代 `SecurityConfig`，**本文件所有授權規則一律不生效**，`@PreAuthorize` 也不生效
-- 登入身分固定為 `app.dev-current-user-id`（預設 1），非真實登入者
+**只有**手動把 `application.properties` 那一行取消註解（或設 `SPRING_PROFILES_ACTIVE=dev`）時：
+
+- `DevSecurityConfig` 以 `anyRequest().permitAll()` 取代 `SecurityConfig`，**所有授權規則與 `@PreAuthorize` 一律不生效**
+- 登入身分固定為 `app.dev-current-user-id`（目前預設 `4`），非真實登入者
 - **例外：WebSocket 的 STOMP CONNECT 驗證在所有 profile 都生效**，本機測試聊天室仍須先登入取得 token
 
-要驗證真實權限：設環境變數 `SPRING_PROFILES_ACTIVE=<非 dev>`，或註解掉 `application.properties` 的該行。
 對外部署另需提供 `JWT_SECRET`／`DB_PASSWORD`／`SEED_ADMIN_*` 等環境變數（現行預設值已進版控，等同公開），並關閉 `ddl-auto`。
 
 ---
@@ -343,7 +345,7 @@ Response `MemberRegisterResponse`：`email`（正規化後）、`message`。刻�
 
 #### 🔓 `POST /api/employees/register` → `201 CREATED`
 
-Request `EmployeeRegisterRequest`：`firstName`、`lastName`（`@NotBlank` `@Size(max=50)`）、`email`（`@NotBlank` `@Email` `@Size(max=100)`）、`phone`（`@NotBlank` `@Size(max=20)`，**無格式限制**）、`password`（同會員規則）、`hireDate`（`@NotNull`）
+Request `EmployeeRegisterRequest`：`firstName`、`lastName`（`@NotBlank` `@Size(max=50)`）、`email`（`@NotBlank` `@Email` `@Size(max=100)`）、`phone`（`@NotBlank` `@Size(max=10)` `@Pattern(^09\d{8}$)`，**台灣手機格式：09 開頭、固定 10 碼**）、`password`（同會員規則）、`hireDate`（`@NotNull`）
 Response `EmployeeRegisterResponse`：`email`、`message`（註冊成功，請等候審核您的帳號。）
 
 建立時 `role` 寫死為 `EMPLOYEE`（申請者無法自選 ADMIN）、`status = PENDING_APPROVAL`。
@@ -355,7 +357,7 @@ Response `EmployeeRegisterResponse`：`email`、`message`（註冊成功，請�
 
 供 `REJECTED` 的申請者重新送件。申請者沒有 JWT，改以 email + 密碼自行驗證身分，**不簽發 token、不變更密碼**。
 
-Request `EmployeeReapplyRequest`：`email`、`password`（身分證明）、`firstName`、`lastName`、`phone`、`hireDate`
+Request `EmployeeReapplyRequest`：`email`、`password`（身分證明）、`firstName`、`lastName`、`phone`（`@Size(max=10)` `@Pattern(^09\d{8}$)`，同註冊規則）、`hireDate`
 Response `EmployeeRegisterResponse`：`message`（已重新送出申請，請等候審核。）
 
 成功時覆寫姓名／電話／到職日，狀態轉回 `PENDING_APPROVAL`，並清空 `reviewedBy`／`reviewedAt`／`reviewNote`。
@@ -365,7 +367,7 @@ Email 或密碼錯誤／此帳號沒有可重新申請的員工紀錄／此員�
 
 ### 2.5 EmployeeReviewController
 
-前綴 `/api/employees/reviews`，全部 🧑‍💼 **EMPLOYEE**（filter 層 + `@PreAuthorize` 雙重把關）。任何在職員工皆可審核，不限管理者。
+前綴 `/api/employees/reviews`，全部 👑 **ADMIN-only**（filter 層 + `@PreAuthorize` 雙重把關）。**2026-08-31 政策定案**：由原本「任何在職員工皆可審核」收緊為僅管理者可審核。路徑仍獨立於 `/api/admin/**` 之外，方便日後若要放寬回 `hasRole('EMPLOYEE')` 只需改一行。角色為疊加式，ADMIN 帳號必同時具 `EMPLOYEE`，`approve`／`reject` 內用 `requireCurrentEmployeeId()` 記錄審核者不受影響。
 
 | 方法 | 路徑 | 說明 |
 |---|---|---|
@@ -443,24 +445,29 @@ Email 或密碼錯誤／此帳號沒有可重新申請的員工紀錄／此員�
 
 ### 2.8 EmployeeProfileController（`/api/employee/profile`）
 
-不動既有的員工申請（2.4）、同儕審核（2.5）、拒絕後重新申請流程。
+不動既有的員工申請（2.4）、員工審核（2.5）、拒絕後重新申請流程。
 
 | 方法 | 路徑 | 權限 | 成功狀態 | 說明 |
 |---|---|---|---|---|
-| GET | `/api/employee/profile` | 🧑‍💼 EMPLOYEE | 200 | 查自己的員工資料 |
-| PUT | `/api/employee/profile` | 🧑‍💼 EMPLOYEE | 200 | 修改自己的電話 |
+| GET | `/api/employee/profile` | 🧑‍💼 EMPLOYEE | 200 | 查自己的員工資料（具教練身分時一併帶出教練公開欄位） |
+| PUT | `/api/employee/profile` | 🧑‍💼 EMPLOYEE | 200 | 修改自己的姓名與電話（具教練身分時另可改教練公開欄位） |
+| POST | `/api/employee/profile/upload` | 🧑‍💼 EMPLOYEE | 200 | 上傳頭像圖片，回 `{ url }`（另有 `POST /api/employee/uploads/images`，同義） |
 
 > GET／PUT 都掛 `hasRole('EMPLOYEE')`——跟 `MemberProfileController` 的 GET 只要求已登入不同，
 > 是刻意的：若只要求已登入，同一帳號若還有其他啟用中身分（例如同時是 `ACTIVE` 會員），
 > `INACTIVE` 的員工身分仍會被看到並讀出資料。用 `hasRole('EMPLOYEE')` 才能把員工身分本身
 > 是否 `ACTIVE` 的判斷跟同帳號其他身分脫鉤——`INACTIVE` 員工完全看不到、也改不了自己的資料。
 
-`EmployeeProfileUpdateRequest`：`phone`（`@NotBlank`，≤20，無格式限制，比照 `EmployeeRegisterRequest`）
+`EmployeeProfileUpdateRequest`：`lastName`／`firstName`（`@NotBlank`，≤50）、`phone`（`@NotBlank`、
+`@Size(max=10)`、`@Pattern(^09\d{8}$)`，**台灣手機格式：09 開頭、固定 10 碼**，比照 `EmployeeRegisterRequest`）；
+選填 `profileImageUrl`／`specialty`／`experience`／`bio`（僅具教練身分時生效，會同步寫入對應 `Trainer` 欄位）
 
-> 姓名屬正式人事資料，本人不可自行修改，只能由 ADMIN 透過 2.9 代改。
+> 姓名修改會在同一交易內同步寫回該帳號的 `Member`／`Trainer` 姓名快照。角色／狀態／到職日
+> 仍屬正式人事資料，本人不可自行修改，只能由 ADMIN 透過 2.9 代改。
 
 `EmployeeProfileResponse`：`employeeId`、`email`（來自 account）、`firstName`、`lastName`、`phone`、
-`role`、`status`、`hireDate`、`isTrainer`、`createdAt`（無 `updatedAt`，比照 `MemberProfileResponse`）
+`role`、`status`、`hireDate`、`isTrainer`、`createdAt`、`profileImageUrl`、`specialty`、`experience`、`bio`
+（末四欄僅具教練身分時有值；無 `updatedAt`，比照 `MemberProfileResponse`）
 
 主要錯誤：`403 FORBIDDEN_ACCESS` 此帳號沒有可用的員工資料（無 Employee、已軟刪除，或非 `ACTIVE`）
 
@@ -489,8 +496,9 @@ Email 或密碼錯誤／此帳號沒有可重新申請的員工紀錄／此員�
 > 列表以 `JOIN FETCH` 帶出 account，避免映射時逐筆 lazy load 造成 N+1；一律排除軟刪除的員工。
 > 排序皆附加 `id ASC` 當穩定 tiebreaker（主排序本身就是 `id` 時例外，不重複附加）。
 
-`AdminEmployeeUpdateRequest`：`firstName`／`lastName`（`@NotBlank`，≤50）、`phone`（`@NotBlank`，≤20）、
-`hireDate`（`@NotNull`）——PUT 為完整覆蓋語意，四欄皆必填，不含 `role`／`status`。
+`AdminEmployeeUpdateRequest`：`firstName`／`lastName`（`@NotBlank`，≤50）、`phone`（`@NotBlank`、
+`@Size(max=10)`、`@Pattern(^09\d{8}$)`，同員工自助規則）、`hireDate`（`@NotNull`）——PUT 為完整覆蓋語意，
+四欄皆必填，不含 `role`／`status`。
 
 `AdminEmployeeRoleUpdateRequest`：`role`（`@NotNull`，`EmployeeRole`）
 
@@ -1051,7 +1059,8 @@ Response `Page<AdminTrainerSummaryResponse>`：`trainerId`／`employeeId`／`dis
 電話等一般個資改走 `PUT /api/admin/employees/{employeeId}`（§8.6），不在這裡處理。
 
 **`POST /api/admin/trainers/{trainerId}/status`** Request `AdminTrainerStatusUpdateRequest`：
-`{"status": "ACTIVE" | "UNAVAILABLE"}`（`@NotNull`）。規則：已軟刪除者 `409`；狀態與現況
+`{"status": "ACTIVE" | "UNAVAILABLE"}`（`@NotNull`）。規則：已軟刪除者 **`404`**「找不到此教練」
+（`changeStatus` 走 `lockOrThrow`，軟刪除的列查不到就當作不存在，**不是** `409`）；狀態與現況
 相同 `409`「此教練已經是指定狀態」；欲設為 `ACTIVE` 但底下員工非 ACTIVE 時 `409`
 「此教練所屬員工目前不是在職狀態，無法設為可服務」（設為 `UNAVAILABLE` 不受此限）。
 設為 `UNAVAILABLE` 不會自動取消既有排班／預約／課程。

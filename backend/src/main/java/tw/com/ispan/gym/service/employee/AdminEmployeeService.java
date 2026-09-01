@@ -26,8 +26,8 @@ import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * ADMIN 員工管理：列表／單筆查詢／代改個資／角色調整／停用／恢復。不動既有的員工申請、
- * 同儕審核（EmployeeReviewService，任何 ACTIVE 員工皆可審核，跟這裡的 ADMIN-only 是
- * 兩個不同動作的不同權限模型）、拒絕後重新申請。
+ * 員工審核（EmployeeReviewService，2026-08-31 起同為 ADMIN-only，但屬審核流程、
+ * 與這裡的人事管理是不同動作）、拒絕後重新申請。
  *
  * <p>update()／changeRole()／suspend()／activate() 皆以悲觀鎖讀取，理由同
  * AdminMemberService：避免同一筆資料被多個操作用記憶體裡的舊值互相覆蓋。降級與停用

@@ -2,6 +2,12 @@
 import { computed, ref } from 'vue'
 import { reapplyEmployee } from '@/api/auth.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import {
+  TW_MOBILE_MAXLENGTH,
+  TW_MOBILE_PLACEHOLDER,
+  TW_MOBILE_ERROR,
+  isValidTwMobile,
+} from '@/utils/phone.js'
 
 /**
  * 員工重新申請頁。對應 POST /api/employees/reapply（EmployeeReapplyRequest）。
@@ -21,6 +27,7 @@ const submitting = ref(false)
 const submittedEmail = ref('')
 
 const isEmailValid = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value))
+const isPhoneValid = computed(() => isValidTwMobile(phone.value))
 
 const isFormValid = computed(
   () =>
@@ -28,7 +35,7 @@ const isFormValid = computed(
     password.value.trim() !== '' &&
     firstName.value.trim() !== '' &&
     lastName.value.trim() !== '' &&
-    phone.value.trim() !== '' &&
+    isPhoneValid.value &&
     hireDate.value !== '',
 )
 
@@ -136,10 +143,12 @@ async function onSubmit() {
               v-model.trim="phone"
               class="form-input"
               type="tel"
-              maxlength="20"
+              :maxlength="TW_MOBILE_MAXLENGTH"
+              :placeholder="TW_MOBILE_PLACEHOLDER"
               required
               autocomplete="tel"
             />
+            <p v-if="phone && !isPhoneValid" class="form-error">✗ {{ TW_MOBILE_ERROR }}</p>
           </div>
 
           <div class="form-group">

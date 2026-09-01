@@ -23,8 +23,8 @@ import tw.com.ispan.gym.service.employee.AdminEmployeeService;
 
 /**
  * ADMIN 員工管理：列表／單筆查詢／代改個資／角色調整／停用／恢復。不動既有的員工申請
- * （EmployeeRegisterController）、同儕審核（EmployeeReviewController，任何在職員工
- * 皆可審核）、拒絕後重新申請。
+ * （EmployeeRegisterController）、員工審核（EmployeeReviewController，2026-08-31 起
+ * ADMIN-only，屬審核流程、與這裡的人事管理是不同動作）、拒絕後重新申請。
  *
  * <p>/api/admin/** 已由正式 SecurityConfig 的 URL matcher 使用 hasRole("ADMIN") 保護，
  * 這裡的方法層級 @PreAuthorize 是第二層防護，比照 AdminMemberController 既有風格——

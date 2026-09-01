@@ -21,6 +21,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -214,6 +216,30 @@ class AdminEmployeeControllerTest {
                         .content("""
                                 { "firstName": "小明", "lastName": "林", "phone": "0933333333" }
                                 """))
+                .andExpect(status().isBadRequest());
+
+        verify(adminEmployeeService, never()).update(any(), any());
+    }
+
+    /**
+     * 台灣手機格式（^09\d{8}$、固定 10 碼）：非 09 開頭／不足或超過 10 碼／含非數字／空白
+     * 一律回 400 且不呼叫 Service，不能繞過前端直接寫入非法號碼。
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "0812345678",            // 非 09 開頭
+            "091234567",             // 不足 10 碼
+            "09123456789",           // 超過 10 碼
+            "123456789012345678901", // 遠超過長度上限
+            "09abcdefgh",            // 含非數字
+            "   "                    // 空白
+    })
+    void update_phone格式不符時回400且不呼叫Service(String badPhone) throws Exception {
+        mockMvc.perform(put("/api/admin/employees/3")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "firstName": "小明", "lastName": "林", "phone": "%s", "hireDate": "2021-06-01" }
+                                """.formatted(badPhone)))
                 .andExpect(status().isBadRequest());
 
         verify(adminEmployeeService, never()).update(any(), any());

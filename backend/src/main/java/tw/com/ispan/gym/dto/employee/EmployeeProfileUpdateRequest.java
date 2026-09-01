@@ -1,6 +1,7 @@
 package tw.com.ispan.gym.dto.employee;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -21,7 +22,8 @@ public class EmployeeProfileUpdateRequest {
     private String firstName;
 
     @NotBlank(message = "電話為必填")
-    @Size(max = 20, message = "電話不可超過20個字元")
+    @Size(max = 10, message = "電話不可超過10個字元")
+    @Pattern(regexp = "^09\\d{8}$", message = "電話格式不正確，請輸入09開頭的10碼手機號碼")
     private String phone;
 
     private String profileImageUrl;

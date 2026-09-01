@@ -2,10 +2,21 @@
 import { computed, inject, onMounted, ref } from 'vue'
 import api from '@/api/axios.instance.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import StaffChangeConfirmModal from '@/components/StaffChangeConfirmModal.vue'
 
 import { formatImageUrl } from '@/utils/image.js'
+import {
+  TW_MOBILE_MAXLENGTH,
+  TW_MOBILE_PLACEHOLDER,
+  TW_MOBILE_ERROR,
+  isValidTwMobile,
+} from '@/utils/phone.js'
 
 const showToast = inject('showToast')
+
+const phoneMaxlength = TW_MOBILE_MAXLENGTH
+const phonePlaceholder = TW_MOBILE_PLACEHOLDER
+const phoneError = TW_MOBILE_ERROR
 
 const loading = ref(true)
 const saving = ref(false)
@@ -40,8 +51,11 @@ const ROLE_LABELS = {
   TRAINER: '教練' 
 }
 
-const isPhoneValid = computed(() => /^09\d{8}$/.test(phone.value))
+const isPhoneValid = computed(() => isValidTwMobile(phone.value))
 const isFormValid = computed(() => firstName.value.trim() !== '' && lastName.value.trim() !== '' && isPhoneValid.value)
+
+// 送出前的原始快照，用來算實際變更欄位並在確認彈窗呈現「修改前 → 修改後」
+const original = ref(null)
 
 function applyProfile(profile) {
   email.value = profile.email
@@ -52,13 +66,65 @@ function applyProfile(profile) {
   role.value = profile.role || ''
   hireDate.value = profile.hireDate || ''
   isTrainer.value = profile.isTrainer || false
-  
+
   // 教練資料
   profileImageUrl.value = profile.profileImageUrl || ''
   specialty.value = profile.specialty || ''
   experience.value = profile.experience || ''
   bio.value = profile.bio || ''
+
+  original.value = {
+    lastName: lastName.value,
+    firstName: firstName.value,
+    phone: phone.value,
+    profileImageUrl: profileImageUrl.value,
+    specialty: specialty.value,
+    experience: experience.value,
+    bio: bio.value,
+  }
 }
+
+// 確認彈窗
+const confirmModal = ref(false)
+const confirmError = ref('')
+const pendingPayload = ref(null)
+
+const CHANGE_LABELS = {
+  lastName: '姓氏',
+  firstName: '名字',
+  phone: '聯絡電話',
+  profileImageUrl: '個人頭像照片',
+  specialty: '教練專長',
+  experience: '教學經歷',
+  bio: '個人簡介',
+}
+
+function buildPayload() {
+  return {
+    lastName: lastName.value.trim(),
+    firstName: firstName.value.trim(),
+    phone: phone.value.trim(),
+    profileImageUrl: isTrainer.value ? (profileImageUrl.value || '').trim() : null,
+    specialty: isTrainer.value ? specialty.value.trim() : null,
+    experience: isTrainer.value ? experience.value.trim() : null,
+    bio: isTrainer.value ? bio.value.trim() : null,
+  }
+}
+
+const pendingChanges = computed(() => {
+  if (!original.value || !pendingPayload.value) return []
+  const keys = isTrainer.value
+    ? ['lastName', 'firstName', 'phone', 'profileImageUrl', 'specialty', 'experience', 'bio']
+    : ['lastName', 'firstName', 'phone']
+  return keys
+    .filter((key) => (original.value[key] || '').trim() !== (pendingPayload.value[key] || ''))
+    .map((key) => ({
+      key,
+      label: CHANGE_LABELS[key],
+      before: original.value[key],
+      after: pendingPayload.value[key],
+    }))
+})
 
 onMounted(async () => {
   try {
@@ -99,29 +165,43 @@ async function uploadFile(event) {
   }
 }
 
-async function onSubmit() {
+function onSubmit() {
   errorMessage.value = ''
   if (!isFormValid.value) {
-    errorMessage.value = '請確認姓名與電話是否正確填寫 (電話需為09開頭10位數字)'
+    errorMessage.value = `請確認姓名與電話是否正確填寫（${TW_MOBILE_ERROR}）`
     return
   }
+  const payload = buildPayload()
+  pendingPayload.value = payload
+  if (pendingChanges.value.length === 0) {
+    errorMessage.value = '目前沒有需要儲存的變更'
+    pendingPayload.value = null
+    return
+  }
+  confirmError.value = ''
+  confirmModal.value = true
+}
+
+async function confirmSave() {
+  if (!pendingPayload.value || pendingChanges.value.length === 0) return
   saving.value = true
+  confirmError.value = ''
   try {
-    const payload = {
-      lastName: lastName.value.trim(),
-      firstName: firstName.value.trim(),
-      phone: phone.value.trim(),
-      profileImageUrl: isTrainer.value ? profileImageUrl.value : null,
-      specialty: isTrainer.value ? specialty.value.trim() : null,
-      experience: isTrainer.value ? experience.value.trim() : null,
-      bio: isTrainer.value ? bio.value.trim() : null
-    }
-    const { data } = await api.put('/api/employee/profile', payload)
+    const { data } = await api.put('/api/employee/profile', pendingPayload.value)
     applyProfile(data)
+    confirmModal.value = false
+    pendingPayload.value = null
     showToast('基本資料已更新')
     window.dispatchEvent(new CustomEvent('profile-updated'))
   } catch (e) {
-    errorMessage.value = e.message
+    // 業務類錯誤（400/409…）就地顯示在彈窗內、讓使用者返回修改；其餘（含 401）
+    // 由 axios 攔截器統一處理，這裡只把訊息帶回主表單
+    if (e.status === 400 || e.status === 409) {
+      confirmError.value = e.message
+    } else {
+      confirmModal.value = false
+      errorMessage.value = e.message
+    }
   } finally {
     saving.value = false
   }
@@ -132,7 +212,7 @@ async function onSubmit() {
   <div class="page-container">
     <span class="section-tag">PROFILE</span>
     <h2 class="section-title">員工基本資料</h2>
-    <p class="section-desc">檢視您的在職資訊並管理聯絡電話。</p>
+    <p class="section-desc">檢視您的在職資訊並管理姓名與聯絡電話。</p>
 
     <OperationMessage v-if="errorMessage" tone="error" class="mb-4">
       {{ errorMessage }}
@@ -210,14 +290,15 @@ async function onSubmit() {
             <label for="phone" class="form-label">聯絡電話 <span class="required">*</span></label>
             <input
               id="phone"
-              v-model="phone"
+              v-model.trim="phone"
               type="tel"
-              placeholder="例如: 0912345678"
+              :maxlength="phoneMaxlength"
+              :placeholder="phonePlaceholder"
               class="form-control"
               :class="{ 'is-invalid': phone && !isPhoneValid }"
               required
             />
-            <span v-if="phone && !isPhoneValid" class="field-error">請輸入正確的 10 位手機格式</span>
+            <span v-if="phone && !isPhoneValid" class="field-error">{{ phoneError }}</span>
           </div>
 
           <!-- 移除原本在卡片內部的按鈕 -->
@@ -270,10 +351,21 @@ async function onSubmit() {
           style="padding: 0.75rem 2.5rem; font-size: 1rem;"
           :disabled="saving || !isFormValid"
         >
-          {{ saving ? '儲存中...' : '儲存變更' }}
+          儲存變更
         </button>
       </div>
     </form>
+
+    <!-- 儲存前二次確認：只列實際變更欄位 -->
+    <StaffChangeConfirmModal
+      v-model:visible="confirmModal"
+      title="確認修改基本資料"
+      intro="請確認以下變更，送出後將更新您的員工基本資料。"
+      :changes="pendingChanges"
+      :saving="saving"
+      :error-message="confirmError"
+      @confirm="confirmSave"
+    />
   </div>
 </template>
 

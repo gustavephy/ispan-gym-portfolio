@@ -20,7 +20,7 @@ import tw.com.ispan.gym.repository.trainer.TrainerRepository;
 
 /**
  * Trainer 建立/查詢：只有 ADMIN 能把 ACTIVE 的 Employee 升級為 Trainer，
- * 不走同儕審核（跟 EmployeeReviewService 是不同動作的不同權限模型）。
+ * 不走員工審核流程（跟 EmployeeReviewService 是不同動作，兩者現皆為 ADMIN-only）。
  * 一位 Employee 一生只會有一筆 Trainer（revive-not-recreate，DB 有 unconditional unique
  * constraint 兜底），已軟刪除的舊列一律擋掉重複建立，須改走 AdminTrainerService.restore()。
  */
