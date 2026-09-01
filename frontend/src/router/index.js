@@ -245,6 +245,16 @@ const router = createRouter({
       name: 'oauth-register',
       component: () => import('@/views/oauth/OAuthRegisterView.vue'),
     },
+    // Google「綁定」流程的落地頁：後端 app.oauth.frontend-link-result-url 直接導到這裡，
+    // 路徑名稱不可隨意更動。與登入用的 /oauth/callback 不同——這是已登入者從帳號設定頁
+    // 發起綁定後回來的地方，需登入；掛載後解析結果、notify() 保存訊息，隨即 replace 回
+    // /account/security。刻意不掛 DefaultLayout（過場頁，不需要側邊主選單）。
+    {
+      path: '/account/oauth/callback',
+      name: 'account-oauth-callback',
+      component: () => import('@/views/account/AccountOAuthCallbackView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

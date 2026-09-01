@@ -82,9 +82,12 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         // 整個方法）。不記 token/state/exception message，只記 correlation id 與例外類別，
         // 導向固定的 unexpected_error 讓使用者重新發起整個 Google 登入——已經消耗掉的
         // transaction 不會、也不能改回 PENDING。
+        // transaction 宣告在 try 外：catch 需要它來決定「非預期例外」要導回哪裡——已經確認
+        // 是 LINK 的話導帳號安全 callback，否則（LOGIN／purpose 還沒查到）保守導 /login。
+        OAuthTransactionView transaction = null;
         try {
             String rawState = request.getParameter("state");
-            OAuthTransactionView transaction = (rawState == null) ? null
+            transaction = (rawState == null) ? null
                     : transactions.findViewByStateHash(tokenGenerator.hash(rawState)).orElse(null);
 
             if (transaction == null) {
@@ -104,7 +107,9 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
             // 原子消耗：只有真的贏得這次處理權才能繼續，避免併發 callback 重複處理同一 transaction
             int consumed = transactions.consumeIfPending(transaction.stateHash(), now);
             if (consumed == 0) {
-                redirectError(response, OAuthRedirectReason.FLOW_EXPIRED, null);
+                // 併發下另一個 callback 先消耗了這筆 transaction。用 purpose 決定導向，但不再
+                // markFailedIfPending（那筆列已不是 PENDING，且贏得消耗的那個 callback 會負責收尾）
+                redirectPurposeAware(response, OAuthRedirectReason.FLOW_EXPIRED, transaction.purpose());
                 return;
             }
 
@@ -126,7 +131,11 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
             // 的字串，只留分類用的 class name 才能保證安全
             log.error("Google OAuth Success Handler 發生非預期例外：exception={} correlationId={}",
                     ex.getClass().getSimpleName(), correlationId);
-            redirectReason(response, OAuthRedirectReason.UNEXPECTED_ERROR);
+            // 已經查到這次是 LINK（例外發生在 identityMapper／linkService 等後段）→ 導回帳號安全
+            // callback，否則（purpose 未知）保守導 /login。不 markFailedIfPending：transaction
+            // 已在上面被 consumeIfPending 消耗成 CONSUMED，或本來就查不到。
+            redirectPurposeAware(response, OAuthRedirectReason.UNEXPECTED_ERROR,
+                    transaction == null ? null : transaction.purpose());
         }
     }
 
@@ -156,7 +165,10 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         switch (outcome) {
             case GoogleOAuthLinkService.Linked ignored ->
                 redirect(response, properties.frontendLinkResultUrl(), "result", "linked");
-            case GoogleOAuthLinkService.Rejected rejected -> redirectReason(response, rejected.reason());
+            // LINK 業務拒絕（email 不符、身分已被佔用、併發下已綁定等）：導回「帳號安全頁」的
+            // callback，不是共用的錯誤頁（見 redirectPurposeAware 的說明）。見第五批定案。
+            case GoogleOAuthLinkService.Rejected rejected ->
+                redirectPurposeAware(response, rejected.reason(), OAuthTransactionPurpose.LINK);
         }
     }
 
@@ -165,7 +177,22 @@ public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         if (transaction != null) {
             transactions.markFailedIfPending(transaction.stateHash(), LocalDateTime.now(clock), reason.name());
         }
-        redirectReason(response, reason);
+        redirectPurposeAware(response, reason, transaction == null ? null : transaction.purpose());
+    }
+
+    /**
+     * 依 transaction 的 purpose 選導向：LINK → 帳號安全頁 callback（frontendLinkResultUrl），
+     * 其餘（LOGIN、purpose 未知）→ 共用錯誤頁（frontendErrorUrl，目前是 /login）。
+     * frontendErrorUrl 對已登入者不友善（router 的 beforeEnter 會把已登入者導離 /login），
+     * 所以 LINK 流程的失敗訊息一定要走 frontendLinkResultUrl 才看得到。
+     */
+    private void redirectPurposeAware(HttpServletResponse response, OAuthRedirectReason reason,
+            OAuthTransactionPurpose purpose) throws IOException {
+        String baseUrl = purpose == OAuthTransactionPurpose.LINK
+                ? properties.frontendLinkResultUrl()
+                : properties.frontendErrorUrl();
+        log.info("Google OAuth 流程結束於非成功狀態：{}", reason);
+        redirect(response, baseUrl, "oauthError", reason.name().toLowerCase(Locale.ROOT));
     }
 
     private void redirectReason(HttpServletResponse response, OAuthRedirectReason reason) throws IOException {

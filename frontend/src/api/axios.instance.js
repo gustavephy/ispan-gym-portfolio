@@ -20,7 +20,12 @@
  */
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth.js'
-import { normalizeApiError, isInlineError, CODE_SUBSCRIPTION_REQUIRED } from './api-error.js'
+import {
+  normalizeApiError,
+  isInlineError,
+  CODE_SUBSCRIPTION_REQUIRED,
+  CODE_REAUTHENTICATION_REQUIRED,
+} from './api-error.js'
 import { notifyApiError, notifySubscriptionRequired, notifySessionExpired } from './error-bus.js'
 
 const api = axios.create({
@@ -76,7 +81,14 @@ api.interceptors.response.use(
     // skipGlobal 只代表「不要跳全域錯誤提示」，跟登入狀態無關——即使呼叫端自己處理錯誤顯示
     // （例如首頁選填 API），token 真的過期時仍要清掉，不然使用者會帶著死掉的 token 卡住，
     // 直到剛好打到一支沒設 skipGlobal 的 API 才會被登出。
-    if (apiError.status === 401 && !skipAuthRedirect) {
+    // 例外：REAUTHENTICATION_REQUIRED（Google 綁定／解除的密碼重新驗證失敗）也是 401，
+    // 但它代表「這次敏感操作要再驗一次密碼」，不是登入 token 失效——不清登入狀態，交給
+    // 呼叫端就地顯示在密碼確認 Modal。真過期仍回 UNAUTHENTICATED（或無 body 的 HTTP_401），照常登出。
+    if (
+      apiError.status === 401 &&
+      apiError.code !== CODE_REAUTHENTICATION_REQUIRED &&
+      !skipAuthRedirect
+    ) {
       try {
         useAuthStore().logout()
       } catch (e) {

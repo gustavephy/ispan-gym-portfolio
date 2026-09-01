@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import jakarta.persistence.EntityManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,10 +25,13 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import tw.com.ispan.gym.dto.account.ChangePasswordRequest;
 import tw.com.ispan.gym.dto.account.ChangePasswordResponse;
+import tw.com.ispan.gym.dto.account.SetPasswordRequest;
+import tw.com.ispan.gym.dto.account.SetPasswordResponse;
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.account.PasswordHistory;
 import tw.com.ispan.gym.entity.account.PasswordResetToken;
 import tw.com.ispan.gym.exception.CurrentPasswordIncorrectException;
+import tw.com.ispan.gym.exception.PasswordAlreadyConfiguredException;
 import tw.com.ispan.gym.exception.PasswordChangeRateLimitedException;
 import tw.com.ispan.gym.exception.PasswordNotConfiguredException;
 import tw.com.ispan.gym.exception.PasswordReusedException;
@@ -74,6 +78,7 @@ public class PasswordService {
     private final InMemoryRateLimiter rateLimiter;
     private final MailService mailService;
     private final Executor mailTaskExecutor;
+    private final EntityManager entityManager;
     private final long resetTokenTtlMinutes;
     private final long resendCooldownSeconds;
 
@@ -87,6 +92,7 @@ public class PasswordService {
             InMemoryRateLimiter rateLimiter,
             MailService mailService,
             @Qualifier("mailTaskExecutor") Executor mailTaskExecutor,
+            EntityManager entityManager,
             @Value("${app.mail.password-reset-token-ttl-minutes}") long resetTokenTtlMinutes,
             @Value("${app.mail.password-reset-resend-cooldown-seconds}") long resendCooldownSeconds) {
         this.accounts = accounts;
@@ -98,6 +104,7 @@ public class PasswordService {
         this.rateLimiter = rateLimiter;
         this.mailService = mailService;
         this.mailTaskExecutor = mailTaskExecutor;
+        this.entityManager = entityManager;
         this.resetTokenTtlMinutes = resetTokenTtlMinutes;
         this.resendCooldownSeconds = resendCooldownSeconds;
     }
@@ -133,6 +140,12 @@ public class PasswordService {
         // 否則會出現「用已失效的舊密碼仍能覆蓋別人剛設定的新密碼」的並行漏洞。
         Account locked = accounts.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new ResourceNotFoundException("帳號不存在"));
+        // findByIdForUpdate 在 DB 拿到列鎖，但因為 spring.jpa.open-in-view=true，JwtAuthFilter
+        // 這次請求稍早已用 findById 把同一個 Account 載入共用的 persistence context——Hibernate
+        // 會回傳那個「鎖前」的舊實例，state 不是鎖定後的最新值。必須 refresh 才能讓下面所有
+        // 針對 locked 的判斷（重驗目前密碼、重用檢查、credentialsVersion）看到鎖後真正的資料。
+        // 根治方案（不汙染整個 request 的 persistence context）留給獨立任務評估。
+        entityManager.refresh(locked);
         if (!passwordEncoder.matches(request.getCurrentPassword(), locked.getPasswordHash())) {
             throw new CurrentPasswordIncorrectException("目前密碼錯誤");
         }
@@ -145,6 +158,47 @@ public class PasswordService {
 
         String newToken = jwtUtil.generateToken(locked);
         return new ChangePasswordResponse(newToken, locked.getId(), locked.getEmail(),
+                authorityResolver.resolveRoleNames(locked));
+    }
+
+    // === OAuth-only 帳號設定第一組本機密碼 =====================================
+
+    /**
+     * OAuth-only 帳號（{@code passwordHash == null}）設定它的第一組本機密碼。
+     *
+     * <p>刻意不做 {@code changePassword()} 後半段的三件事，因為它們在「第一組密碼」情境下
+     * 沒有意義或無法執行：
+     * <ul>
+     *   <li>不比對 currentPassword、不套 currentPassword 的 reserve-then-clear 限流——
+     *       這種帳號根本沒有目前密碼，沒有密碼猜測面。</li>
+     *   <li>不呼叫 {@code assertNotReused()}——目前密碼是 null，無從比對。</li>
+     *   <li>不呼叫 {@code recordOutgoingPasswordAndTrim()}——沒有「被取代的舊密碼」可以寫入歷史。</li>
+     * </ul>
+     *
+     * <p>沿用的是帳號安全域固定的部分：Account 悲觀寫鎖、{@code credentialsVersion + 1}
+     * 讓 OAuth 登入簽發的所有舊 JWT 失效、以遞增後版本簽發新 JWT 回傳。
+     *
+     * <p>併發：兩個請求同時進來時 Account 鎖序列化它們——第一個成功設定，第二個取得鎖之後
+     * 看到 {@code passwordHash != null}，穩定回 {@link PasswordAlreadyConfiguredException}，
+     * 不覆寫、也不再次遞增版本。判斷「能不能設定」只看 {@code passwordHash == null}，是唯一依據。
+     */
+    @Transactional
+    public SetPasswordResponse setPassword(Integer accountId, SetPasswordRequest request) {
+        Account locked = accounts.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new ResourceNotFoundException("帳號不存在"));
+        // 見 changePassword() 的同段說明：OSIV + JwtAuthFilter 的預載會讓 locked 是鎖前的
+        // 舊實例。沒有這行 refresh，兩個併發請求都會看到 passwordHash == null 而各自設定一次，
+        // 悲觀鎖只序列化了交易、擋不住「重複設定第一組密碼」。
+        entityManager.refresh(locked);
+        if (locked.getPasswordHash() != null) {
+            throw new PasswordAlreadyConfiguredException("此帳號已設定本機密碼，如需變更請使用「修改密碼」");
+        }
+
+        locked.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        locked.setCredentialsVersion(locked.getCredentialsVersion() + 1);
+
+        String newToken = jwtUtil.generateToken(locked);
+        return new SetPasswordResponse(newToken, locked.getId(), locked.getEmail(),
                 authorityResolver.resolveRoleNames(locked));
     }
 

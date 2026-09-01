@@ -6,6 +6,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.account.OauthAccount;
 import tw.com.ispan.gym.enums.account.OAuthProvider;
@@ -35,13 +36,15 @@ public class GoogleOAuthUnlinkService {
     private final OauthAccountRepository oauthAccounts;
     private final PasswordEncoder passwordEncoder;
     private final InMemoryRateLimiter rateLimiter;
+    private final EntityManager entityManager;
 
     public GoogleOAuthUnlinkService(AccountRepository accounts, OauthAccountRepository oauthAccounts,
-            PasswordEncoder passwordEncoder, InMemoryRateLimiter rateLimiter) {
+            PasswordEncoder passwordEncoder, InMemoryRateLimiter rateLimiter, EntityManager entityManager) {
         this.accounts = accounts;
         this.oauthAccounts = oauthAccounts;
         this.passwordEncoder = passwordEncoder;
         this.rateLimiter = rateLimiter;
+        this.entityManager = entityManager;
     }
 
     @Transactional
@@ -63,6 +66,9 @@ public class GoogleOAuthUnlinkService {
 
         Account locked = accounts.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new ResourceNotFoundException("帳號不存在"));
+        // OSIV + JwtAuthFilter 的預載會讓 locked 是鎖前的舊實例；refresh 後鎖後的密碼重驗
+        // 與 credentialsVersion 遞增才用得到最新資料（見 PasswordService.changePassword() 的同段說明）。
+        entityManager.refresh(locked);
         if (!passwordEncoder.matches(currentPassword, locked.getPasswordHash())) {
             throw new ReauthenticationRequiredException("目前密碼錯誤");
         }

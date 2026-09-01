@@ -1034,6 +1034,20 @@ class EndpointAuthorizationTest {
         expectAuthorized(post("/api/account/me/change-password"), employeeToken());
     }
 
+    /**
+     * 設定第一組本機密碼（OAuth-only 帳號用，第五批新增）也是 Account 層級端點，
+     * 沒有 @PreAuthorize，任何已登入身分皆可、未登入 401。
+     * 業務上「已有密碼」會被 Service 擋成 409，但那不是授權關卡的責任。
+     */
+    @Test
+    void 設定第一組密碼需要登入_任何已登入身分皆可() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/account/me/set-password"));
+        expectAuthorized(post("/api/account/me/set-password"), memberToken());
+        expectAuthorized(post("/api/account/me/set-password"), employeeToken());
+        expectAuthorized(post("/api/account/me/set-password"), adminToken());
+        expectAuthorized(post("/api/account/me/set-password"), trainerToken());
+    }
+
     /** 忘記密碼申請／憑 Token 重設密碼都是匿名端點，落在既有 /api/auth/** permitAll 規則裡 */
     @Test
     void 忘記密碼與重設密碼不需登入() throws Exception {

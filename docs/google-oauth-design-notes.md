@@ -41,7 +41,9 @@ Account（PESSIMISTIC_WRITE）→ 短效憑證列（OAuthTransaction／PasswordR
 
 ## `credentialsVersion` 與 Exchange Code 的版本快照
 
-`Account.credentialsVersion` 是全裝置登出機制：change/reset password、UNLINK 都會遞增；JWT 簽發時把當下版本放進 `cv` claim，每次請求比對。
+`Account.credentialsVersion` 是全裝置登出機制：change/reset password、**OAuth-only 帳號設定第一組本地密碼（`set-password`）**、UNLINK 都會遞增；JWT 簽發時把當下版本放進 `cv` claim，每次請求比對。change password 與 set-password 會在同一回應附一組遞增後版本的新 JWT（目前裝置維持登入）；UNLINK 不核發新 JWT（一律重新登入）。
+
+> STOMP 只在 `CONNECT` frame 比對 `cv`，已建立的連線不會被主動中斷——`cv` 遞增後舊 token 無法再重新連線，但當下的聊天室連線要等它自然斷開或使用者離開頁面才失效。
 
 `OAuthExchangeCode.issuedCredentialsVersion` 是**核發當下**的版本快照（LOGIN 與首次註冊兩個核發點都會寫入）。兌換時的流程：
 
@@ -62,6 +64,8 @@ Account（PESSIMISTIC_WRITE）→ 短效憑證列（OAuthTransaction／PasswordR
 
 - `GET /oauth2/authorization/google`（LOGIN 發起）：per-IP，20/10 分 + 60/小時。
 - `POST /api/account/me/oauth/google/link`（LINK 發起）：兩組獨立限流——`oauth-link-reauth`（密碼猜測，答對即清除）與 `oauth-link-initiate`（Account ID 鍵值，5/10 分 + 15/小時，**答對密碼也不清除**，防止已知密碼的人無限重複發起）。
+- `POST /api/account/me/set-password`（OAuth-only 設定第一組本地密碼）：**未設獨立限流**——這支不比對任何舊密碼，沒有密碼猜測面；取得 Account 悲觀鎖後先檢查 `passwordHash != null` 即拒絕，只有首次成功才執行一次 BCrypt 編碼。
+- `prompt=select_account`：只加在 LINK 的 authorization request（多 Google 帳號時強制顯示帳號選擇器，避免綁到非預期身分）。LOGIN 刻意不加——那會改變全站 Google 登入體驗，屬另行決定。
 - Callback 本身不做 IP 限流（來源 IP 可能合法地跟發起時不同），單次使用的 state 本身已是防重放機制。
 - `X-Forwarded-For` 一律不信任（沒有設定受信任反向代理）。
 
@@ -75,3 +79,5 @@ Account（PESSIMISTIC_WRITE）→ 短效憑證列（OAuthTransaction／PasswordR
 - 單機記憶體限流器：重啟即重置，多機會各自累計，尚未接 Redis／API Gateway 層限流。
 - 多分頁併發 OAuth 流程：新流程會使舊分頁的流程失效（`FLOW_REPLACED`），不支援真正的多分頁並行。
 - 前端整合細節（`authorizationUrl` 是相對路徑、DELETE 端點帶 request body 等）不在這份文件範圍——後端只保證 API 契約本身正確，前端串接需求另外處理。
+- **OAuth-only 設定第一組本地密碼採「最小方案」**：只要求有效 JWT，不強制先重新走一次 Google 驗證。已知殘留風險：若 OAuth-only 使用者的 JWT 被竊，攻擊者可替帳號設定本地密碼、取得持久登入方式，之後甚至能解除 Google。緩解仍靠短 token TTL 與全裝置登出。**後續安全強化候選**：新增 `OAuthTransactionPurpose.SET_PASSWORD` 一次性證明，設定前強制 Google step-up 確認仍是原綁定的 `sub`——需擴充 Resolver／Handler／transaction 表，第五批範圍外，未實作。
+- 密碼／OAuth 安全操作的通知信（設定密碼、解除綁定寄信提醒）尚未實作。
