@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { registerEmployee } from '@/api/auth.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 import {
   TW_MOBILE_MAXLENGTH,
   TW_MOBILE_PLACEHOLDER,
@@ -173,11 +174,9 @@ async function onSubmit() {
 
           <div class="form-group">
             <label class="form-label" for="emp-reg-password">密碼</label>
-            <input
+            <PasswordInput
               id="emp-reg-password"
               v-model="password"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
             />
@@ -193,11 +192,9 @@ async function onSubmit() {
 
           <div class="form-group">
             <label class="form-label" for="emp-reg-confirm">確認密碼</label>
-            <input
+            <PasswordInput
               id="emp-reg-confirm"
               v-model="confirmPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
             />

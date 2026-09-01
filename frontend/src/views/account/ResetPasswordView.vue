@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { resetPassword } from '@/api/auth.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 
 /**
  * 憑 Token 重設密碼頁。對應 POST /api/auth/reset-password，是後端
@@ -86,11 +87,9 @@ async function onSubmit() {
         <form @submit.prevent="onSubmit">
           <div class="form-group">
             <label class="form-label" for="reset-password">新密碼</label>
-            <input
+            <PasswordInput
               id="reset-password"
               v-model="newPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
             />
@@ -105,11 +104,9 @@ async function onSubmit() {
 
           <div class="form-group">
             <label class="form-label" for="reset-confirm">確認新密碼</label>
-            <input
+            <PasswordInput
               id="reset-confirm"
               v-model="confirmPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
             />

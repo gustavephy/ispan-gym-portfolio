@@ -16,6 +16,7 @@ import { linkAuthorizationUrl } from '@/api/oauth.js'
 import { notify } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import AppModal from '@/components/AppModal.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 
 /**
  * 帳號設定頁：任何已登入身分都能用（不分 MEMBER/EMPLOYEE/ADMIN/TRAINER），對應
@@ -389,11 +390,9 @@ async function onConfirmLogoutAll() {
         <form @submit.prevent="connections.hasPassword ? onChangePassword() : onSetPassword()">
           <div v-if="connections.hasPassword" class="form-group">
             <label class="form-label" for="sec-current-password">目前密碼</label>
-            <input
+            <PasswordInput
               id="sec-current-password"
               v-model="currentPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="current-password"
               :disabled="pwdSubmitting"
@@ -403,11 +402,9 @@ async function onConfirmLogoutAll() {
             <label class="form-label" for="sec-new-password">
               {{ connections.hasPassword ? '新密碼' : '密碼' }}
             </label>
-            <input
+            <PasswordInput
               id="sec-new-password"
               v-model="newPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
               :disabled="pwdSubmitting"
@@ -425,11 +422,9 @@ async function onConfirmLogoutAll() {
             <label class="form-label" for="sec-confirm-password">
               {{ connections.hasPassword ? '確認新密碼' : '確認密碼' }}
             </label>
-            <input
+            <PasswordInput
               id="sec-confirm-password"
               v-model="confirmPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
               :disabled="pwdSubmitting"
@@ -490,11 +485,9 @@ async function onConfirmLogoutAll() {
       </p>
       <div class="form-group">
         <label class="form-label" for="link-current-password">目前密碼</label>
-        <input
+        <PasswordInput
           id="link-current-password"
           v-model="linkPassword"
-          class="form-input"
-          type="password"
           autocomplete="current-password"
           :disabled="linkSubmitting"
           @keyup.enter="onConfirmLink"
@@ -519,11 +512,9 @@ async function onConfirmLogoutAll() {
       </p>
       <div class="form-group">
         <label class="form-label" for="unlink-current-password">目前密碼</label>
-        <input
+        <PasswordInput
           id="unlink-current-password"
           v-model="unlinkPassword"
-          class="form-input"
-          type="password"
           autocomplete="current-password"
           :disabled="unlinkSubmitting"
           @keyup.enter="onConfirmUnlink"

@@ -275,6 +275,13 @@ button {
   box-shadow: 0 0 0 3px rgba(201, 154, 91, 0.15);
 }
 
+/* PasswordInput.vue：右側要留出眼睛按鈕的空間。後台那組 .form-input 用 shorthand
+   padding !important 鎖死，這裡補上等權重（含 .auth-card 前綴）的 padding-right 覆寫。 */
+.form-input.pw-has-toggle,
+.auth-card .form-input.pw-has-toggle {
+  padding-right: 2.75rem !important;
+}
+
 /* 區塊標題 */
 .section-tag {
   display: inline-block;

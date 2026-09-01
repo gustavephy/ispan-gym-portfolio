@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { checkEmailAvailability, registerMember, resendVerificationEmail } from '@/api/auth.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 
 /**
  * 會員註冊頁。對應 POST /api/members/register（MemberRegisterRequest）。
@@ -314,11 +315,9 @@ async function confirmAndRegister() {
 
           <div class="form-group">
             <label class="form-label" for="reg-password">密碼</label>
-            <input
+            <PasswordInput
               id="reg-password"
               v-model="password"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
             />
@@ -333,11 +332,9 @@ async function confirmAndRegister() {
 
           <div class="form-group">
             <label class="form-label" for="reg-confirm">確認密碼</label>
-            <input
+            <PasswordInput
               id="reg-confirm"
               v-model="confirmPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
             />
