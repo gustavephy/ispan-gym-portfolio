@@ -245,8 +245,14 @@ public class OperationReportService {
             countByPaymentMethod.put((String) row[0], (Long) row[1]);
         }
 
+        // 退款與新會員／新訂閱：口徑同 attachExtendedStats（含無退款時投影回 null 的正規化）
+        ReportRefundSummary refunds = refundRepository.summarizeCompleted(from, to);
+        long refundCount = refunds == null || refunds.refundCount() == null ? 0L : refunds.refundCount();
+        BigDecimal refundAmount = refunds == null ? BigDecimal.ZERO : zeroIfNull(refunds.refundAmount());
+
         return new OrderOverviewResponse(from, to, totalOrders, totalRevenue, countByStatus, revenueByStatus,
-                countByPaymentMethod);
+                countByPaymentMethod, refundCount, refundAmount,
+                members.countCreatedBetween(from, to), subscriptions.countCreatedBetween(from, to));
     }
 
     /**

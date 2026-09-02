@@ -404,6 +404,27 @@ class OperationReportServiceTest {
 
         assertThat(overview.totalRevenue()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(overview.revenueByStatus()).containsEntry("PAID", BigDecimal.ZERO);
+        // 退款投影未 stub（回 null）也要正規化為零，口徑同 attachExtendedStats
+        assertThat(overview.refundCount()).isZero();
+        assertThat(overview.refundAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void 訂單總覽帶回退款與新會員新訂閱數() {
+        LocalDateTime from = START.atStartOfDay();
+        LocalDateTime to = END.plusDays(1).atStartOfDay();
+        when(orders.aggregateByStatus(from, to)).thenReturn(List.of());
+        when(orders.aggregateByPaymentMethod(from, to)).thenReturn(List.of());
+        when(refunds.summarizeCompleted(from, to)).thenReturn(new ReportRefundSummary(2L, new BigDecimal("800")));
+        when(members.countCreatedBetween(from, to)).thenReturn(5L);
+        when(subscriptions.countCreatedBetween(from, to)).thenReturn(3L);
+
+        OrderOverviewResponse overview = service.getOrderOverview(from, to);
+
+        assertThat(overview.refundCount()).isEqualTo(2L);
+        assertThat(overview.refundAmount()).isEqualByComparingTo("800");
+        assertThat(overview.newMemberCount()).isEqualTo(5L);
+        assertThat(overview.newSubscriptionCount()).isEqualTo(3L);
     }
 
     // === listReports() / getReport() / delete() ================================

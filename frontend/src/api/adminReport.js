@@ -17,6 +17,15 @@ export const getLiveStats = ({ from, to, type = '', top = 10 }) =>
     params: { from, to, type: type || undefined, top },
   })
 
+/**
+ * 即時營運總覽（訂單/營收/狀態與付款方式分布/退款/新會員新訂閱），需 ADMIN。
+ * 端點掛在 AdminOrderController 下；參數是 ISO DATE_TIME，
+ * 呼叫端自行把日期轉成 [起日 00:00, 迄日+1 00:00) 的半開區間（口徑同 /stats）。
+ * 注意時間軸與 /stats 不同：這裡統計「下單日 createdAt」，看的是下單量而非營收歸屬。
+ */
+export const getOrderOverview = ({ from, to }) =>
+  api.get('/api/admin/orders/reports/overview', { params: { from, to } })
+
 /** 歷史報表列表（不含明細），需 ADMIN */
 export const getReports = () => api.get('/api/admin/reports')
 

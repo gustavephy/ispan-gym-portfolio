@@ -3,11 +3,12 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 // 按需引入，避免整包 echarts（含地圖、3D 等用不到的模組）被打進 bundle
 // （用法比照 InbodyPanel.vue）
 import * as echarts from 'echarts/core'
-import { LineChart, BarChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { LineChart, BarChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import {
   getLiveStats,
+  getOrderOverview,
   getReports,
   getReportDetail,
   downloadReportPdf,
@@ -19,7 +20,7 @@ import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import { paymentMethodLabel } from '@/utils/paymentLabels.js'
 
-echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRenderer])
+echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 // 品項型別對照：後端 ReportItemType
 const TYPE_LABELS = {
@@ -56,6 +57,8 @@ const typeFilter = ref('')
 const stats = ref(null)
 const statsLoading = ref(true)
 const statsError = ref(null)
+// 即時營運總覽：訂單量/退款/新會員與付款方式分布（口徑：下單日 createdAt，與 /stats 的付款日不同）
+const overview = ref(null)
 
 // ── 歷史報表快照（趨勢圖與分佈的資料來源）──────────────────
 const reports = ref([])
@@ -85,18 +88,38 @@ const kpis = computed(() => {
     { key: 'qty', label: '售出件數', value: number.format(Number(s.totalQuantity ?? 0)) },
     { key: 'kinds', label: '有銷售的品項', value: number.format(s.ranking?.length ?? 0) },
   ]
-  const d = detail.value
-  if (d) {
+  // 後三張改吃即時 overview（原本退款吃快照 detail，沒選快照就看不到，且期間對不上篩選列）
+  const o = overview.value
+  if (o) {
+    // 客單價分母只算已收款訂單（PAID/SHIPPED/COMPLETED），與營收口徑一致
+    const paidOrders = ['PAID', 'SHIPPED', 'COMPLETED']
+      .reduce((sum, k) => sum + Number(o.countByStatus?.[k] ?? 0), 0)
+    tiles.push({
+      key: 'orders',
+      label: '訂單數',
+      value: number.format(Number(o.totalOrders ?? 0)),
+      hint: paidOrders > 0 ? `客單價 ${currency.format(Number(o.totalRevenue ?? 0) / paidOrders)}` : null,
+    })
     tiles.push({
       key: 'refund',
       label: '退款金額',
-      value: currency.format(Number(d.refundAmount ?? 0)),
-      hint: `${number.format(Number(d.refundCount ?? 0))} 筆`,
-      tone: Number(d.refundAmount ?? 0) > 0 ? 'warn' : null,
+      value: currency.format(Number(o.refundAmount ?? 0)),
+      hint: `${number.format(Number(o.refundCount ?? 0))} 筆`,
+      tone: Number(o.refundAmount ?? 0) > 0 ? 'warn' : null,
+    })
+    tiles.push({
+      key: 'members',
+      label: '新會員',
+      value: number.format(Number(o.newMemberCount ?? 0)),
+      hint: `新訂閱 ${number.format(Number(o.newSubscriptionCount ?? 0))}`,
     })
   }
   return tiles
 })
+
+const hasPaymentData = computed(
+  () => Object.keys(overview.value?.countByPaymentMethod ?? {}).length > 0,
+)
 
 const hasRanking = computed(() => (stats.value?.ranking?.length ?? 0) > 0)
 
@@ -112,13 +135,17 @@ const paymentBreakdown = computed(() => detail.value?.paymentBreakdown ?? [])
 // ── 圖表 ────────────────────────────────────────────────────
 const trendEl = ref(null)
 const rankingEl = ref(null)
+const paymentEl = ref(null)
 let trendChart = null
 let rankingChart = null
+let paymentChart = null
 
 // 取自 dataviz 參考色盤（已用 validate_palette.js 驗證通過 light／dark 兩種模式）
 const SERIES_1 = '#2a78d6'
 const MUTED = '#9a8f88'
 const INK = '#2b2320'
+// 付款方式圓餅的類別色：首色沿用 SERIES_1，其餘取同明度的對比色相
+const CATEGORICAL = [SERIES_1, '#e8933d', '#43a06d', '#9268c9', '#c75d76']
 
 function renderTrend() {
   if (!trendEl.value) return
@@ -211,29 +238,78 @@ function renderRanking() {
   )
 }
 
+function renderPaymentPie() {
+  if (!paymentEl.value) return
+  // 同 renderTrend 的節點換人防護：v-show 雖不卸載節點，保險起見比照處理
+  if (paymentChart && paymentChart.getDom() !== paymentEl.value) {
+    paymentChart.dispose()
+    paymentChart = null
+  }
+  if (!paymentChart) paymentChart = echarts.init(paymentEl.value)
+  const entries = Object.entries(overview.value?.countByPaymentMethod ?? {})
+  paymentChart.setOption(
+    {
+      color: CATEGORICAL,
+      tooltip: {
+        trigger: 'item',
+        formatter: (p) => `${p.name}：${number.format(p.value)} 筆（${p.percent}%）`,
+      },
+      legend: { bottom: 0, textStyle: { color: INK } },
+      series: [
+        {
+          type: 'pie',
+          // 甜甜圈：中空讓佔比讀起來不那麼像面積比較，圓心留白也讓整體不擁擠
+          radius: ['42%', '68%'],
+          center: ['50%', '44%'],
+          data: entries.map(([method, count]) => ({
+            name: paymentMethodLabel(method),
+            value: Number(count ?? 0),
+          })),
+          label: { color: INK, formatter: '{b} {d}%' },
+        },
+      ],
+    },
+    true,
+  )
+}
+
 function resizeCharts() {
   trendChart?.resize()
   rankingChart?.resize()
+  paymentChart?.resize()
 }
 
 // ── 資料載入 ────────────────────────────────────────────────
+/** 迄日 +1 天的 00:00，湊出與後端一致的半開區間 [from, to) */
+function nextDayStart(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`)
+  d.setDate(d.getDate() + 1)
+  return `${isoDate(d)}T00:00:00`
+}
+
 async function fetchStats() {
   statsLoading.value = true
   statsError.value = null
   try {
-    const { data } = await getLiveStats({
-      from: from.value,
-      to: to.value,
-      type: typeFilter.value,
-      top: 10,
-    })
-    stats.value = data
+    const [statsRes, overviewRes] = await Promise.all([
+      getLiveStats({
+        from: from.value,
+        to: to.value,
+        type: typeFilter.value,
+        top: 10,
+      }),
+      // overview 不分品項型別（訂單層級的統計切不開型別），只跟期間篩選連動
+      getOrderOverview({ from: `${from.value}T00:00:00`, to: nextDayStart(to.value) }),
+    ])
+    stats.value = statsRes.data
+    overview.value = overviewRes.data
     // 等 nextTick 讓容器套用新的 rankingHeight 後再 resize，否則圖表仍用舊高度繪製
     await nextTick()
     if (hasRanking.value) {
       rankingChart?.resize()
       renderRanking()
     }
+    if (hasPaymentData.value) renderPaymentPie()
   } catch (e) {
     statsError.value = e.message
   } finally {
@@ -408,6 +484,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', resizeCharts)
   trendChart?.dispose()
   rankingChart?.dispose()
+  paymentChart?.dispose()
 })
 </script>
 
@@ -467,6 +544,16 @@ onBeforeUnmount(() => {
         class="chart"
         :style="{ height: `${rankingHeight}px` }"
       ></div>
+    </section>
+
+    <!-- 付款方式分布：即時統計，各方式的訂單數佔比（口徑：下單日，與上方營收的付款日不同） -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">付款方式分布</h2>
+        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依訂單數</span>
+      </header>
+      <p v-if="!statsLoading && !hasPaymentData" class="empty-hint">此期間沒有付款資料。</p>
+      <div v-show="hasPaymentData" ref="paymentEl" class="chart" style="height: 300px"></div>
     </section>
 
     <!-- 歷史報表快照：趨勢與分佈的資料來源 -->
