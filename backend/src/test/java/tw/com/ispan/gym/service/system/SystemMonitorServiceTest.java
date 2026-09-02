@@ -130,6 +130,36 @@ class SystemMonitorServiceTest {
     }
 
     @Test
+    void 排程取樣寫入歷史且速率由相鄰兩筆差分() {
+        when(jdbc.queryForObject(anyString(), eq(Integer.class))).thenReturn(1);
+        Timer timer = registry.timer("http.server.requests", "uri", "/api/a");
+
+        service.sampleAt(5_000); // 第一筆沒有前一筆可差分，速率記 0
+        for (int i = 0; i < 10; i++) {
+            timer.record(10, TimeUnit.MILLISECONDS);
+        }
+        service.sampleAt(10_000); // 5 秒內多了 10 筆 → 2 req/s
+
+        var history = service.currentMetrics().history();
+        assertThat(history).hasSize(2);
+        assertThat(history.get(0).reqPerSec()).isZero();
+        assertThat(history.get(1).reqPerSec()).isEqualTo(2.0);
+        assertThat(history.get(1).at()).isEqualTo(10_000);
+    }
+
+    @Test
+    void 歷史只保留六十筆最舊的先丟() {
+        when(jdbc.queryForObject(anyString(), eq(Integer.class))).thenReturn(1);
+        for (int i = 1; i <= 70; i++) {
+            service.sampleAt(i * 5_000L);
+        }
+
+        var history = service.currentMetrics().history();
+        assertThat(history).hasSize(60);
+        assertThat(history.get(0).at()).isEqualTo(11 * 5_000L); // 前 10 筆被擠掉
+    }
+
+    @Test
     void 資料庫連不上時回DOWN而指標照常回傳() {
         when(jdbc.queryForObject(anyString(), eq(Integer.class)))
                 .thenThrow(new DataAccessResourceFailureException("連線失敗"));

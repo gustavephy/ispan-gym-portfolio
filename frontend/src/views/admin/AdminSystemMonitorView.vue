@@ -18,23 +18,15 @@ const metrics = ref(null)
 const error = ref(null)
 const loading = ref(true)
 
-// 滾動取樣：時間戳與各序列平行存放，超過視窗就從頭移除
-const sampleTimes = ref([])
-const heapSeries = ref([])
-const cpuProcessSeries = ref([])
-const cpuSystemSeries = ref([])
-const reqRateSeries = ref([])
-const p50Series = ref([])
-const p95Series = ref([])
-const p99Series = ref([])
-const poolActiveSeries = ref([])
-const poolIdleSeries = ref([])
-
-// 後端給的是「啟動以來」的累積計數（counter），速率與錯誤率要用相鄰兩次輪詢的差分算
-// ——跟 Prometheus 的 rate() 是同一件事，只是視窗短
-let prevSample = null
-const reqPerSec = ref(0)
-const errRatePct = ref(0)
+// 折線資料一律來自後端排程取樣的 history（SystemMonitorService 每 5 秒一筆、保留 5 分鐘）：
+// 取樣與速率差分都在伺服器端做，頁面重新整理、切換路由、多人同看拿到的是同一份歷史，
+// 前端只是視圖
+const lastPoint = computed(() => {
+  const h = metrics.value?.history
+  return h?.length ? h[h.length - 1] : null
+})
+const reqPerSec = computed(() => lastPoint.value?.reqPerSec ?? 0)
+const errRatePct = computed(() => lastPoint.value?.errRatePct ?? 0)
 
 const number = new Intl.NumberFormat('zh-TW')
 
@@ -166,16 +158,11 @@ function lineOption({ seriesDefs, unit = '', min, max, hasLegend }) {
 }
 
 function line(name, data, extra = {}) {
-  // time 軸的資料點是 [時間戳, 值]；數值序列與 sampleTimes 是平行陣列，在這裡合併
-  return {
-    name,
-    type: 'line',
-    data: data.map((v, i) => [sampleTimes.value[i], v]),
-    showSymbol: false,
-    lineStyle: { width: 2 },
-    ...extra,
-  }
+  // time 軸的資料點是 [時間戳, 值]
+  return { name, type: 'line', data, showSymbol: false, lineStyle: { width: 2 }, ...extra }
 }
+
+const fix1 = (v) => Number(Number(v ?? 0).toFixed(1))
 
 function setChart(key, el, option) {
   if (!el) return
@@ -184,6 +171,7 @@ function setChart(key, el, option) {
 }
 
 function renderCharts() {
+  const pts = metrics.value?.history ?? []
   setChart('latency', latencyEl.value, {
     color: [GREEN, YELLOW, RED],
     ...lineOption({
@@ -191,9 +179,9 @@ function renderCharts() {
       min: 0,
       hasLegend: true,
       seriesDefs: [
-        line('p50', p50Series.value),
-        line('p95', p95Series.value),
-        line('p99', p99Series.value),
+        line('p50', pts.map((p) => [p.at, fix1(p.p50Millis)])),
+        line('p95', pts.map((p) => [p.at, fix1(p.p95Millis)])),
+        line('p99', pts.map((p) => [p.at, fix1(p.p99Millis)])),
       ],
     }),
   })
@@ -201,7 +189,9 @@ function renderCharts() {
     color: [BLUE],
     ...lineOption({
       min: 0,
-      seriesDefs: [line('req/s', reqRateSeries.value, { areaStyle: { opacity: 0.12 } })],
+      seriesDefs: [
+        line('req/s', pts.map((p) => [p.at, fix1(p.reqPerSec)]), { areaStyle: { opacity: 0.12 } }),
+      ],
     }),
   })
   setChart('heap', heapEl.value, {
@@ -210,7 +200,9 @@ function renderCharts() {
       unit: '%',
       min: 0,
       max: 100,
-      seriesDefs: [line('Heap 使用率', heapSeries.value, { areaStyle: { opacity: 0.1 } })],
+      seriesDefs: [
+        line('Heap 使用率', pts.map((p) => [p.at, fix1(p.heapPct)]), { areaStyle: { opacity: 0.1 } }),
+      ],
     }),
   })
   setChart('cpu', cpuEl.value, {
@@ -221,8 +213,8 @@ function renderCharts() {
       max: 100,
       hasLegend: true,
       seriesDefs: [
-        line('應用程式 CPU', cpuProcessSeries.value),
-        line('系統 CPU', cpuSystemSeries.value),
+        line('應用程式 CPU', pts.map((p) => [p.at, fix1(p.processCpuPct)])),
+        line('系統 CPU', pts.map((p) => [p.at, fix1(p.systemCpuPct)])),
       ],
     }),
   })
@@ -233,9 +225,9 @@ function renderCharts() {
       max: (metrics.value?.dbPoolMax ?? 10) + 2,
       hasLegend: true,
       seriesDefs: [
-        line('使用中', poolActiveSeries.value),
-        line('閒置', poolIdleSeries.value),
-        line('上限', Array(sampleTimes.value.length).fill(metrics.value?.dbPoolMax ?? 0), {
+        line('使用中', pts.map((p) => [p.at, p.poolActive])),
+        line('閒置', pts.map((p) => [p.at, p.poolIdle])),
+        line('上限', pts.map((p) => [p.at, metrics.value?.dbPoolMax ?? 0]), {
           lineStyle: { width: 1, type: 'dashed' },
         }),
       ],
@@ -243,49 +235,15 @@ function renderCharts() {
   })
 }
 
-const allSeries = [
-  sampleTimes, heapSeries, cpuProcessSeries, cpuSystemSeries,
-  reqRateSeries, p50Series, p95Series, p99Series, poolActiveSeries, poolIdleSeries,
-]
-
-function pushSample(m) {
-  // counter 差分 → 速率（後端重啟計數歸零會出現負差，視為 0）
-  const nowMs = Date.now()
-  if (prevSample) {
-    const dt = (nowMs - prevSample.t) / 1000
-    const dCount = m.httpRequestCount - prevSample.count
-    const d5xx = m.http5xxCount - prevSample.fiveXx
-    reqPerSec.value = dt > 0 && dCount > 0 ? dCount / dt : 0
-    errRatePct.value = dCount > 0 && d5xx > 0 ? (d5xx / dCount) * 100 : 0
-  }
-  prevSample = { t: nowMs, count: m.httpRequestCount ?? 0, fiveXx: m.http5xxCount ?? 0 }
-
-  sampleTimes.value.push(nowMs)
-  heapSeries.value.push(Number((m.heapMaxBytes ? (m.heapUsedBytes / m.heapMaxBytes) * 100 : 0).toFixed(1)))
-  cpuProcessSeries.value.push(Number((Number(m.processCpuUsage ?? 0) * 100).toFixed(1)))
-  cpuSystemSeries.value.push(Number((Number(m.systemCpuUsage ?? 0) * 100).toFixed(1)))
-  reqRateSeries.value.push(Number(reqPerSec.value.toFixed(2)))
-  p50Series.value.push(Number(Number(m.httpP50Millis ?? 0).toFixed(1)))
-  p95Series.value.push(Number(Number(m.httpP95Millis ?? 0).toFixed(1)))
-  p99Series.value.push(Number(Number(m.httpP99Millis ?? 0).toFixed(1)))
-  poolActiveSeries.value.push(m.dbPoolActive ?? 0)
-  poolIdleSeries.value.push(m.dbPoolIdle ?? 0)
-  // 掉出視窗的點修掉；分頁在背景放久了回來，過舊的點也一併清光
-  while (sampleTimes.value.length && sampleTimes.value[0] < nowMs - WINDOW_MS) {
-    allSeries.forEach((s) => s.value.shift())
-  }
-}
-
 let pollTimer = null
 
 async function fetchMetrics() {
-  // 分頁被切到背景時暫停取樣，回到前景下一輪自然恢復，避免累積無意義的請求
+  // 分頁在背景時暫停輪詢省流量；取樣在後端持續進行，回前景下一輪就補齊完整歷史
   if (document.hidden) return
   try {
     const { data } = await getSystemMetrics()
     metrics.value = data
     error.value = null
-    pushSample(data)
     // 第一筆資料到手時圖表容器才剛從 v-if 長出來，等 DOM 更新完再 init
     await nextTick()
     renderCharts()
@@ -318,8 +276,8 @@ onBeforeUnmount(() => {
     <span class="section-tag">ADMIN</span>
     <h1 class="section-title">系統監控</h1>
     <p class="section-desc">
-      服務健康狀態與資源使用情形，每 {{ POLL_MS / 1000 }} 秒自動更新；
-      延遲分位數由直方圖插值（與 Grafana／PromQL 同款算法），速率由計數器差分而來。
+      服務健康狀態與資源使用情形，每 {{ POLL_MS / 1000 }} 秒自動更新；取樣與速率差分由後端排程完成，
+      重新整理頁面歷史不會消失。延遲分位數由直方圖插值（與 Grafana／PromQL 同款算法）。
     </p>
 
     <OperationMessage :message="error" />
