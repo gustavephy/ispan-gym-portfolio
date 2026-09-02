@@ -1,0 +1,120 @@
+{
+  "uid": "gym-backend",
+  "title": "Gym Backend 監控（業界版）",
+  "timezone": "browser",
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Uptime",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 0 }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "process_uptime_seconds{job=\"gym-backend\"}" }]
+    },
+    {
+      "type": "stat",
+      "title": "執行緒",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "jvm_threads_live_threads{job=\"gym-backend\"}" }]
+    },
+    {
+      "type": "stat",
+      "title": "DB 連線使用中",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "hikaricp_connections_active{job=\"gym-backend\"}" }]
+    },
+    {
+      "type": "stat",
+      "title": "每秒請求數",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 1 }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "sum(rate(http_server_requests_seconds_count{job=\"gym-backend\"}[1m]))" }]
+    },
+    {
+      "type": "stat",
+      "title": "p95 延遲",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3 }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"gym-backend\"}[5m])) by (le))" }]
+    },
+    {
+      "type": "stat",
+      "title": "5xx 錯誤率",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.01 } ] }
+        },
+        "overrides": []
+      },
+      "targets": [{ "refId": "A", "expr": "sum(rate(http_server_requests_seconds_count{job=\"gym-backend\", status=~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"gym-backend\"}[5m]))" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP 延遲分位數（平均值會掩蓋的尾延遲）",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{job=\"gym-backend\"}[5m])) by (le))" },
+        { "refId": "B", "legendFormat": "p95", "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"gym-backend\"}[5m])) by (le))" },
+        { "refId": "C", "legendFormat": "p99", "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"gym-backend\"}[5m])) by (le))" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "每秒請求數：流量前五名端點",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{uri}}", "expr": "topk(5, sum by (uri) (rate(http_server_requests_seconds_count{job=\"gym-backend\"}[1m])))" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Heap 使用率",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "heap", "expr": "sum(jvm_memory_used_bytes{job=\"gym-backend\", area=\"heap\"}) / sum(jvm_memory_max_bytes{job=\"gym-backend\", area=\"heap\"})" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU 使用率",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "process", "expr": "process_cpu_usage{job=\"gym-backend\"}" },
+        { "refId": "B", "legendFormat": "system", "expr": "system_cpu_usage{job=\"gym-backend\"}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "DB 連線池（HikariCP）",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "gym-prom" },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "使用中", "expr": "hikaricp_connections_active{job=\"gym-backend\"}" },
+        { "refId": "B", "legendFormat": "閒置", "expr": "hikaricp_connections_idle{job=\"gym-backend\"}" },
+        { "refId": "C", "legendFormat": "上限", "expr": "hikaricp_connections_max{job=\"gym-backend\"}" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# 自動載入 dashboards/ 下的儀表板 JSON
+apiVersion: 1
+providers:
+  - name: gym-dashboards
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

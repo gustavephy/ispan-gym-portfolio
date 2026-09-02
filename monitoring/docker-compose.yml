@@ -1,0 +1,33 @@
+# 業界版監控管線，跟自製的 /admin/system 監控頁並排展示用：
+# 後端只負責在管理埠 8081 曝露 /actuator/prometheus（標準格式），
+# Prometheus 每 15 秒來拉並落地成時序資料，Grafana 讀 Prometheus 畫圖。
+#
+# 啟動（在 monitoring/ 目錄下）：docker compose up -d
+# Grafana:    http://localhost:3000  （Demo 設定為匿名即 Admin，免登入）
+# Prometheus: http://localhost:9090
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: gym-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: gym-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      # Demo 免登入（匿名視同 Admin）；正式環境務必拿掉這三行改回帳密
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

@@ -1,0 +1,12 @@
+# Prometheus 是 pull 模型：由它主動來抓後端的 /actuator/prometheus，
+# 應用程式端不需要知道監控系統的存在（跟自製監控頁的差異之一）。
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: gym-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # 後端跑在宿主機上（管理埠 8081），容器內用 host.docker.internal 指回宿主
+      - targets: ["host.docker.internal:8081"]

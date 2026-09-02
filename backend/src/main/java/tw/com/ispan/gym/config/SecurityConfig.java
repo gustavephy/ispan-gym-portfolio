@@ -150,6 +150,11 @@ public class SecurityConfig {
                         // 由 StompAuthChannelInterceptor 處理，這裡放行純粹是為了讓交握能建立
                         .requestMatchers("/ws-chat/**").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // Prometheus 抓取端點只存在於管理埠 8081（management.server.port），但安全鏈
+                        // 對管理埠同樣生效，Prometheus 拉取不帶 JWT，故需明確放行；隔離靠的是
+                        // 生產環境對管理埠做內網／防火牆限制，不是端點登入。8080 沒註冊 actuator
+                        // handler，打 /actuator/** 過來只會 404，這條放行不會在主埠開出任何東西
+                        .requestMatchers("/actuator/prometheus").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // 員工基底角色由 AccountAuthorityResolver 對所有 ACTIVE 員工加發（職位另有 ROLE_ADMIN/ROLE_TRAINER）
                         .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")

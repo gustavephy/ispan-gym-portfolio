@@ -65,6 +65,13 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
+		<!-- Prometheus 匯出格式：/actuator/prometheus 只開在 8081 管理埠（見 application.properties），
+		     供 monitoring/ 的 Prometheus + Grafana 抓取；主埠 8080 依然沒有任何 /actuator/** -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+			<scope>runtime</scope>
+		</dependency>
 		<!-- 聊天室（2.4）：STOMP + SockJS 即時推送 -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
