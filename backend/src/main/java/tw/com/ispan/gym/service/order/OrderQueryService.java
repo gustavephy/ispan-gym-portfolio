@@ -57,9 +57,7 @@ public class OrderQueryService {
                 ? paymentTransactions.findByMerchantTradeNo(order.getMerchantTradeNo())
                         .map(OrderPaymentInfoResponse::from).orElse(null)
                 : null;
-        return new OrderDetailResponse(order.getOrderId(), order.getMerchantTradeNo(),
-                OrderDetailResponse.title(subscription, items), order.getTotalAmount(),
-                order.getStatus(), order.getCreatedAt(), items, subscription, paymentInfo);
+        return OrderDetailResponse.of(order, items, subscription, paymentInfo);
     }
 
     /** 訂單狀態時間軸，僅限本人訂單 */

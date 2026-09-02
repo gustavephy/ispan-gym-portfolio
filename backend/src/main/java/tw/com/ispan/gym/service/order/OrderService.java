@@ -5,6 +5,7 @@ import tw.com.ispan.gym.dto.order.CreateOrderRequest;
 import tw.com.ispan.gym.dto.order.DirectCheckoutRequest;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
 import tw.com.ispan.gym.dto.order.OrderItemResponse;
+import tw.com.ispan.gym.dto.order.OrderPreviewResponse;
 import tw.com.ispan.gym.dto.order.OrderSubscriptionResponse;
 import tw.com.ispan.gym.dto.order.PendingRefundResponse;
 import tw.com.ispan.gym.dto.order.SubscriptionCheckoutRequest;
@@ -29,6 +30,7 @@ import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 import tw.com.ispan.gym.enums.coupon.CouponApplicableType;
 import tw.com.ispan.gym.enums.coupon.CouponStatus;
 import tw.com.ispan.gym.enums.coupon.CouponType;
+import tw.com.ispan.gym.enums.order.InvoiceType;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.enums.product.ProductStatus;
 import tw.com.ispan.gym.enums.course.CourseStatus;
@@ -154,16 +156,87 @@ public class OrderService {
         String receiverName = request == null ? null : request.receiverName();
         String receiverPhone = request == null ? null : request.receiverPhone();
         String receiverAddress = request == null ? null : request.receiverAddress();
+        InvoiceType invoiceType = request == null ? null : request.invoiceType();
 
         // 購物車只裝實體商品，一定要出貨——沒有收件地址無法履約
         if (receiverAddress == null || receiverAddress.isBlank()) {
             throw new BusinessRuleException("請填寫收件地址");
         }
+        assertInvoiceValid(invoiceType,
+                request == null ? null : request.invoiceCarrier(),
+                request == null ? null : request.invoiceTaxId(),
+                request == null ? null : request.invoiceDonationCode());
 
         Order order = createOrder(member, lines, couponCode, receiverName, receiverPhone, receiverAddress,
                 CouponApplicableType.PRODUCT);
+        order.applyInvoice(invoiceType,
+                request == null ? null : request.invoiceCarrier(),
+                request == null ? null : request.invoiceTaxId(),
+                request == null ? null : request.invoiceDonationCode());
         cartItems.deleteAllByMemberId(memberId);
         return toDetailResponse(order);
+    }
+
+    /**
+     * 發票資訊格式檢查。type 為 null 或 {@code PERSONAL_CARRIER}（個人／會員載具）免驗；
+     * 其餘型別需帶對應欄位且格式正確——手機條碼載具的規則跟 type 綁一起，
+     * {@code @Pattern} 表達不了，統一在這裡擋。
+     */
+    private void assertInvoiceValid(InvoiceType type, String carrier, String taxId, String donationCode) {
+        if (type == null || type == InvoiceType.PERSONAL_CARRIER) {
+            return;
+        }
+        switch (type) {
+            case MOBILE_BARCODE -> {
+                if (carrier == null || !carrier.matches("^/[0-9A-Z.+-]{7}$")) {
+                    throw new BusinessRuleException("手機條碼載具格式不正確（需為斜線加 7 碼大寫英數）");
+                }
+            }
+            case COMPANY -> {
+                if (taxId == null || !taxId.matches("^\\d{8}$")) {
+                    throw new BusinessRuleException("統一編號需為 8 碼數字");
+                }
+            }
+            case NPO_DONATION -> {
+                if (donationCode == null || !donationCode.matches("^\\d{2,7}$")) {
+                    throw new BusinessRuleException("愛心捐贈碼需為 2~7 碼數字");
+                }
+            }
+            default -> { }
+        }
+    }
+
+    /**
+     * 結帳前試算：以購物車現價算小計，套上優惠券後回傳「小計 / 折抵 / 應付」。
+     * 唯讀——不鎖庫存、不消耗優惠券（{@link #assertCouponRedeemable} 不會變更 {@link MemberCoupon}）。
+     * 優惠券不適用時不丟例外，改在回應裡以 {@code couponApplied=false} + 訊息表達，
+     * 讓結帳頁顯示為提示而非錯誤。
+     */
+    public OrderPreviewResponse previewFromCart(Integer memberId, String couponCode) {
+        List<CartItem> items = cartItems.findAllByMemberIdOrderByCreatedAtAsc(memberId);
+        BigDecimal subtotal = items.stream()
+                .map(ci -> ci.getProduct().getPrice().multiply(BigDecimal.valueOf(ci.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (couponCode == null || couponCode.isBlank()) {
+            return new OrderPreviewResponse(subtotal, BigDecimal.ZERO, subtotal, false, null, null, null);
+        }
+        Member member = members.findById(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("找不到會員資料"));
+        Coupon coupon = coupons.findByCode(couponCode).orElse(null);
+        if (coupon == null) {
+            return new OrderPreviewResponse(subtotal, BigDecimal.ZERO, subtotal, false, couponCode, null,
+                    "查無此優惠券代碼");
+        }
+        try {
+            assertCouponRedeemable(member, coupon, subtotal, CouponApplicableType.PRODUCT);
+        } catch (BusinessRuleException ex) {
+            return new OrderPreviewResponse(subtotal, BigDecimal.ZERO, subtotal, false, couponCode,
+                    coupon.getName(), ex.getMessage());
+        }
+        BigDecimal discount = computeDiscount(coupon, subtotal);
+        return new OrderPreviewResponse(subtotal, discount, subtotal.subtract(discount).max(BigDecimal.ZERO),
+                true, coupon.getCode(), coupon.getName(), null);
     }
 
     /**
@@ -591,7 +664,12 @@ public class OrderService {
         }
     }
 
-    private MemberCoupon redeemCoupon(Member member, Coupon coupon, BigDecimal subtotal,
+    /**
+     * 優惠券可否用於這次結帳的檢查——狀態、使用期限、適用品類、最低消費、是否持有未使用。
+     * 純檢查，不變更任何狀態：{@link #redeemCoupon} 與結帳前試算 {@link #previewFromCart} 共用，
+     * 後者在唯讀交易內呼叫、不得產生副作用。訊息與檢查順序不可更動，{@code OrderServiceTest} 有斷言。
+     */
+    private void assertCouponRedeemable(Member member, Coupon coupon, BigDecimal subtotal,
             CouponApplicableType lineType) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         if (!CouponStatus.ACTIVE.equals(coupon.getStatus())
@@ -606,12 +684,21 @@ public class OrderService {
         if (subtotal.compareTo(coupon.getMinSpend()) < 0) {
             throw new BusinessRuleException("未達優惠券最低消費金額");
         }
+        if (memberCoupons.findByMemberIdAndCouponCouponIdAndStatus(member.getId(), coupon.getCouponId(),
+                MemberCouponStatus.UNUSED).isEmpty()) {
+            throw new BusinessRuleException("尚未持有此優惠券或已使用過");
+        }
+    }
+
+    private MemberCoupon redeemCoupon(Member member, Coupon coupon, BigDecimal subtotal,
+            CouponApplicableType lineType) {
+        assertCouponRedeemable(member, coupon, subtotal, lineType);
         MemberCoupon memberCoupon = memberCoupons
                 .findByMemberIdAndCouponCouponIdAndStatus(member.getId(), coupon.getCouponId(),
                         MemberCouponStatus.UNUSED)
                 .orElseThrow(() -> new BusinessRuleException("尚未持有此優惠券或已使用過"));
         memberCoupon.setStatus(MemberCouponStatus.USED);
-        memberCoupon.setUsedAt(now);
+        memberCoupon.setUsedAt(LocalDateTime.now(TAIPEI));
         return memberCoupon;
     }
 
@@ -675,9 +762,7 @@ public class OrderService {
         OrderSubscriptionResponse subscription = OrderSubscriptionResponse.from(order.getSubscriptionPlan());
         // 這裡回應的都是建單/取消/出貨/完成當下的結果，ECPay 的 ATM/CVS 取號通知只會在使用者
         // 之後前往綠界付款頁才會送達，此時必定還沒有，固定回 null；真正顯示繳費資訊看 OrderQueryService
-        return new OrderDetailResponse(order.getOrderId(), order.getMerchantTradeNo(),
-                OrderDetailResponse.title(subscription, items), order.getTotalAmount(),
-                order.getStatus(), order.getCreatedAt(), items, subscription, null);
+        return OrderDetailResponse.of(order, items, subscription, null);
     }
 
     private record OrderLine(Product product, int quantity) {

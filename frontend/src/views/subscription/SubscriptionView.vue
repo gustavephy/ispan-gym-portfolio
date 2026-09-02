@@ -3,8 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getSubscriptionPlans, getMySubscription } from '@/api/subscription.js'
 import { checkoutDirectSubscriptionWithEcpay, getMyOrders } from '@/api/order.js'
-import { getEcpayCheckoutForm } from '@/api/payment.js'
-import { submitEcpayForm } from '@/utils/ecpay.js'
+import { useEcpayCheckout } from '@/composables/useEcpayCheckout.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useFeedback } from '@/composables/useFeedback.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
@@ -12,6 +11,7 @@ import AppButton from '@/components/AppButton.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
+const { redirectToEcpay, submitPrebuiltEcpayForm } = useEcpayCheckout()
 
 const plans = ref([])
 const mySubscription = ref(null)
@@ -86,24 +86,21 @@ async function purchase(plan) {
     const mine = await getMyOrders()
     const existing = (mine.data || []).find((o) => o.status === 'UNPAID' && o.title === plan.name)
     if (existing) {
-      const form = await getEcpayCheckoutForm(existing.orderId)
-      localStorage.setItem('pendingPaymentOrderId', String(existing.orderId))
-      submitEcpayForm(form.data)
+      await redirectToEcpay(existing.orderId)
       return // 即將導向綠界，不重設 purchasingId
     }
 
     const { key, clear } = checkoutKeyFor(plan.subscriptionPlanId)
-    const res = await checkoutDirectSubscriptionWithEcpay({
-      subscriptionPlanId: plan.subscriptionPlanId,
-      couponCode: null,
-    }, key)
+    const res = await checkoutDirectSubscriptionWithEcpay(
+      {
+        subscriptionPlanId: plan.subscriptionPlanId,
+        couponCode: null,
+      },
+      key,
+    )
     clear() // 建單成功，這個意圖完結
-    // 記下這筆訂單，讓使用者從綠界返回 /orders 時主動查一次付款結果
-    // （本機收不到綠界的 server-to-server 通知，見 OrderListView#syncPendingPayment）
-    if (res.data.order?.orderId) {
-      localStorage.setItem('pendingPaymentOrderId', String(res.data.order.orderId))
-    }
-    submitEcpayForm(res.data.ecpayForm)
+    // 後端已一併回傳綠界表單，直接送出（同時記下訂單 id 讓返回後的 /payment/result 接住）
+    submitPrebuiltEcpayForm(res.data.ecpayForm, res.data.order?.orderId)
     // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 purchasingId，避免使用者在轉導期間重複點擊
   } catch (err) {
     // 攔截器已正規化錯誤，訊息在 err.message；err.response 不存在（見 normalizeApiError）
@@ -111,7 +108,6 @@ async function purchase(plan) {
     purchasingId.value = null
   }
 }
-
 
 onMounted(() => {
   loadPlans()
@@ -134,11 +130,16 @@ onMounted(() => {
         <span class="current-sub-label">目前使用會籍</span>
         <h3 class="current-sub-title">{{ mySubscription.planName }}</h3>
         <p class="current-sub-dates">
-          有效期限：{{ formatDate(mySubscription.startDate) }} ～ {{ formatDate(mySubscription.endDate) }}
+          有效期限：{{ formatDate(mySubscription.startDate) }} ～
+          {{ formatDate(mySubscription.endDate) }}
         </p>
       </div>
       <span class="status-badge" :class="{ active: mySubscription.isActive }">
-        {{ mySubscription.isActive ? statusLabels.ACTIVE : (statusLabels[mySubscription.status] || mySubscription.status) }}
+        {{
+          mySubscription.isActive
+            ? statusLabels.ACTIVE
+            : statusLabels[mySubscription.status] || mySubscription.status
+        }}
       </span>
     </div>
 
@@ -156,7 +157,11 @@ onMounted(() => {
       <!-- 方案列表區 -->
       <div class="sub-main">
         <div class="plans-grid" :class="{ 'single-plan-grid': plans.length === 1 }">
-          <div v-for="plan in plans" :key="plan.subscriptionPlanId" class="plan-card selected recommended">
+          <div
+            v-for="plan in plans"
+            :key="plan.subscriptionPlanId"
+            class="plan-card selected recommended"
+          >
             <div class="recommended-badge">{{ plan.durationDays }} 天方案</div>
             <div class="plan-card-header">
               <div>
@@ -164,15 +169,19 @@ onMounted(() => {
                 <span class="plan-rate-tag highlight">暢玩無極限</span>
               </div>
             </div>
-            
+
             <div class="plan-cost-display">
               <span class="currency">NT$</span>
               <span class="cost-number">{{ Number(plan.price).toLocaleString() }}</span>
               <span class="period">/ {{ plan.durationDays }} 天</span>
             </div>
-            
-            <p class="plan-card-desc">{{ plan.description || '限大安店通用，適合有長期運動規劃、想要無拘無束自主鍛鍊的學員。' }}</p>
-            
+
+            <p class="plan-card-desc">
+              {{
+                plan.description || '限大安店通用，適合有長期運動規劃、想要無拘無束自主鍛鍊的學員。'
+              }}
+            </p>
+
             <!-- 方案專屬特點清單 -->
             <div class="plan-features-list">
               <div class="p-feature-item">
@@ -197,7 +206,7 @@ onMounted(() => {
               :loading="purchasingId === plan.subscriptionPlanId"
               @click="purchase(plan)"
               :class="{ 'btn-disabled': hasActiveSubscription }"
-              style="margin-top: 1.5rem; width: 100%;"
+              style="margin-top: 1.5rem; width: 100%"
             >
               {{ hasActiveSubscription ? '您已是訂閱會員' : '確認完成線上訂閱與付費' }}
             </AppButton>
@@ -213,19 +222,26 @@ onMounted(() => {
         <div class="faq-list">
           <div class="faq-item">
             <h6>如何計算訂閱效期？</h6>
-            <p>付費成功後效期立即生效。系統會根據您購買的方案天數（如 30 天、90 天或 365 天），自付費當天起算對應天數作為有效通行期。</p>
+            <p>
+              付費成功後效期立即生效。系統會根據您購買的方案天數（如 30 天、90 天或 365
+              天），自付費當天起算對應天數作為有效通行期。
+            </p>
           </div>
           <div class="faq-item">
             <h6>可以重複訂閱嗎？</h6>
-            <p>為避免效期重疊，系統限制每個會員在同一時間內只能擁有一份有效的會籍，到期後方可再次訂閱。</p>
+            <p>
+              為避免效期重疊，系統限制每個會員在同一時間內只能擁有一份有效的會籍，到期後方可再次訂閱。
+            </p>
           </div>
           <div class="faq-item">
             <h6>支援哪些付款方式？</h6>
             <p>目前與綠界金流 (ECPay) 整合，支援各家信用卡線上安全刷卡與付費。</p>
           </div>
         </div>
-        <div class="ecpay-banner" style="margin-top: 1.5rem;">
-          <p class="security-note" style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">256-bit SSL 安全加密保障</p>
+        <div class="ecpay-banner" style="margin-top: 1.5rem">
+          <p class="security-note" style="margin: 0; font-size: 0.8rem; color: var(--text-muted)">
+            256-bit SSL 安全加密保障
+          </p>
         </div>
       </div>
     </div>

@@ -5,6 +5,8 @@ import tw.com.ispan.gym.dto.order.CancelOrderRequest;
 import tw.com.ispan.gym.dto.order.CreateOrderRequest;
 import tw.com.ispan.gym.dto.order.DirectCheckoutRequest;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
+import tw.com.ispan.gym.dto.order.OrderPreviewRequest;
+import tw.com.ispan.gym.dto.order.OrderPreviewResponse;
 import tw.com.ispan.gym.dto.order.OrderStatusHistoryResponse;
 import tw.com.ispan.gym.dto.order.OrderSummaryResponse;
 import tw.com.ispan.gym.dto.order.SubscriptionCheckoutRequest;
@@ -92,6 +94,17 @@ public class OrderController {
     @GetMapping("/{orderId}/history")
     public List<OrderStatusHistoryResponse> history(@PathVariable Integer orderId) {
         return orderQueryService.findHistory(currentUser.requireCurrentMemberId(), orderId);
+    }
+
+    /**
+     * 結帳前試算：帶入選填的優惠券代碼，回傳購物車現價的「小計 / 折抵 / 應付」。
+     * 唯讀、不建單、不鎖庫存、不消耗優惠券，故不套用 Idempotency-Key 與建單節流；
+     * 優惠券不適用時仍以 200 回傳（見 {@link OrderPreviewResponse}），由前端顯示為提示。
+     */
+    @PostMapping("/preview")
+    public OrderPreviewResponse preview(@Valid @RequestBody(required = false) OrderPreviewRequest request) {
+        return orderService.previewFromCart(currentUser.requireCurrentMemberId(),
+                request == null ? null : request.couponCode());
     }
 
     @PostMapping
