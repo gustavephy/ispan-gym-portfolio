@@ -34,6 +34,13 @@ export const getGroupClassFill = ({ from, to }) =>
 export const getMemberGrowth = ({ from, to }) =>
   api.get('/api/admin/reports/member-growth', { params: { from, to } })
 
+/** 教練時段使用率（即時，不落快照），需 ADMIN。時間軸為時段開始時間，取消時段不計 */
+export const getTrainerUtilization = ({ from, to }) =>
+  api.get('/api/admin/reports/trainer-utilization', { params: { from, to } })
+
+/** 優惠券成效（即時，看券的整個生命週期），需 ADMIN。不吃期間參數 */
+export const getCouponEffect = () => api.get('/api/admin/reports/coupon-effect')
+
 /** 歷史報表列表（不含明細），需 ADMIN */
 export const getReports = () => api.get('/api/admin/reports')
 

@@ -17,9 +17,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import tw.com.ispan.gym.dto.report.CouponEffectRow;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
 import tw.com.ispan.gym.dto.report.GroupClassFillRow;
 import tw.com.ispan.gym.dto.report.MemberDailyRow;
+import tw.com.ispan.gym.dto.report.TrainerSlotRow;
 import tw.com.ispan.gym.dto.report.ReportDetailResponse;
 import tw.com.ispan.gym.dto.report.ReportSummaryResponse;
 import tw.com.ispan.gym.dto.report.SalesStatsResponse;
@@ -83,6 +85,20 @@ public class OperationReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return reportService.memberGrowth(from, to);
+    }
+
+    /** 教練時段使用率（即時統計，不落快照） */
+    @GetMapping("/trainer-utilization")
+    public List<TrainerSlotRow> trainerUtilization(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return reportService.trainerUtilization(from, to);
+    }
+
+    /** 優惠券成效（即時統計，看券的整個生命週期，不隨期間篩選） */
+    @GetMapping("/coupon-effect")
+    public List<CouponEffectRow> couponEffect() {
+        return reportService.couponEffect();
     }
 
     /** 單份報表含排行明細 */

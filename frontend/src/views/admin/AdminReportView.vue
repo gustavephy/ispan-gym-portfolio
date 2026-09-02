@@ -11,6 +11,8 @@ import {
   getOrderOverview,
   getGroupClassFill,
   getMemberGrowth,
+  getTrainerUtilization,
+  getCouponEffect,
   getReports,
   getReportDetail,
   downloadReportPdf,
@@ -64,6 +66,9 @@ const overview = ref(null)
 // 團課滿座率與每日新會員：同樣跟期間篩選連動的即時統計
 const classFill = ref([])
 const memberDaily = ref([])
+// 教練時段使用率（跟期間連動）；優惠券成效看整個生命週期、不吃期間
+const trainerUtil = ref([])
+const couponEffect = ref([])
 
 // ── 歷史報表快照（趨勢圖與分佈的資料來源）──────────────────
 const reports = ref([])
@@ -127,8 +132,24 @@ const hasPaymentData = computed(
 )
 const hasClassFill = computed(() => classFill.value.length > 0)
 const hasMemberDaily = computed(() => memberDaily.value.length > 0)
+const hasTrainerUtil = computed(() => trainerUtil.value.length > 0)
 // 與排行同律：高度隨課程數成長
 const classFillHeight = computed(() => Math.max(120, classFill.value.length * 44 + 32))
+const trainerUtilHeight = computed(() => Math.max(120, trainerUtil.value.length * 44 + 32))
+
+// 優惠券成效表格列：比率先算好，模板只負責顯示
+const couponRows = computed(() =>
+  couponEffect.value.map((c) => {
+    const total = Number(c.totalQuantity ?? 0)
+    const claimed = Number(c.claimedQuantity ?? 0)
+    const used = Number(c.usedCount ?? 0)
+    return {
+      ...c,
+      claimRate: total > 0 ? ((claimed / total) * 100).toFixed(1) : '—',
+      useRate: claimed > 0 ? ((used / claimed) * 100).toFixed(1) : '—',
+    }
+  }),
+)
 
 const hasRanking = computed(() => (stats.value?.ranking?.length ?? 0) > 0)
 
@@ -147,11 +168,13 @@ const rankingEl = ref(null)
 const paymentEl = ref(null)
 const classFillEl = ref(null)
 const memberGrowthEl = ref(null)
+const trainerUtilEl = ref(null)
 let trendChart = null
 let rankingChart = null
 let paymentChart = null
 let classFillChart = null
 let memberGrowthChart = null
+let trainerUtilChart = null
 
 // 取自 dataviz 參考色盤（已用 validate_palette.js 驗證通過 light／dark 兩種模式）
 const SERIES_1 = '#2a78d6'
@@ -374,12 +397,61 @@ function renderMemberGrowth() {
   )
 }
 
+function renderTrainerUtil() {
+  if (!trainerUtilEl.value) return
+  if (!trainerUtilChart) trainerUtilChart = echarts.init(trainerUtilEl.value)
+  // 使用率由低到高排，最搶手的教練落在最上方（同滿座率圖）
+  const rows = [...trainerUtil.value]
+    .map((r) => ({ ...r, pct: r.totalSlots > 0 ? (r.bookedSlots / r.totalSlots) * 100 : 0 }))
+    .sort((a, b) => a.pct - b.pct)
+  trainerUtilChart.setOption(
+    {
+      color: [SERIES_1],
+      tooltip: {
+        trigger: 'item',
+        formatter: (p) => {
+          const row = rows[p.dataIndex]
+          return `${row.trainerName}<br/>開放 ${number.format(row.totalSlots)} 時段｜已預約 ${number.format(row.bookedSlots)}<br/>使用率 ${row.pct.toFixed(1)}%`
+        },
+      },
+      grid: { left: 8, right: 96, top: 8, bottom: 8, containLabel: true },
+      xAxis: { type: 'value', max: 100, show: false },
+      yAxis: {
+        type: 'category',
+        data: rows.map((r) => r.trainerName),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: INK },
+      },
+      series: [
+        {
+          type: 'bar',
+          data: rows.map((r) => Number(r.pct.toFixed(1))),
+          barMaxWidth: 18,
+          itemStyle: { borderRadius: [0, 4, 4, 0] },
+          label: {
+            show: true,
+            position: 'right',
+            color: MUTED,
+            formatter: (p) => {
+              const row = rows[p.dataIndex]
+              return `${number.format(row.bookedSlots)}/${number.format(row.totalSlots)}（${row.pct.toFixed(0)}%）`
+            },
+          },
+        },
+      ],
+    },
+    true,
+  )
+}
+
 function resizeCharts() {
   trendChart?.resize()
   rankingChart?.resize()
   paymentChart?.resize()
   classFillChart?.resize()
   memberGrowthChart?.resize()
+  trainerUtilChart?.resize()
 }
 
 // ── 資料載入 ────────────────────────────────────────────────
@@ -394,7 +466,7 @@ async function fetchStats() {
   statsLoading.value = true
   statsError.value = null
   try {
-    const [statsRes, overviewRes, fillRes, growthRes] = await Promise.all([
+    const [statsRes, overviewRes, fillRes, growthRes, utilRes, effectRes] = await Promise.all([
       getLiveStats({
         from: from.value,
         to: to.value,
@@ -405,11 +477,15 @@ async function fetchStats() {
       getOrderOverview({ from: `${from.value}T00:00:00`, to: nextDayStart(to.value) }),
       getGroupClassFill({ from: from.value, to: to.value }),
       getMemberGrowth({ from: from.value, to: to.value }),
+      getTrainerUtilization({ from: from.value, to: to.value }),
+      getCouponEffect(),
     ])
     stats.value = statsRes.data
     overview.value = overviewRes.data
     classFill.value = fillRes.data ?? []
     memberDaily.value = growthRes.data ?? []
+    trainerUtil.value = utilRes.data ?? []
+    couponEffect.value = effectRes.data ?? []
     // 等 nextTick 讓容器套用新的 rankingHeight 後再 resize，否則圖表仍用舊高度繪製
     await nextTick()
     if (hasRanking.value) {
@@ -422,6 +498,10 @@ async function fetchStats() {
       renderClassFill()
     }
     if (hasMemberDaily.value) renderMemberGrowth()
+    if (hasTrainerUtil.value) {
+      trainerUtilChart?.resize()
+      renderTrainerUtil()
+    }
   } catch (e) {
     statsError.value = e.message
   } finally {
@@ -599,6 +679,7 @@ onBeforeUnmount(() => {
   paymentChart?.dispose()
   classFillChart?.dispose()
   memberGrowthChart?.dispose()
+  trainerUtilChart?.dispose()
 })
 </script>
 
@@ -693,6 +774,56 @@ onBeforeUnmount(() => {
       </header>
       <p v-if="!statsLoading && !hasMemberDaily" class="empty-hint">此期間沒有新註冊會員。</p>
       <div v-show="hasMemberDaily" ref="memberGrowthEl" class="chart" style="height: 280px"></div>
+    </section>
+
+    <!-- 教練時段使用率：私教供需，軸固定 0–100% -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">教練時段使用率</h2>
+        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依時段開始時間，取消時段不計</span>
+      </header>
+      <p v-if="!statsLoading && !hasTrainerUtil" class="empty-hint">此期間沒有教練開放時段。</p>
+      <div
+        v-show="hasTrainerUtil"
+        ref="trainerUtilEl"
+        class="chart"
+        :style="{ height: `${trainerUtilHeight}px` }"
+      ></div>
+    </section>
+
+    <!-- 優惠券成效：多欄數值用表格比圖表誠實，比率已在 computed 算好 -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">優惠券成效</h2>
+        <span class="chart-card__sub">券的整個生命週期，不隨期間篩選</span>
+      </header>
+      <p v-if="!statsLoading && couponRows.length === 0" class="empty-hint">目前沒有優惠券。</p>
+      <div v-if="couponRows.length > 0" class="effect-table-wrap">
+        <table class="effect-table">
+          <thead>
+            <tr>
+              <th>名稱</th>
+              <th>代碼</th>
+              <th class="num">發行</th>
+              <th class="num">已領取</th>
+              <th class="num">領取率</th>
+              <th class="num">已使用</th>
+              <th class="num">使用率</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="c in couponRows" :key="c.code">
+              <td>{{ c.name }}</td>
+              <td class="code">{{ c.code }}</td>
+              <td class="num">{{ number.format(c.totalQuantity ?? 0) }}</td>
+              <td class="num">{{ number.format(c.claimedQuantity ?? 0) }}</td>
+              <td class="num">{{ c.claimRate === '—' ? '—' : `${c.claimRate}%` }}</td>
+              <td class="num">{{ number.format(c.usedCount ?? 0) }}</td>
+              <td class="num">{{ c.useRate === '—' ? '—' : `${c.useRate}%` }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- 歷史報表快照：趨勢與分佈的資料來源 -->
@@ -1089,5 +1220,43 @@ onBeforeUnmount(() => {
 .col-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* 優惠券成效表：窄螢幕時讓表格自己橫向捲，不撐破卡片 */
+.effect-table-wrap {
+  overflow-x: auto;
+}
+
+.effect-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.effect-table th,
+.effect-table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.effect-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.effect-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.effect-table .code {
+  font-family: monospace;
+  color: var(--text-secondary);
+}
+
+.effect-table tbody tr:last-child td {
+  border-bottom: none;
 }
 </style>

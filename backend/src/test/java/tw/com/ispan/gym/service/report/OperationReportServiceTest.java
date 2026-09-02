@@ -36,10 +36,14 @@ import tw.com.ispan.gym.enums.report.ReportType;
 import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.dto.report.CouponEffectRow;
 import tw.com.ispan.gym.dto.report.GroupClassFillRow;
 import tw.com.ispan.gym.dto.report.MemberDailyRow;
+import tw.com.ispan.gym.dto.report.TrainerSlotRow;
 import tw.com.ispan.gym.dto.report.ReportRefundSummary;
+import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
 import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
+import tw.com.ispan.gym.repository.coupon.CouponRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
@@ -71,8 +75,11 @@ class OperationReportServiceTest {
     private final MemberRepository members = mock(MemberRepository.class);
     private final MemberSubscriptionRepository subscriptions = mock(MemberSubscriptionRepository.class);
     private final GroupClassSessionRepository groupClassSessions = mock(GroupClassSessionRepository.class);
+    private final CoachSlotRepository coachSlots = mock(CoachSlotRepository.class);
+    private final CouponRepository coupons = mock(CouponRepository.class);
     private final OperationReportService service = new OperationReportService(
-            snapshots, orders, orderItems, employees, refunds, members, subscriptions, groupClassSessions);
+            snapshots, orders, orderItems, employees, refunds, members, subscriptions, groupClassSessions,
+            coachSlots, coupons);
 
     // === 共用測試資料 ========================================================
 
@@ -430,6 +437,24 @@ class OperationReportServiceTest {
         assertThatThrownBy(() -> service.groupClassFill(END, START))
                 .isInstanceOf(BusinessRuleException.class);
         assertThatThrownBy(() -> service.memberGrowth(END, START))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void 教練使用率有期間驗證而優惠券成效不分期間() {
+        LocalDateTime from = START.atStartOfDay();
+        LocalDateTime to = END.plusDays(1).atStartOfDay();
+        when(coachSlots.aggregateUtilization(from, to))
+                .thenReturn(List.of(new TrainerSlotRow("林志強", 10L, 7L)));
+        when(coupons.aggregateEffect())
+                .thenReturn(List.of(new CouponEffectRow("新春折扣", "CNY100", 100, 60, 25L)));
+
+        assertThat(service.trainerUtilization(START, END)).hasSize(1)
+                .first().satisfies(row -> assertThat(row.bookedSlots()).isEqualTo(7L));
+        assertThat(service.couponEffect()).hasSize(1)
+                .first().satisfies(row -> assertThat(row.usedCount()).isEqualTo(25L));
+
+        assertThatThrownBy(() -> service.trainerUtilization(END, START))
                 .isInstanceOf(BusinessRuleException.class);
     }
 
