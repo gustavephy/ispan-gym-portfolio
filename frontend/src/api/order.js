@@ -5,9 +5,15 @@ import api from './axios.instance.js'
 const idempotentConfig = (idempotencyKey) =>
   idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined
 
-// 購物車結帳（一般商品）：payload 可省略或帶 { couponCode, receiverName, receiverPhone, receiverAddress }
+// 購物車結帳（一般商品）：payload 可省略或帶
+// { couponCode, receiverName, receiverPhone, receiverAddress,
+//   invoiceType, invoiceCarrier, invoiceTaxId, invoiceDonationCode }
 export const checkoutFromCart = (payload, idempotencyKey) =>
   api.post('/api/orders', payload, idempotentConfig(idempotencyKey))
+
+// 結帳前試算：帶 { couponCode }（可為 null），回 { subtotalAmount, discountAmount, totalAmount,
+// couponApplied, couponCode, couponName, couponMessage }。唯讀、不建單、不消耗優惠券。
+export const previewOrder = (payload) => api.post('/api/orders/preview', payload)
 
 // 課程略過購物車直接結帳：{ privateCourseId, quantity, couponCode }
 export const checkoutDirect = (payload, idempotencyKey) =>

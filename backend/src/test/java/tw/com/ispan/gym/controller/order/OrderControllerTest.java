@@ -53,8 +53,9 @@ class OrderControllerTest {
             .build();
 
     private OrderDetailResponse detail(int id) {
-        return new OrderDetailResponse(id, "GYM1", "乳清蛋白", new BigDecimal("1000"), OrderStatus.UNPAID,
-                LocalDateTime.now(), List.of(), null, null);
+        return new OrderDetailResponse(id, "GYM1", "乳清蛋白", new BigDecimal("1000"), BigDecimal.ZERO,
+                new BigDecimal("1000"), null, null, OrderStatus.UNPAID, LocalDateTime.now(), List.of(), null,
+                null, null);
     }
 
     private void loggedInAndNotRateLimited() {
@@ -138,5 +139,22 @@ class OrderControllerTest {
         when(orderQueryService.findMine(1)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/orders")).andExpect(status().isOk());
+    }
+
+    @Test
+    void 結帳前試算回200且不套用冪等與節流() throws Exception {
+        when(currentUser.requireCurrentMemberId()).thenReturn(1);
+        when(orderService.previewFromCart(1, "SAVE100")).thenReturn(
+                new tw.com.ispan.gym.dto.order.OrderPreviewResponse(new BigDecimal("1000"),
+                        new BigDecimal("100"), new BigDecimal("900"), true, "SAVE100", "折100", null));
+
+        mockMvc.perform(post("/api/orders/preview").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"couponCode\":\"SAVE100\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.couponApplied").value(true))
+                .andExpect(jsonPath("$.totalAmount").value(900));
+
+        verify(idempotency, org.mockito.Mockito.never()).resolve(any(), any(), any(), any(), any());
+        verify(rateLimiter, org.mockito.Mockito.never()).tryAcquire(any(), org.mockito.ArgumentMatchers.anyInt(), any());
     }
 }

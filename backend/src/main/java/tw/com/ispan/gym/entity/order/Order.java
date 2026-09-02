@@ -4,6 +4,7 @@ import tw.com.ispan.gym.entity.member.MemberCoupon;
 import tw.com.ispan.gym.entity.member.Member;
 import tw.com.ispan.gym.entity.subscription.SubscriptionPlan;
 
+import tw.com.ispan.gym.enums.order.InvoiceType;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 
 import tw.com.ispan.gym.common.persistence.TaipeiTimestampEntity;
@@ -103,6 +104,22 @@ public class Order extends TaipeiTimestampEntity {
     @Nationalized
     @Column(name = "cancel_reason", length = 500)
     private String cancelReason;
+
+    /**
+     * 發票開立方式與所需資料，結帳時由使用者選填，目前僅儲存與顯示（未串綠界電子發票開立）。
+     * 全部可為 null：舊訂單、或使用者選「個人（會員載具）」時 carrier/taxId/donationCode 皆空。
+     * 格式驗證見 OrderService#assertInvoiceValid。
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "invoice_type", length = 20)
+    private InvoiceType invoiceType;
+    @Column(name = "invoice_carrier", length = 64)
+    private String invoiceCarrier;
+    @Column(name = "invoice_tax_id", length = 8)
+    private String invoiceTaxId;
+    @Column(name = "invoice_donation_code", length = 10)
+    private String invoiceDonationCode;
+
     @Version
     @Column(name = "version", nullable = false)
     private Integer version = 0;
@@ -360,5 +377,32 @@ public class Order extends TaipeiTimestampEntity {
 
     public void setSubscriptionPlan(SubscriptionPlan subscriptionPlan) {
         this.subscriptionPlan = subscriptionPlan;
+    }
+
+    /**
+     * 設定發票資訊。type 為 null 時視同「個人（會員載具）」，其餘欄位一律清空；
+     * 各 type 需要的欄位由 OrderService#assertInvoiceValid 先驗過格式，這裡只負責存。
+     */
+    public void applyInvoice(InvoiceType type, String carrier, String taxId, String donationCode) {
+        this.invoiceType = type;
+        this.invoiceCarrier = type == InvoiceType.MOBILE_BARCODE ? carrier : null;
+        this.invoiceTaxId = type == InvoiceType.COMPANY ? taxId : null;
+        this.invoiceDonationCode = type == InvoiceType.NPO_DONATION ? donationCode : null;
+    }
+
+    public InvoiceType getInvoiceType() {
+        return invoiceType;
+    }
+
+    public String getInvoiceCarrier() {
+        return invoiceCarrier;
+    }
+
+    public String getInvoiceTaxId() {
+        return invoiceTaxId;
+    }
+
+    public String getInvoiceDonationCode() {
+        return invoiceDonationCode;
     }
 }

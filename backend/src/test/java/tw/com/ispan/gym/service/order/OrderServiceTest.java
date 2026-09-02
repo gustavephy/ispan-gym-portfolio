@@ -23,6 +23,7 @@ import tw.com.ispan.gym.dto.order.CancelOrderRequest;
 import tw.com.ispan.gym.dto.order.CreateOrderRequest;
 import tw.com.ispan.gym.dto.order.DirectCheckoutRequest;
 import tw.com.ispan.gym.dto.order.OrderDetailResponse;
+import tw.com.ispan.gym.dto.order.OrderPreviewResponse;
 import tw.com.ispan.gym.dto.order.SubscriptionCheckoutRequest;
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.cart.CartItem;
@@ -45,6 +46,7 @@ import tw.com.ispan.gym.enums.coupon.CouponStatus;
 import tw.com.ispan.gym.enums.coupon.CouponType;
 import tw.com.ispan.gym.enums.course.CourseStatus;
 import tw.com.ispan.gym.enums.member.MemberCouponStatus;
+import tw.com.ispan.gym.enums.order.InvoiceType;
 import tw.com.ispan.gym.enums.order.OrderStatus;
 import tw.com.ispan.gym.enums.product.ProductStatus;
 import tw.com.ispan.gym.enums.subscription.SubscriptionStatus;
@@ -474,6 +476,145 @@ class OrderServiceTest {
                 new CreateOrderRequest(COUPON_CODE, null, null, RECEIVER_ADDR)))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining(messageFragment);
+    }
+
+    // === previewFromCart()：結帳前試算 ========================================
+
+    @Test
+    void 試算_無優惠券時折抵為零應付等於小計() {
+        Product a = product(PRODUCT_ID, 10, "1000");
+        stubCart(new CartItem(member(), a, 2));
+
+        OrderPreviewResponse preview = service.previewFromCart(MEMBER_ID, null);
+
+        assertThat(preview.subtotalAmount()).isEqualByComparingTo("2000");
+        assertThat(preview.discountAmount()).isEqualByComparingTo("0");
+        assertThat(preview.totalAmount()).isEqualByComparingTo("2000");
+        assertThat(preview.couponApplied()).isFalse();
+    }
+
+    @Test
+    void 試算_現金券折抵並標記已套用() {
+        Product a = product(PRODUCT_ID, 10, "1000");
+        stubCart(new CartItem(member(), a, 1));
+        Coupon coupon = coupon(CouponType.CASH, "100");
+        MemberCoupon held = heldCoupon(coupon);
+        stubHoldsCoupon(coupon, held);
+
+        OrderPreviewResponse preview = service.previewFromCart(MEMBER_ID, COUPON_CODE);
+
+        assertThat(preview.couponApplied()).isTrue();
+        assertThat(preview.discountAmount()).isEqualByComparingTo("100");
+        assertThat(preview.totalAmount()).isEqualByComparingTo("900");
+        assertThat(preview.couponCode()).isEqualTo(COUPON_CODE);
+        // 試算不得消耗優惠券
+        assertThat(held.getStatus()).isEqualTo(MemberCouponStatus.UNUSED);
+        assertThat(held.getUsedAt()).isNull();
+        verify(orders, never()).save(any());
+    }
+
+    @Test
+    void 試算_百分比券四捨五入() {
+        Product a = product(PRODUCT_ID, 10, "333.33");
+        stubCart(new CartItem(member(), a, 1));
+        Coupon coupon = coupon(CouponType.PERCENT, "15"); // 333.33 × 15% = 49.9995 → 50.00
+        stubHoldsCoupon(coupon, heldCoupon(coupon));
+
+        OrderPreviewResponse preview = service.previewFromCart(MEMBER_ID, COUPON_CODE);
+
+        assertThat(preview.discountAmount()).isEqualByComparingTo("50.00");
+        assertThat(preview.totalAmount()).isEqualByComparingTo("283.33");
+    }
+
+    @Test
+    void 試算_券不適用時以200回傳提示訊息且不變更持有紀錄() {
+        Product a = product(PRODUCT_ID, 10, "1000");
+        stubCart(new CartItem(member(), a, 1));
+        Coupon highMinSpend = coupon(CouponType.CASH, "100");
+        highMinSpend.setMinSpend(new BigDecimal("2000"));
+        MemberCoupon held = heldCoupon(highMinSpend);
+        stubHoldsCoupon(highMinSpend, held);
+
+        OrderPreviewResponse preview = service.previewFromCart(MEMBER_ID, COUPON_CODE);
+
+        assertThat(preview.couponApplied()).isFalse();
+        assertThat(preview.couponMessage()).contains("最低消費");
+        assertThat(preview.discountAmount()).isEqualByComparingTo("0");
+        assertThat(preview.totalAmount()).isEqualByComparingTo("1000");
+        assertThat(held.getStatus()).isEqualTo(MemberCouponStatus.UNUSED);
+    }
+
+    @Test
+    void 試算_查無優惠券代碼時回couponApplied為false() {
+        Product a = product(PRODUCT_ID, 10, "1000");
+        stubCart(new CartItem(member(), a, 1));
+        when(coupons.findByCode(COUPON_CODE)).thenReturn(Optional.empty());
+
+        OrderPreviewResponse preview = service.previewFromCart(MEMBER_ID, COUPON_CODE);
+
+        assertThat(preview.couponApplied()).isFalse();
+        assertThat(preview.couponMessage()).contains("查無");
+        assertThat(preview.totalAmount()).isEqualByComparingTo("1000");
+    }
+
+    @Test
+    void 試算_未持有該券時回couponApplied為false() {
+        Product a = product(PRODUCT_ID, 10, "1000");
+        stubCart(new CartItem(member(), a, 1));
+        Coupon coupon = coupon(CouponType.CASH, "100");
+        when(coupons.findByCode(COUPON_CODE)).thenReturn(Optional.of(coupon));
+        when(memberCoupons.findByMemberIdAndCouponCouponIdAndStatus(
+                MEMBER_ID, COUPON_ID, MemberCouponStatus.UNUSED)).thenReturn(Optional.empty());
+
+        OrderPreviewResponse preview = service.previewFromCart(MEMBER_ID, COUPON_CODE);
+
+        assertThat(preview.couponApplied()).isFalse();
+        assertThat(preview.couponMessage()).contains("尚未持有");
+    }
+
+    // === 發票資訊 ============================================================
+
+    @Test
+    void 結帳帶手機條碼載具時儲存於訂單() {
+        Product a = product(PRODUCT_ID, 10, "1000");
+        stubCart(new CartItem(member(), a, 1));
+        stubProductLock(a);
+        stubOrderSaveAssignsId();
+        stubNoOrderItems();
+
+        service.createOrderFromCart(MEMBER_ID, new CreateOrderRequest(null, null, null, RECEIVER_ADDR,
+                InvoiceType.MOBILE_BARCODE, "/ABC1234", null, null));
+
+        org.mockito.ArgumentCaptor<Order> saved = org.mockito.ArgumentCaptor.forClass(Order.class);
+        verify(orders).save(saved.capture());
+        assertThat(saved.getValue().getInvoiceType()).isEqualTo(InvoiceType.MOBILE_BARCODE);
+        assertThat(saved.getValue().getInvoiceCarrier()).isEqualTo("/ABC1234");
+    }
+
+    @Test
+    void 結帳帶格式錯誤的手機條碼載具時擋下且不建單() {
+        Product a = product(PRODUCT_ID, 10, "1000");
+        stubCart(new CartItem(member(), a, 1));
+
+        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, new CreateOrderRequest(
+                null, null, null, RECEIVER_ADDR, InvoiceType.MOBILE_BARCODE, "abc", null, null)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("手機條碼");
+
+        verify(orders, never()).save(any());
+    }
+
+    @Test
+    void 結帳選公司戶但未帶統編時擋下() {
+        Product a = product(PRODUCT_ID, 10, "1000");
+        stubCart(new CartItem(member(), a, 1));
+
+        assertThatThrownBy(() -> service.createOrderFromCart(MEMBER_ID, new CreateOrderRequest(
+                null, null, null, RECEIVER_ADDR, InvoiceType.COMPANY, null, null, null)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("統一編號");
+
+        verify(orders, never()).save(any());
     }
 
     // === createDirectOrder()：私教課 ==========================================
