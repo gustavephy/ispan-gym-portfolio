@@ -165,72 +165,142 @@ main { padding-top: 0; }
 
 
 .hero {
-  min-height: calc(100vh - 68px);
-  /* 原設計引用 assets/luxury_gym_hero.png，但圖檔從未進版控（vite build 直接失敗）。
-     先以同色系漸層墊底——上方 ::before 遮罩本來就壓深整區，視覺差異有限；
-     圖檔補進 assets 後把這行換回 url() 即可。 */
-  background: linear-gradient(135deg, #3c302b 0%, #6b5445 55%, #8a6f5c 100%);
-  background-size: cover;
+  min-height: min(100vh, 860px);
+  /* 深色暗角漸層寫在前、Unsplash 健身房實照在後；圖片載入失敗時仍有 #17120f 深黑棕墊底不破版。
+     疊兩層漸層——由左壓深讓左側文字清楚、由下壓深銜接下一區塊。 */
+  background:
+    linear-gradient(90deg, rgba(18, 14, 11, 0.62) 0%, rgba(18, 14, 11, 0.1) 62%),
+    linear-gradient(180deg, rgba(18, 14, 11, 0.5) 0%, rgba(18, 14, 11, 0.34) 35%, rgba(18, 14, 11, 0.93) 100%),
+    url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1920&q=72') center / cover no-repeat,
+    #17120f;
   display: flex;
   align-items: center;
   position: relative;
   overflow: hidden;
 }
-.hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(60, 48, 43, 0.75);
-  z-index: 0;
-}
 .hero-content {
   position: relative;
   z-index: 1;
-  max-width: 1200px;
+  width: 100%;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 4rem 1.5rem;
+  padding: clamp(3rem, 8vw, 7rem) 1.5rem;
   color: #fff;
+}
+/* 進場：逐項淡入上浮（prefers-reduced-motion 下停用，見檔尾） */
+.hero-content > * { animation: hero-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.hero-content > .hero-tag { animation-delay: 0.05s; }
+.hero-content > .hero-title { animation-delay: 0.14s; }
+.hero-content > .hero-desc { animation-delay: 0.24s; }
+.hero-content > .hero-actions { animation-delay: 0.34s; }
+.hero-content > .hero-stats { animation-delay: 0.44s; }
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .hero-tag {
   display: inline-block;
-  background: rgba(255,255,255,0.15);
-  padding: 0.3rem 1rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  margin-bottom: 1.5rem;
-  backdrop-filter: blur(4px);
+  padding: 0.4rem 1.1rem;
+  border: 1px solid rgba(233, 196, 159, 0.5);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #e9c49f;
+  margin-bottom: 1.6rem;
+  backdrop-filter: blur(3px);
 }
 .hero-title {
-  font-size: clamp(2.2rem, 6vw, 4rem);
+  font-size: clamp(2.2rem, 6vw, 4.2rem);
   font-weight: 900;
-  line-height: 1.2;
-  margin-bottom: 1.2rem;
+  line-height: 1.14;
+  letter-spacing: -0.01em;
+  margin-bottom: 1.3rem;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4);
+  text-wrap: balance;
 }
 .hero-highlight {
-  color: #e9c49f;
   display: block;
+  margin-top: 0.35rem;
+  color: #e9c49f;
 }
 .hero-desc {
-  font-size: 1.05rem;
-  line-height: 1.8;
-  color: rgba(255,255,255,0.85);
-  margin-bottom: 2.5rem;
-  max-width: 520px;
+  font-size: clamp(0.98rem, 1.4vw, 1.1rem);
+  line-height: 1.85;
+  color: rgba(255,255,255,0.82);
+  margin-bottom: 2.6rem;
+  max-width: 32rem;
 }
-.hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 3rem; }
-.hero-btn { padding: 0.85rem 2rem; font-size: 1rem; }
+.hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 3.2rem; }
+/* admin 區塊的 .btn { height:38px!important; padding:0!important } 會壓扁 hero CTA，
+   用 .hero .hero-btn 提高權重並同樣加 !important 蓋回來 */
+.hero .hero-btn {
+  height: auto !important;
+  padding: 0.95rem 2.3rem !important;
+  font-size: 1rem;
+  border-radius: 999px;
+}
 .hero-stats {
   display: flex;
   align-items: center;
   gap: 2rem;
   flex-wrap: wrap;
+  padding-top: 1.75rem;
+  border-top: 1px solid rgba(255,255,255,0.15);
 }
-.stat { text-align: center; }
-.stat-n { display: block; font-size: 1.8rem; font-weight: 900; }
-.stat-l { font-size: 0.82rem; color: rgba(255,255,255,0.7); }
-.stat-divider { width: 1px; height: 40px; background: rgba(255,255,255,0.2); }
+.stat { text-align: left; }
+.stat-n { display: block; font-size: 1.9rem; font-weight: 900; line-height: 1.1; color: #e9c49f; }
+.stat-l { font-size: 0.8rem; letter-spacing: 0.04em; color: rgba(255,255,255,0.62); }
+.stat-divider { width: 1px; height: 38px; background: rgba(255,255,255,0.18); }
+
+/* 向下捲動提示（絕對定位，不受 .hero-content 進場動畫影響） */
+.hero-scroll {
+  position: absolute;
+  left: 50%;
+  bottom: 1.6rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgba(255,255,255,0.65);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-decoration: none;
+  z-index: 1;
+  transition: color 0.25s ease;
+}
+.hero-scroll:hover { color: #e9c49f; }
+.hero-scroll svg { animation: hero-scroll-bob 1.8s ease-in-out infinite; }
+@keyframes hero-scroll-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(5px); }
+}
+
+/* 次要 CTA：深色底上的白框幽靈按鈕（.btn-outline-white 專案內未定義過，補在此） */
+.btn-outline-white {
+  border: 1.5px solid rgba(255,255,255,0.7) !important;
+  background: rgba(255,255,255,0.06) !important;
+  color: #fff !important;
+}
+.btn-outline-white:hover {
+  background: #fff !important;
+  border-color: #fff !important;
+  color: var(--primary-dark) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-content > *,
+  .hero-scroll svg { animation: none; }
+}
+
+/* 手機版有 60px 固定頂欄，hero 扣掉它才不會把下方內容擠出一截空白（放在 .hero 基底之後才生效） */
+@media (max-width: 900px) {
+  .hero { min-height: calc(100svh - 60px); }
+  .hero-scroll { display: none; }
+}
 
 .features-section {
   background: var(--bg-section);
@@ -538,8 +608,14 @@ main { padding-top: 0; }
   .trainers-grid { grid-template-columns: repeat(2, 1fr); }
   .why-visual { display: none; }
   .cta-box { flex-direction: column; text-align: center; }
-  .hero-stats { gap: 1.2rem; }
+  .hero-title { font-size: clamp(1.9rem, 8vw, 2.7rem); line-height: 1.2; }
+  .hero-highlight { margin-top: 0.15rem; }
+  .hero-desc { margin-bottom: 2.1rem; }
+  .hero-actions { flex-direction: column; align-items: stretch; margin-bottom: 2.6rem; }
+  .hero .hero-btn { width: 100%; }
+  .hero-stats { gap: 1.1rem 1.4rem; }
   .stat-divider { display: none; }
+  .stat-n { font-size: 1.6rem; }
 }
 
 .plan-select-btn {
