@@ -8,13 +8,12 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Run stage using node:20-alpine (already cached locally)
+# Run stage using node:20-alpine (cached locally)
 FROM node:20-alpine
 WORKDIR /app
 
-RUN npm install -g serve
-
-COPY --from=builder /app/dist /app/dist
+COPY --from=builder /app/dist ./dist
+COPY server.js ./server.js
 
 EXPOSE 80
-CMD ["serve", "-s", "dist", "-l", "80"]
+CMD ["node", "server.js"]
