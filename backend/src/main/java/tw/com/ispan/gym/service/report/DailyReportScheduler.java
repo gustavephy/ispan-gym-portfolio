@@ -53,10 +53,30 @@ public class DailyReportScheduler {
 
     private void generateDaily(LocalDate date, String cause) {
         try {
-            reportService.generate(new GenerateReportRequest(ReportType.DAILY, date, date), null);
+            var report = reportService.generate(
+                    new GenerateReportRequest(ReportType.DAILY, date, date), null);
             log.info("{}完成：{}", cause, date);
+            String warning = report == null ? null
+                    : qualityWarning(date, report.orderCount(), report.totalAmount());
+            if (warning != null) {
+                log.warn(warning);
+            }
         } catch (Exception ex) {
             log.error("{}失敗：{}，可由後台手動補跑", cause, date, ex);
         }
+    }
+
+    /**
+     * 資料品質檢查（資料管線工具內建品質檢查的最小可行版）：異常結果不該安靜地寫進快照。
+     * 有計入營收的訂單但總額為 0，幾乎必是金額欄位或統計口徑出了問題。
+     * 拆成純函式讓單元測試直接驗，不用攔 log；正常回 null。
+     */
+    static String qualityWarning(LocalDate date, Long orderCount, java.math.BigDecimal totalAmount) {
+        if (orderCount != null && orderCount > 0
+                && totalAmount != null && totalAmount.signum() == 0) {
+            return "日報資料品質警告：" + date + " 有 " + orderCount
+                    + " 筆計入營收的訂單但營收為 0，請檢查金額欄位與統計口徑";
+        }
+        return null;
     }
 }

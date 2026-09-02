@@ -39,6 +39,24 @@ class DailyReportSchedulerTest {
     }
 
     @Test
+    void 有營收訂單但總額為零時發出品質警告() {
+        String warning = DailyReportScheduler.qualityWarning(
+                YESTERDAY, 5L, java.math.BigDecimal.ZERO);
+        org.assertj.core.api.Assertions.assertThat(warning)
+                .contains("品質警告").contains("5 筆");
+    }
+
+    @Test
+    void 正常結果與空日不觸發品質警告() {
+        org.assertj.core.api.Assertions.assertThat(
+                DailyReportScheduler.qualityWarning(YESTERDAY, 5L, new java.math.BigDecimal("1200"))).isNull();
+        org.assertj.core.api.Assertions.assertThat(
+                DailyReportScheduler.qualityWarning(YESTERDAY, 0L, java.math.BigDecimal.ZERO)).isNull();
+        org.assertj.core.api.Assertions.assertThat(
+                DailyReportScheduler.qualityWarning(YESTERDAY, null, null)).isNull();
+    }
+
+    @Test
     void 啟動時昨日日報已存在就不重生() {
         when(snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(ReportType.DAILY, YESTERDAY, YESTERDAY))
                 .thenReturn(Optional.of(mock(ReportSnapshot.class)));
