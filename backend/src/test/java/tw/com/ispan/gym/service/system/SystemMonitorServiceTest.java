@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,80 @@ class SystemMonitorServiceTest {
 
         assertThat(m.httpRequestCount()).isEqualTo(3L);
         assertThat(m.httpAvgLatencyMillis()).isEqualTo(200.0); // (100+300+200)/3
+    }
+
+    @Test
+    void 分位數由彙總直方圖插值而來且高分位不低於低分位() {
+        when(jdbc.queryForObject(anyString(), eq(Integer.class))).thenReturn(1);
+        // publishPercentileHistogram 只對 Prometheus 型 registry 發布 bucket，
+        // SimpleMeterRegistry 會忽略；單元測試改用明確 SLO bucket（任何 registry 都發布）
+        // 驗證同一條「bucket 彙總＋桶內插值」路徑。正式環境的 bucket 由
+        // application.properties 的 percentiles-histogram 設定產生。
+        Timer timer = Timer.builder("http.server.requests").tag("uri", "/api/a")
+                .serviceLevelObjectives(java.time.Duration.ofMillis(25), java.time.Duration.ofMillis(50),
+                        java.time.Duration.ofMillis(500), java.time.Duration.ofMillis(1000))
+                .register(registry);
+        for (int i = 0; i < 95; i++) {
+            timer.record(20, TimeUnit.MILLISECONDS);
+        }
+        for (int i = 0; i < 5; i++) {
+            timer.record(800, TimeUnit.MILLISECONDS);
+        }
+
+        SystemMetricsResponse m = service.currentMetrics();
+
+        // 95 筆落在 <=25ms 桶、5 筆落在 <=1000ms 桶：
+        // p50 在首桶內插值（約 13ms）、p99 在 500–1000ms 桶內插值（約 900ms）
+        assertThat(m.httpP50Millis()).isBetween(5.0, 25.0);
+        assertThat(m.httpP99Millis()).isBetween(500.0, 1000.0);
+        assertThat(m.httpP95Millis()).isGreaterThanOrEqualTo(m.httpP50Millis());
+        assertThat(m.httpP99Millis()).isGreaterThanOrEqualTo(m.httpP95Millis());
+    }
+
+    @Test
+    void 未開直方圖時分位數回零不噴錯() {
+        when(jdbc.queryForObject(anyString(), eq(Integer.class))).thenReturn(1);
+        registry.timer("http.server.requests", "uri", "/api/a").record(100, TimeUnit.MILLISECONDS);
+
+        SystemMetricsResponse m = service.currentMetrics();
+
+        assertThat(m.httpP95Millis()).isZero();
+    }
+
+    @Test
+    void 前五端點依請求數排序且剔除監控端點自身() {
+        when(jdbc.queryForObject(anyString(), eq(Integer.class))).thenReturn(1);
+        for (int i = 0; i < 3; i++) {
+            registry.timer("http.server.requests", "uri", "/api/a").record(100, TimeUnit.MILLISECONDS);
+        }
+        for (int i = 0; i < 5; i++) {
+            registry.timer("http.server.requests", "uri", "/api/b").record(50, TimeUnit.MILLISECONDS);
+        }
+        for (int i = 0; i < 99; i++) {
+            registry.timer("http.server.requests", "uri", "/api/admin/system/metrics").record(1, TimeUnit.MILLISECONDS);
+        }
+
+        SystemMetricsResponse m = service.currentMetrics();
+
+        assertThat(m.topEndpoints()).extracting(SystemMetricsResponse.EndpointStat::uri)
+                .containsExactly("/api/b", "/api/a"); // 自身輪詢量最大但不上榜
+        assertThat(m.topEndpoints().get(0).count()).isEqualTo(5L);
+        assertThat(m.topEndpoints().get(0).avgMillis()).isEqualTo(50.0);
+        // 剔除只影響排行榜，總量照算
+        assertThat(m.httpRequestCount()).isEqualTo(107L);
+    }
+
+    @Test
+    void 五xx計數只算狀態五開頭的請求() {
+        when(jdbc.queryForObject(anyString(), eq(Integer.class))).thenReturn(1);
+        registry.timer("http.server.requests", "uri", "/api/a", "status", "200").record(10, TimeUnit.MILLISECONDS);
+        registry.timer("http.server.requests", "uri", "/api/a", "status", "404").record(10, TimeUnit.MILLISECONDS);
+        registry.timer("http.server.requests", "uri", "/api/a", "status", "500").record(10, TimeUnit.MILLISECONDS);
+        registry.timer("http.server.requests", "uri", "/api/a", "status", "503").record(10, TimeUnit.MILLISECONDS);
+
+        SystemMetricsResponse m = service.currentMetrics();
+
+        assertThat(m.http5xxCount()).isEqualTo(2L);
     }
 
     @Test
