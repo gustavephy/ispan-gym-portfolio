@@ -43,8 +43,8 @@ public class DailyReportScheduler {
     @EventListener(ApplicationReadyEvent.class)
     public void backfillYesterdayOnStartup() {
         LocalDate yesterday = LocalDate.now(TAIPEI).minusDays(1);
-        if (snapshots.findByReportTypeAndPeriodStartAndPeriodEnd(ReportType.DAILY, yesterday, yesterday)
-                .isPresent()) {
+        if (snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(
+                ReportType.DAILY, yesterday, yesterday).isPresent()) {
             return;
         }
         log.info("啟動補跑：{} 的日報不存在，自動補生", yesterday);

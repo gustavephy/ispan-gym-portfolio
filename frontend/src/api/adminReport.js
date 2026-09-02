@@ -51,6 +51,9 @@ export const getReports = () => api.get('/api/admin/reports')
  */
 export const getReportDetail = (reportId) => api.get(`/api/admin/reports/${reportId}`)
 
+/** 同型別同區間的全部版本（現行版第一筆）；append-only 版本化的歷史入口，需 ADMIN */
+export const getReportVersions = (reportId) => api.get(`/api/admin/reports/${reportId}/versions`)
+
 /**
  * 生成報表快照，需 ADMIN
  * @param {{reportType: string, periodStart: string, periodEnd: string}} payload

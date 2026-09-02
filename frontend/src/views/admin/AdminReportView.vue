@@ -15,6 +15,7 @@ import {
   getCouponEffect,
   getReports,
   getReportDetail,
+  getReportVersions,
   downloadReportPdf,
   downloadReportCsv,
   generateReport,
@@ -75,6 +76,31 @@ const reports = ref([])
 const selectedReportId = ref(null)
 const detail = ref(null)
 const detailLoading = ref(false)
+
+// append-only 版本化：主下拉只列現行版；選中後抓同區間全部版本，
+// 有多版時出現版本選單，可回看「當初生成的那份凍結數字」（可下載、不可刪）
+const versions = ref([])
+const viewingVersionId = ref(null)
+const viewingHistorical = computed(
+  () => viewingVersionId.value != null && viewingVersionId.value !== selectedReportId.value,
+)
+
+async function fetchVersions(reportId) {
+  if (!reportId) {
+    versions.value = []
+    return
+  }
+  try {
+    const { data } = await getReportVersions(reportId)
+    versions.value = data
+  } catch {
+    versions.value = [] // 版本清單抓不到只影響回看功能，不擋主流程
+  }
+}
+
+function formatDateTime(value) {
+  return String(value ?? '').replace('T', ' ').slice(0, 16)
+}
 
 const currency = new Intl.NumberFormat('zh-TW', {
   style: 'currency',
@@ -513,13 +539,15 @@ async function fetchReports() {
   try {
     const { data } = await getReports()
     reports.value = data
-    // 預設選最新一份，讓趨勢圖一進來就有東西看
+    // 預設選最新一份；明細與版本清單由 selectedReportId 的 watch 載入。
+    // 重生成時 handleGenerate 已先切到新 id（此處值相同不再觸發），那次 watch 已載過
     if (data.length > 0) {
       selectedReportId.value = data[0].id
-      await fetchDetail(data[0].id)
     } else {
       // 清單被刪光時要跟著清掉，否則畫面會停留在最後一份已刪除快照的殘留資料
       selectedReportId.value = null
+      viewingVersionId.value = null
+      versions.value = []
       detail.value = null
     }
   } catch (e) {
@@ -623,14 +651,20 @@ async function fetchDetail(reportId) {
   if (dailyTotals.value.length > 0) renderTrend()
 }
 
-watch(selectedReportId, (id) => fetchDetail(id))
+watch(selectedReportId, (id) => {
+  // 切換快照＝回到該區間的現行版；同時抓版本清單決定要不要顯示版本選單
+  viewingVersionId.value = id
+  fetchDetail(id)
+  fetchVersions(id)
+})
 
 // PDF 由後端 ReportPdfService 產生（內嵌中文字型），這裡只負責把回傳的 blob
 // 轉成下載連結；寫法比照 AiPlanPanel.vue 的 onDownloadPdf
 const downloadingPdf = ref(false)
 
-// 下載與刪除都以「目前選中的快照 id」為準（見 handleDelete 的說明），detail 只當備援
-const currentReportId = () => selectedReportId.value ?? detail.value?.id
+// 下載以「正在檢視的版本」為準——回看歷史版本時下載的就是當初那份；
+// 刪除仍以現行版為準（歷史版本不開放刪除，見範本的 disabled 條件）
+const currentReportId = () => viewingVersionId.value ?? selectedReportId.value ?? detail.value?.id
 
 async function onDownloadPdf() {
   await downloadBlob(() => downloadReportPdf(currentReportId()), 'application/pdf', 'pdf', (v) => (downloadingPdf.value = v))
@@ -840,6 +874,19 @@ onBeforeUnmount(() => {
               </option>
             </select>
           </label>
+          <!-- append-only 版本化：同區間被重生成過才會出現，可回看歷史版本 -->
+          <label v-if="versions.length > 1" class="report-picker__field">
+            <span class="filter__label">版本</span>
+            <select
+              v-model="viewingVersionId"
+              class="filter__input"
+              @change="fetchDetail(viewingVersionId)"
+            >
+              <option v-for="v in versions" :key="v.id" :value="v.id">
+                {{ v.supersededAt ? '歷史版' : '現行版' }}｜{{ formatDateTime(v.generatedAt) }} 生成
+              </option>
+            </select>
+          </label>
           <!-- 下載的是所選快照的完整報表（含排行、分佈、每日營收），不是畫面上的圖 -->
           <button
             type="button"
@@ -860,7 +907,7 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="btn btn-danger-outline"
-            :disabled="!detail || deleting"
+            :disabled="!detail || deleting || viewingHistorical"
             @click="handleDelete"
           >
             {{ deleting ? '刪除中…' : '刪除' }}
@@ -908,12 +955,17 @@ onBeforeUnmount(() => {
         </button>
 
         <p class="generate-hint">
-          同類型、同區間若已有快照，會直接以這次的結果取代舊的一份。
+          同類型、同區間若已有快照，這次的結果會成為現行版；舊的一份保留為歷史版本，
+          可從「版本」選單回看（append-only，當初的數字永遠可追溯）。
         </p>
         <OperationMessage :message="generateError" />
       </div>
 
-      <p v-if="detail?.staleAt" class="stale-notice">
+      <p v-if="viewingHistorical" class="stale-notice">
+        正在檢視歷史版本——這是當時生成的凍結數字（可下載存證，不可刪除）；
+        現行數字請切回「現行版」。
+      </p>
+      <p v-if="detail?.staleAt && !viewingHistorical" class="stale-notice">
         此報表生成後區間內發生過退款，數字已與現況不符，建議重新生成。
       </p>
 

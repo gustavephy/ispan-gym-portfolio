@@ -107,6 +107,12 @@ public class OperationReportController {
         return reportService.getReport(reportId);
     }
 
+    /** 同型別同區間的全部版本（現行版第一筆）；append-only 版本化的歷史入口 */
+    @GetMapping("/{reportId}/versions")
+    public List<ReportSummaryResponse> versions(@PathVariable Integer reportId) {
+        return reportService.versions(reportId);
+    }
+
     /** 單份報表匯出 PDF（僅限已生成的快照；即時統計請先生成快照再匯出） */
     @GetMapping("/{reportId}/pdf")
     public ResponseEntity<byte[]> downloadPdf(@PathVariable Integer reportId) {

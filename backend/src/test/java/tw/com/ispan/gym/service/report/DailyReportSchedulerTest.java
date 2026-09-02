@@ -29,7 +29,7 @@ class DailyReportSchedulerTest {
 
     @Test
     void 啟動時昨日日報不存在就補生() {
-        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEnd(ReportType.DAILY, YESTERDAY, YESTERDAY))
+        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(ReportType.DAILY, YESTERDAY, YESTERDAY))
                 .thenReturn(Optional.empty());
 
         scheduler.backfillYesterdayOnStartup();
@@ -40,7 +40,7 @@ class DailyReportSchedulerTest {
 
     @Test
     void 啟動時昨日日報已存在就不重生() {
-        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEnd(ReportType.DAILY, YESTERDAY, YESTERDAY))
+        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(ReportType.DAILY, YESTERDAY, YESTERDAY))
                 .thenReturn(Optional.of(mock(ReportSnapshot.class)));
 
         scheduler.backfillYesterdayOnStartup();

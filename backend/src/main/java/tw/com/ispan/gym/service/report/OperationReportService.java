@@ -121,13 +121,30 @@ public class OperationReportService {
         snapshots.markStaleCovering(event.paidDate(), LocalDateTime.now());
     }
 
-    /** 歷史報表列表，新的在前 */
+    /** 歷史報表列表（只列現行版），新的在前；同區間的歷史版本走 versions() */
     public List<ReportSummaryResponse> listReports() {
-        return snapshots.findAllByOrderByGeneratedAtDesc().stream()
-                .map(s -> new ReportSummaryResponse(s.getId(), s.getReportType(),
-                        s.getPeriodStart(), s.getPeriodEnd(), s.getOrderCount(),
-                        s.getTotalAmount(), s.getDiscountAmount(), s.getGeneratedAt(), s.getStaleAt()))
+        return snapshots.findAllBySupersededAtIsNullOrderByGeneratedAtDesc().stream()
+                .map(this::toSummary)
                 .toList();
+    }
+
+    /**
+     * 指定快照所屬（型別＋區間）的全部版本，新的在前——現行版第一筆、其後是被取代的歷史版本。
+     * append-only 版本化：重生成不刪舊版，這裡就是「當初印出去那份」的入口。
+     */
+    public List<ReportSummaryResponse> versions(Integer reportId) {
+        ReportSnapshot any = snapshots.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException("找不到報表資料"));
+        return snapshots.findAllByReportTypeAndPeriodStartAndPeriodEndOrderByGeneratedAtDesc(
+                        any.getReportType(), any.getPeriodStart(), any.getPeriodEnd())
+                .stream().map(this::toSummary).toList();
+    }
+
+    private ReportSummaryResponse toSummary(ReportSnapshot s) {
+        return new ReportSummaryResponse(s.getId(), s.getReportType(),
+                s.getPeriodStart(), s.getPeriodEnd(), s.getOrderCount(),
+                s.getTotalAmount(), s.getDiscountAmount(), s.getGeneratedAt(),
+                s.getStaleAt(), s.getSupersededAt());
     }
 
     /** 單份報表含排行明細 */
@@ -137,7 +154,10 @@ public class OperationReportService {
         return toDetail(snapshot);
     }
 
-    /** 刪除單份歷史報表；排行明細子項由 cascade 一併刪除 */
+    /**
+     * 刪除單份報表（單一版本）；排行明細子項由 cascade 一併刪除。
+     * 刪掉現行版不會讓舊版「復活」為現行——該區間就是沒有現行版，要看就重新生成。
+     */
     @Transactional
     public void delete(Integer reportId) {
         ReportSnapshot snapshot = snapshots.findById(reportId)
@@ -147,8 +167,9 @@ public class OperationReportService {
 
     /**
      * 以真實訂單結算並寫入快照。
-     * 同型別同區間重新生成＝同一交易內刪舊插新，對外永遠只看得到一份完整的；
-     * 併發觸發由 UX_report_type_period 唯一約束作最後防線。
+     * 同型別同區間重新生成＝append-only 版本化：舊版蓋上 supersededAt 成為歷史版本
+     * （不刪，「當初印出去的數字」永遠可追溯），新版成為現行版；
+     * 併發觸發由篩選唯一索引 UX_report_type_period_current 作最後防線。
      *
      * @param operatorAccountId 手動觸發的操作者帳號 id（JWT subject）；排程觸發傳 null。
      *                          身分域拆分後操作者記 Employee，以 account_id 反查。
@@ -159,11 +180,11 @@ public class OperationReportService {
         LocalDateTime from = request.periodStart().atStartOfDay();
         LocalDateTime to = request.periodEnd().plusDays(1).atStartOfDay();
 
-        snapshots.findByReportTypeAndPeriodStartAndPeriodEnd(
+        snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(
                         request.reportType(), request.periodStart(), request.periodEnd())
                 .ifPresent(existing -> {
-                    snapshots.delete(existing);
-                    snapshots.flush(); // 先送出 DELETE，避免新快照撞唯一約束
+                    existing.markSuperseded(LocalDateTime.now());
+                    snapshots.saveAndFlush(existing); // 先送出 UPDATE 讓出「現行版」篩選唯一索引，新版才插得進去
                 });
 
         OrderPeriodSummary summary = orders.summarizePeriod(from, to, REVENUE_STATUSES);

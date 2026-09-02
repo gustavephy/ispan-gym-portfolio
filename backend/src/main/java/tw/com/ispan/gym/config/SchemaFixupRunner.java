@@ -67,6 +67,27 @@ public class SchemaFixupRunner implements CommandLineRunner {
         addOauthExchangeCodeVersionColumn();
         createOAuthSecurityConstraints();
         migrateGroupClassRoomToEnum();
+        versionReportSnapshots();
+    }
+
+    // === 報表快照 append-only 版本化（2026-09-03 定案）========================
+    // 同區間重生成改為「舊版蓋 superseded_at、新版為現行」，歷史版本永久保留可追溯。
+    // 「現行版唯一」的約束帶 WHERE 條件，UNIQUE CONSTRAINT 做不到，
+    // entity 上的舊 @UniqueConstraint 已移除，這裡卸舊約束、建篩選唯一索引。
+    // superseded_at 欄位由 ddl-auto 依 entity 新欄位先建好（nullable），
+    // 既有列全為 NULL＝一律視為現行版，符合舊約束「每區間僅一份」的前提。
+
+    private void versionReportSnapshots() {
+        if (!tableExists("report_snapshot") || !columnExists("report_snapshot", "superseded_at")) {
+            return;
+        }
+        dropConstraintIfExists("report_snapshot", "UX_report_type_period");
+        dropIndexIfExists("report_snapshot", "UX_report_type_period");
+        createFilteredUniqueIndex("UX_report_type_period_current", """
+                CREATE UNIQUE INDEX UX_report_type_period_current
+                    ON report_snapshot(report_type, period_start, period_end)
+                    WHERE superseded_at IS NULL
+                """);
     }
 
     // === 員工審核模型修正（2026-08-14 定案：EmployeeRole/EmployeeStatus 改版）========

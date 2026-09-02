@@ -55,7 +55,8 @@ import tw.com.ispan.gym.repository.report.ReportSnapshotRepository;
  *
  * 涵蓋類別註解列出的統計口徑：計入營收的三種狀態、日期區間轉半開區間
  * （end 要 +1 天才含尾）、品項排行三分來源的合併與金額降冪、
- * 區間驗證（起訖顛倒／超過上限）、重新生成時先刪後插，以及退款事件標記快照過時。
+ * 區間驗證（起訖顛倒／超過上限）、重新生成時的 append-only 版本化（舊版標記
+ * superseded、不刪），以及退款事件標記快照過時。
  *
  * 聚合本身是 JPQL，這裡只驗證「service 有沒有用正確的參數去查、拿到結果後怎麼組裝」，
  * SQL 正確性要靠實際資料庫驗證。
@@ -95,7 +96,7 @@ class OperationReportServiceTest {
 
     private void stubSnapshotSaveReturnsArgument() {
         when(snapshots.save(any(ReportSnapshot.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEnd(any(), any(), any()))
+        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(any(), any(), any()))
                 .thenReturn(Optional.empty());
     }
 
@@ -159,19 +160,21 @@ class OperationReportServiceTest {
     }
 
     @Test
-    void 同型別同區間重新生成先刪舊再插新() {
+    void 同型別同區間重新生成舊版標記superseded新版為現行不刪舊() {
         stubEmptyAggregates();
         ReportSnapshot existing = new ReportSnapshot(ReportType.MONTHLY, START, END, 5L,
                 new BigDecimal("1000"), BigDecimal.ZERO, null);
-        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEnd(ReportType.MONTHLY, START, END))
-                .thenReturn(Optional.of(existing));
+        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(
+                ReportType.MONTHLY, START, END)).thenReturn(Optional.of(existing));
         when(snapshots.save(any(ReportSnapshot.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(snapshots.saveAndFlush(any(ReportSnapshot.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.generate(request(), null);
 
-        verify(snapshots).delete(existing);
-        // 先 flush 送出 DELETE，新快照才不會撞唯一約束
-        verify(snapshots).flush();
+        // append-only：舊版不刪、蓋上 supersededAt；先 flush 讓出「現行版」篩選唯一索引
+        assertThat(existing.getSupersededAt()).isNotNull();
+        verify(snapshots).saveAndFlush(existing);
+        verify(snapshots, never()).delete(any());
         verify(snapshots).save(any(ReportSnapshot.class));
     }
 
@@ -522,8 +525,8 @@ class OperationReportServiceTest {
     }
 
     @Test
-    void 報表列表回傳摘要欄位() {
-        when(snapshots.findAllByOrderByGeneratedAtDesc()).thenReturn(List.of(
+    void 報表列表只列現行版並回傳摘要欄位() {
+        when(snapshots.findAllBySupersededAtIsNullOrderByGeneratedAtDesc()).thenReturn(List.of(
                 new ReportSnapshot(ReportType.MONTHLY, START, END, 10L,
                         new BigDecimal("10000"), new BigDecimal("500"), null)));
 
@@ -532,7 +535,27 @@ class OperationReportServiceTest {
                     assertThat(summary.reportType()).isEqualTo(ReportType.MONTHLY);
                     assertThat(summary.orderCount()).isEqualTo(10L);
                     assertThat(summary.totalAmount()).isEqualByComparingTo("10000");
+                    assertThat(summary.supersededAt()).isNull();
                 });
+    }
+
+    @Test
+    void 版本清單回傳同區間全部版本且現行版在前() {
+        ReportSnapshot current = new ReportSnapshot(ReportType.MONTHLY, START, END, 12L,
+                new BigDecimal("12000"), BigDecimal.ZERO, null);
+        ReportSnapshot old = new ReportSnapshot(ReportType.MONTHLY, START, END, 10L,
+                new BigDecimal("10000"), BigDecimal.ZERO, null);
+        old.markSuperseded(LocalDateTime.of(2026, 9, 1, 0, 10));
+        when(snapshots.findById(7)).thenReturn(Optional.of(current));
+        when(snapshots.findAllByReportTypeAndPeriodStartAndPeriodEndOrderByGeneratedAtDesc(
+                ReportType.MONTHLY, START, END)).thenReturn(List.of(current, old));
+
+        var versions = service.versions(7);
+
+        assertThat(versions).hasSize(2);
+        assertThat(versions.get(0).supersededAt()).isNull(); // 現行版
+        assertThat(versions.get(1).supersededAt()).isNotNull(); // 歷史版本仍可讀
+        assertThat(versions.get(1).totalAmount()).isEqualByComparingTo("10000");
     }
 
     // === onRefundCompleted() ==================================================

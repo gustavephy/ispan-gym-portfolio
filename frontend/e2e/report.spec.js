@@ -5,8 +5,9 @@ import { test, expect, ACCOUNTS, loginAs } from './fixtures.js'
  * A7 營運報表：生成快照、檢視、匯出、刪除。
  *
  * <p>報表是快照式的——生成當下把統計算完寫進 report_snapshot 與三張明細表，
- * 之後讀取不重算。同型別同區間重新生成會覆蓋舊的那份（同一交易內刪舊插新），
- * 所以測試可以用固定日期重複跑而不會累積垃圾。
+ * 之後讀取不重算。同型別同區間重新生成是 append-only 版本化：新的成為現行版、
+ * 舊的保留為歷史版本（不刪），下拉選單只列現行版——所以測試可以用固定日期
+ * 重複跑而不會讓下拉累積垃圾（歷史版本累積在版本選單，不影響主清單）。
  *
  * <p>頁面的輸入框沒有 id，但都包在 <label> 裡且有文字 span，getByLabel 定位得到。
  */
@@ -32,8 +33,8 @@ async function generateDailyReport(page, date = REPORT_DATE) {
   const res = await generated
   expect(res.ok(), `生成失敗：${await res.text()}`).toBeTruthy()
 
-  // 同區間重複生成是「刪舊插新」：POST 回來的瞬間頁面可能還選著已被刪掉的舊快照，
-  // 這時按下載／刪除會打到舊 id 而 404。等下拉真的切到新 id 再回傳，後續操作才可靠。
+  // 同區間重複生成是「舊版標記 superseded、新版為現行」：POST 回來的瞬間頁面可能
+  // 還選著已被取代的舊版。等下拉真的切到新 id 再回傳，後續操作才可靠。
   const created = await res.json()
   await expect(page.locator('select').nth(1)).toHaveValue(String(created.id))
   return created
@@ -65,7 +66,7 @@ test.describe('A7 營運報表', () => {
     await expect(page.getByRole('button', { name: '排行 CSV' })).toBeEnabled()
   })
 
-  test('同區間重複生成會覆蓋而不是新增一份', async ({ page }) => {
+  test('同區間重複生成成為現行版，舊版保留為可回看的歷史版本', async ({ page }) => {
     const snapshotCount = async () => {
       const options = page.locator('select').nth(1).locator('option')
       return options.count()
@@ -74,10 +75,17 @@ test.describe('A7 營運報表', () => {
     await generateDailyReport(page)
     const before = await snapshotCount()
 
-    // 同型別同區間再生成一次
+    // 同型別同區間再生成一次：主下拉（只列現行版）不長新項目……
     await generateDailyReport(page)
-
     expect(await snapshotCount()).toBe(before)
+
+    // ……但版本選單出現：現行版在前、被取代的歷史版本仍可回看（append-only）
+    const versionSelect = page.locator('select').nth(2)
+    await expect(versionSelect).toBeVisible()
+    const versionOptions = versionSelect.locator('option')
+    await expect(versionOptions.first()).toContainText('現行版')
+    expect(await versionOptions.count()).toBeGreaterThanOrEqual(2)
+    await expect(versionOptions.nth(1)).toContainText('歷史版')
   })
 
   test('可下載 PDF 與排行 CSV', async ({ page }) => {
