@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
+import tw.com.ispan.gym.dto.report.GroupClassFillRow;
+import tw.com.ispan.gym.dto.report.MemberDailyRow;
 import tw.com.ispan.gym.dto.report.ReportDetailResponse;
 import tw.com.ispan.gym.dto.report.ReportSummaryResponse;
 import tw.com.ispan.gym.dto.report.SalesStatsResponse;
@@ -65,6 +67,22 @@ public class OperationReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "10") int top) {
         return reportService.liveStats(type, from, to, top);
+    }
+
+    /** 團課滿座率（即時統計，不落快照）；字面路徑同樣須排在 /{reportId} 之前 */
+    @GetMapping("/group-class-fill")
+    public List<GroupClassFillRow> groupClassFill(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return reportService.groupClassFill(from, to);
+    }
+
+    /** 每日新會員趨勢（即時統計，不落快照） */
+    @GetMapping("/member-growth")
+    public List<MemberDailyRow> memberGrowth(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return reportService.memberGrowth(from, to);
     }
 
     /** 單份報表含排行明細 */

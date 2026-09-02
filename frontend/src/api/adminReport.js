@@ -26,6 +26,14 @@ export const getLiveStats = ({ from, to, type = '', top = 10 }) =>
 export const getOrderOverview = ({ from, to }) =>
   api.get('/api/admin/orders/reports/overview', { params: { from, to } })
 
+/** 團課滿座率（即時，不落快照），需 ADMIN。from／to 為 yyyy-MM-dd，時間軸為場次開始時間 */
+export const getGroupClassFill = ({ from, to }) =>
+  api.get('/api/admin/reports/group-class-fill', { params: { from, to } })
+
+/** 每日新會員趨勢（即時，不落快照），需 ADMIN。無人註冊的日期不回列，呈現端自行補零 */
+export const getMemberGrowth = ({ from, to }) =>
+  api.get('/api/admin/reports/member-growth', { params: { from, to } })
+
 /** 歷史報表列表（不含明細），需 ADMIN */
 export const getReports = () => api.get('/api/admin/reports')
 

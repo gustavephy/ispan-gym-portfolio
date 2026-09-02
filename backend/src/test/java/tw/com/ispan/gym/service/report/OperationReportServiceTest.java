@@ -36,7 +36,10 @@ import tw.com.ispan.gym.enums.report.ReportType;
 import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.dto.report.GroupClassFillRow;
+import tw.com.ispan.gym.dto.report.MemberDailyRow;
 import tw.com.ispan.gym.dto.report.ReportRefundSummary;
+import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
@@ -67,8 +70,9 @@ class OperationReportServiceTest {
     private final PaymentRefundRepository refunds = mock(PaymentRefundRepository.class);
     private final MemberRepository members = mock(MemberRepository.class);
     private final MemberSubscriptionRepository subscriptions = mock(MemberSubscriptionRepository.class);
+    private final GroupClassSessionRepository groupClassSessions = mock(GroupClassSessionRepository.class);
     private final OperationReportService service = new OperationReportService(
-            snapshots, orders, orderItems, employees, refunds, members, subscriptions);
+            snapshots, orders, orderItems, employees, refunds, members, subscriptions, groupClassSessions);
 
     // === 共用測試資料 ========================================================
 
@@ -407,6 +411,26 @@ class OperationReportServiceTest {
         // 退款投影未 stub（回 null）也要正規化為零，口徑同 attachExtendedStats
         assertThat(overview.refundCount()).isZero();
         assertThat(overview.refundAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void 團課滿座率與會員成長皆以半開區間查詢且起訖顛倒會被擋下() {
+        LocalDateTime from = START.atStartOfDay();
+        LocalDateTime to = END.plusDays(1).atStartOfDay();
+        when(groupClassSessions.aggregateFillRate(from, to))
+                .thenReturn(List.of(new GroupClassFillRow("熱瑜珈", 4L, 30L, 40L)));
+        when(members.aggregateDailyNewMembers(from, to))
+                .thenReturn(List.of(new MemberDailyRow(START, 2L)));
+
+        assertThat(service.groupClassFill(START, END)).hasSize(1)
+                .first().satisfies(row -> assertThat(row.bookedTotal()).isEqualTo(30L));
+        assertThat(service.memberGrowth(START, END)).hasSize(1)
+                .first().satisfies(row -> assertThat(row.newMembers()).isEqualTo(2L));
+
+        assertThatThrownBy(() -> service.groupClassFill(END, START))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThatThrownBy(() -> service.memberGrowth(END, START))
+                .isInstanceOf(BusinessRuleException.class);
     }
 
     @Test

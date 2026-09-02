@@ -9,6 +9,8 @@ import { CanvasRenderer } from 'echarts/renderers'
 import {
   getLiveStats,
   getOrderOverview,
+  getGroupClassFill,
+  getMemberGrowth,
   getReports,
   getReportDetail,
   downloadReportPdf,
@@ -59,6 +61,9 @@ const statsLoading = ref(true)
 const statsError = ref(null)
 // 即時營運總覽：訂單量/退款/新會員與付款方式分布（口徑：下單日 createdAt，與 /stats 的付款日不同）
 const overview = ref(null)
+// 團課滿座率與每日新會員：同樣跟期間篩選連動的即時統計
+const classFill = ref([])
+const memberDaily = ref([])
 
 // ── 歷史報表快照（趨勢圖與分佈的資料來源）──────────────────
 const reports = ref([])
@@ -120,6 +125,10 @@ const kpis = computed(() => {
 const hasPaymentData = computed(
   () => Object.keys(overview.value?.countByPaymentMethod ?? {}).length > 0,
 )
+const hasClassFill = computed(() => classFill.value.length > 0)
+const hasMemberDaily = computed(() => memberDaily.value.length > 0)
+// 與排行同律：高度隨課程數成長
+const classFillHeight = computed(() => Math.max(120, classFill.value.length * 44 + 32))
 
 const hasRanking = computed(() => (stats.value?.ranking?.length ?? 0) > 0)
 
@@ -136,9 +145,13 @@ const paymentBreakdown = computed(() => detail.value?.paymentBreakdown ?? [])
 const trendEl = ref(null)
 const rankingEl = ref(null)
 const paymentEl = ref(null)
+const classFillEl = ref(null)
+const memberGrowthEl = ref(null)
 let trendChart = null
 let rankingChart = null
 let paymentChart = null
+let classFillChart = null
+let memberGrowthChart = null
 
 // 取自 dataviz 參考色盤（已用 validate_palette.js 驗證通過 light／dark 兩種模式）
 const SERIES_1 = '#2a78d6'
@@ -273,10 +286,100 @@ function renderPaymentPie() {
   )
 }
 
+function renderClassFill() {
+  if (!classFillEl.value) return
+  if (!classFillChart) classFillChart = echarts.init(classFillEl.value)
+  // 滿座率由低到高排，橫向長條最滿的落在最上方（同排行圖的方向邏輯）
+  const rows = [...classFill.value]
+    .map((r) => ({ ...r, pct: r.capacityTotal > 0 ? (r.bookedTotal / r.capacityTotal) * 100 : 0 }))
+    .sort((a, b) => a.pct - b.pct)
+  classFillChart.setOption(
+    {
+      color: [SERIES_1],
+      tooltip: {
+        trigger: 'item',
+        formatter: (p) => {
+          const row = rows[p.dataIndex]
+          return `${row.courseName}<br/>${number.format(row.sessionCount)} 場次｜報名 ${number.format(row.bookedTotal)}/${number.format(row.capacityTotal)} 人次<br/>滿座率 ${row.pct.toFixed(1)}%`
+        },
+      },
+      grid: { left: 8, right: 96, top: 8, bottom: 8, containLabel: true },
+      // 滿座率是 0–100 的比例，軸固定到 100 讓「離滿座多遠」讀得出來
+      xAxis: { type: 'value', max: 100, show: false },
+      yAxis: {
+        type: 'category',
+        data: rows.map((r) => r.courseName),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: INK },
+      },
+      series: [
+        {
+          type: 'bar',
+          data: rows.map((r) => Number(r.pct.toFixed(1))),
+          barMaxWidth: 18,
+          itemStyle: { borderRadius: [0, 4, 4, 0] },
+          label: {
+            show: true,
+            position: 'right',
+            color: MUTED,
+            formatter: (p) => {
+              const row = rows[p.dataIndex]
+              return `${number.format(row.bookedTotal)}/${number.format(row.capacityTotal)}（${row.pct.toFixed(0)}%）`
+            },
+          },
+        },
+      ],
+    },
+    true,
+  )
+}
+
+function renderMemberGrowth() {
+  if (!memberGrowthEl.value) return
+  if (!memberGrowthChart) memberGrowthChart = echarts.init(memberGrowthEl.value)
+  const rows = memberDaily.value
+  memberGrowthChart.setOption(
+    {
+      color: [SERIES_1],
+      tooltip: {
+        trigger: 'axis',
+        valueFormatter: (v) => `${number.format(Number(v ?? 0))} 人`,
+      },
+      grid: { left: 48, right: 24, top: 24, bottom: 32 },
+      xAxis: {
+        type: 'category',
+        data: rows.map((r) => formatDate(r.statDate)),
+        axisLine: { lineStyle: { color: MUTED } },
+        axisLabel: { color: MUTED },
+      },
+      yAxis: {
+        type: 'value',
+        minInterval: 1, // 人數是整數，不出現 0.5 這種刻度
+        axisLabel: { color: MUTED, formatter: (v) => number.format(v) },
+        splitLine: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
+      },
+      series: [
+        {
+          name: '新會員',
+          type: 'line',
+          data: rows.map((r) => Number(r.newMembers ?? 0)),
+          smooth: false,
+          lineStyle: { width: 2 },
+          symbolSize: 8,
+        },
+      ],
+    },
+    true,
+  )
+}
+
 function resizeCharts() {
   trendChart?.resize()
   rankingChart?.resize()
   paymentChart?.resize()
+  classFillChart?.resize()
+  memberGrowthChart?.resize()
 }
 
 // ── 資料載入 ────────────────────────────────────────────────
@@ -291,7 +394,7 @@ async function fetchStats() {
   statsLoading.value = true
   statsError.value = null
   try {
-    const [statsRes, overviewRes] = await Promise.all([
+    const [statsRes, overviewRes, fillRes, growthRes] = await Promise.all([
       getLiveStats({
         from: from.value,
         to: to.value,
@@ -300,9 +403,13 @@ async function fetchStats() {
       }),
       // overview 不分品項型別（訂單層級的統計切不開型別），只跟期間篩選連動
       getOrderOverview({ from: `${from.value}T00:00:00`, to: nextDayStart(to.value) }),
+      getGroupClassFill({ from: from.value, to: to.value }),
+      getMemberGrowth({ from: from.value, to: to.value }),
     ])
     stats.value = statsRes.data
     overview.value = overviewRes.data
+    classFill.value = fillRes.data ?? []
+    memberDaily.value = growthRes.data ?? []
     // 等 nextTick 讓容器套用新的 rankingHeight 後再 resize，否則圖表仍用舊高度繪製
     await nextTick()
     if (hasRanking.value) {
@@ -310,6 +417,11 @@ async function fetchStats() {
       renderRanking()
     }
     if (hasPaymentData.value) renderPaymentPie()
+    if (hasClassFill.value) {
+      classFillChart?.resize()
+      renderClassFill()
+    }
+    if (hasMemberDaily.value) renderMemberGrowth()
   } catch (e) {
     statsError.value = e.message
   } finally {
@@ -485,6 +597,8 @@ onBeforeUnmount(() => {
   trendChart?.dispose()
   rankingChart?.dispose()
   paymentChart?.dispose()
+  classFillChart?.dispose()
+  memberGrowthChart?.dispose()
 })
 </script>
 
@@ -554,6 +668,31 @@ onBeforeUnmount(() => {
       </header>
       <p v-if="!statsLoading && !hasPaymentData" class="empty-hint">此期間沒有付款資料。</p>
       <div v-show="hasPaymentData" ref="paymentEl" class="chart" style="height: 300px"></div>
+    </section>
+
+    <!-- 團課滿座率：健身房營運最關心的供需指標，軸固定 0–100% -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">團課滿座率</h2>
+        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依場次開始時間，取消場次不計</span>
+      </header>
+      <p v-if="!statsLoading && !hasClassFill" class="empty-hint">此期間沒有團課場次。</p>
+      <div
+        v-show="hasClassFill"
+        ref="classFillEl"
+        class="chart"
+        :style="{ height: `${classFillHeight}px` }"
+      ></div>
+    </section>
+
+    <!-- 每日新會員：成長趨勢，無人註冊的日期後端不回列（斷點如實呈現） -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">每日新會員</h2>
+        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依註冊日</span>
+      </header>
+      <p v-if="!statsLoading && !hasMemberDaily" class="empty-hint">此期間沒有新註冊會員。</p>
+      <div v-show="hasMemberDaily" ref="memberGrowthEl" class="chart" style="height: 280px"></div>
     </section>
 
     <!-- 歷史報表快照：趨勢與分佈的資料來源 -->
