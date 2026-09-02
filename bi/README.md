@@ -30,6 +30,10 @@ set -a && . ./.env && set +a && python bi/metabase_setup.py
 - 資料庫存的 datetime 是 UTC 牆鐘（`hibernate.jdbc.time_zone=UTC`），
   **圖卡 SQL 的日期一律 `DATEADD(HOUR, 8, ...)` 轉台北再分桶**，
   跟後端 OperationReportService 的 Java 端分桶是同一個口徑
+- 儀表板頂端掛了**日期選擇器**（field filter），未設定＝開站以來；
+  注意 filter 比的是 DB 的 UTC 牆鐘，日界有 8 小時偏移（Demo 可接受，
+  正宗解法是倉儲層建台北時區的日期維度）。field filter 綁的表在 SQL 裡
+  **不能取別名**（Metabase 以原表名注入條件）
 - 後台「營運分析」頁嵌的是 public link 的 iframe（無認證，本機 Demo 可接受；
   正式環境要換 signed embedding——後端用 embed secret 簽 JWT）；public link 換了要同步改
   `AdminAnalyticsView.vue` 的網址常數

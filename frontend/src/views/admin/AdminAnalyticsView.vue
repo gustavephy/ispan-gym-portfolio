@@ -15,7 +15,8 @@ const PUBLIC_DASHBOARD_URL = `${METABASE_BASE}/public/dashboard/dda53c1f-30f4-46
     <span class="section-tag">ADMIN</span>
     <h1 class="section-title">營運分析</h1>
     <p class="section-desc">
-      Metabase 自助式 BI：這裡嵌的是「營運總覽」儀表板；要自己拖拉新報表，
+      Metabase 自助式 BI：這裡嵌的是「營運總覽」儀表板，頂端的日期選擇器可切換期間
+      （未設定＝開站以來）；要自己拖拉新報表，
       <a :href="METABASE_BASE" target="_blank" rel="noopener">在 Metabase 開啟</a>（營運人員不用寫程式）。
       跟「營運統計」互補：對帳走快照報表，探索走這裡。
     </p>

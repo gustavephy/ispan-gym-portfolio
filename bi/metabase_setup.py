@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""一次性：Metabase 初始設定 + 接 SQL Server + 建圖卡/儀表板 + 開 public link。"""
+"""一次性：Metabase 初始設定 + 接 SQL Server + 建圖卡/儀表板 + 開 public link。
+
+重跑方式（repo 根目錄）：set -a && . ./.env && set +a && python bi/metabase_setup.py
+"""
 import json
 import os
 import sys
@@ -90,97 +93,148 @@ else:
     if db_id is None:
         sys.exit("all database variants failed")
 
-# 4. 建圖卡（原始時間是 UTC 牆鐘，日期一律 DATEADD +8 轉台北——與後端修正同一口徑）。
-# 儀表板刻意只放「營運統計」頁沒有的探索維度——兩頁職責不同：對帳走快照、探索走 BI；
-# 日期趨勢類另存成卡（不上儀表板），當「已修正時區口徑」的示範。
+# 3.5 等 schema 同步完成，拿日期欄位 id——field filter 要綁到具體欄位
+WANT_FIELDS = {("orders", "paid_at"): None, ("orders", "created_at"): None,
+               ("coach_slot", "start_at"): None}
+for i in range(60):
+    s, meta = req("GET", f"/api/database/{db_id}/metadata", token=session)
+    if s == 200:
+        for t in meta.get("tables", []):
+            for f in t.get("fields", []):
+                key = (t["name"], f["name"])
+                if key in WANT_FIELDS:
+                    WANT_FIELDS[key] = f["id"]
+        if all(v is not None for v in WANT_FIELDS.values()):
+            break
+    time.sleep(5)
+else:
+    sys.exit("schema 同步逾時，拿不到日期欄位 id")
+F_PAID = WANT_FIELDS[("orders", "paid_at")]
+F_CREATED = WANT_FIELDS[("orders", "created_at")]
+F_SLOT = WANT_FIELDS[("coach_slot", "start_at")]
+print(f"field ids: paid_at={F_PAID} created_at={F_CREATED} slot_start={F_SLOT}")
+
+# 4. 建圖卡。設計要點：
+# - 儀表板刻意只放「營運統計」頁沒有的探索維度——兩頁職責不同：對帳走快照、探索走 BI；
+#   日期趨勢類另存成卡（不上儀表板），當「已修正時區口徑（DATEADD +8）」的示範。
+# - 五張上板卡都掛 field filter（SQL 裡的 [[AND {{tag}}]]），由儀表板頂端的
+#   日期選擇器統一驅動；未設篩選＝開站以來。
+# - filter 比的是 DB 存的 UTC 牆鐘時間，日界有 8 小時偏移（Demo 可接受，README 有註記）。
+# - field filter 綁的表在 SQL 中不能取別名（Metabase 會以原表名注入條件）。
+DESC_PAID = "日期依付款時間篩選；未設篩選＝開站以來（DB 存 UTC 牆鐘，日界有 8 小時偏移）"
+DESC_CREATED = "日期依下單時間篩選；未設篩選＝開站以來（DB 存 UTC 牆鐘，日界有 8 小時偏移）"
+DESC_SLOT = "日期依時段開始時間篩選；未設篩選＝開站以來（DB 存 UTC 牆鐘，日界有 8 小時偏移）"
+
+# (名稱, 圖型, tag 名, tag 顯示名, 欄位 id, 描述, SQL)；tag 為 None 的不掛 filter
 CARDS = [
-    ("各商品分類營收", "bar", """
+    ("各商品分類營收", "bar", "paid_date", "付款日期", "F_PAID", DESC_PAID, """
 SELECT pc.name AS [分類], SUM(oi.quantity * oi.price_at_buy) AS [營收]
 FROM order_item oi
-JOIN orders o ON o.order_id = oi.order_id
+JOIN orders ON orders.order_id = oi.order_id
 JOIN product p ON p.product_id = oi.product_id
 JOIN product_category pc ON pc.product_category_id = p.category_id
-WHERE o.status IN ('PAID','SHIPPED','COMPLETED')
+WHERE orders.status IN ('PAID','SHIPPED','COMPLETED')
+[[AND {{paid_date}}]]
 GROUP BY pc.name
 ORDER BY [營收] DESC"""),
-    ("付款方式分布", "pie", """
+    ("付款方式分布", "pie", "order_date", "下單日期", "F_CREATED", DESC_CREATED, """
 SELECT ISNULL(payment_method, N'未付款') AS [付款方式], COUNT(*) AS [筆數]
-FROM orders GROUP BY payment_method"""),
-    ("營收組成", "pie", """
+FROM orders
+WHERE 1=1 [[AND {{order_date}}]]
+GROUP BY payment_method"""),
+    ("營收組成", "pie", "paid_date", "付款日期", "F_PAID", DESC_PAID, """
 SELECT t.[類型], SUM(t.[金額]) AS [營收] FROM (
     SELECT CASE WHEN oi.product_id IS NOT NULL THEN N'商品' ELSE N'私人課程' END AS [類型],
            oi.quantity * oi.price_at_buy AS [金額]
-    FROM order_item oi JOIN orders o ON o.order_id = oi.order_id
-    WHERE o.status IN ('PAID','SHIPPED','COMPLETED')
+    FROM order_item oi JOIN orders ON orders.order_id = oi.order_id
+    WHERE orders.status IN ('PAID','SHIPPED','COMPLETED') [[AND {{paid_date}}]]
     UNION ALL
-    SELECT N'會籍訂閱', o.total_amount
-    FROM orders o
-    WHERE o.subscription_plan_id IS NOT NULL AND o.status IN ('PAID','SHIPPED','COMPLETED')
+    SELECT N'會籍訂閱', total_amount
+    FROM orders
+    WHERE subscription_plan_id IS NOT NULL AND status IN ('PAID','SHIPPED','COMPLETED') [[AND {{paid_date}}]]
 ) t GROUP BY t.[類型]"""),
-    ("各教練預約數", "row", """
+    ("各教練預約數", "row", "slot_date", "時段日期", "F_SLOT", DESC_SLOT, """
 SELECT tr.last_name + tr.first_name AS [教練], COUNT(*) AS [預約數]
 FROM coach_booking cb
-JOIN coach_slot cs ON cs.id = cb.coach_slot_id
-JOIN trainer tr ON tr.trainer_id = cs.trainer_id
+JOIN coach_slot ON coach_slot.id = cb.coach_slot_id
+JOIN trainer tr ON tr.trainer_id = coach_slot.trainer_id
+WHERE 1=1 [[AND {{slot_date}}]]
 GROUP BY tr.last_name, tr.first_name
 ORDER BY [預約數] DESC"""),
-    ("商品銷售排行", "row", """
+    ("商品銷售排行", "row", "paid_date", "付款日期", "F_PAID", DESC_PAID, """
 SELECT TOP 10 oi.product_name_at_buy AS [商品],
        SUM(oi.quantity * oi.price_at_buy) AS [金額]
-FROM order_item oi JOIN orders o ON o.order_id = oi.order_id
-WHERE o.status IN ('PAID','SHIPPED','COMPLETED') AND oi.product_id IS NOT NULL
+FROM order_item oi JOIN orders ON orders.order_id = oi.order_id
+WHERE orders.status IN ('PAID','SHIPPED','COMPLETED') AND oi.product_id IS NOT NULL
+[[AND {{paid_date}}]]
 GROUP BY oi.product_name_at_buy
 ORDER BY [金額] DESC"""),
 ]
 # 只存卡、不上儀表板：日期趨勢（DATEADD +8 修正示範，與營運統計頁重疊故不展示）
 EXTRA_CARDS = [
-    ("每日營收趨勢", "line", """
+    ("每日營收趨勢", "line", None, None, None, None, """
 SELECT CAST(DATEADD(HOUR, 8, paid_at) AS DATE) AS [日期], SUM(total_amount) AS [營收]
 FROM orders
 WHERE paid_at IS NOT NULL AND status IN ('PAID','SHIPPED','COMPLETED')
 GROUP BY CAST(DATEADD(HOUR, 8, paid_at) AS DATE)
 ORDER BY [日期]"""),
-    ("每日新會員", "bar", """
+    ("每日新會員", "bar", None, None, None, None, """
 SELECT CAST(DATEADD(HOUR, 8, created_at) AS DATE) AS [日期], COUNT(*) AS [新會員]
 FROM member WHERE deleted_at IS NULL
 GROUP BY CAST(DATEADD(HOUR, 8, created_at) AS DATE)
 ORDER BY [日期]"""),
 ]
+FIELD_BY_KEY = {"F_PAID": F_PAID, "F_CREATED": F_CREATED, "F_SLOT": F_SLOT}
+
 card_ids = []
-for name, display, sql in CARDS + EXTRA_CARDS:
+tag_by_card = {}
+for name, display, tname, tdisp, fkey, desc, sql in CARDS + EXTRA_CARDS:
+    native = {"query": sql.strip()}
+    if tname:
+        native["template-tags"] = {tname: {
+            "id": f"tt-{tname}-{len(card_ids)}", "name": tname, "display-name": tdisp,
+            "type": "dimension", "dimension": ["field", FIELD_BY_KEY[fkey], None],
+            "widget-type": "date/all-options"}}
     s, res = req("POST", "/api/card", token=session, body={
         "name": name, "display": display, "visualization_settings": {},
-        "collection_id": None,
-        "dataset_query": {"type": "native", "database": db_id,
-                          "native": {"query": sql.strip()}}})
+        "collection_id": None, "description": desc,
+        "dataset_query": {"type": "native", "database": db_id, "native": native}})
     if s != 200:
         sys.exit(f"card '{name}' failed {s}: {str(res)[:300]}")
     card_ids.append(res["id"])
+    if tname:
+        tag_by_card[res["id"]] = tname
     print(f"card '{name}' id={res['id']}")
 
-# 5. 儀表板 + 排版（新版 API 用 PUT dashcards，失敗退回舊版 POST cards）
+# 5. 儀表板：排版＋掛日期參數（date/all-options），逐卡對映到各自的 template tag
 s, res = req("POST", "/api/dashboard", token=session, body={"name": "營運總覽"})
 if s != 200:
     sys.exit(f"dashboard failed {s}: {res}")
 dash_id = res["id"]
-layout = [
-    {"id": -1, "card_id": card_ids[0], "row": 0, "col": 0, "size_x": 14, "size_y": 8},
-    {"id": -2, "card_id": card_ids[1], "row": 0, "col": 14, "size_x": 10, "size_y": 8},
-    {"id": -3, "card_id": card_ids[2], "row": 8, "col": 0, "size_x": 10, "size_y": 8},
-    {"id": -4, "card_id": card_ids[3], "row": 8, "col": 10, "size_x": 14, "size_y": 8},
-    {"id": -5, "card_id": card_ids[4], "row": 16, "col": 0, "size_x": 24, "size_y": 8},
+PARAM_ID = "gymdate1"
+positions = [
+    (card_ids[0], 0, 0, 14, 8),
+    (card_ids[1], 0, 14, 10, 8),
+    (card_ids[2], 8, 0, 10, 8),
+    (card_ids[3], 8, 10, 14, 8),
+    (card_ids[4], 16, 0, 24, 8),
 ]
-s, res = req("PUT", f"/api/dashboard/{dash_id}", token=session,
-             body={"dashcards": layout})
-if s == 200:
-    print(f"dashboard id={dash_id} laid out (PUT)")
-else:
-    print(f"PUT dashcards failed {s}: {str(res)[:200]}; trying legacy API")
-    for c in layout:
-        s2, res2 = req("POST", f"/api/dashboard/{dash_id}/cards", token=session,
-                       body={"cardId": c["card_id"], "row": c["row"], "col": c["col"],
-                             "size_x": c["size_x"], "size_y": c["size_y"]})
-        print(f"legacy add card {c['card_id']}: {s2}")
+dashcards = []
+for i, (cid, row, col, sx, sy) in enumerate(positions):
+    entry = {"id": -(i + 1), "card_id": cid, "row": row, "col": col,
+             "size_x": sx, "size_y": sy, "parameter_mappings": []}
+    if cid in tag_by_card:
+        entry["parameter_mappings"] = [{
+            "parameter_id": PARAM_ID, "card_id": cid,
+            "target": ["dimension", ["template-tag", tag_by_card[cid]]]}]
+    dashcards.append(entry)
+s, res = req("PUT", f"/api/dashboard/{dash_id}", token=session, body={
+    "parameters": [{"id": PARAM_ID, "name": "日期", "slug": "date",
+                    "type": "date/all-options", "sectionId": "date"}],
+    "dashcards": dashcards})
+if s != 200:
+    sys.exit(f"PUT dashcards failed {s}: {str(res)[:300]}")
+print(f"dashboard id={dash_id} laid out with date filter")
 
 # 6. 開 public sharing + 產生公開連結
 s, res = req("PUT", "/api/setting/enable-public-sharing", token=session,
