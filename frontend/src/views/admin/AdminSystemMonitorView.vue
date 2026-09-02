@@ -11,8 +11,8 @@ import OperationMessage from '@/components/OperationMessage.vue'
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const POLL_MS = 5000
-/** 滾動視窗保留的取樣點數：5 秒一點 × 60 點 ＝ 最近 5 分鐘 */
-const MAX_POINTS = 60
+/** 固定時間視窗：x 軸永遠是「最近 5 分鐘」，也是取樣點的保留期限 */
+const WINDOW_MS = 5 * 60 * 1000
 
 const metrics = ref(null)
 const error = ref(null)
@@ -145,11 +145,14 @@ function lineOption({ seriesDefs, unit = '', min, max, hasLegend }) {
     tooltip: { trigger: 'axis', valueFormatter: (v) => `${Number(v ?? 0).toFixed(1)}${unit}` },
     legend: hasLegend ? { top: 0, textStyle: { color: TEXT_MUTED } } : undefined,
     grid: { left: 48, right: 12, top: hasLegend ? 30 : 14, bottom: 26 },
+    // 固定「最近 5 分鐘」的 time 軸：新點從右緣進來往左流、未滿窗時左邊留白，
+    // 跟 Grafana 一樣。category 軸會把現有點平攤滿整寬，每進一點就整條向內壓縮
     xAxis: {
-      type: 'category',
-      data: sampleTimes.value,
+      type: 'time',
+      min: Date.now() - WINDOW_MS,
+      max: Date.now(),
       axisLine: { lineStyle: { color: GRID_LINE } },
-      axisLabel: { color: TEXT_MUTED },
+      axisLabel: { color: TEXT_MUTED, formatter: '{HH}:{mm}:{ss}' },
     },
     yAxis: {
       type: 'value',
@@ -163,7 +166,15 @@ function lineOption({ seriesDefs, unit = '', min, max, hasLegend }) {
 }
 
 function line(name, data, extra = {}) {
-  return { name, type: 'line', data, showSymbol: false, lineStyle: { width: 2 }, ...extra }
+  // time 軸的資料點是 [時間戳, 值]；數值序列與 sampleTimes 是平行陣列，在這裡合併
+  return {
+    name,
+    type: 'line',
+    data: data.map((v, i) => [sampleTimes.value[i], v]),
+    showSymbol: false,
+    lineStyle: { width: 2 },
+    ...extra,
+  }
 }
 
 function setChart(key, el, option) {
@@ -238,10 +249,8 @@ const allSeries = [
 ]
 
 function pushSample(m) {
-  const now = new Date()
-
   // counter 差分 → 速率（後端重啟計數歸零會出現負差，視為 0）
-  const nowMs = now.getTime()
+  const nowMs = Date.now()
   if (prevSample) {
     const dt = (nowMs - prevSample.t) / 1000
     const dCount = m.httpRequestCount - prevSample.count
@@ -251,9 +260,7 @@ function pushSample(m) {
   }
   prevSample = { t: nowMs, count: m.httpRequestCount ?? 0, fiveXx: m.http5xxCount ?? 0 }
 
-  sampleTimes.value.push(
-    `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`,
-  )
+  sampleTimes.value.push(nowMs)
   heapSeries.value.push(Number((m.heapMaxBytes ? (m.heapUsedBytes / m.heapMaxBytes) * 100 : 0).toFixed(1)))
   cpuProcessSeries.value.push(Number((Number(m.processCpuUsage ?? 0) * 100).toFixed(1)))
   cpuSystemSeries.value.push(Number((Number(m.systemCpuUsage ?? 0) * 100).toFixed(1)))
@@ -263,7 +270,8 @@ function pushSample(m) {
   p99Series.value.push(Number(Number(m.httpP99Millis ?? 0).toFixed(1)))
   poolActiveSeries.value.push(m.dbPoolActive ?? 0)
   poolIdleSeries.value.push(m.dbPoolIdle ?? 0)
-  if (sampleTimes.value.length > MAX_POINTS) {
+  // 掉出視窗的點修掉；分頁在背景放久了回來，過舊的點也一併清光
+  while (sampleTimes.value.length && sampleTimes.value[0] < nowMs - WINDOW_MS) {
     allSeries.forEach((s) => s.value.shift())
   }
 }
