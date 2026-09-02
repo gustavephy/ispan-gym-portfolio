@@ -26,6 +26,22 @@ public interface MemberRepository extends JpaRepository<Member, Integer> {
                              @Param("to") java.time.LocalDateTime to);
 
     /**
+     * 每日新會員聚合（報表趨勢用）；半開區間 [from, to)，
+     * CAST 至 LocalDate 由方言轉為資料庫層的日期截斷（寫法同 OrderRepository.aggregateDailyRevenue）。
+     */
+    @Query("""
+            SELECT new tw.com.ispan.gym.dto.report.MemberDailyRow(
+                CAST(m.createdAt AS LocalDate), COUNT(m))
+            FROM Member m
+            WHERE m.createdAt >= :from AND m.createdAt < :to
+            GROUP BY CAST(m.createdAt AS LocalDate)
+            ORDER BY CAST(m.createdAt AS LocalDate)
+            """)
+    java.util.List<tw.com.ispan.gym.dto.report.MemberDailyRow> aggregateDailyNewMembers(
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to);
+
+    /**
      * 依 account id 悲觀鎖定：自助修改個資專用。刻意不透過 findByAccountId() 先載入，
      * 避免同一 transaction 內 Member 被 Persistence Context 快取後，之後即使改用鎖定查詢
      * 命中同一列，Hibernate 仍回傳先前那個未鎖定讀到的舊物件、不會用新結果覆蓋欄位值，

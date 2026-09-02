@@ -14,7 +14,11 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.com.ispan.gym.dto.report.DailyRevenueRow;
+import tw.com.ispan.gym.dto.report.CouponEffectRow;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
+import tw.com.ispan.gym.dto.report.GroupClassFillRow;
+import tw.com.ispan.gym.dto.report.MemberDailyRow;
+import tw.com.ispan.gym.dto.report.TrainerSlotRow;
 import tw.com.ispan.gym.dto.report.OrderOverviewResponse;
 import tw.com.ispan.gym.dto.report.OrderPeriodSummary;
 import tw.com.ispan.gym.dto.report.ProductSalesRow;
@@ -37,6 +41,9 @@ import tw.com.ispan.gym.enums.report.ReportItemType;
 import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
+import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
+import tw.com.ispan.gym.repository.coupon.CouponRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
@@ -80,11 +87,16 @@ public class OperationReportService {
     private final PaymentRefundRepository refundRepository;
     private final MemberRepository members;
     private final MemberSubscriptionRepository subscriptions;
+    private final GroupClassSessionRepository groupClassSessions;
+    private final CoachSlotRepository coachSlots;
+    private final CouponRepository coupons;
 
     public OperationReportService(ReportSnapshotRepository snapshots, OrderRepository orders,
                                   OrderItemRepository orderItems, EmployeeRepository employees,
                                   PaymentRefundRepository refundRepository, MemberRepository members,
-                                  MemberSubscriptionRepository subscriptions) {
+                                  MemberSubscriptionRepository subscriptions,
+                                  GroupClassSessionRepository groupClassSessions,
+                                  CoachSlotRepository coachSlots, CouponRepository coupons) {
         this.snapshots = snapshots;
         this.orders = orders;
         this.orderItems = orderItems;
@@ -92,6 +104,9 @@ public class OperationReportService {
         this.refundRepository = refundRepository;
         this.members = members;
         this.subscriptions = subscriptions;
+        this.groupClassSessions = groupClassSessions;
+        this.coachSlots = coachSlots;
+        this.coupons = coupons;
     }
 
     /**
@@ -245,8 +260,40 @@ public class OperationReportService {
             countByPaymentMethod.put((String) row[0], (Long) row[1]);
         }
 
+        // 退款與新會員／新訂閱：口徑同 attachExtendedStats（含無退款時投影回 null 的正規化）
+        ReportRefundSummary refunds = refundRepository.summarizeCompleted(from, to);
+        long refundCount = refunds == null || refunds.refundCount() == null ? 0L : refunds.refundCount();
+        BigDecimal refundAmount = refunds == null ? BigDecimal.ZERO : zeroIfNull(refunds.refundAmount());
+
         return new OrderOverviewResponse(from, to, totalOrders, totalRevenue, countByStatus, revenueByStatus,
-                countByPaymentMethod);
+                countByPaymentMethod, refundCount, refundAmount,
+                members.countCreatedBetween(from, to), subscriptions.countCreatedBetween(from, to));
+    }
+
+    /** 團課滿座率（即時，不落快照）：時間軸為場次開始時間，取消場次不計 */
+    public List<GroupClassFillRow> groupClassFill(LocalDate periodStart, LocalDate periodEnd) {
+        validatePeriod(periodStart, periodEnd);
+        return groupClassSessions.aggregateFillRate(
+                periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay());
+    }
+
+    /** 每日新會員趨勢（即時，不落快照）；無人註冊的日期不產生列 */
+    public List<MemberDailyRow> memberGrowth(LocalDate periodStart, LocalDate periodEnd) {
+        validatePeriod(periodStart, periodEnd);
+        return members.aggregateDailyNewMembers(
+                periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay());
+    }
+
+    /** 教練時段使用率（即時，不落快照）：時間軸為時段開始時間，取消時段不計 */
+    public List<TrainerSlotRow> trainerUtilization(LocalDate periodStart, LocalDate periodEnd) {
+        validatePeriod(periodStart, periodEnd);
+        return coachSlots.aggregateUtilization(
+                periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay());
+    }
+
+    /** 優惠券成效（即時，不落快照）：看券的整個生命週期，不隨期間篩選 */
+    public List<CouponEffectRow> couponEffect() {
+        return coupons.aggregateEffect();
     }
 
     /**

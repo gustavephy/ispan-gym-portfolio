@@ -17,6 +17,30 @@ export const getLiveStats = ({ from, to, type = '', top = 10 }) =>
     params: { from, to, type: type || undefined, top },
   })
 
+/**
+ * 即時營運總覽（訂單/營收/狀態與付款方式分布/退款/新會員新訂閱），需 ADMIN。
+ * 端點掛在 AdminOrderController 下；參數是 ISO DATE_TIME，
+ * 呼叫端自行把日期轉成 [起日 00:00, 迄日+1 00:00) 的半開區間（口徑同 /stats）。
+ * 注意時間軸與 /stats 不同：這裡統計「下單日 createdAt」，看的是下單量而非營收歸屬。
+ */
+export const getOrderOverview = ({ from, to }) =>
+  api.get('/api/admin/orders/reports/overview', { params: { from, to } })
+
+/** 團課滿座率（即時，不落快照），需 ADMIN。from／to 為 yyyy-MM-dd，時間軸為場次開始時間 */
+export const getGroupClassFill = ({ from, to }) =>
+  api.get('/api/admin/reports/group-class-fill', { params: { from, to } })
+
+/** 每日新會員趨勢（即時，不落快照），需 ADMIN。無人註冊的日期不回列，呈現端自行補零 */
+export const getMemberGrowth = ({ from, to }) =>
+  api.get('/api/admin/reports/member-growth', { params: { from, to } })
+
+/** 教練時段使用率（即時，不落快照），需 ADMIN。時間軸為時段開始時間，取消時段不計 */
+export const getTrainerUtilization = ({ from, to }) =>
+  api.get('/api/admin/reports/trainer-utilization', { params: { from, to } })
+
+/** 優惠券成效（即時，看券的整個生命週期），需 ADMIN。不吃期間參數 */
+export const getCouponEffect = () => api.get('/api/admin/reports/coupon-effect')
+
 /** 歷史報表列表（不含明細），需 ADMIN */
 export const getReports = () => api.get('/api/admin/reports')
 

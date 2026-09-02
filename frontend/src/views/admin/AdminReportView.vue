@@ -3,11 +3,16 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 // 按需引入，避免整包 echarts（含地圖、3D 等用不到的模組）被打進 bundle
 // （用法比照 InbodyPanel.vue）
 import * as echarts from 'echarts/core'
-import { LineChart, BarChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { LineChart, BarChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import {
   getLiveStats,
+  getOrderOverview,
+  getGroupClassFill,
+  getMemberGrowth,
+  getTrainerUtilization,
+  getCouponEffect,
   getReports,
   getReportDetail,
   downloadReportPdf,
@@ -19,7 +24,7 @@ import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import { paymentMethodLabel } from '@/utils/paymentLabels.js'
 
-echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRenderer])
+echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 // 品項型別對照：後端 ReportItemType
 const TYPE_LABELS = {
@@ -56,6 +61,14 @@ const typeFilter = ref('')
 const stats = ref(null)
 const statsLoading = ref(true)
 const statsError = ref(null)
+// 即時營運總覽：訂單量/退款/新會員與付款方式分布（口徑：下單日 createdAt，與 /stats 的付款日不同）
+const overview = ref(null)
+// 團課滿座率與每日新會員：同樣跟期間篩選連動的即時統計
+const classFill = ref([])
+const memberDaily = ref([])
+// 教練時段使用率（跟期間連動）；優惠券成效看整個生命週期、不吃期間
+const trainerUtil = ref([])
+const couponEffect = ref([])
 
 // ── 歷史報表快照（趨勢圖與分佈的資料來源）──────────────────
 const reports = ref([])
@@ -85,18 +98,58 @@ const kpis = computed(() => {
     { key: 'qty', label: '售出件數', value: number.format(Number(s.totalQuantity ?? 0)) },
     { key: 'kinds', label: '有銷售的品項', value: number.format(s.ranking?.length ?? 0) },
   ]
-  const d = detail.value
-  if (d) {
+  // 後三張改吃即時 overview（原本退款吃快照 detail，沒選快照就看不到，且期間對不上篩選列）
+  const o = overview.value
+  if (o) {
+    // 客單價分母只算已收款訂單（PAID/SHIPPED/COMPLETED），與營收口徑一致
+    const paidOrders = ['PAID', 'SHIPPED', 'COMPLETED']
+      .reduce((sum, k) => sum + Number(o.countByStatus?.[k] ?? 0), 0)
+    tiles.push({
+      key: 'orders',
+      label: '訂單數',
+      value: number.format(Number(o.totalOrders ?? 0)),
+      hint: paidOrders > 0 ? `客單價 ${currency.format(Number(o.totalRevenue ?? 0) / paidOrders)}` : null,
+    })
     tiles.push({
       key: 'refund',
       label: '退款金額',
-      value: currency.format(Number(d.refundAmount ?? 0)),
-      hint: `${number.format(Number(d.refundCount ?? 0))} 筆`,
-      tone: Number(d.refundAmount ?? 0) > 0 ? 'warn' : null,
+      value: currency.format(Number(o.refundAmount ?? 0)),
+      hint: `${number.format(Number(o.refundCount ?? 0))} 筆`,
+      tone: Number(o.refundAmount ?? 0) > 0 ? 'warn' : null,
+    })
+    tiles.push({
+      key: 'members',
+      label: '新會員',
+      value: number.format(Number(o.newMemberCount ?? 0)),
+      hint: `新訂閱 ${number.format(Number(o.newSubscriptionCount ?? 0))}`,
     })
   }
   return tiles
 })
+
+const hasPaymentData = computed(
+  () => Object.keys(overview.value?.countByPaymentMethod ?? {}).length > 0,
+)
+const hasClassFill = computed(() => classFill.value.length > 0)
+const hasMemberDaily = computed(() => memberDaily.value.length > 0)
+const hasTrainerUtil = computed(() => trainerUtil.value.length > 0)
+// 與排行同律：高度隨課程數成長
+const classFillHeight = computed(() => Math.max(120, classFill.value.length * 44 + 32))
+const trainerUtilHeight = computed(() => Math.max(120, trainerUtil.value.length * 44 + 32))
+
+// 優惠券成效表格列：比率先算好，模板只負責顯示
+const couponRows = computed(() =>
+  couponEffect.value.map((c) => {
+    const total = Number(c.totalQuantity ?? 0)
+    const claimed = Number(c.claimedQuantity ?? 0)
+    const used = Number(c.usedCount ?? 0)
+    return {
+      ...c,
+      claimRate: total > 0 ? ((claimed / total) * 100).toFixed(1) : '—',
+      useRate: claimed > 0 ? ((used / claimed) * 100).toFixed(1) : '—',
+    }
+  }),
+)
 
 const hasRanking = computed(() => (stats.value?.ranking?.length ?? 0) > 0)
 
@@ -112,13 +165,23 @@ const paymentBreakdown = computed(() => detail.value?.paymentBreakdown ?? [])
 // ── 圖表 ────────────────────────────────────────────────────
 const trendEl = ref(null)
 const rankingEl = ref(null)
+const paymentEl = ref(null)
+const classFillEl = ref(null)
+const memberGrowthEl = ref(null)
+const trainerUtilEl = ref(null)
 let trendChart = null
 let rankingChart = null
+let paymentChart = null
+let classFillChart = null
+let memberGrowthChart = null
+let trainerUtilChart = null
 
 // 取自 dataviz 參考色盤（已用 validate_palette.js 驗證通過 light／dark 兩種模式）
 const SERIES_1 = '#2a78d6'
 const MUTED = '#9a8f88'
 const INK = '#2b2320'
+// 付款方式圓餅的類別色：首色沿用 SERIES_1，其餘取同明度的對比色相
+const CATEGORICAL = [SERIES_1, '#e8933d', '#43a06d', '#9268c9', '#c75d76']
 
 function renderTrend() {
   if (!trendEl.value) return
@@ -211,28 +274,233 @@ function renderRanking() {
   )
 }
 
+function renderPaymentPie() {
+  if (!paymentEl.value) return
+  // 同 renderTrend 的節點換人防護：v-show 雖不卸載節點，保險起見比照處理
+  if (paymentChart && paymentChart.getDom() !== paymentEl.value) {
+    paymentChart.dispose()
+    paymentChart = null
+  }
+  if (!paymentChart) paymentChart = echarts.init(paymentEl.value)
+  const entries = Object.entries(overview.value?.countByPaymentMethod ?? {})
+  paymentChart.setOption(
+    {
+      color: CATEGORICAL,
+      tooltip: {
+        trigger: 'item',
+        formatter: (p) => `${p.name}：${number.format(p.value)} 筆（${p.percent}%）`,
+      },
+      legend: { bottom: 0, textStyle: { color: INK } },
+      series: [
+        {
+          type: 'pie',
+          // 甜甜圈：中空讓佔比讀起來不那麼像面積比較，圓心留白也讓整體不擁擠
+          radius: ['42%', '68%'],
+          center: ['50%', '44%'],
+          data: entries.map(([method, count]) => ({
+            name: paymentMethodLabel(method),
+            value: Number(count ?? 0),
+          })),
+          label: { color: INK, formatter: '{b} {d}%' },
+        },
+      ],
+    },
+    true,
+  )
+}
+
+function renderClassFill() {
+  if (!classFillEl.value) return
+  if (!classFillChart) classFillChart = echarts.init(classFillEl.value)
+  // 滿座率由低到高排，橫向長條最滿的落在最上方（同排行圖的方向邏輯）
+  const rows = [...classFill.value]
+    .map((r) => ({ ...r, pct: r.capacityTotal > 0 ? (r.bookedTotal / r.capacityTotal) * 100 : 0 }))
+    .sort((a, b) => a.pct - b.pct)
+  classFillChart.setOption(
+    {
+      color: [SERIES_1],
+      tooltip: {
+        trigger: 'item',
+        formatter: (p) => {
+          const row = rows[p.dataIndex]
+          return `${row.courseName}<br/>${number.format(row.sessionCount)} 場次｜報名 ${number.format(row.bookedTotal)}/${number.format(row.capacityTotal)} 人次<br/>滿座率 ${row.pct.toFixed(1)}%`
+        },
+      },
+      grid: { left: 8, right: 96, top: 8, bottom: 8, containLabel: true },
+      // 滿座率是 0–100 的比例，軸固定到 100 讓「離滿座多遠」讀得出來
+      xAxis: { type: 'value', max: 100, show: false },
+      yAxis: {
+        type: 'category',
+        data: rows.map((r) => r.courseName),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: INK },
+      },
+      series: [
+        {
+          type: 'bar',
+          data: rows.map((r) => Number(r.pct.toFixed(1))),
+          barMaxWidth: 18,
+          itemStyle: { borderRadius: [0, 4, 4, 0] },
+          label: {
+            show: true,
+            position: 'right',
+            color: MUTED,
+            formatter: (p) => {
+              const row = rows[p.dataIndex]
+              return `${number.format(row.bookedTotal)}/${number.format(row.capacityTotal)}（${row.pct.toFixed(0)}%）`
+            },
+          },
+        },
+      ],
+    },
+    true,
+  )
+}
+
+function renderMemberGrowth() {
+  if (!memberGrowthEl.value) return
+  if (!memberGrowthChart) memberGrowthChart = echarts.init(memberGrowthEl.value)
+  const rows = memberDaily.value
+  memberGrowthChart.setOption(
+    {
+      color: [SERIES_1],
+      tooltip: {
+        trigger: 'axis',
+        valueFormatter: (v) => `${number.format(Number(v ?? 0))} 人`,
+      },
+      grid: { left: 48, right: 24, top: 24, bottom: 32 },
+      xAxis: {
+        type: 'category',
+        data: rows.map((r) => formatDate(r.statDate)),
+        axisLine: { lineStyle: { color: MUTED } },
+        axisLabel: { color: MUTED },
+      },
+      yAxis: {
+        type: 'value',
+        minInterval: 1, // 人數是整數，不出現 0.5 這種刻度
+        axisLabel: { color: MUTED, formatter: (v) => number.format(v) },
+        splitLine: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
+      },
+      series: [
+        {
+          name: '新會員',
+          type: 'line',
+          data: rows.map((r) => Number(r.newMembers ?? 0)),
+          smooth: false,
+          lineStyle: { width: 2 },
+          symbolSize: 8,
+        },
+      ],
+    },
+    true,
+  )
+}
+
+function renderTrainerUtil() {
+  if (!trainerUtilEl.value) return
+  if (!trainerUtilChart) trainerUtilChart = echarts.init(trainerUtilEl.value)
+  // 使用率由低到高排，最搶手的教練落在最上方（同滿座率圖）
+  const rows = [...trainerUtil.value]
+    .map((r) => ({ ...r, pct: r.totalSlots > 0 ? (r.bookedSlots / r.totalSlots) * 100 : 0 }))
+    .sort((a, b) => a.pct - b.pct)
+  trainerUtilChart.setOption(
+    {
+      color: [SERIES_1],
+      tooltip: {
+        trigger: 'item',
+        formatter: (p) => {
+          const row = rows[p.dataIndex]
+          return `${row.trainerName}<br/>開放 ${number.format(row.totalSlots)} 時段｜已預約 ${number.format(row.bookedSlots)}<br/>使用率 ${row.pct.toFixed(1)}%`
+        },
+      },
+      grid: { left: 8, right: 96, top: 8, bottom: 8, containLabel: true },
+      xAxis: { type: 'value', max: 100, show: false },
+      yAxis: {
+        type: 'category',
+        data: rows.map((r) => r.trainerName),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: INK },
+      },
+      series: [
+        {
+          type: 'bar',
+          data: rows.map((r) => Number(r.pct.toFixed(1))),
+          barMaxWidth: 18,
+          itemStyle: { borderRadius: [0, 4, 4, 0] },
+          label: {
+            show: true,
+            position: 'right',
+            color: MUTED,
+            formatter: (p) => {
+              const row = rows[p.dataIndex]
+              return `${number.format(row.bookedSlots)}/${number.format(row.totalSlots)}（${row.pct.toFixed(0)}%）`
+            },
+          },
+        },
+      ],
+    },
+    true,
+  )
+}
+
 function resizeCharts() {
   trendChart?.resize()
   rankingChart?.resize()
+  paymentChart?.resize()
+  classFillChart?.resize()
+  memberGrowthChart?.resize()
+  trainerUtilChart?.resize()
 }
 
 // ── 資料載入 ────────────────────────────────────────────────
+/** 迄日 +1 天的 00:00，湊出與後端一致的半開區間 [from, to) */
+function nextDayStart(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`)
+  d.setDate(d.getDate() + 1)
+  return `${isoDate(d)}T00:00:00`
+}
+
 async function fetchStats() {
   statsLoading.value = true
   statsError.value = null
   try {
-    const { data } = await getLiveStats({
-      from: from.value,
-      to: to.value,
-      type: typeFilter.value,
-      top: 10,
-    })
-    stats.value = data
+    const [statsRes, overviewRes, fillRes, growthRes, utilRes, effectRes] = await Promise.all([
+      getLiveStats({
+        from: from.value,
+        to: to.value,
+        type: typeFilter.value,
+        top: 10,
+      }),
+      // overview 不分品項型別（訂單層級的統計切不開型別），只跟期間篩選連動
+      getOrderOverview({ from: `${from.value}T00:00:00`, to: nextDayStart(to.value) }),
+      getGroupClassFill({ from: from.value, to: to.value }),
+      getMemberGrowth({ from: from.value, to: to.value }),
+      getTrainerUtilization({ from: from.value, to: to.value }),
+      getCouponEffect(),
+    ])
+    stats.value = statsRes.data
+    overview.value = overviewRes.data
+    classFill.value = fillRes.data ?? []
+    memberDaily.value = growthRes.data ?? []
+    trainerUtil.value = utilRes.data ?? []
+    couponEffect.value = effectRes.data ?? []
     // 等 nextTick 讓容器套用新的 rankingHeight 後再 resize，否則圖表仍用舊高度繪製
     await nextTick()
     if (hasRanking.value) {
       rankingChart?.resize()
       renderRanking()
+    }
+    if (hasPaymentData.value) renderPaymentPie()
+    if (hasClassFill.value) {
+      classFillChart?.resize()
+      renderClassFill()
+    }
+    if (hasMemberDaily.value) renderMemberGrowth()
+    if (hasTrainerUtil.value) {
+      trainerUtilChart?.resize()
+      renderTrainerUtil()
     }
   } catch (e) {
     statsError.value = e.message
@@ -408,6 +676,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', resizeCharts)
   trendChart?.dispose()
   rankingChart?.dispose()
+  paymentChart?.dispose()
+  classFillChart?.dispose()
+  memberGrowthChart?.dispose()
+  trainerUtilChart?.dispose()
 })
 </script>
 
@@ -467,6 +739,91 @@ onBeforeUnmount(() => {
         class="chart"
         :style="{ height: `${rankingHeight}px` }"
       ></div>
+    </section>
+
+    <!-- 付款方式分布：即時統計，各方式的訂單數佔比（口徑：下單日，與上方營收的付款日不同） -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">付款方式分布</h2>
+        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依訂單數</span>
+      </header>
+      <p v-if="!statsLoading && !hasPaymentData" class="empty-hint">此期間沒有付款資料。</p>
+      <div v-show="hasPaymentData" ref="paymentEl" class="chart" style="height: 300px"></div>
+    </section>
+
+    <!-- 團課滿座率：健身房營運最關心的供需指標，軸固定 0–100% -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">團課滿座率</h2>
+        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依場次開始時間，取消場次不計</span>
+      </header>
+      <p v-if="!statsLoading && !hasClassFill" class="empty-hint">此期間沒有團課場次。</p>
+      <div
+        v-show="hasClassFill"
+        ref="classFillEl"
+        class="chart"
+        :style="{ height: `${classFillHeight}px` }"
+      ></div>
+    </section>
+
+    <!-- 每日新會員：成長趨勢，無人註冊的日期後端不回列（斷點如實呈現） -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">每日新會員</h2>
+        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依註冊日</span>
+      </header>
+      <p v-if="!statsLoading && !hasMemberDaily" class="empty-hint">此期間沒有新註冊會員。</p>
+      <div v-show="hasMemberDaily" ref="memberGrowthEl" class="chart" style="height: 280px"></div>
+    </section>
+
+    <!-- 教練時段使用率：私教供需，軸固定 0–100% -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">教練時段使用率</h2>
+        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依時段開始時間，取消時段不計</span>
+      </header>
+      <p v-if="!statsLoading && !hasTrainerUtil" class="empty-hint">此期間沒有教練開放時段。</p>
+      <div
+        v-show="hasTrainerUtil"
+        ref="trainerUtilEl"
+        class="chart"
+        :style="{ height: `${trainerUtilHeight}px` }"
+      ></div>
+    </section>
+
+    <!-- 優惠券成效：多欄數值用表格比圖表誠實，比率已在 computed 算好 -->
+    <section class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">優惠券成效</h2>
+        <span class="chart-card__sub">券的整個生命週期，不隨期間篩選</span>
+      </header>
+      <p v-if="!statsLoading && couponRows.length === 0" class="empty-hint">目前沒有優惠券。</p>
+      <div v-if="couponRows.length > 0" class="effect-table-wrap">
+        <table class="effect-table">
+          <thead>
+            <tr>
+              <th>名稱</th>
+              <th>代碼</th>
+              <th class="num">發行</th>
+              <th class="num">已領取</th>
+              <th class="num">領取率</th>
+              <th class="num">已使用</th>
+              <th class="num">使用率</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="c in couponRows" :key="c.code">
+              <td>{{ c.name }}</td>
+              <td class="code">{{ c.code }}</td>
+              <td class="num">{{ number.format(c.totalQuantity ?? 0) }}</td>
+              <td class="num">{{ number.format(c.claimedQuantity ?? 0) }}</td>
+              <td class="num">{{ c.claimRate === '—' ? '—' : `${c.claimRate}%` }}</td>
+              <td class="num">{{ number.format(c.usedCount ?? 0) }}</td>
+              <td class="num">{{ c.useRate === '—' ? '—' : `${c.useRate}%` }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- 歷史報表快照：趨勢與分佈的資料來源 -->
@@ -863,5 +1220,43 @@ onBeforeUnmount(() => {
 .col-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* 優惠券成效表：窄螢幕時讓表格自己橫向捲，不撐破卡片 */
+.effect-table-wrap {
+  overflow-x: auto;
+}
+
+.effect-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.effect-table th,
+.effect-table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.effect-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.effect-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.effect-table .code {
+  font-family: monospace;
+  color: var(--text-secondary);
+}
+
+.effect-table tbody tr:last-child td {
+  border-bottom: none;
 }
 </style>

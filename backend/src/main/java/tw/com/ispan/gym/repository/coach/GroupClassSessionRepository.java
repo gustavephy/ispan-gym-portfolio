@@ -16,6 +16,22 @@ import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
 public interface GroupClassSessionRepository extends JpaRepository<GroupClassSession, Integer> {
 
         /**
+         * 團課滿座率聚合（營運報表用）：以課程為單位彙總期間內場次數、報名人次與容量。
+         * 取消的場次不計；半開區間 [from, to)，時間軸為場次開始時間。
+         */
+        @Query("""
+                        SELECT new tw.com.ispan.gym.dto.report.GroupClassFillRow(
+                            s.course.name, COUNT(s), SUM(s.bookedCount), SUM(s.capacity))
+                        FROM GroupClassSession s
+                        WHERE s.startAt >= :from AND s.startAt < :to AND s.status <> 'CANCELLED'
+                        GROUP BY s.course.name
+                        ORDER BY SUM(s.bookedCount) DESC
+                        """)
+        List<tw.com.ispan.gym.dto.report.GroupClassFillRow> aggregateFillRate(
+                        @Param("from") LocalDateTime from,
+                        @Param("to") LocalDateTime to);
+
+        /**
          * 查詢某教室在指定時間範圍內、狀態未取消的重疊場次。
          *
          * 注意：本方法只做「嚴格時間重疊」判斷，不內建任何緩衝時間。

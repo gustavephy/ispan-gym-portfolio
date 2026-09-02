@@ -36,7 +36,14 @@ import tw.com.ispan.gym.enums.report.ReportType;
 import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.dto.report.CouponEffectRow;
+import tw.com.ispan.gym.dto.report.GroupClassFillRow;
+import tw.com.ispan.gym.dto.report.MemberDailyRow;
+import tw.com.ispan.gym.dto.report.TrainerSlotRow;
 import tw.com.ispan.gym.dto.report.ReportRefundSummary;
+import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
+import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
+import tw.com.ispan.gym.repository.coupon.CouponRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
@@ -67,8 +74,12 @@ class OperationReportServiceTest {
     private final PaymentRefundRepository refunds = mock(PaymentRefundRepository.class);
     private final MemberRepository members = mock(MemberRepository.class);
     private final MemberSubscriptionRepository subscriptions = mock(MemberSubscriptionRepository.class);
+    private final GroupClassSessionRepository groupClassSessions = mock(GroupClassSessionRepository.class);
+    private final CoachSlotRepository coachSlots = mock(CoachSlotRepository.class);
+    private final CouponRepository coupons = mock(CouponRepository.class);
     private final OperationReportService service = new OperationReportService(
-            snapshots, orders, orderItems, employees, refunds, members, subscriptions);
+            snapshots, orders, orderItems, employees, refunds, members, subscriptions, groupClassSessions,
+            coachSlots, coupons);
 
     // === 共用測試資料 ========================================================
 
@@ -404,6 +415,65 @@ class OperationReportServiceTest {
 
         assertThat(overview.totalRevenue()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(overview.revenueByStatus()).containsEntry("PAID", BigDecimal.ZERO);
+        // 退款投影未 stub（回 null）也要正規化為零，口徑同 attachExtendedStats
+        assertThat(overview.refundCount()).isZero();
+        assertThat(overview.refundAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void 團課滿座率與會員成長皆以半開區間查詢且起訖顛倒會被擋下() {
+        LocalDateTime from = START.atStartOfDay();
+        LocalDateTime to = END.plusDays(1).atStartOfDay();
+        when(groupClassSessions.aggregateFillRate(from, to))
+                .thenReturn(List.of(new GroupClassFillRow("熱瑜珈", 4L, 30L, 40L)));
+        when(members.aggregateDailyNewMembers(from, to))
+                .thenReturn(List.of(new MemberDailyRow(START, 2L)));
+
+        assertThat(service.groupClassFill(START, END)).hasSize(1)
+                .first().satisfies(row -> assertThat(row.bookedTotal()).isEqualTo(30L));
+        assertThat(service.memberGrowth(START, END)).hasSize(1)
+                .first().satisfies(row -> assertThat(row.newMembers()).isEqualTo(2L));
+
+        assertThatThrownBy(() -> service.groupClassFill(END, START))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThatThrownBy(() -> service.memberGrowth(END, START))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void 教練使用率有期間驗證而優惠券成效不分期間() {
+        LocalDateTime from = START.atStartOfDay();
+        LocalDateTime to = END.plusDays(1).atStartOfDay();
+        when(coachSlots.aggregateUtilization(from, to))
+                .thenReturn(List.of(new TrainerSlotRow("林志強", 10L, 7L)));
+        when(coupons.aggregateEffect())
+                .thenReturn(List.of(new CouponEffectRow("新春折扣", "CNY100", 100, 60, 25L)));
+
+        assertThat(service.trainerUtilization(START, END)).hasSize(1)
+                .first().satisfies(row -> assertThat(row.bookedSlots()).isEqualTo(7L));
+        assertThat(service.couponEffect()).hasSize(1)
+                .first().satisfies(row -> assertThat(row.usedCount()).isEqualTo(25L));
+
+        assertThatThrownBy(() -> service.trainerUtilization(END, START))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void 訂單總覽帶回退款與新會員新訂閱數() {
+        LocalDateTime from = START.atStartOfDay();
+        LocalDateTime to = END.plusDays(1).atStartOfDay();
+        when(orders.aggregateByStatus(from, to)).thenReturn(List.of());
+        when(orders.aggregateByPaymentMethod(from, to)).thenReturn(List.of());
+        when(refunds.summarizeCompleted(from, to)).thenReturn(new ReportRefundSummary(2L, new BigDecimal("800")));
+        when(members.countCreatedBetween(from, to)).thenReturn(5L);
+        when(subscriptions.countCreatedBetween(from, to)).thenReturn(3L);
+
+        OrderOverviewResponse overview = service.getOrderOverview(from, to);
+
+        assertThat(overview.refundCount()).isEqualTo(2L);
+        assertThat(overview.refundAmount()).isEqualByComparingTo("800");
+        assertThat(overview.newMemberCount()).isEqualTo(5L);
+        assertThat(overview.newSubscriptionCount()).isEqualTo(3L);
     }
 
     // === listReports() / getReport() / delete() ================================
