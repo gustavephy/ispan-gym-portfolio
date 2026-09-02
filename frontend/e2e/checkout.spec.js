@@ -82,6 +82,11 @@ test.describe('B1 商品購買完整流程', () => {
     const orderId = (await (await orderResponse).json()).orderId
     expect(orderId).toBeTruthy()
 
+    // 等結帳流程真的收尾（導頁落在被 stub 的綠界頁）再往下走。
+    // 建單回應到手時前端還在跑「取付款表單」——那支 API 會更新訂單（換 merchantTradeNo），
+    // 不等它結束就打 simulate-payment 會撞樂觀鎖；表單導頁還在飛時 page.goto 也會被打斷。
+    await page.waitForURL(/ecpay\.com\.tw/)
+
     // 訂單剛建立時應該是未付款
     const adminToken = await apiToken(ACCOUNTS.admin)
     const before = await page.request.get(`${API}/api/admin/orders/${orderId}`, {
