@@ -60,6 +60,13 @@ import tw.com.ispan.gym.repository.course.PrivateCourseRepository;
 import tw.com.ispan.gym.entity.coach.GroupClassSession;
 import tw.com.ispan.gym.enums.coach.ClassRoom;
 import tw.com.ispan.gym.enums.coach.GroupClassSessionStatus;
+import tw.com.ispan.gym.entity.coach.CoachBooking;
+import tw.com.ispan.gym.entity.coach.GroupClassBooking;
+import tw.com.ispan.gym.enums.coach.CoachBookingStatus;
+import tw.com.ispan.gym.enums.coach.GroupClassBookingStatus;
+import tw.com.ispan.gym.enums.member.Gender;
+import tw.com.ispan.gym.repository.coach.CoachBookingRepository;
+import tw.com.ispan.gym.repository.coach.GroupClassBookingRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -229,6 +236,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private final MemberCourseQuotaRepository memberCourseQuotas;
     private final CouponRepository couponRepository;
     private final CoachSlotRepository coachSlots;
+    private final CoachBookingRepository coachBookings;
+    private final GroupClassBookingRepository groupClassBookings;
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
@@ -252,6 +261,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
             MemberCourseQuotaRepository memberCourseQuotas,
             CouponRepository couponRepository,
             CoachSlotRepository coachSlots,
+            CoachBookingRepository coachBookings,
+            GroupClassBookingRepository groupClassBookings,
             JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
             @Value("${app.seed.test-data-enabled:false}") boolean enabled) {
@@ -273,6 +284,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
         this.memberCourseQuotas = memberCourseQuotas;
         this.couponRepository = couponRepository;
         this.coachSlots = coachSlots;
+        this.coachBookings = coachBookings;
+        this.groupClassBookings = groupClassBookings;
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
@@ -325,6 +338,14 @@ public class TestDataSeedRunner implements CommandLineRunner {
         }
 
         ensureCatalogData(seededTrainers);
+
+        // 統計展示資料：擬真會員、更多樣本訂單、過去的團課場次與私教預約，
+        // 讓營運統計／營運分析的圖表有可看的分布（只加不刪，全部冪等；
+        // 放在 ensureSampleOrderHistory 之前，新訂單才會一併補到狀態時間軸）
+        List<Member> demoMembers = ensureRealisticMembers();
+        ensureMoreSampleOrders(demoMembers);
+        ensurePastGroupClassSessions(demoMembers);
+        ensurePastCoachSlotBookings(demoMembers);
 
         // 預約資格要等目錄資料就緒（訂閱要指向方案、堂數要指向教練）。
         // 放在種子最後而不是併進 ensureCatalogData：目錄資料是「大家看的展示資料」，
@@ -1335,5 +1356,312 @@ public class TestDataSeedRunner implements CommandLineRunner {
             currentWeekStart = currentWeekStart.plusWeeks(1);
         }
         log.info("已成功播種 {} 筆教練預約時段 (6月-10月)！", count);
+    }
+
+    // ─────────────── 統計展示資料：讓營運統計／BI 圖表有真實分布 ───────────────
+
+    /** 擬真示範會員的 email 格式；統計展示資料以此辨識，不會動到手動註冊的會員 */
+    private static final String DEMO_MEMBER_EMAIL_FMT = "seed-member%02d@local.test";
+    private static final int DEMO_MEMBER_COUNT = 36;
+    /** 樣本訂單總數；前 {@value #SAMPLE_ORDER_COUNT} 筆是 ensureSampleOrders 的，其餘由 ensureMoreSampleOrders 補齊 */
+    private static final int DEMO_ORDER_TARGET = 60;
+    /** 付款方式輪替：信用卡佔多數，其餘平均分佈——代碼須存在於前端 paymentLabels.js 的對照表 */
+    private static final List<String> DEMO_PAYMENT_METHODS = List.of(
+            "Credit_CreditCard", "Credit_CreditCard", "ATM", "Credit_CreditCard",
+            "CVS", "WebATM", "Credit_CreditCard", "BARCODE");
+
+    /**
+     * 擬真示範會員：中文姓名、性別、生日、城市齊全，created_at 攤在最近 90 天
+     * （二次曲線：早期疏、近期密），讓「每日新會員」趨勢有起伏而不是全部擠在重建日。
+     * 冪等：逐 email 檢查，已存在就只收集回傳不改動。
+     */
+    private List<Member> ensureRealisticMembers() {
+        String[] surnames = {
+                "陳", "林", "黃", "張", "李", "王", "吳", "劉", "蔡", "楊", "許", "鄭",
+                "謝", "郭", "洪", "曾", "邱", "廖", "賴", "周", "葉", "蘇", "莊", "呂",
+                "江", "何", "蕭", "羅", "高", "潘", "簡", "朱", "鍾", "彭", "游", "詹" };
+        // 偶數位女性、奇數位男性，與下方 gender 判斷對齊
+        String[] givenNames = {
+                "淑芬", "家豪", "雅婷", "志明", "佳穎", "俊傑", "怡君", "建宏", "美玲", "冠廷", "雅雯", "承翰",
+                "詩涵", "宗翰", "佩珊", "柏翰", "宜蓁", "冠宇", "欣妤", "家瑋", "心怡", "哲瑋", "郁婷", "明哲",
+                "曉慧", "育誠", "麗華", "世豪", "芷若", "彥廷", "依婷", "家銘", "韻如", "志偉", "惠雯", "俊宏" };
+        record City(String city, String district, String zip) {
+        }
+        List<City> cities = List.of(
+                new City("台北市", "中山區", "104"), new City("台北市", "大安區", "106"),
+                new City("台北市", "信義區", "110"), new City("新北市", "板橋區", "220"),
+                new City("新北市", "中和區", "235"), new City("新北市", "新莊區", "242"),
+                new City("桃園市", "桃園區", "330"), new City("桃園市", "中壢區", "320"),
+                new City("台中市", "西屯區", "407"), new City("台中市", "北屯區", "406"),
+                new City("台南市", "東區", "701"), new City("高雄市", "左營區", "813"),
+                new City("高雄市", "三民區", "807"), new City("新竹市", "東區", "300"));
+
+        List<Member> result = new java.util.ArrayList<>();
+        int created = 0;
+        for (int i = 0; i < DEMO_MEMBER_COUNT; i++) {
+            String email = String.format(DEMO_MEMBER_EMAIL_FMT, i + 1);
+            Account existing = accounts.findByEmailIgnoreCase(email).orElse(null);
+            if (existing != null) {
+                members.findByAccountId(existing.getId()).ifPresent(result::add);
+                continue;
+            }
+            Account acc = new Account();
+            acc.setEmail(email);
+            acc.setPasswordHash(passwordEncoder.encode(TEST_PASSWORD));
+            acc.getRoles().add(AccountType.MEMBER);
+            acc = accounts.save(acc);
+
+            City city = cities.get(i % cities.size());
+            Member m = new Member();
+            m.setAccount(acc);
+            m.setLastName(surnames[i]);
+            m.setFirstName(givenNames[i]);
+            m.setPhone("09" + String.format("%08d", 61000000 + i));
+            m.setStatus(UserStatus.ACTIVE);
+            m.setGender(i % 2 == 0 ? Gender.F : Gender.M);
+            m.setDob(LocalDate.of(1972 + (i * 31) % 34, (i % 12) + 1, (i * 7) % 27 + 1));
+            m.setCity(city.city());
+            m.setDistrict(city.district());
+            m.setZipCode(city.zip());
+            m = members.save(m);
+
+            // created_at 由 @PrePersist 設成「現在」，比照 ensureSampleOrders 直接下 SQL 回填分散日期
+            int daysAgo = 89 - (i * i * 89) / ((DEMO_MEMBER_COUNT - 1) * (DEMO_MEMBER_COUNT - 1));
+            LocalDateTime createdAt = LocalDateTime.now().minusDays(daysAgo)
+                    .withHour(9 + (i * 5) % 12).withMinute((i * 17) % 60).withSecond(0).withNano(0);
+            jdbc.update("UPDATE member SET created_at = ?, updated_at = ? WHERE member_id = ?",
+                    createdAt, createdAt, m.getId());
+            result.add(m);
+            created++;
+        }
+        if (created > 0) {
+            log.info("已建立 {} 位擬真示範會員（seed-memberNN@local.test，註冊日攤在最近 90 天）", created);
+        }
+        return result;
+    }
+
+    /**
+     * 把樣本訂單從 {@value #SAMPLE_ORDER_COUNT} 筆補到 {@value #DEMO_ORDER_TARGET} 筆：
+     * 買家輪流用示範會員、付款方式輪替、日期攤在最近 90 天且時辰含台北清晨
+     * （清晨單正是 UTC 日期桶 bug 的驗證樣本）。「模擬付款」來自 E2E 的 simulate-payment，
+     * 不造假刪除，靠這批真實付款方式的訂單把它稀釋成小切片。
+     * 冪等：以 SEED-ORD- 前綴計數，補滿即停。
+     */
+    private void ensureMoreSampleOrders(List<Member> demoMembers) {
+        if (demoMembers.isEmpty()) {
+            return;
+        }
+        long existing = orders.findAll().stream()
+                .filter(o -> o.getOrderNo() != null && o.getOrderNo().startsWith(SAMPLE_ORDER_PREFIX))
+                .count();
+        if (existing >= DEMO_ORDER_TARGET) {
+            return;
+        }
+        List<Product> sellable = products.findAll().stream()
+                .filter(p -> p.getPrice() != null)
+                .toList();
+        if (sellable.isEmpty()) {
+            return;
+        }
+
+        int created = 0;
+        for (int i = (int) existing; i < DEMO_ORDER_TARGET; i++) {
+            // 全部由固定公式導出，播種結果可重現
+            int daysAgo = (i * 83) % 90;
+            int hour = 6 + (i * 11) % 16; // 6–21 時，含台北清晨（跨 UTC 日界的樣本）
+            OrderStatus status = switch (i % 12) {
+                case 4 -> OrderStatus.CANCELLED;
+                case 7 -> OrderStatus.REFUNDED;
+                default -> OrderStatus.PAID;
+            };
+            Product product = sellable.get((i * 13) % sellable.size());
+            int quantity = 1 + (i % 3);
+            Member buyer = demoMembers.get((i * 7) % demoMembers.size());
+            String method = DEMO_PAYMENT_METHODS.get(i % DEMO_PAYMENT_METHODS.size());
+
+            BigDecimal unit = product.getPrice();
+            BigDecimal amount = unit.multiply(BigDecimal.valueOf(quantity));
+            LocalDateTime placedAt = LocalDateTime.now().minusDays(daysAgo)
+                    .withHour(hour).withMinute((i * 23) % 60).withSecond(0).withNano(0);
+            String no = SAMPLE_ORDER_PREFIX + String.format("%03d", i + 1);
+
+            tw.com.ispan.gym.entity.order.Order order = new tw.com.ispan.gym.entity.order.Order(
+                    buyer, no, no, amount, BigDecimal.ZERO, amount, amount, null,
+                    buyer.getLastName() + buyer.getFirstName(), buyer.getPhone(), null, null);
+            switch (status) {
+                case PAID -> order.markPaid(method, no);
+                case REFUNDED -> {
+                    order.markPaid(method, no);
+                    order.markRefunded();
+                }
+                case CANCELLED -> order.cancel("測試資料：模擬取消訂單");
+                default -> {
+                }
+            }
+            tw.com.ispan.gym.entity.order.Order savedOrder = orders.save(order);
+            orderItems.save(new OrderItem(savedOrder, product, product.getName(), unit, quantity));
+
+            if (status == OrderStatus.PAID || status == OrderStatus.REFUNDED) {
+                PaymentTransaction payment = new PaymentTransaction(savedOrder, "ECPAY", no, amount, "TWD");
+                payment.setTradeNo(no);
+                payment.setPaymentMethod(method);
+                payment.setStatus("SUCCESS");
+                payment.setPaidAt(placedAt);
+                payment.setRtnCode(1);
+                payment.setRtnMsg("交易成功");
+                paymentTransactions.save(payment);
+            }
+
+            jdbc.update("UPDATE orders SET created_at = ?, updated_at = ? WHERE order_id = ?",
+                    placedAt, placedAt, savedOrder.getOrderId());
+            jdbc.update("UPDATE order_item SET created_at = ? WHERE order_id = ?",
+                    placedAt, savedOrder.getOrderId());
+            if (savedOrder.getPaidAt() != null) {
+                jdbc.update("UPDATE orders SET paid_at = ? WHERE order_id = ?", placedAt, savedOrder.getOrderId());
+            }
+            created++;
+        }
+        if (created > 0) {
+            log.info("已補 {} 筆樣本訂單（買家/付款方式/日期分散，總數 {}）", created, DEMO_ORDER_TARGET);
+        }
+    }
+
+    /**
+     * 過去 4 週的團課場次＋報名：現行種子只建未來場次（給預約流程用），
+     * 報表的「團課滿座率」看的是過去，一直是空的。只為種子課程（以封面圖對照表辨識）補場次，
+     * 報名列與 bookedCount 完全一致，不留「有數字沒名單」的怪資料。
+     * 冪等：已存在任何過去場次就不再補。
+     */
+    private void ensurePastGroupClassSessions(List<Member> demoMembers) {
+        if (demoMembers.isEmpty()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        boolean hasPastSession = groupClassSessions.findAll().stream()
+                .anyMatch(s -> s.getStartAt().isBefore(now.minusDays(1)));
+        if (hasPastSession) {
+            return;
+        }
+        List<GroupCourse> seedCourses = groupCourses.findAll().stream()
+                .filter(gc -> SEED_GROUP_COURSE_IMAGES.containsKey(gc.getName()))
+                .toList();
+        if (seedCourses.isEmpty()) {
+            return;
+        }
+        // 教室沿用該課程未來場次的教室；沒有就退回重訓教室
+        java.util.Map<String, ClassRoom> roomByCourse = new java.util.HashMap<>();
+        for (GroupClassSession s : groupClassSessions.findAll()) {
+            roomByCourse.putIfAbsent(s.getCourse().getName(), s.getRoomName());
+        }
+
+        int memberCursor = 0;
+        int sessionCount = 0;
+        int bookingCount = 0;
+        for (int c = 0; c < seedCourses.size(); c++) {
+            GroupCourse course = seedCourses.get(c);
+            for (int w = 0; w < 3; w++) {
+                int daysAgo = 26 - w * 7 - (c % 4);
+                LocalDateTime start = now.minusDays(daysAgo)
+                        .withHour(8 + (c * 5 + w * 3) % 13).withMinute(0).withSecond(0).withNano(0);
+                int capacity = course.getMaxCapacity();
+                // 滿座率 50%–95%，各場次不同
+                int booked = Math.min(capacity, Math.max(3, capacity * (50 + (c * 7 + w * 13) % 45) / 100));
+
+                GroupClassSession session = new GroupClassSession();
+                session.setCourse(course);
+                session.setRoomName(roomByCourse.getOrDefault(course.getName(), ClassRoom.WEIGHT_ROOM));
+                session.setStartAt(start);
+                session.setEndAt(start.plusHours(1));
+                session.setCapacity(capacity);
+                session.setStatus(GroupClassSessionStatus.SCHEDULED);
+                session.setBookedCount(booked);
+                GroupClassSession saved = groupClassSessions.save(session);
+                sessionCount++;
+
+                // 連續取用示範會員，單一場次內必不重複（booked <= 25 < 36），
+                // 滿足 (session_id, member_id) WHERE BOOKED 的部分唯一索引
+                for (int b = 0; b < booked; b++) {
+                    GroupClassBooking gb = new GroupClassBooking();
+                    gb.setSession(saved);
+                    gb.setMember(demoMembers.get(memberCursor++ % demoMembers.size()));
+                    gb.setStatus(GroupClassBookingStatus.BOOKED);
+                    groupClassBookings.save(gb);
+                    bookingCount++;
+                }
+                // 報名時間回填到開課前兩天，前端明細的時間軸才合理
+                jdbc.update("UPDATE group_class_booking SET created_at = ?, updated_at = ? WHERE session_id = ?",
+                        start.minusDays(2), start.minusDays(2), saved.getId());
+            }
+        }
+        log.info("已補 {} 筆過去團課場次與 {} 筆報名（滿座率 50–95%）", sessionCount, bookingCount);
+    }
+
+    /**
+     * 過去 8 週的私教時段預約：既有種子把 6–10 月的時段全建成 AVAILABLE，
+     * 報表的「教練時段使用率」全是 0。挑過去時段的六成建立已完成的預約
+     * （quota → booking → slot 轉 BOOKED 一路做全，不留「BOOKED 卻沒有預約列」的怪資料）。
+     * 冪等：以 check_in_key 的 SEED- 前綴辨識，已播過就跳過。
+     */
+    private void ensurePastCoachSlotBookings(List<Member> demoMembers) {
+        if (demoMembers.isEmpty()) {
+            return;
+        }
+        Integer seeded = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM coach_booking WHERE check_in_key LIKE 'SEED-%'", Integer.class);
+        if (seeded != null && seeded > 0) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        List<CoachSlot> pastAvailable = coachSlots.findAll().stream()
+                .filter(s -> s.getStatus() == SlotStatus.AVAILABLE
+                        && s.getStartAt().isBefore(now)
+                        && s.getStartAt().isAfter(now.minusDays(56)))
+                .sorted(java.util.Comparator.comparing(CoachSlot::getStartAt))
+                .toList();
+
+        java.util.Map<String, MemberCourseQuota> quotaCache = new java.util.HashMap<>();
+        int cursor = 0;
+        int made = 0;
+        for (int j = 0; j < pastAvailable.size(); j++) {
+            CoachSlot slot = pastAvailable.get(j);
+            if ((j * 7 + slot.getTrainer().getId() * 3) % 10 >= 6) {
+                continue; // 六成預約率，各教練錯落
+            }
+            Member member = demoMembers.get(cursor++ % demoMembers.size());
+            String key = member.getId() + "-" + slot.getTrainer().getId();
+            MemberCourseQuota quota = quotaCache.computeIfAbsent(key, k -> {
+                MemberCourseQuota q = new MemberCourseQuota();
+                q.setMember(member);
+                q.setTrainer(slot.getTrainer());
+                q.setCourseName("一對一重量訓練額度");
+                q.setRemainingCourse(2);
+                q.setReservedCourse(0);
+                q.setUsedCourse(0);
+                q.setExpiryDate(now.plusMonths(6));
+                return memberCourseQuotas.save(q);
+            });
+            quota.setUsedCourse(quota.getUsedCourse() + 1);
+            memberCourseQuotas.save(quota);
+
+            slot.setStatus(SlotStatus.BOOKED);
+            coachSlots.save(slot);
+
+            CoachBooking booking = new CoachBooking();
+            booking.setCoachSlot(slot);
+            booking.setMember(member);
+            booking.setQuota(quota);
+            booking.setStatus(CoachBookingStatus.COMPLETED);
+            booking.setCheckInKey("SEED-" + slot.getId());
+            booking.setCheckInTime(slot.getEndAt());
+            booking.setCheckInApprover(slot.getTrainer());
+            coachBookings.save(booking);
+            // 預約成立時間回填到上課前三天
+            jdbc.update("UPDATE coach_booking SET created_at = ?, updated_at = ? WHERE check_in_key = ?",
+                    slot.getStartAt().minusDays(3), slot.getStartAt().minusDays(3), "SEED-" + slot.getId());
+            made++;
+        }
+        if (made > 0) {
+            log.info("已補 {} 筆過去私教預約（過去 8 週、約六成使用率，時段轉 BOOKED）", made);
+        }
     }
 }
