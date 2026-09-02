@@ -539,7 +539,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
     /**
      * 資料庫裡是否已有「真實流程」產生的交易資料：私教預約、團課報名、買課得到的堂數、
      * 非樣本訂單。有的話代表這不是一顆只有種子的展示資料庫，任何整批刪除都不該執行。
-     * 樣本訂單以 {@value #SAMPLE_ORDER_PREFIX}／{@value #SEED_SUBSCRIPTION_ORDER_NO} 前綴辨識。
+     * 樣本訂單以 {@value #SAMPLE_ORDER_PREFIX}／{@value #SEED_SUBSCRIPTION_ORDER_NO}
+     * 前綴辨識。
      */
     private boolean hasLiveTransactionalData() {
         Integer live = jdbc.queryForObject("""
@@ -1031,7 +1032,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         record Seed(String name, String desc, int price, int sessions, boolean trial) {
         }
         List<Seed> seeds = List.of(
-                new Seed(SEED_PRIVATE_COURSE_NAMES.get(0), "首次體驗，單堂一對一指導，評估體能並初步規劃重訓方向。", 800, 1, true),
+                new Seed(SEED_PRIVATE_COURSE_NAMES.get(0), "首次體驗，單堂一對一指導，評估體能並初步規劃重訓方向。", 800, 1, false),
                 new Seed(SEED_PRIVATE_COURSE_NAMES.get(1), "從姿勢與呼吸打底，建立深蹲、硬舉、臥推三大動作基礎。", 6500, 5, false),
                 new Seed(SEED_PRIVATE_COURSE_NAMES.get(2), "依 InBody 數據客製課表，系統化進行進階重訓，十堂完成階段性目標。", 12000, 10, false));
 
@@ -1122,7 +1123,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             coupon.setApplicableType(seed.applicableType());
             coupon.setDescription(seed.description());
             coupon.setStatus(CouponStatus.ACTIVE);
-            
+
             // 如果是 FIRSTFREE，預設設為 10 張，且已被領取 9 張（剩餘 1 張）
             if ("FIRSTFREE".equals(seed.code())) {
                 coupon.setTotalQuantity(10);
@@ -1131,7 +1132,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
                 coupon.setTotalQuantity(1000); // 限量 1000 張
                 coupon.setClaimedQuantity(0);
             }
-            
+
             coupon.setStartDate(LocalDate.now());
             coupon.setEndDate(LocalDate.now().plusYears(1));
             couponRepository.save(coupon);
@@ -1160,7 +1161,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             for (Trainer trainer : seededTrainers) {
                 int firstDayOffset = Math.abs((trainer.getId() * 7 + currentWeekStart.hashCode())) % 5;
                 int secondDayOffset = (firstDayOffset + 2) % 5;
-                
+
                 int firstHour = 9 + Math.abs((trainer.getId() * 3 + currentWeekStart.hashCode())) % 8;
                 int secondHour = 9 + Math.abs((trainer.getId() * 5 + currentWeekStart.hashCode())) % 8;
 
