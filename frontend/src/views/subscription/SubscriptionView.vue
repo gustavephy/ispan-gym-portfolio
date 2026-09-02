@@ -28,6 +28,11 @@ const statusLabels = {
 
 const hasActiveSubscription = computed(() => mySubscription.value?.isActive === true)
 
+function formatPrice(val) {
+  const num = Number(val)
+  return isNaN(num) ? '0' : num.toLocaleString('zh-TW')
+}
+
 function formatDate(isoString) {
   return new Date(isoString).toLocaleDateString('zh-TW')
 }
@@ -172,7 +177,7 @@ onMounted(() => {
 
             <div class="plan-cost-display">
               <span class="currency">NT$</span>
-              <span class="cost-number">{{ Number(plan.price).toLocaleString() }}</span>
+              <span class="cost-number">{{ formatPrice(plan.price) }}</span>
               <span class="period">/ {{ plan.durationDays }} 天</span>
             </div>
 
