@@ -4,6 +4,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import jakarta.transaction.Transactional;
@@ -40,11 +43,11 @@ public class MemberCouponService {
     private final MemberRepository memberRepository;
 
     /** 會員：查詢可以領取的優惠券列表 */
-    public org.springframework.data.domain.Page<CouponResponse> getAvailableCouponsForClaim(Integer memberId, org.springframework.data.domain.Pageable pageable) {
+    public Page<CouponResponse> getAvailableCouponsForClaim(Integer memberId, Pageable pageable) {
         LocalDate today = LocalDate.now();
         // 為防資料庫數量不多，且記憶體過濾更準確，我們先查出所有 ACTIVE 的優惠券
-        List<Coupon> allActive = couponRepository.findByStatus(CouponStatus.ACTIVE, org.springframework.data.domain.Pageable.unpaged()).getContent();
-        
+        List<Coupon> allActive = couponRepository.findByStatus(CouponStatus.ACTIVE, Pageable.unpaged()).getContent();
+
         List<CouponResponse> filtered = allActive.stream()
                 .filter(c -> c.getEndDate() == null || !c.getEndDate().isBefore(today))
                 .filter(c -> c.getClaimedQuantity() < c.getTotalQuantity())
@@ -54,11 +57,11 @@ public class MemberCouponService {
 
         // 手動分頁
         if (pageable.isUnpaged()) {
-            return new org.springframework.data.domain.PageImpl<>(filtered, pageable, filtered.size());
+            return new PageImpl<>(filtered, pageable, filtered.size());
         }
         int start = (int) pageable.getOffset();
         int end = Math.min((start + pageable.getPageSize()), filtered.size());
-        
+
         List<CouponResponse> subList = (start >= filtered.size()) ? List.of() : filtered.subList(start, end);
         return new org.springframework.data.domain.PageImpl<>(subList, pageable, filtered.size());
     }
@@ -103,7 +106,7 @@ public class MemberCouponService {
     }
 
     /** 會員：取得自己的優惠券清單 */
-    public org.springframework.data.domain.Page<MemberCouponResponse> getMyCoupons(Integer memberId, MemberCouponStatus status, org.springframework.data.domain.Pageable pageable) {
+    public Page<MemberCouponResponse> getMyCoupons(Integer memberId, MemberCouponStatus status, Pageable pageable) {
         if (status != null) {
             return memberCouponRepository.findByMemberIdAndStatus(memberId, status, pageable)
                     .map(MemberCouponResponse::from);
@@ -116,7 +119,8 @@ public class MemberCouponService {
     public List<MemberCouponResponse> getMyUnusedCoupons(Integer memberId) {
         LocalDate today = LocalDate.now();
         // 結帳下拉選單不需要分頁，故這裡維持全量拉取
-        return memberCouponRepository.findByMemberIdAndStatus(memberId, MemberCouponStatus.UNUSED, org.springframework.data.domain.Pageable.unpaged()).getContent().stream()
+        return memberCouponRepository.findByMemberIdAndStatus(memberId, MemberCouponStatus.UNUSED, Pageable.unpaged())
+                .getContent().stream()
                 .filter(mc -> mc.getCoupon().getStatus() == CouponStatus.ACTIVE)
                 .filter(mc -> mc.getCoupon().getEndDate() == null || !mc.getCoupon().getEndDate().isBefore(today))
                 .map(MemberCouponResponse::from)

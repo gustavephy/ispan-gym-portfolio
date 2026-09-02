@@ -181,7 +181,7 @@ async function fetchProducts() {
 }
 
 // 監聽所有篩選與每頁數量變更，重置頁碼並重新載入
-watch([selectedCategoryKey, selectedBrands, priceSort, minPrice, maxPrice, minWeight, maxWeight], () => {
+watch([selectedCategoryKey, selectedBrands, priceSort, minPrice, maxPrice, minWeight, maxWeight, itemsPerPage], () => {
   page.value = 1
   fetchProducts()
 }, { deep: true })
@@ -404,10 +404,28 @@ onMounted(async () => {
         <main class="shop-main">
           <!-- 結果資訊與篩選標籤 -->
           <div class="result-bar">
-            <div class="result-left">
-              <span class="result-count">共 {{ totalItems }} 件商品</span>
+            <div class="result-bar-top">
+              <div class="result-left">
+                <span class="result-count">
+                  共 {{ totalItems }} 件商品，每頁顯示
+                  <select v-model.number="itemsPerPage" class="page-size-select inline-select">
+                    <option :value="12">12</option>
+                    <option :value="24">24</option>
+                    <option :value="36">36</option>
+                  </select>
+                  筆
+                </span>
+              </div>
+              <!-- 最上方分頁 -->
+              <AppPagination
+                v-model="page"
+                :totalPages="totalPages"
+                :totalElements="totalItems"
+                :pageSize="itemsPerPage"
+                class="top-pagination"
+              />
             </div>
-            <div class="active-tags">
+            <div class="active-tags" v-if="searchParams.keyword || minWeight || maxWeight || selectedBrands.length > 0">
               <span v-if="searchParams.keyword" class="active-tag">
                 關鍵字：{{ searchParams.keyword }}
                 <button @click="searchParams.keyword = ''" class="tag-remove">✕</button>
@@ -759,13 +777,19 @@ onMounted(async () => {
 
 .result-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.75rem;
   margin-bottom: 1.5rem;
-  flex-wrap: wrap;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.75rem;
+}
+
+.result-bar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 1rem;
 }
 
 .result-left {
@@ -781,6 +805,57 @@ onMounted(async () => {
   color: var(--text-secondary);
   font-weight: 600;
   white-space: nowrap;
+}
+
+.page-size-selector {
+  display: inline-flex;
+  align-items: center;
+}
+
+.page-size-select {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-section);
+  outline: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.inline-select {
+  padding: 0.1rem 0.35rem;
+  margin: 0 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.page-size-select:focus {
+  border-color: var(--primary);
+}
+
+.top-pagination {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.top-pagination :deep(.pagination-info) {
+  display: none !important;
+}
+
+.top-pagination :deep(.app-pagination-container) {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding: 0 !important;
+  gap: 0.5rem !important;
+  justify-content: flex-end !important;
+  width: auto !important;
 }
 
 
