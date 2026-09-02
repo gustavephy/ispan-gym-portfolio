@@ -1,0 +1,35 @@
+# 團隊一鍵啟動（Demo／驗收用）：前後端容器化，資料庫沿用宿主機的 SQL Server。
+# 用法：repo 根目錄 `docker compose up -d --build`。
+# docker compose 會自動讀同目錄的 .env 做變數代換——DB_PASSWORD 為必填、
+# 刻意不給預設值（資料庫密碼不進版控）。
+# 注意：
+# - frontend 對外埠 5173 與 Vite dev server 相同，容器版與 `npm run dev` 二選一
+# - 信箱／Cloudinary／Gemini 金鑰未帶入，相關功能在容器內優雅降級
+# 重製自 feature/dockerize：改用 nginx（WebSocket 反代正確）、密碼改必填、補 .dockerignore
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gym-docker-backend
+    ports:
+      - "8088:8080" # 避開宿主機開發用的 8080
+    environment:
+      - DB_URL=jdbc:sqlserver://host.docker.internal:1433;databaseName=ispan-proj-gymdb;encrypt=false;trustServerCertificate=true
+      - DB_USERNAME=sa
+      - DB_PASSWORD=${DB_PASSWORD:?請在 .env 設定 DB_PASSWORD（不進版控）}
+      # 本機開發專用預設值（base64 內容即寫明 dev-only），正式環境必以環境變數覆蓋
+      - JWT_SECRET=${JWT_SECRET:-aXNwYW4tZ3ltLWxvY2FsLWRldi1vbmx5LXNlY3JldC1kby1ub3QtdXNlLWluLXByb2Qh}
+      - ECPAY_RETURN_URL=${ECPAY_RETURN_URL:-http://localhost:8088/api/payments/ecpay/notify}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gym-docker-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
