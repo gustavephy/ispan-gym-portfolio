@@ -58,6 +58,13 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
+		<!-- 系統監控：Micrometer 自動蒐集 JVM/CPU/連線池/HTTP 指標。
+		     不對外開放 /actuator/** web 端點（見 application.properties），
+		     由 /api/admin/system/metrics 讀 MeterRegistry 彙總後提供 -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
 		<!-- 聊天室（2.4）：STOMP + SockJS 即時推送 -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
