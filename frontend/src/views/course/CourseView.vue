@@ -70,7 +70,8 @@ async function fetchCourses() {
     const raw = res.data
     if (raw) {
       privateCoursesData.value = {
-        items: raw.items || raw.content || [],
+        // 與 store 一致補上 id 別名：私教課主鍵是 privateCourseId，沒有 id 欄位
+        items: (raw.items || raw.content || []).map(c => ({ ...c, id: c.id ?? c.privateCourseId })),
         totalElements: raw.totalItems ?? raw.totalElements ?? 0,
         totalPages: raw.totalPages || 1
       }
@@ -196,11 +197,24 @@ const displayedTrainers = computed(() => {
 // 各教練選取的課程方案對應 ID Map
 const selectedCoursesMap = ref({})
 
+// 私教課主鍵是 privateCourseId；直接讀 .id 在資料未經正規化時會是 undefined，
+// 而 undefined === undefined 會讓下方的 find 命中第一門課，造成選 A 卻買到 B。
+function courseKey(course) {
+  return course?.privateCourseId ?? course?.id
+}
+
+// 取出某位教練目前選取的課程方案，供價格、堂數、描述與購買按鈕共用
+function selectedCourseOf(trainer) {
+  const picked = selectedCoursesMap.value[trainer.id]
+  if (picked == null) return null
+  return trainer.courses.find(c => courseKey(c) === picked) || null
+}
+
 // 監聽並自動為每位教練預設第一個課程方案
 watch(trainersWithPrivateCourses, (newVal) => {
   newVal.forEach(t => {
     if (!selectedCoursesMap.value[t.id] && t.courses.length > 0) {
-      selectedCoursesMap.value[t.id] = t.courses[0].id
+      selectedCoursesMap.value[t.id] = courseKey(t.courses[0])
     }
   })
 }, { immediate: true })
@@ -208,11 +222,10 @@ watch(trainersWithPrivateCourses, (newVal) => {
 async function handleAddToCart(course) {
   if (!authStore.isLoggedIn) {
     showFeedback('請先登入會員以進行課程購買', 'error')
-    await coursesStore.purchaseCourse(course.id || course.privateCourseId, () => {})
+    await coursesStore.purchaseCourse(courseKey(course), () => {})
     return
   }
-  const idVal = course.privateCourseId || course.id
-  await coursesStore.purchaseCourse(idVal, (msg, type) => {
+  await coursesStore.purchaseCourse(courseKey(course), (msg, type) => {
     showFeedback(msg, type === 'error' ? 'error' : 'success')
   })
 }
@@ -264,7 +277,7 @@ async function fetchMyQuotas() {
 
 function isCoursePurchased(course) {
   if (!course) return false
-  const courseId = course.id || course.privateCourseId
+  const courseId = courseKey(course)
   return myQuotas.value.some(q => q.productId === courseId && q.remainingCourse > 0)
 }
 
@@ -414,8 +427,8 @@ onUnmounted(() => {
                 >
                   <option
                     v-for="course in trainer.courses"
-                    :key="course.id"
-                    :value="course.id"
+                    :key="courseKey(course)"
+                    :value="courseKey(course)"
                   >
                     {{ course.name }} - NT$ {{ formatPrice(course.price) }}
                   </option>
@@ -424,23 +437,23 @@ onUnmounted(() => {
                 <!-- 選取的課程詳情 (使用共用卡片與設計語彙) -->
                 <div
                   class="selected-course-details"
-                  v-if="trainer.courses.find(c => c.id === selectedCoursesMap[trainer.id])"
+                  v-if="selectedCourseOf(trainer)"
                   style="border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem; background: var(--bg-section);"
                 >
                   <div class="item-footer" style="margin-top: 0; margin-bottom: 0.5rem; justify-content: flex-start; align-items: center; gap: 0.75rem;">
                     <span class="price">
-                      NT$ {{ formatPrice(trainer.courses.find(c => c.id === selectedCoursesMap[trainer.id]).price) }}
+                      NT$ {{ formatPrice(selectedCourseOf(trainer).price) }}
                     </span>
                     <span class="spec-badge" style="font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.45rem;">
-                      共 {{ trainer.courses.find(c => c.id === selectedCoursesMap[trainer.id]).sessionPerUnit }} 堂課
+                      共 {{ selectedCourseOf(trainer).sessionPerUnit }} 堂課
                     </span>
                   </div>
                   <p class="item-desc" style="min-height: auto; height: auto; -webkit-line-clamp: unset; line-clamp: unset; margin-bottom: 0.75rem; line-height: 1.55;">
-                    {{ trainer.courses.find(c => c.id === selectedCoursesMap[trainer.id]).description || '精緻一對一專屬私人課程，客製化個人體態與訓練計畫。' }}
+                    {{ selectedCourseOf(trainer).description || '精緻一對一專屬私人課程，客製化個人體態與訓練計畫。' }}
                   </p>
 
                   <button
-                    v-if="isCoursePurchased(trainer.courses.find(c => c.id === selectedCoursesMap[trainer.id]))"
+                    v-if="isCoursePurchased(selectedCourseOf(trainer))"
                     class="btn"
                     style="width: 100%; border-radius: 999px; background: var(--border); color: var(--text-secondary); cursor: not-allowed;"
                     disabled
@@ -451,7 +464,7 @@ onUnmounted(() => {
                     v-else
                     class="btn btn-accent"
                     style="width: 100%; border-radius: 999px;"
-                    @click="handleAddToCart(trainer.courses.find(c => c.id === selectedCoursesMap[trainer.id]))"
+                    @click="handleAddToCart(selectedCourseOf(trainer))"
                   >
                     確認購買課程
                   </button>

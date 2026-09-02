@@ -8,6 +8,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
 import tw.com.ispan.gym.config.GoogleOAuthProperties;
 import tw.com.ispan.gym.entity.account.Account;
 import tw.com.ispan.gym.entity.account.OAuthTransaction;
@@ -72,12 +73,13 @@ public class GoogleOAuthLinkInitiationService {
     private final InMemoryRateLimiter rateLimiter;
     private final OpaqueTokenGenerator tokenGenerator;
     private final GoogleOAuthProperties properties;
+    private final EntityManager entityManager;
     private final Clock clock;
 
     public GoogleOAuthLinkInitiationService(AccountRepository accounts, OauthAccountRepository oauthAccounts,
             OAuthTransactionRepository transactions, PasswordEncoder passwordEncoder,
             InMemoryRateLimiter rateLimiter, OpaqueTokenGenerator tokenGenerator, GoogleOAuthProperties properties,
-            Clock clock) {
+            EntityManager entityManager, Clock clock) {
         this.accounts = accounts;
         this.oauthAccounts = oauthAccounts;
         this.transactions = transactions;
@@ -85,6 +87,7 @@ public class GoogleOAuthLinkInitiationService {
         this.rateLimiter = rateLimiter;
         this.tokenGenerator = tokenGenerator;
         this.properties = properties;
+        this.entityManager = entityManager;
         this.clock = clock;
     }
 
@@ -114,6 +117,9 @@ public class GoogleOAuthLinkInitiationService {
 
         Account locked = accounts.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new ResourceNotFoundException("帳號不存在"));
+        // OSIV + JwtAuthFilter 的預載會讓 locked 是鎖前的舊實例；refresh 後鎖後的密碼重驗才是
+        // 對最新 passwordHash 比對（見 PasswordService.changePassword() 的同段說明）。
+        entityManager.refresh(locked);
         if (!passwordEncoder.matches(currentPassword, locked.getPasswordHash())) {
             throw new ReauthenticationRequiredException("目前密碼錯誤");
         }

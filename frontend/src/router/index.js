@@ -27,7 +27,10 @@ const router = createRouter({
           component: () => import('@/views/reservation/TrainerSlotsView.vue'),
           meta: { requiresAuth: true },
         },
-        { path: 'group-classes', component: () => import('@/views/reservation/GroupClassView.vue') },
+        {
+          path: 'group-classes',
+          component: () => import('@/views/reservation/GroupClassView.vue'),
+        },
         { path: 'products', component: () => import('@/views/product/ProductView.vue') },
         { path: 'products/:id', component: () => import('@/views/product/ProductDetail.vue') },
         {
@@ -195,7 +198,7 @@ const router = createRouter({
         if (auth.isLoggedIn) {
           return typeof to.query.redirect === 'string' ? to.query.redirect : '/'
         }
-      }
+      },
     },
     // 以下匿名路由與 /login 同層級、不掛 DefaultLayout（跟登入頁一樣，匿名流程不需要側邊主選單）
     {
@@ -232,6 +235,15 @@ const router = createRouter({
       name: 'employee-reapply',
       component: () => import('@/views/employee/EmployeeReapplyView.vue'),
     },
+    // 綠界付款完成後「返回商店」的落地頁：後端 app.ecpay.client-back-url 直接導到這裡。
+    // 不掛 DefaultLayout（過場／結果頁，不需要側邊主選單）；三種結帳（購物車／課程／訂閱）
+    // 都會落到這，故只要求登入、不限 MEMBER 角色。
+    {
+      path: '/payment/result',
+      name: 'payment-result',
+      component: () => import('@/views/payment/PaymentResultView.vue'),
+      meta: { requiresAuth: true },
+    },
     // Google OAuth 登入流程：後端 app.oauth.frontend-success-url／frontend-registration-url
     // 直接把瀏覽器導到這兩個路徑，路徑名稱不可隨意更動。跟其他匿名頁一樣不掛 DefaultLayout。
     // 失敗時後端改導 /login?oauthError=<reason>，由 LoginView 承接，不另設錯誤頁。
@@ -244,6 +256,16 @@ const router = createRouter({
       path: '/oauth/register',
       name: 'oauth-register',
       component: () => import('@/views/oauth/OAuthRegisterView.vue'),
+    },
+    // Google「綁定」流程的落地頁：後端 app.oauth.frontend-link-result-url 直接導到這裡，
+    // 路徑名稱不可隨意更動。與登入用的 /oauth/callback 不同——這是已登入者從帳號設定頁
+    // 發起綁定後回來的地方，需登入；掛載後解析結果、notify() 保存訊息，隨即 replace 回
+    // /account/security。刻意不掛 DefaultLayout（過場頁，不需要側邊主選單）。
+    {
+      path: '/account/oauth/callback',
+      name: 'account-oauth-callback',
+      component: () => import('@/views/account/AccountOAuthCallbackView.vue'),
+      meta: { requiresAuth: true },
     },
   ],
 })
@@ -259,7 +281,7 @@ const router = createRouter({
  */
 router.beforeEach((to) => {
   const auth = useAuthStore()
-  
+
   // 根據角色自訂首頁導向。只導到該角色「進得去」的頁：/admin/reports 要求 ADMIN，
   // 純員工（非管理員、非教練）若也導過去，會被下面的角色守衛踢回 /，再被這裡導走……
   // 形成無限重導，整站開不起來。純員工就留在首頁。

@@ -3,18 +3,18 @@ import { ref, computed } from 'vue'
 import {
   getPrivateCoursesPublic,
   getGroupCoursesPublic,
-  getCourseCategories
+  getCourseCategories,
 } from '@/api/course/course.js'
 import api from '@/api/axios.instance.js'
-import { submitEcpayForm } from '@/utils/ecpay.js'
+import { redirectToEcpay } from '@/composables/useEcpayCheckout.js'
 
 // [全域狀態庫] useCoursesStore (courses)
 // 定義課程相關的 Pinia 狀態庫，提供課程方案與教練課程的資料管理功能。
 export const useCoursesStore = defineStore('courses', () => {
-  const categories = ref([])     // 課程商品方案列表（用於課程商城或方案介紹）
-  const privateCourses = ref([])  // 私教課方案列表（用於課程商城或方案介紹）
-  const groupCourses = ref([])  // 團課方案列表（用於課程商城或方案介紹）
-  const loading = ref(false)      // 課程 API 載入狀態
+  const categories = ref([]) // 課程商品方案列表（用於課程商城或方案介紹）
+  const privateCourses = ref([]) // 私教課方案列表（用於課程商城或方案介紹）
+  const groupCourses = ref([]) // 團課方案列表（用於課程商城或方案介紹）
+  const loading = ref(false) // 課程 API 載入狀態
 
   // 響應式分頁狀態 (前端分頁使用)
   const currentPageNum = ref(0)
@@ -23,10 +23,10 @@ export const useCoursesStore = defineStore('courses', () => {
 
   //載入課程分類
   async function loadCategories() {
-    const res = await getCourseCategories();
-    categories.value = (res.data || []).map(c => ({
+    const res = await getCourseCategories()
+    categories.value = (res.data || []).map((c) => ({
       ...c,
-      id: c.courseCategoryId || c.id
+      id: c.courseCategoryId || c.id,
     }))
   }
 
@@ -34,12 +34,16 @@ export const useCoursesStore = defineStore('courses', () => {
     const privates = Array.isArray(privateCourses.value) ? privateCourses.value : []
     const groups = Array.isArray(groupCourses.value)
       ? groupCourses.value
-      : (groupCourses.value?.content && Array.isArray(groupCourses.value.content)
-          ? groupCourses.value.content
-          : [])
+      : groupCourses.value?.content && Array.isArray(groupCourses.value.content)
+        ? groupCourses.value.content
+        : []
     return [
-      ...privates.map(c => ({ ...c, id: c.id || c.privateCourseId || c.courseId, isPrivate: true })),
-      ...groups.map(c => ({ ...c, id: c.id || c.courseId || c.groupCourseId, isPrivate: false }))
+      ...privates.map((c) => ({
+        ...c,
+        id: c.id || c.privateCourseId || c.courseId,
+        isPrivate: true,
+      })),
+      ...groups.map((c) => ({ ...c, id: c.id || c.courseId || c.groupCourseId, isPrivate: false })),
     ]
   })
 
@@ -54,9 +58,10 @@ export const useCoursesStore = defineStore('courses', () => {
     // 1. 關鍵字過濾
     const keyword = searchQuery.value.trim().toLowerCase()
     if (keyword) {
-      result = result.filter(course => {
+      result = result.filter((course) => {
         const nameMatch = course.name?.toLowerCase().includes(keyword)
-        const trainerName = course.trainerName || course.trainer?.name || course.trainer?.displayName || ""
+        const trainerName =
+          course.trainerName || course.trainer?.name || course.trainer?.displayName || ''
         const trainerMatch = trainerName.toLowerCase().includes(keyword)
         return nameMatch || trainerMatch
       })
@@ -65,8 +70,12 @@ export const useCoursesStore = defineStore('courses', () => {
     // 2. 分類過濾
     if (selectedCategoryId.value) {
       const catId = Number(selectedCategoryId.value)
-      result = result.filter(course => {
-        const cId = course.courseCategoryId || course.category?.courseCategoryId || course.category?.id || course.categoryId
+      result = result.filter((course) => {
+        const cId =
+          course.courseCategoryId ||
+          course.category?.courseCategoryId ||
+          course.category?.id ||
+          course.categoryId
         return Number(cId) === catId
       })
     }
@@ -74,7 +83,7 @@ export const useCoursesStore = defineStore('courses', () => {
     // 3. 教練過濾
     if (selectedTrainerId.value) {
       const tId = Number(selectedTrainerId.value)
-      result = result.filter(course => {
+      result = result.filter((course) => {
         // 團課是扁平的 trainerId；私教課是巢狀 trainer 物件（TrainerDto 的主鍵叫 id）
         const trId = course.trainerId || course.trainer?.trainerId || course.trainer?.id
         return Number(trId) === tId
@@ -86,7 +95,9 @@ export const useCoursesStore = defineStore('courses', () => {
 
   // 計算屬性：總筆數與總頁數 (自動隨 filteredCourses 計算)
   const courseTotalElements = computed(() => filteredCourses.value.length)
-  const courseTotalPages = computed(() => Math.ceil(filteredCourses.value.length / totalSize.value) || 1)
+  const courseTotalPages = computed(
+    () => Math.ceil(filteredCourses.value.length / totalSize.value) || 1,
+  )
 
   // 計算屬性：處理分頁邏輯
   const displayedCourses = computed(() => {
@@ -109,23 +120,31 @@ export const useCoursesStore = defineStore('courses', () => {
     try {
       const [privateRes, groupRes] = await Promise.all([
         getPrivateCoursesPublic(),
-        getGroupCoursesPublic()
+        getGroupCoursesPublic(),
       ])
 
       const rawGroup = groupRes.data
-        privateCourses.value = Array.isArray(privateRes.data) ? privateRes.data : (privateRes.data?.content || [])
-        // 團課走後端共用的 PageResponse，分頁清單放在 items（不是 Spring Page 的 content）；
-        // content 保留當備援，避免之後有端點改回 Page 直接序列化
-        groupCourses.value = Array.isArray(rawGroup)
-          ? rawGroup
-          : (Array.isArray(rawGroup?.items) ? rawGroup.items
-            : (Array.isArray(rawGroup?.content) ? rawGroup.content : []))
-      } catch (e) {
-        // 公開課程 API 若失敗（如後端尚未啟動），靜默處理，不讓錯誤往上拋造成全域 session expired 流程
-        console.warn('loadCourses failed:', e?.message || e)
-      } finally {
-        loading.value = false
-      }
+      // PrivateCourseResponse 的主鍵是 privateCourseId，沒有 id；團課與商品則各自是 id、productId。
+      // 在來源補上 id 別名，讓下游（allCourses、首頁、課程頁的下拉選單）不必各自處理欄位差異。
+      const rawPrivate = Array.isArray(privateRes.data)
+        ? privateRes.data
+        : privateRes.data?.content || []
+      privateCourses.value = rawPrivate.map((c) => ({ ...c, id: c.id ?? c.privateCourseId }))
+      // 團課走後端共用的 PageResponse，分頁清單放在 items（不是 Spring Page 的 content）；
+      // content 保留當備援，避免之後有端點改回 Page 直接序列化
+      groupCourses.value = Array.isArray(rawGroup)
+        ? rawGroup
+        : Array.isArray(rawGroup?.items)
+          ? rawGroup.items
+          : Array.isArray(rawGroup?.content)
+            ? rawGroup.content
+            : []
+    } catch (e) {
+      // 公開課程 API 若失敗（如後端尚未啟動），靜默處理，不讓錯誤往上拋造成全域 session expired 流程
+      console.warn('loadCourses failed:', e?.message || e)
+    } finally {
+      loading.value = false
+    }
   }
 
   // 統一前置驗證：依序檢查登入狀態與會員個人資料完整度
@@ -148,11 +167,17 @@ export const useCoursesStore = defineStore('courses', () => {
     // 執行統一前置驗證，若不通過則直接中斷
     if (!(await validateMemberRequirements(authStore, showToast))) return
 
+    // 課程主鍵取錯欄位時，後端只會回 @NotNull 的「不得是空值」，看不出是哪裡出錯；先在這裡擋掉
+    if (courseId == null) {
+      showToast('無法取得課程編號，請重新整理後再試', 'error')
+      return
+    }
+
     try {
       // 1. 建立課程直接購買訂單
       const orderRes = await api.post('/api/orders/direct', {
         privateCourseId: courseId,
-        quantity: 1
+        quantity: 1,
       })
 
       const orderData = orderRes.data
@@ -161,19 +186,10 @@ export const useCoursesStore = defineStore('courses', () => {
         return
       }
 
-      showToast('課程訂單已建立，引導至付款頁面...', 'success')
+      showToast('課程訂單已建立，前往付款…', 'success')
 
-      // 2. 獲取綠界金流表單欄位，組成隱藏表單送出（與購物車結帳共用 utils/ecpay.js）
-      const ecpayRes = await api.post(`/api/payments/ecpay/checkout/${orderData.orderId}`)
-      if (ecpayRes.data) {
-        // 記下這筆訂單，讓使用者從綠界返回 /orders 時主動查一次付款結果
-        // （本機收不到綠界的 server-to-server 通知，見 OrderListView#syncPendingPayment）。
-        // 課程走的是信用卡即時付款，跟購物車的 Credit 分支同樣需要這個標記。
-        localStorage.setItem('pendingPaymentOrderId', String(orderData.orderId))
-        // 同分頁導向：開新分頁的話綠界「返回商店」會停在新分頁，原本的頁面不會重新載入
-        // /orders，上面那個標記就永遠不會被消化，訂單看起來就一直是未付款
-        submitEcpayForm(ecpayRes.data)
-      }
+      // 2. 取綠界表單 → 記下待確認訂單 → 全屏過場 → 送出導向綠界（與購物車／訂閱結帳共用 useEcpayCheckout）
+      await redirectToEcpay(orderData.orderId, { method: 'Credit' })
     } catch (err) {
       showToast(err.message || err.response?.data?.message || '購買失敗，請重試', 'error')
     }

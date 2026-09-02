@@ -1,26 +1,132 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useCartStore } from '@/stores/cart.js'
-import { checkoutFromCart } from '@/api/order.js'
-import { getEcpayCheckoutForm } from '@/api/payment.js'
+import { checkoutFromCart, previewOrder } from '@/api/order.js'
 import { getMyProfile } from '@/api/memberProfile.js'
-import { submitEcpayForm } from '@/utils/ecpay.js'
+import { getMyUnusedCoupons } from '@/api/member/coupon.js'
+import { useEcpayCheckout } from '@/composables/useEcpayCheckout.js'
+import { useMediaQuery } from '@/composables/useMediaQuery.js'
 import { useFeedback } from '@/composables/useFeedback.js'
 import { taiwanDistricts } from '@/data/taiwanDistricts.js'
+import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import OrderSummaryCard from '@/components/OrderSummaryCard.vue'
 
 const cart = useCartStore()
 const { items, totalAmount, loading } = storeToRefs(cart)
+const { redirectToEcpay } = useEcpayCheckout()
+const isNarrow = useMediaQuery('(max-width: 768px)')
 
+// 選中的優惠券代碼（空字串＝不使用）
 const couponCode = ref('')
 const receiverName = ref('')
 const receiverPhone = ref('')
 const submitting = ref(false)
 const showConfirm = ref(false)
+
+// ── 我的優惠券下拉挑選 ─────────────────────────────────────────────────
+// 後端結帳規則：只有「已領取且未使用」的券才能折抵，所以不提供手動輸入代碼，
+// 一律從名下未使用清單挑（再過濾成適用商品的：applicableType 為 ALL 或 PRODUCT）
+const unusedCoupons = ref([])
+const applicableCoupons = computed(() =>
+  unusedCoupons.value.filter((mc) => ['ALL', 'PRODUCT'].includes(mc.coupon?.applicableType)),
+)
+
+async function loadCoupons() {
+  try {
+    const { data } = await getMyUnusedCoupons()
+    unusedCoupons.value = Array.isArray(data) ? data : []
+  } catch {
+    unusedCoupons.value = []
+  }
+}
+
+function couponDiscountLabel(coupon) {
+  if (!coupon) return ''
+  return coupon.type === 'PERCENT'
+    ? `省 ${Number(coupon.value)}%`
+    : `折 NT$ ${Number(coupon.value).toLocaleString()}`
+}
+
+// ── 結帳前試算：選券後即時算折抵與應付金額 ────────────────────────────
+const preview = ref(null)
+let previewTimer = null
+
+async function runPreview() {
+  try {
+    const { data } = await previewOrder({ couponCode: couponCode.value.trim() || null })
+    preview.value = data
+  } catch {
+    // 試算失敗不擋結帳，畫面退回只顯示小計
+    preview.value = null
+  }
+}
+
+watch(couponCode, () => {
+  clearTimeout(previewTimer)
+  previewTimer = setTimeout(runPreview, 400)
+})
+
+const subtotal = computed(() => Number(preview.value?.subtotalAmount ?? totalAmount.value))
+const discount = computed(() => Number(preview.value?.discountAmount ?? 0))
+const payableTotal = computed(() => Number(preview.value?.totalAmount ?? totalAmount.value))
+const couponRejected = computed(
+  () => !!couponCode.value.trim() && preview.value && !preview.value.couponApplied,
+)
+
+// ── 發票資訊（僅蒐集儲存＋顯示，未串綠界電子發票開立） ───────────────
+const invoiceType = ref('PERSONAL_CARRIER')
+const invoiceCarrier = ref('')
+const invoiceTaxId = ref('')
+const invoiceDonationCode = ref('')
+const invoiceOptions = [
+  {
+    value: 'PERSONAL_CARRIER',
+    label: '個人（會員載具）',
+    desc: '歸戶至您的會員雲端發票，不需額外資料',
+  },
+  { value: 'MOBILE_BARCODE', label: '手機條碼載具', desc: '輸入手機條碼（斜線加 7 碼大寫英數）' },
+  { value: 'COMPANY', label: '公司統編', desc: '開立三聯式發票，輸入 8 碼統一編號' },
+  { value: 'NPO_DONATION', label: '捐贈發票', desc: '捐贈給社福機構，輸入愛心碼' },
+]
+const MOBILE_BARCODE_RE = /^\/[0-9A-Z.+-]{7}$/
+const TAX_ID_RE = /^\d{8}$/
+const DONATION_RE = /^\d{2,7}$/
+const invoiceError = computed(() => {
+  if (
+    invoiceType.value === 'MOBILE_BARCODE' &&
+    !MOBILE_BARCODE_RE.test(invoiceCarrier.value.trim())
+  ) {
+    return '手機條碼格式不正確，例如 /ABC+123'
+  }
+  if (invoiceType.value === 'COMPANY' && !TAX_ID_RE.test(invoiceTaxId.value.trim())) {
+    return '統一編號需為 8 碼數字'
+  }
+  if (invoiceType.value === 'NPO_DONATION' && !DONATION_RE.test(invoiceDonationCode.value.trim())) {
+    return '愛心捐贈碼需為 2~7 碼數字'
+  }
+  return ''
+})
+const invoiceSummary = computed(() => {
+  const opt = invoiceOptions.find((o) => o.value === invoiceType.value)
+  if (invoiceType.value === 'MOBILE_BARCODE') return `手機條碼載具　${invoiceCarrier.value.trim()}`
+  if (invoiceType.value === 'COMPANY') return `公司統編　${invoiceTaxId.value.trim()}`
+  if (invoiceType.value === 'NPO_DONATION')
+    return `捐贈發票　愛心碼 ${invoiceDonationCode.value.trim()}`
+  return opt?.label ?? ''
+})
+function invoicePayload() {
+  return {
+    invoiceType: invoiceType.value,
+    invoiceCarrier: invoiceType.value === 'MOBILE_BARCODE' ? invoiceCarrier.value.trim() : null,
+    invoiceTaxId: invoiceType.value === 'COMPANY' ? invoiceTaxId.value.trim() : null,
+    invoiceDonationCode:
+      invoiceType.value === 'NPO_DONATION' ? invoiceDonationCode.value.trim() : null,
+  }
+}
 
 // 付款方式：Credit（信用卡，即時）／ATM（虛擬帳號轉帳）／CVS（超商代碼繳費）——
 // 後兩者不是即時付款，綠界會先給一組帳號/代碼，消費者之後自行完成繳費
@@ -34,11 +140,11 @@ const paymentMethodLabel = computed(
   () => paymentMethodOptions.find((o) => o.value === paymentMethod.value)?.label ?? '',
 )
 
-// 超商代碼繳費金額限制（含手續費），跟後端 EcpayService 的檢查一致
+// 超商代碼繳費金額限制（含手續費），跟後端 EcpayService 的檢查一致；用折抵後的應付金額判斷
 const CVS_MIN_AMOUNT = 27
 const CVS_MAX_AMOUNT = 20000
 const isCvsAllowed = computed(
-  () => Number(totalAmount.value) >= CVS_MIN_AMOUNT && Number(totalAmount.value) <= CVS_MAX_AMOUNT,
+  () => payableTotal.value >= CVS_MIN_AMOUNT && payableTotal.value <= CVS_MAX_AMOUNT,
 )
 // 訂單金額變動（例如優惠券折抵後）導致超商代碼不再適用時，自動退回信用卡，避免送出後被後端擋下
 watch(isCvsAllowed, (allowed) => {
@@ -142,6 +248,10 @@ function openConfirm() {
     showFeedback('請填寫收件地址', 'error')
     return
   }
+  if (invoiceError.value) {
+    showFeedback(invoiceError.value, 'error')
+    return
+  }
   showConfirm.value = true
 }
 
@@ -155,21 +265,16 @@ async function handleCheckout() {
         receiverName: receiver.name || null,
         receiverPhone: receiver.phone || null,
         receiverAddress: receiver.address || null,
+        ...invoicePayload(),
       },
       idempotencyKey,
     )
     const orderId = orderRes.data.orderId
     cart.reset() // 訂單一旦建立後端就已清空購物車，本地狀態在這裡就同步清空即可，不必等組表單成功
 
-    const formRes = await getEcpayCheckoutForm(orderId, paymentMethod.value)
-
-    // 只有信用卡是「幾乎即時」的付款體驗，回 /orders 後才需要 OrderListView 短輪詢確認付款結果；
-    // ATM／超商代碼要等消費者之後自行完成繳費，短輪詢不會有結果，改由 OrderListView 顯示待繳費資訊
-    if (paymentMethod.value === 'Credit') {
-      localStorage.setItem('pendingPaymentOrderId', String(orderId))
-    }
-    submitEcpayForm(formRes.data)
-    // 送出表單後瀏覽器即將離開本頁（導向綠界），故意不重設 submitting，避免使用者在轉導期間重複點擊
+    // 取綠界表單 → 記下待確認訂單 → 顯示全屏過場 → 送出導向綠界（見 useEcpayCheckout）
+    await redirectToEcpay(orderId, { method: paymentMethod.value })
+    // 成功時瀏覽器即將離開本頁（導向綠界），過場遮罩由 EcpayRedirectOverlay 負責
   } catch (err) {
     // 攔截器已正規化錯誤，訊息在 err.message；err.response 不存在（見 normalizeApiError）
     showConfirm.value = false
@@ -181,7 +286,11 @@ async function handleCheckout() {
 onMounted(() => {
   cart.loadCart()
   loadMemberProfile()
+  loadCoupons()
+  runPreview()
 })
+
+onUnmounted(() => clearTimeout(previewTimer))
 </script>
 
 <template>
@@ -205,7 +314,20 @@ onMounted(() => {
       <div class="checkout-form">
         <div class="form-card">
           <h3>訂單商品</h3>
-          <div v-for="item in items" :key="item.cartItemId" class="order-item-row">
+          <div
+            v-for="item in items"
+            :key="item.cartItemId"
+            class="order-item-row order-item-row--rich"
+          >
+            <div class="order-item-thumb">
+              <img
+                v-if="item.imageUrl"
+                :src="formatImageUrl(item.imageUrl)"
+                :alt="item.productName"
+                @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)"
+              />
+              <span v-else>{{ item.productName?.[0] }}</span>
+            </div>
             <span class="order-item-name">
               {{ item.productName }} × {{ item.quantity }}
               <span v-if="item.available === false" class="item-flag danger"
@@ -313,31 +435,119 @@ onMounted(() => {
         </div>
 
         <div class="form-card">
+          <h3>發票資訊</h3>
+          <div class="invoice-select" role="group" aria-label="發票開立方式">
+            <button
+              v-for="opt in invoiceOptions"
+              :key="opt.value"
+              type="button"
+              class="payment-method-option"
+              :class="{ active: invoiceType === opt.value }"
+              :aria-pressed="invoiceType === opt.value"
+              @click="invoiceType = opt.value"
+            >
+              <span class="payment-method-option-label">{{ opt.label }}</span>
+              <span class="payment-method-option-desc">{{ opt.desc }}</span>
+            </button>
+          </div>
+          <div v-if="invoiceType === 'MOBILE_BARCODE'" class="field-group invoice-field">
+            <label>手機條碼</label>
+            <input v-model="invoiceCarrier" class="form-input" placeholder="例如 /ABC+123" />
+          </div>
+          <div v-else-if="invoiceType === 'COMPANY'" class="field-group invoice-field">
+            <label>統一編號</label>
+            <input v-model="invoiceTaxId" class="form-input" placeholder="8 碼數字" maxlength="8" />
+          </div>
+          <div v-else-if="invoiceType === 'NPO_DONATION'" class="field-group invoice-field">
+            <label>愛心捐贈碼</label>
+            <input
+              v-model="invoiceDonationCode"
+              class="form-input"
+              placeholder="2~7 碼數字"
+              maxlength="7"
+            />
+          </div>
+          <p v-if="invoiceError" class="payment-method-hint">{{ invoiceError }}</p>
+        </div>
+
+        <div class="form-card">
           <h3>優惠券（選填）</h3>
-          <input v-model="couponCode" class="form-input" placeholder="輸入優惠券代碼" />
+          <div
+            v-if="applicableCoupons.length"
+            class="coupon-select"
+            role="radiogroup"
+            aria-label="選擇優惠券"
+          >
+            <label class="coupon-option" :class="{ active: couponCode === '' }">
+              <input type="radio" name="coupon" value="" v-model="couponCode" />
+              <span class="coupon-option__label">不使用優惠券</span>
+            </label>
+            <label
+              v-for="mc in applicableCoupons"
+              :key="mc.memberCouponId"
+              class="coupon-option"
+              :class="{ active: couponCode === mc.coupon.code }"
+            >
+              <input type="radio" name="coupon" :value="mc.coupon.code" v-model="couponCode" />
+              <span class="coupon-option__label">{{ mc.coupon.name }}</span>
+              <span class="coupon-option__meta">
+                {{ couponDiscountLabel(mc.coupon) }}
+                <template v-if="Number(mc.coupon.minSpend) > 0">
+                  ・滿 NT$ {{ Number(mc.coupon.minSpend).toLocaleString() }}
+                </template>
+              </span>
+            </label>
+          </div>
+          <p v-else class="coupon-empty">
+            目前沒有可用於商品的優惠券，可至
+            <RouterLink to="/coupons">優惠券專區</RouterLink>
+            領取。
+          </p>
+          <p v-if="couponRejected" class="payment-method-hint" role="alert">
+            {{ preview.couponMessage }}
+          </p>
         </div>
       </div>
 
-      <OrderSummaryCard
-        title="付款金額"
-        :rows="[{ label: '商品小計', value: Number(totalAmount) }]"
-        total-label="應付金額"
-        :total-value="Number(totalAmount)"
-        sticky
-      >
+      <OrderSummaryCard title="付款金額" total-label="應付金額" :total-value="payableTotal" sticky>
+        <template #rows>
+          <div class="summary-card__row">
+            <span>商品小計</span>
+            <span>NT$ {{ subtotal.toLocaleString() }}</span>
+          </div>
+          <div v-if="discount > 0" class="summary-card__row discount-row">
+            <span>優惠折抵{{ preview?.couponName ? `（${preview.couponName}）` : '' }}</span>
+            <span>− NT$ {{ discount.toLocaleString() }}</span>
+          </div>
+        </template>
         <div class="payment-method-row">
           <span class="payment-method-label">付款方式</span>
           <span class="payment-method-value">{{ paymentMethodLabel }}（綠界 ECPay）</span>
         </div>
         <p class="ecpay-note">{{ paymentMethodNote }}</p>
         <button
+          v-if="!isNarrow"
           class="btn btn-accent submit-btn"
-          :disabled="submitting || hasUnavailableItem"
+          :disabled="submitting || hasUnavailableItem || !!invoiceError"
           @click="openConfirm"
         >
           確認結帳並前往付款
         </button>
       </OrderSummaryCard>
+    </div>
+
+    <div v-if="isNarrow && !loading && items.length" class="mobile-checkout-bar">
+      <div class="mobile-checkout-bar__total">
+        <span>應付金額</span>
+        <strong>NT$ {{ payableTotal.toLocaleString() }}</strong>
+      </div>
+      <button
+        class="btn btn-accent mobile-checkout-bar__btn"
+        :disabled="submitting || hasUnavailableItem || !!invoiceError"
+        @click="openConfirm"
+      >
+        確認結帳並前往付款
+      </button>
     </div>
 
     <div
@@ -364,9 +574,9 @@ onMounted(() => {
           <p class="confirm-text">{{ effectiveReceiver.address || '未填寫地址' }}</p>
         </div>
 
-        <div v-if="couponCode.trim()" class="confirm-section">
-          <h4 class="confirm-section-title">優惠券</h4>
-          <p class="confirm-text">{{ couponCode.trim() }}（實際折扣將於送出後計算）</p>
+        <div class="confirm-section">
+          <h4 class="confirm-section-title">發票</h4>
+          <p class="confirm-text">{{ invoiceSummary }}</p>
         </div>
 
         <div class="confirm-section">
@@ -374,9 +584,19 @@ onMounted(() => {
           <p class="confirm-text">{{ paymentMethodLabel }}</p>
         </div>
 
+        <div class="confirm-amount-lines">
+          <div class="confirm-amount-row">
+            <span>商品小計</span>
+            <span>NT$ {{ subtotal.toLocaleString() }}</span>
+          </div>
+          <div v-if="discount > 0" class="confirm-amount-row discount-row">
+            <span>優惠折抵{{ preview?.couponName ? `（${preview.couponName}）` : '' }}</span>
+            <span>− NT$ {{ discount.toLocaleString() }}</span>
+          </div>
+        </div>
         <div class="confirm-total-row">
           <span>應付金額</span>
-          <span class="total-price">NT$ {{ Number(totalAmount).toLocaleString() }}</span>
+          <span class="total-price">NT$ {{ payableTotal.toLocaleString() }}</span>
         </div>
         <p class="ecpay-note">{{ paymentMethodConfirmNote }}</p>
 
@@ -465,6 +685,110 @@ onMounted(() => {
   font-size: 0.88rem;
   color: var(--text-secondary);
   padding: 0.35rem 0;
+}
+.order-item-row--rich {
+  align-items: center;
+  gap: 0.75rem;
+}
+.order-item-thumb {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.order-item-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.order-item-row--rich .order-item-name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 發票／優惠券挑選卡 */
+.invoice-select {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+.invoice-field {
+  margin-top: 0.9rem;
+}
+.coupon-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.coupon-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 0.6rem;
+  padding: 0.65rem 0.85rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.coupon-option:hover {
+  border-color: var(--accent);
+}
+.coupon-option.active {
+  border-color: var(--accent);
+  background: var(--bg-soft);
+}
+.coupon-option__label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.coupon-option__meta {
+  grid-column: 2;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.coupon-empty {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.coupon-empty a {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+/* OrderSummaryCard #rows slot 的內容帶的是本元件的 scope，需在這裡定義樣式 */
+.summary-card__row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+.discount-row {
+  color: #c92a2a;
+}
+.confirm-amount-lines {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--border);
+}
+.confirm-amount-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
+.confirm-amount-row.discount-row {
+  color: #c92a2a;
 }
 .receiver-mode-select {
   display: grid;
@@ -625,6 +949,10 @@ onMounted(() => {
   padding: 0.8rem;
 }
 
+.mobile-checkout-bar {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .checkout-layout {
     grid-template-columns: 1fr;
@@ -634,6 +962,46 @@ onMounted(() => {
   }
   .payment-method-select {
     grid-template-columns: 1fr;
+  }
+  .invoice-select {
+    grid-template-columns: 1fr;
+  }
+  .page-container {
+    padding-bottom: 5.5rem;
+  }
+  /* 底部固定條已提供主 CTA，摘要卡內的送出鈕收起 */
+  .submit-btn {
+    display: none;
+  }
+  .mobile-checkout-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    padding: 0.75rem 1.1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    background: var(--bg-section);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+  }
+  .mobile-checkout-bar__total {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+  .mobile-checkout-bar__total strong {
+    font-size: 1.05rem;
+    color: var(--accent-hover);
+  }
+  .mobile-checkout-bar__btn {
+    flex-shrink: 0;
+    padding: 0.7rem 1.2rem;
+    font-size: 0.85rem;
   }
 }
 

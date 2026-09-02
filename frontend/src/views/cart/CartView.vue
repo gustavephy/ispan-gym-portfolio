@@ -1,10 +1,12 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useCartStore } from '@/stores/cart.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useFeedback } from '@/composables/useFeedback.js'
+import { useMediaQuery } from '@/composables/useMediaQuery.js'
+import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import OrderSummaryCard from '@/components/OrderSummaryCard.vue'
@@ -12,24 +14,32 @@ import OrderSummaryCard from '@/components/OrderSummaryCard.vue'
 const cart = useCartStore()
 const auth = useAuthStore()
 const router = useRouter()
+const isNarrow = useMediaQuery('(max-width: 768px)')
 
 const { items, totalAmount, loading } = storeToRefs(cart)
 
 const { feedback, showFeedback } = useFeedback(2000)
 
-// 目前正在改數量/刪除的品項 cartItemId；期間鎖住該列按鈕與輸入框，
-// 避免連續快速點擊時同一品項送出好幾個重疊的請求互相打架
-const busyId = ref(null)
+// 正在改數量/刪除的品項 cartItemId 集合：逐列上鎖（同一列連點會互相打架，
+// 不同列可以同時操作），配合 store 的樂觀更新讓畫面即時反應
+const busyIds = reactive(new Set())
 const clearing = ref(false)
+const removingUnavailable = ref(false)
+
+const hasUnavailableItem = computed(() => items.value.some((i) => i.available === false))
+const totalQuantity = computed(() => items.value.reduce((sum, i) => sum + Number(i.quantity), 0))
 
 async function updateQuantity(item, newQty) {
-  if (newQty < 1 || busyId.value) return
-  busyId.value = item.cartItemId
+  if (newQty < 1 || busyIds.has(item.cartItemId)) return
+  // 有庫存資訊時前端先夾上限，不必等後端擋
+  if (item.stock != null && newQty > item.stock) newQty = item.stock
+  if (newQty === Number(item.quantity)) return
+  busyIds.add(item.cartItemId)
   try {
     const res = await cart.updateItem(item.cartItemId, newQty)
     if (!res.success) showFeedback(res.message, 'error')
   } finally {
-    busyId.value = null
+    busyIds.delete(item.cartItemId)
   }
 }
 
@@ -37,23 +47,34 @@ function changeQty(item, delta) {
   updateQuantity(item, Number(item.quantity) + delta)
 }
 
-// 手動輸入數量：先把顯示值重置回目前數量（輸入框不直接綁定 store，等後端確認成功
-// 後 store 重新載入才會反映新值），數字沒變或格式不合法就不送出請求
+// 手動輸入數量：先把顯示值重置回目前數量（輸入框不直接綁定 store，等對帳完成
+// store 重新載入才會反映新值），數字沒變或格式不合法就不送出請求
 function handleQtyInput(item, event) {
   const newQty = Number(event.target.value)
   event.target.value = item.quantity
-  if (!Number.isInteger(newQty) || newQty === item.quantity) return
+  if (!Number.isInteger(newQty) || newQty === Number(item.quantity)) return
   updateQuantity(item, newQty)
 }
 
 async function removeItem(item) {
-  if (busyId.value) return
-  busyId.value = item.cartItemId
+  if (busyIds.has(item.cartItemId)) return
+  busyIds.add(item.cartItemId)
   try {
     const res = await cart.removeItem(item.cartItemId)
     if (!res.success) showFeedback(res.message, 'error')
   } finally {
-    busyId.value = null
+    busyIds.delete(item.cartItemId)
+  }
+}
+
+async function removeUnavailable() {
+  removingUnavailable.value = true
+  try {
+    const res = await cart.removeUnavailableItems()
+    if (!res.success) showFeedback(res.message, 'error')
+    else if (res.removed) showFeedback(`已移除 ${res.removed} 項失效商品`)
+  } finally {
+    removingUnavailable.value = false
   }
 }
 
@@ -119,9 +140,31 @@ onMounted(() => {
 
     <div v-else class="cart-layout">
       <div class="cart-items">
-        <div v-for="item in items" :key="item.cartItemId" class="cart-item">
+        <div v-if="hasUnavailableItem" class="unavailable-banner" role="alert">
+          <span>部分商品已下架或庫存不足，結帳前需先移除。</span>
+          <button
+            type="button"
+            class="btn btn-outline unavailable-banner__btn"
+            :disabled="removingUnavailable"
+            @click="removeUnavailable"
+          >
+            {{ removingUnavailable ? '移除中…' : '一鍵移除失效商品' }}
+          </button>
+        </div>
+
+        <div
+          v-for="item in items"
+          :key="item.cartItemId"
+          class="cart-item"
+          :class="{ 'cart-item--unavailable': item.available === false }"
+        >
           <div class="item-image">
-            <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.productName" />
+            <img
+              v-if="item.imageUrl"
+              :src="formatImageUrl(item.imageUrl)"
+              :alt="item.productName"
+              @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)"
+            />
             <span v-else class="item-image-fallback">{{ item.productName?.[0] }}</span>
           </div>
 
@@ -140,7 +183,7 @@ onMounted(() => {
             <button
               class="qty-btn"
               :aria-label="`減少 ${item.productName} 數量`"
-              :disabled="busyId === item.cartItemId"
+              :disabled="busyIds.has(item.cartItemId) || item.quantity <= 1"
               @click="changeQty(item, -1)"
             >
               −
@@ -151,13 +194,15 @@ onMounted(() => {
               class="qty-input"
               :aria-label="`${item.productName} 數量`"
               :value="item.quantity"
-              :disabled="busyId === item.cartItemId"
+              :disabled="busyIds.has(item.cartItemId)"
               @change="handleQtyInput(item, $event)"
             />
             <button
               class="qty-btn"
               :aria-label="`增加 ${item.productName} 數量`"
-              :disabled="busyId === item.cartItemId"
+              :disabled="
+                busyIds.has(item.cartItemId) || (item.stock != null && item.quantity >= item.stock)
+              "
               @click="changeQty(item, 1)"
             >
               ＋
@@ -169,26 +214,40 @@ onMounted(() => {
           <button
             class="remove-btn"
             :aria-label="`移除 ${item.productName}`"
-            :disabled="busyId === item.cartItemId"
+            :disabled="busyIds.has(item.cartItemId)"
             @click="removeItem(item)"
           >
             ✕
           </button>
         </div>
+
+        <RouterLink to="/products" class="continue-shopping">← 繼續購物</RouterLink>
       </div>
 
       <OrderSummaryCard
         title="訂單摘要"
-        :rows="[{ label: '商品小計', value: Number(totalAmount) }]"
+        :rows="[{ label: `商品小計（${totalQuantity} 件）`, value: Number(totalAmount) }]"
         total-label="合計"
         :total-value="Number(totalAmount)"
         sticky
       >
-        <button class="btn btn-accent checkout-btn" @click="goCheckout">前往結帳 →</button>
+        <button v-if="!isNarrow" class="btn btn-accent checkout-btn" @click="goCheckout">
+          前往結帳 →
+        </button>
         <button class="btn btn-outline clear-btn" :disabled="clearing" @click="clearCart">
           {{ clearing ? '清空中…' : '清空購物車' }}
         </button>
       </OrderSummaryCard>
+    </div>
+
+    <div v-if="isNarrow && !loading && auth.isLoggedIn && items.length" class="mobile-checkout-bar">
+      <div class="mobile-checkout-bar__total">
+        <span>合計</span>
+        <strong>NT$ {{ Number(totalAmount).toLocaleString() }}</strong>
+      </div>
+      <button class="btn btn-accent mobile-checkout-bar__btn" @click="goCheckout">
+        前往結帳 →
+      </button>
     </div>
 
     <FeedbackToast :feedback="feedback" />
@@ -349,6 +408,46 @@ onMounted(() => {
   font-size: 0.85rem;
 }
 
+.unavailable-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.8rem 1.1rem;
+  border: 1px solid #f1c6c6;
+  border-radius: var(--radius-md);
+  background: #fdecec;
+  font-size: 0.85rem;
+  color: #c92a2a;
+}
+.unavailable-banner__btn {
+  font-size: 0.8rem;
+  padding: 0.4rem 0.9rem;
+  white-space: nowrap;
+}
+.cart-item--unavailable {
+  border-color: #f1c6c6;
+  background: #fdf4f4;
+}
+
+.continue-shopping {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-hover);
+}
+.continue-shopping:hover {
+  text-decoration: underline;
+}
+
+/* 手機版底部固定結帳條 */
+.mobile-checkout-bar {
+  display: none;
+}
+
 /* 載入骨架：沿用 cart-item / cart-layout 版位，載入完成後不跳版 */
 .cart-item--skeleton {
   pointer-events: none;
@@ -378,6 +477,46 @@ onMounted(() => {
   }
   .skeleton-summary {
     height: 180px;
+  }
+  /* 底部已有固定結帳條，摘要卡內就不再重複一顆主 CTA */
+  .checkout-btn {
+    display: none;
+  }
+  .clear-btn {
+    margin-top: 0;
+  }
+  /* 內容不要被底部固定條蓋住 */
+  .page-container {
+    padding-bottom: 5.5rem;
+  }
+  .mobile-checkout-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    padding: 0.75rem 1.1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    background: var(--bg-section);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+  }
+  .mobile-checkout-bar__total {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+  .mobile-checkout-bar__total strong {
+    font-size: 1.05rem;
+    color: var(--accent-hover);
+  }
+  .mobile-checkout-bar__btn {
+    flex-shrink: 0;
+    padding: 0.7rem 1.4rem;
   }
 }
 </style>

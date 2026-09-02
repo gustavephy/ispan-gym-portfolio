@@ -21,8 +21,9 @@
 | 會員管理（後台） | `/api/admin/members` | [2.7](#27-adminmembercontrollerapiadminmembers-admin) |
 | 員工資料（自助） | `/api/employee/profile` | [2.8](#28-employeeprofilecontrollerapiemployeeprofile) |
 | 員工管理（後台） | `/api/admin/employees` | [2.9](#29-adminemployeecontrollerapiadminemployees-admin) |
-| 密碼管理 | `/api/account/me/change-password`、`/api/auth/forgot-password`、`/api/auth/reset-password` | [2.10](#210-passwordcontrollerpasswordresetcontroller2026-08-24-補先前遺漏) |
+| 密碼管理 | `/api/account/me/change-password`、`/api/account/me/set-password`、`/api/auth/forgot-password`、`/api/auth/reset-password` | [2.10](#210-passwordcontrollerpasswordresetcontroller2026-08-24-補先前遺漏) |
 | 帳號身份／全裝置登出 | `/api/account/me`、`/api/account/me/logout-all` | [2.11](#211-accountcontroller) |
+| Google 綁定（自助） | `/api/account/me/oauth-connections`、`/api/account/me/oauth/google/link`、`/api/account/me/oauth/google` | [2.12](#212-oauthconnectioncontrollerapiaccountmegoogle-綁定自助管理2026-09-第五批補上) |
 | 商品／分類 | `/api/products`、`/api/product-categories` | [3](#3-商品) |
 | 購物車 | `/api/cart` | [4](#4-購物車) |
 | 訂單 | `/api/orders`、`/api/admin/orders` | [5](#5-訂單) |
@@ -553,7 +554,19 @@ Request `ChangePasswordRequest`：`currentPassword`（`@NotBlank`）、`newPassw
 
 Response `200` `ChangePasswordResponse`：`accessToken`／`accountId`／`email`／`roles`——**同一回應內附一組新 JWT**，前端原地替換掉舊 token 即維持登入；舊 token（含其他裝置）立即失效（`credentialsVersion` 遞增）。
 
-錯誤：`409 PASSWORD_NOT_CONFIGURED` 純 OAuth 帳號沒有本地密碼可改；`400 CURRENT_PASSWORD_INCORRECT` 目前密碼錯誤（計入下方限流）；`409 PASSWORD_REUSED` 新密碼與目前密碼或近 4 組歷史密碼重複；`429 PASSWORD_CHANGE_RATE_LIMITED` 同帳號 15 分鐘內目前密碼連續猜錯達 5 次。
+錯誤：`409 PASSWORD_NOT_CONFIGURED` 純 OAuth 帳號沒有本地密碼可改（請改用 `set-password` 設定第一組）；`400 CURRENT_PASSWORD_INCORRECT` 目前密碼錯誤（計入下方限流）；`409 PASSWORD_REUSED` 新密碼與目前密碼或近 4 組歷史密碼重複；`429 PASSWORD_CHANGE_RATE_LIMITED` 同帳號 15 分鐘內目前密碼連續猜錯達 5 次。
+
+#### 🔒 `POST /api/account/me/set-password`（2026-09 第五批新增）
+
+OAuth-only 帳號（`account.passwordHash == null`）設定它的**第一組**本地密碼。與 `change-password` 互斥：那支要求已有密碼，這支要求還沒有。已登入即可用，`accountId` 一律取自 JWT，request body 不接受該欄位。
+
+Request `SetPasswordRequest`：`newPassword`（`@NotBlank`，見下方密碼規則）、`confirmPassword`（`@NotBlank`，須與 `newPassword` 相同）——**沒有 `currentPassword`**，這種帳號本來就沒有舊密碼；已登入的 JWT 即是設定第一組密碼的身分證明（第五批「最小方案」定案，見 `docs/google-oauth-design-notes.md`）。
+
+Response `200` `SetPasswordResponse`：`accessToken`／`accountId`／`email`／`roles`——同一回應內附一組新 JWT（`credentialsVersion` 已遞增），前端原地替換舊 token 即維持登入；OAuth 登入簽發的所有舊 JWT 立即失效。
+
+錯誤：`409 PASSWORD_ALREADY_CONFIGURED` 帳號已有本地密碼（含併發下第二個請求取得 Account 鎖後看到已設定的情況——不覆寫、不再次遞增版本）；`400 INVALID_REQUEST` 密碼不符規則或兩次輸入不一致。
+
+> **不設獨立限流**：這支端點沒有密碼猜測面（不比對任何舊密碼），且取得 Account 悲觀鎖後先檢查 `passwordHash`，只有首次成功才會執行一次 BCrypt 編碼。因此不額外掛限流器。
 
 #### 🔓 `POST /api/auth/forgot-password`
 
@@ -599,6 +612,73 @@ Response **`204`**（無 body，不核發 JWT——視為救援可能已外流�
 故意保留目前裝置登入不同；前端收到成功後應自行清除本機登入狀態並導去登入頁。
 
 主要錯誤：`404` 帳號不存在（理論上不會發生，JWT 能通過驗證代表帳號當下存在）
+
+---
+
+### 2.12 OAuthConnectionController（`/api/account/me`，Google 綁定自助管理）（2026-09 第五批補上）
+
+已登入即可用，不分角色（Account 層級概念，跟密碼管理一樣沒有方法層級 `@PreAuthorize`）。
+`accountId` 一律取自 JWT，不接受外部帶入。整體 Google OAuth 設計見 `docs/google-oauth-design-notes.md`。
+
+| 方法 | 路徑 | 成功狀態 | 說明 |
+|---|---|---|---|
+| GET | `/api/account/me/oauth-connections` | 200 | 查自己的 Google 綁定狀態 |
+| POST | `/api/account/me/oauth/google/link` | 200 | 重新驗證密碼後發起 Google 綁定 |
+| DELETE | `/api/account/me/oauth/google` | 204 | 重新驗證密碼後解除 Google 綁定 |
+
+#### 🔒 `GET /api/account/me/oauth-connections`
+
+Response `200` `OAuthConnectionsResponse`：
+
+```json
+{
+  "google": { "linked": true, "email": "user@example.com", "linkedAt": "2026-08-22T12:34:56" },
+  "hasPassword": true
+}
+```
+
+未綁定時 `google` 為 `{ "linked": false, "email": null, "linkedAt": null }`。`linkedAt` 取自
+`OauthAccount.createdAt`（綁定建立時間），不是最後登入時間。`hasPassword` 是「有沒有本地密碼」的
+**單一來源**（`AccountMeResponse` 刻意不含）。
+
+#### 🔒 `POST /api/account/me/oauth/google/link`
+
+Request `OAuthReauthRequest`：`currentPassword`（`@NotBlank`）——重新驗證目前的本地密碼。
+
+Response `200` `OAuthLinkInitiateResponse`：`{ "authorizationUrl": "/oauth2/authorization/google?transaction=<opaque>" }`
+——**相對路徑**，前端需以後端 origin 組成完整網址後整頁導向。`transaction` 是一次性、單次消耗的
+capability token，語意存在 server-side `OAuthTransaction`。
+
+授權完成後 Google 會回導到後端 callback，成功／失敗再由後端導向前端
+`app.oauth.frontend-link-result-url`（`/account/oauth/callback`）：
+- 成功：`?result=linked`
+- LINK 業務拒絕或協定失敗：`?oauthError=<白名單 reason>`（第五批：LINK 流程的失敗一律導這裡，
+  不再導共用的 `/login`——已登入者進 `/login` 會被前端 router 導走而看不到原因）
+
+發起 LINK 時 Google authorization request 會帶 `prompt=select_account`（只對 LINK，不對 LOGIN），
+強制顯示 Google 帳號選擇器，避免綁到非預期帳號。
+
+錯誤：`400 INVALID_REQUEST` `currentPassword` 空白；`401 REAUTHENTICATION_REQUIRED` 密碼錯誤、
+重新驗證限流、或帳號沒有本地密碼（前端攔截器**不**將此 401 當 session 過期，交由密碼確認 Modal
+就地顯示）；`404`（`HTTP_404`）OAuth 功能停用或帳號不存在；`409 OAUTH_ALREADY_LINKED` 已綁定另一個
+Google 帳號；`429 OAUTH_LINK_RATE_LIMITED` 發起過於頻繁（Account ID 為鍵，5 次／10 分、15 次／小時，
+**密碼答對也不清除**）。
+
+回導 `oauthError` 白名單 reason（小寫）：`access_denied`（使用者取消）、`link_email_mismatch`
+（Google Email 與 Account Email 不符，或 Google Email 未驗證）、`identity_in_use`（該 Google 身分已綁
+其他帳號）、`already_linked`、`account_disabled`、`flow_expired`、`flow_replaced`（多分頁）、
+`provider_error`、`unexpected_error`。
+
+#### 🔒 `DELETE /api/account/me/oauth/google`
+
+Request `OAuthReauthRequest`：`currentPassword`（`@NotBlank`）——DELETE 帶 body。
+
+Response `204`（無 body，**不核發新 JWT**）。後端在同一交易內：刪除 Google 綁定 → `credentialsVersion + 1`
+→ 所有既有 JWT 與後續 STOMP 重連失效。前端收到 `204` 後必須清除本機登入狀態並導回登入頁。
+
+錯誤：`400 INVALID_REQUEST`；`401 REAUTHENTICATION_REQUIRED` 密碼錯誤（同上，不清登入）；
+`404` 帳號或 Google 綁定不存在；`409 LAST_LOGIN_METHOD` 帳號沒有本地密碼、Google 是唯一登入方式，
+無法解除（前端會預先 disable 解除按鈕，後端仍防護）。
 
 ---
 

@@ -1,6 +1,6 @@
 <script setup>
 defineOptions({ name: 'OrderListView' })
-import { ref, reactive, computed, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import {
   getMyOrders,
@@ -9,16 +9,27 @@ import {
   cancelOrder as apiCancelOrder,
   syncOrderPayment,
 } from '@/api/order.js'
-import { getEcpayCheckoutForm } from '@/api/payment.js'
-import { submitEcpayForm } from '@/utils/ecpay.js'
+import { useEcpayCheckout } from '@/composables/useEcpayCheckout.js'
 import { useCartStore } from '@/stores/cart.js'
 import { useFeedback } from '@/composables/useFeedback.js'
+import {
+  statusMeta,
+  historyNoteMeta,
+  REFUND_ELIGIBLE_STATUSES,
+  formatDate,
+  formatMoney,
+  courseItemMeta,
+} from '@/utils/orderStatus.js'
+import { formatImageUrl, useFallbackImage, DEFAULT_PRODUCT_IMAGE } from '@/utils/image.js'
 import FeedbackToast from '@/components/FeedbackToast.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import AppPagination from '@/components/AppPagination.vue'
+import PaymentInfoBox from '@/components/PaymentInfoBox.vue'
 
 const router = useRouter()
 const route = useRoute()
 const cart = useCartStore()
+const { redirectToEcpay } = useEcpayCheckout()
 
 const orders = ref([])
 const loading = ref(false)
@@ -27,32 +38,8 @@ const detailLoading = ref(null) // orderId currently fetching detail
 const orderDetails = reactive({}) // orderId -> OrderDetailResponse（含 items、subscription）
 const orderHistory = reactive({}) // orderId -> OrderStatusHistoryResponse[]
 
-const statusMeta = {
-  UNPAID: { label: '待付款', className: 'warning' },
-  PAID: { label: '已付款', className: 'info' },
-  SHIPPED: { label: '已出貨', className: 'info' },
-  COMPLETED: { label: '已完成', className: 'success' },
-  CANCELLED: { label: '已取消', className: 'muted' },
-  FAILED: { label: '付款失敗', className: 'danger' },
-  REFUNDED: { label: '已退款', className: 'muted' },
-}
-
-// 狀態時間軸的事件說明；note 是後端寫死的短代碼（見 OrderService／EcpayService）
-const historyNoteMeta = {
-  CHECKOUT: '建立訂單',
-  ECPAY_NOTIFY: '綠界付款結果通知',
-  SIMULATE_PAYMENT: '模擬付款（測試）',
-  CANCEL: '取消訂單',
-  REFUND_REQUEST: '申請退款',
-  REFUND_COMPLETE: '退款完成',
-  REFUND_REJECT: '退款申請遭駁回',
-  SHIP: '出貨',
-  COMPLETE: '訂單完成',
-  QUERY_TRADE_INFO: '付款狀態',
-}
-
-// 可以申請退款（含出貨後退貨）的訂單狀態，跟後端 OrderService 的 REFUND_ELIGIBLE_STATUSES 對齊
-const REFUND_ELIGIBLE_STATUSES = ['PAID', 'SHIPPED', 'COMPLETED']
+// UNPAID 訂單的自動取消時限，對齊後端 ORDER_UNPAID_TTL（PT30M）
+const UNPAID_TTL_MINUTES = 30
 
 const orderCategories = [
   { key: 'ALL', label: '全部訂單', statuses: null },
@@ -62,6 +49,10 @@ const orderCategories = [
 ]
 const activeCategory = ref(orderCategories[0].key)
 const keyword = ref('')
+
+// ── 前端分頁：訂單一次全撈（分類數字要用完整清單），只切顯示的那一頁 ──
+const PAGE_SIZE = 8
+const page = ref(1)
 
 function ordersInCategory(category) {
   if (!category.statuses) return orders.value
@@ -82,31 +73,46 @@ const filteredOrders = computed(() => {
   return list
 })
 
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredOrders.value.length / PAGE_SIZE)))
+const pagedOrders = computed(() =>
+  filteredOrders.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
+)
+
+// 切換分類或改關鍵字時回到第 1 頁
+watch([activeCategory, keyword], () => {
+  page.value = 1
+})
+
 function categoryCount(category) {
   return ordersInCategory(category).length
 }
 
 const { feedback, showFeedback } = useFeedback()
 
-function formatDate(isoString) {
-  return new Date(isoString).toLocaleString('zh-TW', { hour12: false })
-}
-
-function formatMoney(amount) {
-  return `NT$ ${Number(amount).toLocaleString()}`
-}
-
 // 訂單卡片標題：優先顯示購買內容（後端算好的 title），沒有才退回訂單編號
 function orderTitle(order) {
   return order.title || order.merchantTradeNo
 }
 
-// 私教課品項的補充說明：共 N 堂、負責教練
-function courseItemMeta(item) {
-  const parts = []
-  if (item.totalSessions != null) parts.push(`共 ${item.totalSessions} 堂`)
-  if (item.trainerName) parts.push(`教練 ${item.trainerName}`)
-  return parts.join('・')
+// 發票資訊顯示文字；invoice 為 null 代表選了「個人（會員載具）」
+const INVOICE_TYPE_LABELS = {
+  PERSONAL_CARRIER: '個人（會員載具）',
+  MOBILE_BARCODE: '手機條碼載具',
+  COMPANY: '公司統編',
+  NPO_DONATION: '捐贈發票',
+}
+function invoiceText(invoice) {
+  if (!invoice) return '電子發票（個人／會員載具）'
+  const label = INVOICE_TYPE_LABELS[invoice.type] || invoice.type
+  if (invoice.type === 'MOBILE_BARCODE') return `${label}　${invoice.carrier}`
+  if (invoice.type === 'COMPANY') return `${label}　統編 ${invoice.taxId}`
+  if (invoice.type === 'NPO_DONATION') return `${label}　愛心碼 ${invoice.donationCode}`
+  return label
+}
+
+// UNPAID 訂單的付款截止時間（建單時間 + TTL），用於顯示倒數提示
+function unpaidDeadline(order) {
+  return new Date(new Date(order.createdAt).getTime() + UNPAID_TTL_MINUTES * 60 * 1000)
 }
 
 async function loadOrders({ silent = false } = {}) {
@@ -125,10 +131,8 @@ const payingId = ref(null)
 async function payForOrder(order) {
   payingId.value = order.orderId
   try {
-    const res = await getEcpayCheckoutForm(order.orderId)
-    // 記下這筆待確認的訂單，從綠界返回 /orders 後主動查詢一次它的付款結果（見 syncPendingPayment）
-    localStorage.setItem('pendingPaymentOrderId', String(order.orderId))
-    submitEcpayForm(res.data)
+    // 取綠界表單 → 記下待確認訂單 → 全屏過場 → 送出導向綠界（見 useEcpayCheckout）
+    await redirectToEcpay(order.orderId)
     // 送出表單後瀏覽器即將導向綠界，故意不重設 payingId
   } catch (err) {
     showFeedback(err.message || '無法前往付款，請稍後再試', 'error')
@@ -353,36 +357,6 @@ async function handleReorder(order) {
 const reduceMotion =
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
-// ── 繳費資訊「複製」：寫入剪貼簿後，該欄位短暫顯示「已複製」 ──────────────
-const copiedKey = ref(null)
-let copiedTimer = null
-
-async function copyPaymentValue(key, value) {
-  try {
-    await navigator.clipboard.writeText(String(value))
-    copiedKey.value = key
-    clearTimeout(copiedTimer)
-    copiedTimer = setTimeout(() => {
-      copiedKey.value = null
-    }, 2000)
-  } catch {
-    showFeedback('複製失敗，請手動選取後複製', 'error')
-  }
-}
-
-// 繳費資訊要顯示的欄位：ATM 給銀行代碼＋虛擬帳號，超商代碼給一組繳費代碼
-function paymentRows(order) {
-  const pi = orderDetails[order.orderId]?.paymentInfo
-  if (!pi) return []
-  if (pi.choosePayment === 'ATM') {
-    return [
-      { key: 'bank', label: '銀行代碼', value: pi.bankCode },
-      { key: 'account', label: '轉帳帳號', value: pi.vAccount },
-    ]
-  }
-  return [{ key: 'cvs', label: '超商代碼', value: pi.paymentNo }]
-}
-
 // ── 訂單明細展開／收合：以實際內容高度做 height 過場，避免內容多寡造成生硬跳出 ──
 function onDetailEnter(el, done) {
   if (reduceMotion) return done()
@@ -417,7 +391,6 @@ const highlightedId = ref(null)
 let highlightTimer = null
 
 onUnmounted(() => {
-  clearTimeout(copiedTimer)
   clearTimeout(highlightTimer)
 })
 
@@ -432,9 +405,14 @@ onActivated(() => {
 onMounted(async () => {
   await loadOrders()
 
-  // 深連結 /orders/:id：直接展開該筆並捲動過去
+  // 深連結 /orders/:id：切到「全部訂單」、翻到該筆所在的分頁，再展開並捲動過去
   const deepLinkId = route.params.id ? Number(route.params.id) : null
   if (deepLinkId && orders.value.some((o) => o.orderId === deepLinkId)) {
+    activeCategory.value = 'ALL'
+    keyword.value = ''
+    await nextTick()
+    const idx = filteredOrders.value.findIndex((o) => o.orderId === deepLinkId)
+    if (idx >= 0) page.value = Math.floor(idx / PAGE_SIZE) + 1
     await toggleExpand({ orderId: deepLinkId })
     await nextTick()
     document
@@ -533,7 +511,7 @@ onMounted(async () => {
 
       <div v-else class="order-list">
         <div
-          v-for="order in filteredOrders"
+          v-for="order in pagedOrders"
           :key="order.orderId"
           class="order-card"
           :class="[
@@ -600,6 +578,15 @@ onMounted(async () => {
                     :key="item.orderItemId"
                     class="detail-item-row"
                   >
+                    <div class="detail-item-thumb" v-if="item.itemType !== 'COURSE'">
+                      <img
+                        v-if="item.imageUrl"
+                        :src="formatImageUrl(item.imageUrl)"
+                        :alt="item.productNameAtBuy"
+                        @error="useFallbackImage($event, DEFAULT_PRODUCT_IMAGE)"
+                      />
+                      <span v-else>{{ item.productNameAtBuy?.[0] }}</span>
+                    </div>
                     <div class="detail-item-info">
                       <span class="detail-item-name">
                         {{ item.productNameAtBuy
@@ -617,47 +604,44 @@ onMounted(async () => {
                     <span class="detail-item-amount">{{ formatMoney(item.lineAmount) }}</span>
                   </div>
 
-                  <div class="detail-total-row">
-                    <span>訂單金額</span>
-                    <span>{{ formatMoney(order.totalAmount) }}</span>
+                  <div class="detail-amount-lines">
+                    <div class="detail-amount-row">
+                      <span>商品小計</span>
+                      <span>{{ formatMoney(orderDetails[order.orderId].subtotalAmount) }}</span>
+                    </div>
+                    <div
+                      v-if="Number(orderDetails[order.orderId].discountAmount) > 0"
+                      class="detail-amount-row discount"
+                    >
+                      <span>
+                        優惠折抵<template v-if="orderDetails[order.orderId].couponName"
+                          >（{{ orderDetails[order.orderId].couponName }}）</template
+                        >
+                      </span>
+                      <span>− {{ formatMoney(orderDetails[order.orderId].discountAmount) }}</span>
+                    </div>
+                    <div class="detail-total-row">
+                      <span>訂單金額</span>
+                      <span>{{ formatMoney(order.totalAmount) }}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div v-if="orderDetails[order.orderId].paymentInfo" class="payment-info-box">
-                  <h4 class="detail-heading">
-                    {{
-                      orderDetails[order.orderId].paymentInfo.choosePayment === 'ATM'
-                        ? '轉帳繳費資訊'
-                        : '超商代碼繳費資訊'
-                    }}
-                  </h4>
-                  <p v-for="row in paymentRows(order)" :key="row.key" class="payment-info-row">
-                    <span>{{ row.label }}</span>
-                    <span class="payment-info-value">
-                      <strong>{{ row.value }}</strong>
-                      <button
-                        type="button"
-                        class="copy-btn"
-                        :class="{ copied: copiedKey === `${order.orderId}-${row.key}` }"
-                        :aria-label="`複製${row.label}`"
-                        @click="copyPaymentValue(`${order.orderId}-${row.key}`, row.value)"
-                      >
-                        {{ copiedKey === `${order.orderId}-${row.key}` ? '已複製' : '複製' }}
-                      </button>
-                    </span>
-                  </p>
-                  <p
-                    v-if="orderDetails[order.orderId].paymentInfo.expireAt"
-                    class="payment-info-expire"
-                  >
-                    請於
-                    {{ formatDate(orderDetails[order.orderId].paymentInfo.expireAt) }}
-                    前完成繳費，逾期系統將自動取消訂單
-                  </p>
-                  <p class="payment-info-note">
-                    完成繳費後，請稍後點擊下方「查詢付款結果」確認是否已入帳
+                <div class="detail-section">
+                  <h4 class="detail-heading">發票資訊</h4>
+                  <p class="detail-invoice">
+                    {{ invoiceText(orderDetails[order.orderId].invoice) }}
                   </p>
                 </div>
+
+                <p v-if="order.status === 'UNPAID'" class="unpaid-deadline">
+                  請於 {{ formatDate(unpaidDeadline(order)) }} 前完成付款，逾時系統將自動取消訂單。
+                </p>
+
+                <PaymentInfoBox
+                  v-if="orderDetails[order.orderId].paymentInfo"
+                  :payment-info="orderDetails[order.orderId].paymentInfo"
+                />
 
                 <div
                   class="detail-actions"
@@ -742,6 +726,15 @@ onMounted(async () => {
             </div>
           </Transition>
         </div>
+
+        <AppPagination
+          v-if="filteredOrders.length > 0"
+          :model-value="page"
+          :total-pages="totalPages"
+          :total-elements="filteredOrders.length"
+          :page-size="PAGE_SIZE"
+          @change="(e) => (page = e.page)"
+        />
       </div>
     </template>
 
@@ -1037,17 +1030,36 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 1rem;
+  gap: 0.85rem;
   font-size: 0.88rem;
   color: var(--text-secondary);
   padding: 0.5rem 0;
   border-bottom: 1px dashed var(--border);
+}
+.detail-item-thumb {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.detail-item-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .detail-item-info {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
+  flex: 1;
 }
 .detail-item-name {
   font-weight: 600;
@@ -1073,73 +1085,41 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--text-primary);
 }
+.detail-amount-lines {
+  padding-top: 0.5rem;
+}
+.detail-amount-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 0.15rem 0;
+}
+.detail-amount-row.discount {
+  color: #c92a2a;
+}
 .detail-total-row {
   display: flex;
   justify-content: space-between;
-  padding: 0.6rem 0 0.2rem;
+  padding: 0.5rem 0 0.2rem;
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border);
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--text-primary);
 }
-.payment-info-box {
+.detail-invoice {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+}
+.unpaid-deadline {
   margin-top: 0.75rem;
-  padding: 0.9rem 1.1rem;
-  border: 1px solid var(--border);
+  padding: 0.55rem 0.8rem;
   border-radius: var(--radius-sm);
-  background: #fff8e6;
-}
-.payment-info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  margin: 0.3rem 0;
-}
-.payment-info-row strong {
-  font-family: 'Courier New', monospace;
-  font-size: 1rem;
-  letter-spacing: 0.03em;
-  color: var(--text-primary);
-}
-.payment-info-value {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-}
-.copy-btn {
-  padding: 0.16rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-section);
-  color: var(--text-secondary);
-  font-size: 0.72rem;
-  font-weight: 700;
-  white-space: nowrap;
-  transition: var(--transition);
-}
-.copy-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent-hover);
-}
-.copy-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(201, 154, 91, 0.25);
-}
-.copy-btn.copied {
-  border-color: #2f9e44;
-  color: #2f9e44;
-}
-.payment-info-expire {
-  margin-top: 0.5rem;
+  background: #fff3cd;
   font-size: 0.8rem;
   font-weight: 600;
   color: #a06400;
-}
-.payment-info-note {
-  margin-top: 0.3rem;
-  font-size: 0.76rem;
-  color: var(--text-muted);
 }
 .detail-actions {
   margin-top: 0.75rem;

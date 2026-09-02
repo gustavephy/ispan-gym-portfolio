@@ -239,7 +239,8 @@ async function loadPrivateCourses() {
     const res = await api.get('/api/admin/private-courses/paged', {
       params: { page: 0, size: 1000 }
     })
-    rawPrivateCourses.value = res.data?.items || []
+    // 與前台一致補上 id 別名：私教課主鍵是 privateCourseId，沒有 id 欄位
+    rawPrivateCourses.value = (res.data?.items || []).map(c => ({ ...c, id: c.id ?? c.privateCourseId }))
   } catch (err) {
     console.error('Failed to load private courses:', err)
   }

@@ -95,13 +95,22 @@ public class GoogleOAuthAuthorizationRequestResolver implements OAuth2Authorizat
             return null;
         }
         String linkTransaction = request.getParameter(LINK_TRANSACTION_PARAM);
-        String state = (linkTransaction != null)
+        boolean isLink = linkTransaction != null;
+        String state = isLink
                 ? resolveLinkState(linkTransaction)
                 : createLoginTransaction(request);
         if (state == null) {
             return null;
         }
-        return OAuth2AuthorizationRequest.from(authorizationRequest).state(state).build();
+        OAuth2AuthorizationRequest.Builder builder = OAuth2AuthorizationRequest.from(authorizationRequest).state(state);
+        if (isLink) {
+            // 只對 LINK 加 prompt=select_account：多 Google 帳號時強制顯示帳號選擇器，
+            // 讓使用者明確挑選要綁定、且需與 Account email 相符的那個 Google 帳號，
+            // 避免瀏覽器自動帶入已登入帳號而綁到非預期身分。
+            // LOGIN 刻意不加——那會改變全站 Google 登入體驗，屬另行決定（第五批範圍外）。
+            builder.additionalParameters(params -> params.put("prompt", "select_account"));
+        }
+        return builder.build();
     }
 
     private String resolveLinkState(String rawTransaction) {

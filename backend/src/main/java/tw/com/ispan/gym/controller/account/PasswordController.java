@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 import tw.com.ispan.gym.dto.account.ChangePasswordRequest;
 import tw.com.ispan.gym.dto.account.ChangePasswordResponse;
+import tw.com.ispan.gym.dto.account.SetPasswordRequest;
+import tw.com.ispan.gym.dto.account.SetPasswordResponse;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.account.PasswordService;
 
@@ -18,6 +20,10 @@ import tw.com.ispan.gym.service.account.PasswordService;
  *
  * <p>只用 {@link CurrentUserProvider#requireCurrentUserId()} 取得 accountId，
  * request body 不接受 accountId 欄位，避免有人代填別人的帳號 id 越權修改密碼。
+ *
+ * <p>{@code /set-password} 是 OAuth-only 帳號設定「第一組」本機密碼用的（第五批新增，
+ * 見 memory/google_oauth_phase_scope.md）——與 {@code /change-password} 互斥：前者要求
+ * {@code passwordHash == null}，後者要求已有密碼。
  */
 @RestController
 @RequestMapping("/api/account/me")
@@ -35,5 +41,11 @@ public class PasswordController {
     public ChangePasswordResponse changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         Integer accountId = currentUser.requireCurrentUserId();
         return passwordService.changePassword(accountId, request);
+    }
+
+    @PostMapping("/set-password")
+    public SetPasswordResponse setPassword(@Valid @RequestBody SetPasswordRequest request) {
+        Integer accountId = currentUser.requireCurrentUserId();
+        return passwordService.setPassword(accountId, request);
     }
 }

@@ -171,8 +171,12 @@ class GoogleOAuthSuccessHandlerTest {
         verify(loginService, never()).login(any(), any());
     }
 
+    /**
+     * LINK 流程在後段（linkService.link）發生非預期例外：已經確認 purpose=LINK，catch 也要
+     * 導回「帳號安全頁」的 callback，不能固定導 /login（否則已登入者被 router 導走看不到錯誤）。
+     */
     @Test
-    void onSuccess_LinkService丟出非預期RuntimeException_導向UnexpectedError() throws Exception {
+    void onSuccess_LinkService丟出非預期RuntimeException_導向LinkResultUrl帶UnexpectedError() throws Exception {
         Integer accountId = 30;
         when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
         when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(Optional.of(
@@ -181,12 +185,30 @@ class GoogleOAuthSuccessHandlerTest {
         when(transactions.consumeIfPending(eq(STATE_HASH), any())).thenReturn(1);
         when(identityMapper.map(any())).thenReturn(identity());
         when(linkService.link(eq(accountId), any())).thenThrow(new RuntimeException("db hiccup"));
-        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+        when(properties.frontendLinkResultUrl()).thenReturn(LINK_RESULT_URL);
 
         MockHttpServletResponse response = new MockHttpServletResponse();
         handler.onAuthenticationSuccess(stateRequest(), response, authentication());
 
-        assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=unexpected_error");
+        assertThat(response.getRedirectedUrl()).isEqualTo(LINK_RESULT_URL + "?oauthError=unexpected_error");
+    }
+
+    /** 同上，但例外發生在更前面的 identityMapper：只要 purpose 已查到是 LINK，就導帳號 callback。 */
+    @Test
+    void onSuccess_LINK流程IdentityMapper丟出非預期RuntimeException_導向LinkResultUrl() throws Exception {
+        when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
+        when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(Optional.of(
+                viewOf(OAuthTransactionStatus.PENDING, OAuthTransactionPurpose.LINK, 30,
+                        LocalDateTime.now().plusMinutes(5))));
+        when(transactions.consumeIfPending(eq(STATE_HASH), any())).thenReturn(1);
+        when(identityMapper.map(any())).thenThrow(new NullPointerException());
+        when(properties.frontendLinkResultUrl()).thenReturn(LINK_RESULT_URL);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(stateRequest(), response, authentication());
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(LINK_RESULT_URL + "?oauthError=unexpected_error");
+        verify(linkService, never()).link(any(), any());
     }
 
     /** 對應 2026-08-22 code review：安全網原本沒蓋到 transaction 查詢這一段 */
@@ -299,8 +321,13 @@ class GoogleOAuthSuccessHandlerTest {
         verify(loginService, never()).login(any(), any());
     }
 
+    /**
+     * LINK 業務拒絕（email 不符、身分已被佔用等）必須導回「帳號安全頁」的 callback
+     * （frontendLinkResultUrl），不是共用錯誤頁——frontendErrorUrl 目前是 /login，
+     * 已登入者被 router beforeEnter 導離，LINK 失敗訊息會看不到。見第五批定案。
+     */
     @Test
-    void onSuccess_Link被拒絕_導向ErrorUrl() throws Exception {
+    void onSuccess_Link被拒絕_導向LinkResultUrl帶oauthError_不走共用ErrorUrl() throws Exception {
         Integer accountId = 30;
         when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
         when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(Optional.of(
@@ -309,13 +336,30 @@ class GoogleOAuthSuccessHandlerTest {
         when(transactions.consumeIfPending(eq(STATE_HASH), any())).thenReturn(1);
         when(identityMapper.map(any())).thenReturn(identity());
         when(linkService.link(eq(accountId), any()))
-                .thenReturn(new GoogleOAuthLinkService.Rejected(OAuthRedirectReason.IDENTITY_IN_USE));
-        when(properties.frontendErrorUrl()).thenReturn(ERROR_URL);
+                .thenReturn(new GoogleOAuthLinkService.Rejected(OAuthRedirectReason.LINK_EMAIL_MISMATCH));
+        when(properties.frontendLinkResultUrl()).thenReturn(LINK_RESULT_URL);
 
         MockHttpServletResponse response = new MockHttpServletResponse();
         handler.onAuthenticationSuccess(stateRequest(), response, authentication());
 
-        assertThat(response.getRedirectedUrl()).isEqualTo(ERROR_URL + "?oauthError=identity_in_use");
+        assertThat(response.getRedirectedUrl()).isEqualTo(LINK_RESULT_URL + "?oauthError=link_email_mismatch");
+    }
+
+    /**
+     * LINK transaction 已被新流程取代（多分頁）：也要導回帳號安全 callback，不是 /login。
+     */
+    @Test
+    void onSuccess_LinkTransaction已Superseded_導向LinkResultUrl帶FlowReplaced() throws Exception {
+        when(tokenGenerator.hash(RAW_STATE)).thenReturn(STATE_HASH);
+        when(transactions.findViewByStateHash(STATE_HASH)).thenReturn(Optional.of(
+                viewOf(OAuthTransactionStatus.SUPERSEDED, OAuthTransactionPurpose.LINK, 30,
+                        LocalDateTime.now().plusMinutes(5))));
+        when(properties.frontendLinkResultUrl()).thenReturn(LINK_RESULT_URL);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        handler.onAuthenticationSuccess(stateRequest(), response, authentication());
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(LINK_RESULT_URL + "?oauthError=flow_replaced");
     }
 
     /** 對應 step 3「Callback 成功或失敗後清除 OAuth Session」——不論走哪個分支結束都要清 */

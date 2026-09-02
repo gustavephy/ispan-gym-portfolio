@@ -152,9 +152,25 @@ test.describe('B3 會員預約私教課', () => {
     await page.waitForURL(/\/reservation\/trainer\/\d+/)
 
     // 這個列表沒有日期篩選也有分頁，剛建立的時段不一定在第一頁；
-    // 改成預約「畫面上第一個可預約時段」，重點在額度扣減與紀錄產生，不在特定那一筆
-    const targetRow = page.locator('tbody tr').filter({ hasText: '預約' }).first()
-    await expect(targetRow).toBeVisible()
+    // 改成預約「畫面上第一個可預約時段」，重點在額度扣減與紀錄產生，不在特定那一筆。
+    // 但不能真的拿第一列：後端 cancelBooking 在上課前 72 小時內取消是「視同消耗、不退堂」，
+    // 收尾要能把額度退回，所以挑第一頁裡第一個「距今至少 4 天」的可預約列。
+    // 種子每位教練每週只播 2 個時段、每頁 10 列依時間排序，第一頁一定有這種列。
+    const bookableRows = page
+      .locator('tbody tr')
+      .filter({ has: page.getByRole('button', { name: '預約', exact: true }) })
+    await expect(bookableRows.first()).toBeVisible()
+    const minStartMs = Date.now() + 4 * 24 * 60 * 60 * 1000
+    let targetRow = null
+    for (let i = 0; i < (await bookableRows.count()); i++) {
+      // 第一格是 formatDateTime(startAt)：zh-TW 兩位數格式，例如 2026/09/03 11:00
+      const m = (await bookableRows.nth(i).innerText()).match(/(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/)
+      if (m && new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime() >= minStartMs) {
+        targetRow = bookableRows.nth(i)
+        break
+      }
+    }
+    expect(targetRow, '第一頁應有距今 ≥4 天的可預約時段（否則取消不會退堂）').toBeTruthy()
     const rowText = (await targetRow.innerText()).split(/\s+/)[0]
 
     // 預約前有 window.confirm，成功後還會用 alert 顯示核銷碼——
@@ -180,9 +196,11 @@ test.describe('B3 會員預約私教課', () => {
     // 不清的話每跑一輪就少一堂，播種的 8 堂用完後整個 spec 就會開始失敗。
     const bookingId = (await res.json()).id
     const memberToken = await apiToken(ACCOUNTS.member)
-    await request.delete(`${API}/api/member/schedules/${bookingId}/cancel`, {
+    const cancelRes = await request.delete(`${API}/api/member/schedules/${bookingId}/cancel`, {
       headers: { Authorization: `Bearer ${memberToken}` },
     })
+    // 取消失敗會讓預約卡在 PENDING、額度不退，後面的 spec（B4）跟著壞——要在這裡就看到原因
+    expect(cancelRes.ok(), `取消預約失敗：${await cancelRes.text()}`).toBeTruthy()
     expect(await remainingQuota(request)).toBe(before)
   })
 

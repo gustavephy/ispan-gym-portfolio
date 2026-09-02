@@ -7,8 +7,8 @@ import api from './axios.instance.js'
  *     不是「token 失效」，攔截器不該清登入狀態或導去登入頁。
  *   - skipGlobalError：錯誤由 OAuth callback／補資料頁就地顯示，不跳全域提示條。
  *
- * 後端契約見 docs/google-oauth-design-notes.md 與 controller/account/OAuth*Controller。
- * 註：後端 docs/API-REFERENCE.md 尚未收錄 OAuth 章節。
+ * 後端契約見 docs/google-oauth-design-notes.md 與 controller/account/OAuth*Controller，
+ * 端點細節見 docs/API-REFERENCE.md §2.12（OAuthConnectionController）。
  */
 const ANONYMOUS_CONFIG = { skipAuthRedirect: true, skipGlobalError: true }
 
@@ -35,19 +35,72 @@ export function sanitizeReturnPath(path) {
 }
 
 /**
- * Google 登入入口網址。這是整頁導向用的（window.location.href = ...），不是 XHR，
- * 所以不受 CORS 限制、也不會經過 axios。
+ * 後端 origin 的單一來源，給「整頁導向 /oauth2/... 」用（不是 XHR，不經過 axios、
+ * 不受 CORS 限制）。與 axios 的 baseURL 對齊：沒設 VITE_API_URL 時回空字串（打相對路徑，
+ * 開發時由 vite proxy 的 /oauth2 轉到 :8080）；有設時回後端 origin（結尾不含斜線、
+ * 不含 /api，見 .env.example）。LOGIN 與 LINK 都透過這裡組發起網址。
  *
- * base 與 axios 的 baseURL 對齊：沒設 VITE_API_URL 時打相對路徑（開發時由 vite proxy
- * 的 /oauth2 轉到 :8080）；有設時打絕對網址（需為後端 origin，結尾不含 /api，見 .env.example）。
+ * @returns {string} 後端 origin（可能為空字串）
+ */
+export function oauthBackendBase() {
+  return (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+}
+
+/**
+ * Google 登入入口網址。整頁導向用（window.location.href = ...）。
  *
  * @param {string} [returnPath] 登入前所在的站內相對路徑，登入成功後導回。
  */
 export function googleLoginUrl(returnPath) {
-  const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
-  const url = `${base}/oauth2/authorization/google`
+  const url = `${oauthBackendBase()}/oauth2/authorization/google`
   const clean = sanitizeReturnPath(returnPath)
   return clean ? `${url}?returnPath=${encodeURIComponent(clean)}` : url
+}
+
+/** 後端 LINK 發起端點唯一允許回傳的相對路徑（pathname 精確比對，不接受前後綴變形） */
+const LINK_AUTHORIZATION_PATHNAME = '/oauth2/authorization/google'
+
+/**
+ * 把後端 LINK 發起 API 回傳的相對路徑組成可導向的完整網址。
+ *
+ * <p>後端 {@code POST /api/account/me/oauth/google/link} 回的是
+ * {@code /oauth2/authorization/google?transaction=<opaque>}（相對路徑）。這個值最終會交給
+ * {@code window.location.href}，所以做**精確白名單**驗證（open redirect 縱深防禦，
+ * 即使值來源是我們自己的後端也不放寬）：
+ * <ul>
+ *   <li>解析後 pathname 必須精確等於 {@code /oauth2/authorization/google}
+ *       （擋掉 {@code /oauth2/authorization/google-evil}、{@code .../google/extra}）</li>
+ *   <li>query 只能有一個 {@code transaction}，且值非空</li>
+ *   <li>不得帶 fragment、不得有重複參數或其他 query</li>
+ *   <li>不得是絕對 URL／protocol-relative（跨域）</li>
+ * </ul>
+ * 任一不符回 {@code null}，呼叫端據此就地顯示錯誤、不導頁。通過後才用
+ * {@link oauthBackendBase} 補上後端 origin。
+ *
+ * @param {unknown} relativeUrl 後端回傳的 authorizationUrl
+ * @returns {string|null} 合法則回完整可導向網址，否則 null
+ */
+export function linkAuthorizationUrl(relativeUrl) {
+  if (typeof relativeUrl !== 'string') return null
+  const trimmed = relativeUrl.trim()
+  // 必須是站內絕對路徑；protocol-relative（//、/\）與含反斜線一律拒絕
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.includes('\\')) return null
+
+  let parsed
+  try {
+    // base 只用來讓相對路徑可被 URL 解析；解析後所有欄位都會逐項比對，base 本身不影響判定
+    parsed = new URL(trimmed, 'http://oauth-link.invalid')
+  } catch {
+    return null
+  }
+  if (parsed.pathname !== LINK_AUTHORIZATION_PATHNAME) return null
+  if (parsed.hash !== '') return null
+
+  const params = [...parsed.searchParams.keys()]
+  if (params.length !== 1 || params[0] !== 'transaction') return null
+  if (!parsed.searchParams.get('transaction')) return null
+
+  return `${oauthBackendBase()}${parsed.pathname}${parsed.search}`
 }
 
 /**

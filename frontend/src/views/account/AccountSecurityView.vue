@@ -3,19 +3,29 @@ defineOptions({ name: 'AccountSecurityView' })
 import { computed, inject, onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
-import { getMyAccount, getOAuthConnections, changePassword, logoutAllDevices } from '@/api/account.js'
+import {
+  getMyAccount,
+  getOAuthConnections,
+  changePassword,
+  setPassword,
+  linkGoogle,
+  unlinkGoogle,
+  logoutAllDevices,
+} from '@/api/account.js'
+import { linkAuthorizationUrl } from '@/api/oauth.js'
 import { notify } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 import AppModal from '@/components/AppModal.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 
 /**
  * 帳號設定頁：任何已登入身分都能用（不分 MEMBER/EMPLOYEE/ADMIN/TRAINER），對應
  * AccountController／PasswordController／OAuthConnectionController 三支後端 Controller
  * 共用的 /api/account/me 路徑前綴。
  *
- * Google 綁定狀態這裡只唯讀顯示——hasPassword 是登入方式狀態的單一來源，不在
- * AccountMeResponse 裡重複一份。綁定／解除綁定的實際操作是第五批「完整 OAuth
- * 帳號設定」的範圍，這裡不做。
+ * 第五批（完整 OAuth 帳號設定）在此頁加入：Google 綁定／解除綁定、OAuth-only 帳號
+ * 設定第一組本地密碼。綁定發起會整頁導向 Google，成功／失敗由 /account/oauth/callback
+ * 落地後 notify() 一則訊息並 replace 回本頁，本頁重新掛載時以 loadAll() 重查權威狀態。
  */
 
 const router = useRouter()
@@ -56,15 +66,18 @@ onMounted(loadAll)
 
 // DefaultLayout 用 <keep-alive> 快取這頁：從 Google 連結回呼頁回來要看到最新連結狀態，重新抓。
 // onActivated 在首次掛載也會觸發（那次由 onMounted 負責），用旗標略過。
+// 注意：不要假設一定由 onActivated 觸發——綁定流程是整頁導向 Google，回來時 keep-alive
+// 快取已不存在，走的是 onMounted。兩條路徑都會 loadAll()。
 let activatedBefore = false
 onActivated(() => {
   if (activatedBefore) loadAll()
   activatedBefore = true
 })
 
-// === 修改密碼 ================================================================
-// 密碼規則檢查沿用 EmployeeRegisterView.vue／ResetPasswordView.vue 既有的 inline
-// computed 寫法，不另立共用 composable（跟那兩個頁面一樣各自各寫一份）。
+// === 新密碼規則（修改密碼與設定第一組密碼共用同一組 computed） ===================
+// 兩個表單由 connections.hasPassword 互斥顯示（v-if / v-else），共用 newPassword／
+// confirmPassword 兩個 ref 不會互相干擾。密碼規則檢查沿用 EmployeeRegisterView.vue／
+// ResetPasswordView.vue 既有的 inline computed 寫法，不另立共用 composable。
 
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -91,11 +104,21 @@ const isNewPasswordValid = computed(
 const isPasswordConfirmed = computed(
   () => confirmPassword.value.length > 0 && newPassword.value === confirmPassword.value,
 )
+
+function resetPasswordForm() {
+  currentPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+}
+
+// === 修改密碼（已有本地密碼的帳號）===========================================
+
 const isChangePasswordFormValid = computed(
   () => currentPassword.value.length > 0 && isNewPasswordValid.value && isPasswordConfirmed.value,
 )
 
 async function onChangePassword() {
+  if (pwdSubmitting.value) return // 按鈕 disabled 擋不住 Enter 連按，這裡再擋一次重入
   pwdErrorMessage.value = ''
   if (!isChangePasswordFormValid.value) {
     pwdErrorMessage.value = '請確認表單各欄位是否正確填寫'
@@ -109,14 +132,130 @@ async function onChangePassword() {
       confirmPassword: confirmPassword.value,
     })
     auth.setSession(data) // 原地換發新 token，維持這個裝置登入；其他裝置已被登出
-    currentPassword.value = ''
-    newPassword.value = ''
-    confirmPassword.value = ''
+    resetPasswordForm()
     showToast('密碼已修改，其他裝置已自動登出')
   } catch (e) {
     pwdErrorMessage.value = e.message
   } finally {
     pwdSubmitting.value = false
+  }
+}
+
+// === 設定第一組本地密碼（OAuth-only 帳號：connections.hasPassword === false）======
+
+const isSetPasswordFormValid = computed(() => isNewPasswordValid.value && isPasswordConfirmed.value)
+
+async function onSetPassword() {
+  if (pwdSubmitting.value) return // 同 onChangePassword：擋 Enter 連按造成的重入
+  pwdErrorMessage.value = ''
+  if (!isSetPasswordFormValid.value) {
+    pwdErrorMessage.value = '請確認密碼符合規則且兩次輸入一致'
+    return
+  }
+  pwdSubmitting.value = true
+  try {
+    const { data } = await setPassword({
+      newPassword: newPassword.value,
+      confirmPassword: confirmPassword.value,
+    })
+    // 後端已 credentialsVersion + 1、簽發新 JWT：原地換發，讓這個裝置以新 token 繼續登入
+    auth.setSession(data)
+    resetPasswordForm()
+    // 重查權威狀態：hasPassword 變 true → 畫面切換成「修改密碼」，解除 Google 綁定按鈕開放
+    await loadAll()
+    showToast('已設定本地密碼，之後可用 Email 與密碼登入')
+  } catch (e) {
+    pwdErrorMessage.value = e.message
+  } finally {
+    pwdSubmitting.value = false
+  }
+}
+
+// === Google 綁定／解除綁定 ====================================================
+
+/** 把後端錯誤 code 對應成給使用者看的文案（重新驗證失敗不會清登入，見 axios 攔截器） */
+function oauthActionErrorText(e) {
+  switch (e.code) {
+    case 'REAUTHENTICATION_REQUIRED':
+      return e.message || '目前密碼錯誤，請重新輸入'
+    case 'OAUTH_ALREADY_LINKED':
+      return '此帳號已綁定 Google，請重新整理頁面'
+    case 'OAUTH_LINK_RATE_LIMITED':
+      return '發起綁定過於頻繁，請稍後再試'
+    case 'LAST_LOGIN_METHOD':
+      return 'Google 是目前唯一的登入方式，請先設定本地密碼後再解除綁定'
+    case 'HTTP_404':
+      return 'Google 綁定功能目前無法使用'
+    default:
+      return e.message || '操作失敗，請稍後再試'
+  }
+}
+
+const linkModalOpen = ref(false)
+const linkPassword = ref('')
+const linkSubmitting = ref(false)
+const linkError = ref('')
+
+function openLinkModal() {
+  linkPassword.value = ''
+  linkError.value = ''
+  linkModalOpen.value = true
+}
+
+async function onConfirmLink() {
+  if (linkSubmitting.value) return // Modal 密碼欄綁 @keyup.enter，按鈕 disabled 擋不住連按 Enter
+  linkError.value = ''
+  if (!linkPassword.value) {
+    linkError.value = '請輸入目前密碼'
+    return
+  }
+  linkSubmitting.value = true
+  try {
+    const { data } = await linkGoogle(linkPassword.value)
+    const url = linkAuthorizationUrl(data.authorizationUrl)
+    if (!url) {
+      linkError.value = '無法取得 Google 綁定網址，請稍後再試'
+      return
+    }
+    // 整頁導向 Google；回來時後端導到 /account/oauth/callback
+    window.location.href = url
+  } catch (e) {
+    linkError.value = oauthActionErrorText(e)
+  } finally {
+    linkSubmitting.value = false
+  }
+}
+
+const unlinkModalOpen = ref(false)
+const unlinkPassword = ref('')
+const unlinkSubmitting = ref(false)
+const unlinkError = ref('')
+
+function openUnlinkModal() {
+  unlinkPassword.value = ''
+  unlinkError.value = ''
+  unlinkModalOpen.value = true
+}
+
+async function onConfirmUnlink() {
+  if (unlinkSubmitting.value) return // 同 onConfirmLink：擋 Enter 連按（第一筆成功後第二筆會拿失效 JWT 再送）
+  unlinkError.value = ''
+  if (!unlinkPassword.value) {
+    unlinkError.value = '請輸入目前密碼'
+    return
+  }
+  unlinkSubmitting.value = true
+  try {
+    await unlinkGoogle(unlinkPassword.value)
+    unlinkModalOpen.value = false
+    // 後端不核發新 JWT，credentialsVersion 已 +1：所有裝置（含這台）都需重新登入
+    auth.logout()
+    notify('已解除 Google 綁定', '所有裝置都需要重新登入', 'success')
+    router.push({ name: 'login' })
+  } catch (e) {
+    unlinkError.value = oauthActionErrorText(e)
+  } finally {
+    unlinkSubmitting.value = false
   }
 }
 
@@ -199,42 +338,76 @@ async function onConfirmLogoutAll() {
             </span>
           </div>
           <div class="login-method-row">
-            <span class="login-method-name">Google</span>
-            <span class="badge" :class="connections.google.linked ? 'badge-success' : 'badge-warning'">
-              {{ connections.google.linked ? `已綁定（${connections.google.email}）` : '未綁定' }}
-            </span>
+            <div class="login-method-info">
+              <span class="login-method-name">Google</span>
+              <span v-if="connections.google.linked" class="login-method-sub">
+                {{ connections.google.email }}
+                <template v-if="connections.google.linkedAt">
+                  · 綁定於 {{ formatDateTime(connections.google.linkedAt) }}
+                </template>
+              </span>
+            </div>
+            <div class="login-method-actions">
+              <span class="badge" :class="connections.google.linked ? 'badge-success' : 'badge-warning'">
+                {{ connections.google.linked ? '已綁定' : '未綁定' }}
+              </span>
+              <button
+                v-if="!connections.google.linked"
+                class="btn btn-edit btn-sm"
+                type="button"
+                @click="openLinkModal"
+              >
+                綁定 Google
+              </button>
+              <button
+                v-else
+                class="btn btn-danger btn-sm"
+                type="button"
+                :disabled="!connections.hasPassword"
+                @click="openUnlinkModal"
+              >
+                解除綁定
+              </button>
+            </div>
           </div>
         </div>
-        <p class="security-card__note">Google 綁定／解除綁定功能將於後續批次提供。</p>
+        <p v-if="connections.google.linked && !connections.hasPassword" class="security-card__note">
+          Google 是目前唯一的登入方式，請先於下方設定本地密碼後才能解除綁定。
+        </p>
+        <p v-else class="security-card__note">
+          綁定 Google 後可用 Google 帳號快速登入；綁定的 Google Email 必須與本站登入 Email 相同。
+        </p>
       </section>
 
-      <!-- 修改密碼 -->
+      <!-- 本地密碼：已設定 → 修改密碼；未設定（OAuth-only）→ 設定第一組密碼 -->
       <section class="security-card">
-        <h3 class="security-card__title">修改密碼</h3>
-        <p v-if="!connections.hasPassword" class="security-card__note">
-          此帳號透過 Google 登入，尚未設定本機密碼，請使用原本的第三方登入方式。
+        <h3 class="security-card__title">{{ connections.hasPassword ? '修改密碼' : '設定本地密碼' }}</h3>
+
+        <p v-if="!connections.hasPassword" class="security-card__note set-password-intro">
+          此帳號目前透過 Google 登入。設定本地密碼後，也能用 Email 與密碼登入；設定完成會登出其他裝置。
         </p>
-        <form v-else @submit.prevent="onChangePassword">
-          <div class="form-group">
+
+        <form @submit.prevent="connections.hasPassword ? onChangePassword() : onSetPassword()">
+          <div v-if="connections.hasPassword" class="form-group">
             <label class="form-label" for="sec-current-password">目前密碼</label>
-            <input
+            <PasswordInput
               id="sec-current-password"
               v-model="currentPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="current-password"
+              :disabled="pwdSubmitting"
             />
           </div>
           <div class="form-group">
-            <label class="form-label" for="sec-new-password">新密碼</label>
-            <input
+            <label class="form-label" for="sec-new-password">
+              {{ connections.hasPassword ? '新密碼' : '密碼' }}
+            </label>
+            <PasswordInput
               id="sec-new-password"
               v-model="newPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
+              :disabled="pwdSubmitting"
             />
             <ul v-if="newPassword" class="pwd-rules">
               <li :class="{ 'pwd-rules__item--pass': hasMinLength }">8～72 個字元</li>
@@ -246,22 +419,36 @@ async function onConfirmLogoutAll() {
             </ul>
           </div>
           <div class="form-group">
-            <label class="form-label" for="sec-confirm-password">確認新密碼</label>
-            <input
+            <label class="form-label" for="sec-confirm-password">
+              {{ connections.hasPassword ? '確認新密碼' : '確認密碼' }}
+            </label>
+            <PasswordInput
               id="sec-confirm-password"
               v-model="confirmPassword"
-              class="form-input"
-              type="password"
               required
               autocomplete="new-password"
+              :disabled="pwdSubmitting"
             />
             <p v-if="confirmPassword && !isPasswordConfirmed" class="form-error">兩次密碼輸入不一致</p>
           </div>
 
           <OperationMessage :message="pwdErrorMessage" tone="error" />
 
-          <button class="btn btn-primary" type="submit" :disabled="pwdSubmitting">
-            {{ pwdSubmitting ? '送出中…' : '修改密碼' }}
+          <button
+            class="btn btn-primary"
+            type="submit"
+            :disabled="
+              pwdSubmitting ||
+              (connections.hasPassword ? !isChangePasswordFormValid : !isSetPasswordFormValid)
+            "
+          >
+            {{
+              pwdSubmitting
+                ? '送出中…'
+                : connections.hasPassword
+                  ? '修改密碼'
+                  : '設定本地密碼'
+            }}
           </button>
         </form>
       </section>
@@ -289,6 +476,70 @@ async function onConfirmLogoutAll() {
         </div>
       </section>
     </div>
+
+    <!-- 綁定 Google：重新驗證目前密碼 -->
+    <AppModal v-model:visible="linkModalOpen" title="綁定 Google 帳號" icon="🔗">
+      <p>
+        為確認是本人操作，請輸入目前的本地密碼。接著會前往 Google 完成授權，
+        綁定的 Google Email 必須與本站登入 Email（{{ account?.email }}）相同。
+      </p>
+      <div class="form-group">
+        <label class="form-label" for="link-current-password">目前密碼</label>
+        <PasswordInput
+          id="link-current-password"
+          v-model="linkPassword"
+          autocomplete="current-password"
+          :disabled="linkSubmitting"
+          @keyup.enter="onConfirmLink"
+        />
+      </div>
+      <OperationMessage :message="linkError" tone="error" />
+      <template #footer>
+        <button class="btn btn-edit" type="button" :disabled="linkSubmitting" @click="linkModalOpen = false">
+          取消
+        </button>
+        <button class="btn btn-primary" type="button" :disabled="linkSubmitting" @click="onConfirmLink">
+          {{ linkSubmitting ? '前往 Google…' : '前往 Google 授權' }}
+        </button>
+      </template>
+    </AppModal>
+
+    <!-- 解除 Google 綁定：重新驗證 + 危險操作確認 -->
+    <AppModal v-model:visible="unlinkModalOpen" title="解除 Google 綁定" icon="⚠️">
+      <p>
+        解除後將無法再用 Google 登入此帳號。此操作會立即讓
+        <strong>所有裝置（含目前這個瀏覽器）</strong>的登入狀態失效，需重新以 Email 與密碼登入。
+      </p>
+      <div class="form-group">
+        <label class="form-label" for="unlink-current-password">目前密碼</label>
+        <PasswordInput
+          id="unlink-current-password"
+          v-model="unlinkPassword"
+          autocomplete="current-password"
+          :disabled="unlinkSubmitting"
+          @keyup.enter="onConfirmUnlink"
+        />
+      </div>
+      <OperationMessage :message="unlinkError" tone="error" />
+      <template #footer>
+        <button
+          class="btn btn-edit"
+          type="button"
+          :disabled="unlinkSubmitting"
+          @click="unlinkModalOpen = false"
+        >
+          取消
+        </button>
+        <button
+          class="btn btn-danger"
+          type="button"
+          :disabled="unlinkSubmitting"
+          @click="onConfirmUnlink"
+        >
+          {{ unlinkSubmitting ? '處理中…' : '確定解除綁定' }}
+        </button>
+      </template>
+    </AppModal>
 
     <AppModal v-model:visible="showLogoutAllConfirm" title="確認全裝置登出" icon="⚠️">
       <p>
@@ -342,6 +593,10 @@ async function onConfirmLogoutAll() {
   color: var(--text-muted);
 }
 
+.set-password-intro {
+  margin: 0 0 1rem;
+}
+
 .readonly-row {
   display: flex;
   flex-wrap: wrap;
@@ -373,7 +628,7 @@ async function onConfirmLogoutAll() {
 .login-methods {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.9rem;
 }
 .login-method-row {
   display: flex;
@@ -381,10 +636,25 @@ async function onConfirmLogoutAll() {
   justify-content: space-between;
   gap: 1rem;
 }
+.login-method-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
 .login-method-name {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-primary);
+}
+.login-method-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.login-method-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
 }
 
 .pwd-rules {
@@ -439,6 +709,10 @@ async function onConfirmLogoutAll() {
     grid-template-columns: 1fr;
   }
   .device-action-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .login-method-row {
     flex-direction: column;
     align-items: flex-start;
   }

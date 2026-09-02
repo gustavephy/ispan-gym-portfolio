@@ -5,6 +5,7 @@ import { login } from '@/api/auth.js'
 import { googleLoginUrl } from '@/api/oauth.js'
 import { useAuthStore } from '@/stores/auth.js'
 import OperationMessage from '@/components/OperationMessage.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 
 /**
  * 登入頁。同時也是「就地顯示錯誤」的示範：
@@ -137,11 +138,9 @@ async function onSubmit() {
 
         <div class="form-group">
           <label class="form-label" for="login-password">密碼</label>
-          <input
+          <PasswordInput
             id="login-password"
             v-model="password"
-            class="form-input"
-            type="password"
             required
             autocomplete="current-password"
           />

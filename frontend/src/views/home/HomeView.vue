@@ -1,18 +1,16 @@
 <template>
   <div class="home-page">
-    <!-- Hero Banner (首頁主視覺區) -->
+    <!-- Hero Banner (首頁主視覺區)：深色實照 + 分層暗角，樣式在 home.css .hero* -->
     <section class="hero">
-      <!-- 背景半透明遮罩，提升上方文字易讀性 -->
-      <div class="hero-overlay"></div>
       <div class="hero-content">
-        <p class="hero-tag">台灣 No.1 健身管理平台</p>
-        <h1 class="hero-title">打造屬於你的<br><span class="hero-highlight">健康生活方式</span></h1>
-        <p class="hero-desc">專業教練一對一指導・智慧課程管理・精選健身補給品<br>從今天開始，讓改變成為習慣。</p>
+        <p class="hero-tag">台灣 No.1 智慧健身管理平台</p>
+        <h1 class="hero-title">訓練 · 養護 · 蛻變<br><span class="hero-highlight">打造專屬你的健康節奏</span></h1>
+        <p class="hero-desc">專業教練一對一指導、智慧排課與無感核銷、精選補給商城——讓每一次到場都算數。</p>
         <div class="hero-actions">
           <RouterLink to="/reservation" class="btn btn-accent hero-btn">立即預約課程</RouterLink>
           <RouterLink to="/courses" class="btn btn-outline-white hero-btn">瀏覽課程方案</RouterLink>
         </div>
-        <!-- 數據統計看板：展示健身房特色數據，樣式定義在 home.css (.hero-stats 等) -->
+        <!-- 數據統計看板 -->
         <div class="hero-stats">
           <div class="stat"><span class="stat-n">50+</span><span class="stat-l">專業教練</span></div>
           <div class="stat-divider"></div>
@@ -21,6 +19,10 @@
           <div class="stat"><span class="stat-n">98%</span><span class="stat-l">學員滿意度</span></div>
         </div>
       </div>
+      <a href="#courses" class="hero-scroll" aria-label="向下捲動看更多">
+        <span>SCROLL</span>
+        <svg viewBox="0 0 16 24" width="13" height="20" aria-hidden="true"><path d="M8 1v18M2 13l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
     </section>
 
     <!-- 三大特色 -->
