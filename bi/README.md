@@ -18,10 +18,10 @@ docker compose up -d
 ## 首次建置（已做過就不用）
 
 初始設定（建管理員、接 SQL Server、建圖卡與「營運總覽」儀表板、開 public link）
-由 API 腳本完成；重建時在 repo 根目錄：
+由 `bi/metabase_setup.py` 完成；重建時在 repo 根目錄：
 
 ```bash
-set -a && . ./.env && set +a && python <腳本路徑>/metabase_setup.py
+set -a && . ./.env && set +a && python bi/metabase_setup.py
 ```
 
 要點：
