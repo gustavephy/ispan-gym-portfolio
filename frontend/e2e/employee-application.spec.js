@@ -102,7 +102,7 @@ test.describe('A4 員工申請與審核', () => {
     // 重新申請後回到待審核狀態
     await page.goto('/employee-reapply')
     await page.getByLabel('Email').fill(email)
-    await page.getByLabel('密碼').fill(PASSWORD)
+    await page.getByLabel('密碼', { exact: true }).fill(PASSWORD)
     await page.getByLabel('姓氏').fill('測試')
     await page.getByLabel('名字').fill('員工')
     await page.getByLabel('聯絡電話').fill('0987654321')

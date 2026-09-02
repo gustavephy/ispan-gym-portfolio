@@ -122,7 +122,8 @@ export async function loginAs(page, account) {
 export async function loginViaForm(page, account, password = PASSWORD) {
   await page.goto('/login')
   await page.getByLabel('Email').fill(account.email)
-  await page.getByLabel('密碼').fill(password)
+  // exact：避開 PasswordInput 眼睛按鈕的 aria-label（「顯示密碼」也含「密碼」）
+  await page.getByLabel('密碼', { exact: true }).fill(password)
   await page.getByRole('button', { name: '登入', exact: true }).click()
 }
 
