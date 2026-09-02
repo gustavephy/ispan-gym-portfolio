@@ -111,7 +111,8 @@ async function handleCoursePurchase(course) {
     router.push({ name: 'login', query: { redirect: '/courses' } })
     return
   }
-  await coursesStore.purchaseCourse(course.id, showToast)
+  // 私教課主鍵是 privateCourseId，沒有 id 欄位；只讀 id 會送出空值而被後端擋下
+  await coursesStore.purchaseCourse(course.privateCourseId ?? course.id, showToast)
 }
 
 // [響應式狀態] dbTrainers (dbtrainers)

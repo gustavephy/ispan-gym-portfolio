@@ -113,7 +113,10 @@ export const useCoursesStore = defineStore('courses', () => {
       ])
 
       const rawGroup = groupRes.data
-        privateCourses.value = Array.isArray(privateRes.data) ? privateRes.data : (privateRes.data?.content || [])
+        // PrivateCourseResponse 的主鍵是 privateCourseId，沒有 id；團課與商品則各自是 id、productId。
+        // 在來源補上 id 別名，讓下游（allCourses、首頁、課程頁的下拉選單）不必各自處理欄位差異。
+        const rawPrivate = Array.isArray(privateRes.data) ? privateRes.data : (privateRes.data?.content || [])
+        privateCourses.value = rawPrivate.map(c => ({ ...c, id: c.id ?? c.privateCourseId }))
         // 團課走後端共用的 PageResponse，分頁清單放在 items（不是 Spring Page 的 content）；
         // content 保留當備援，避免之後有端點改回 Page 直接序列化
         groupCourses.value = Array.isArray(rawGroup)
@@ -147,6 +150,12 @@ export const useCoursesStore = defineStore('courses', () => {
 
     // 執行統一前置驗證，若不通過則直接中斷
     if (!(await validateMemberRequirements(authStore, showToast))) return
+
+    // 課程主鍵取錯欄位時，後端只會回 @NotNull 的「不得是空值」，看不出是哪裡出錯；先在這裡擋掉
+    if (courseId == null) {
+      showToast('無法取得課程編號，請重新整理後再試', 'error')
+      return
+    }
 
     try {
       // 1. 建立課程直接購買訂單
