@@ -17,7 +17,6 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import tw.com.ispan.gym.dto.report.DailyRevenueRow;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
 import tw.com.ispan.gym.dto.report.OrderOverviewResponse;
 import tw.com.ispan.gym.dto.report.OrderPeriodSummary;
@@ -38,7 +37,6 @@ import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
 import tw.com.ispan.gym.dto.report.CouponEffectRow;
 import tw.com.ispan.gym.dto.report.GroupClassFillRow;
-import tw.com.ispan.gym.dto.report.MemberDailyRow;
 import tw.com.ispan.gym.dto.report.TrainerSlotRow;
 import tw.com.ispan.gym.dto.report.ReportRefundSummary;
 import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
@@ -183,9 +181,11 @@ class OperationReportServiceTest {
     void 延伸統計與總覽同口徑一併固化進快照() {
         stubEmptyAggregates();
         stubSnapshotSaveReturnsArgument();
-        when(orders.aggregateDailyRevenue(any(), any(), any())).thenReturn(List.of(
-                new DailyRevenueRow(LocalDate.of(2026, 8, 1), 2L, new BigDecimal("3000")),
-                new DailyRevenueRow(LocalDate.of(2026, 8, 2), 1L, new BigDecimal("1200"))));
+        // 原始列由 service 在 Java 端分桶：8/1 兩筆合 3000、8/2 一筆 1200
+        when(orders.findPaidAtAndAmount(any(), any(), any())).thenReturn(List.<Object[]>of(
+                new Object[] { LocalDateTime.of(2026, 8, 1, 10, 0), new BigDecimal("1800") },
+                new Object[] { LocalDateTime.of(2026, 8, 1, 14, 30), new BigDecimal("1200") },
+                new Object[] { LocalDateTime.of(2026, 8, 2, 9, 0), new BigDecimal("1200") }));
         when(orders.aggregateByStatus(any(), any())).thenReturn(List.<Object[]>of(
                 new Object[] { OrderStatus.PAID, 3L, new BigDecimal("4200") },
                 new Object[] { OrderStatus.CANCELLED, 1L, new BigDecimal("500") }));
@@ -198,9 +198,12 @@ class OperationReportServiceTest {
 
         ReportDetailResponse response = service.generate(request(), null);
 
-        // 每日營收：趨勢資料隨快照凍結，讀取時不重算
+        // 每日營收：趨勢資料隨快照凍結，讀取時不重算；同日多筆要合併加總
         assertThat(response.dailyTotals()).extracting(ReportDailyTotalResponse::statDate)
                 .containsExactly(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 2));
+        assertThat(response.dailyTotals()).extracting(ReportDailyTotalResponse::orderCount)
+                .containsExactly(2L, 1L);
+        assertThat(response.dailyTotals().get(0).revenue()).isEqualByComparingTo("3000");
         // 兩種分佈依維度分流，不混在同一份清單
         assertThat(response.statusBreakdown()).extracting(ReportBreakdownResponse::itemKey)
                 .containsExactly("PAID", "CANCELLED");
@@ -219,10 +222,28 @@ class OperationReportServiceTest {
 
         service.generate(request(), null);
 
-        verify(orders).aggregateDailyRevenue(
+        verify(orders).findPaidAtAndAmount(
                 eq(LocalDate.of(2026, 8, 1).atStartOfDay()),
                 eq(LocalDate.of(2026, 9, 1).atStartOfDay()),
                 eq(List.of(OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.COMPLETED)));
+    }
+
+    @Test
+    void 台北清晨付款分到付款當日不因UTC存放歸前一天() {
+        stubEmptyAggregates();
+        stubSnapshotSaveReturnsArgument();
+        // Hibernate 讀回的 paidAt 是台北牆鐘：8/31 07:00 在 DB 實際存成 UTC 8/30 23:00，
+        // 若在 DB 端 CAST 截日期會錯歸 8/30（真實快照 #3003 驗出的 bug）——分桶必須在 Java 端做。
+        // mock 擋在 repository 介面，這裡守的是「service 用讀回的牆鐘時間分桶」這個口徑
+        when(orders.findPaidAtAndAmount(any(), any(), any())).thenReturn(List.<Object[]>of(
+                new Object[] { LocalDateTime.of(2026, 8, 31, 7, 0), new BigDecimal("999") }));
+
+        ReportDetailResponse response = service.generate(request(), null);
+
+        assertThat(response.dailyTotals()).singleElement().satisfies(d -> {
+            assertThat(d.statDate()).isEqualTo(LocalDate.of(2026, 8, 31));
+            assertThat(d.revenue()).isEqualByComparingTo("999");
+        });
     }
 
     @Test
@@ -426,13 +447,17 @@ class OperationReportServiceTest {
         LocalDateTime to = END.plusDays(1).atStartOfDay();
         when(groupClassSessions.aggregateFillRate(from, to))
                 .thenReturn(List.of(new GroupClassFillRow("熱瑜珈", 4L, 30L, 40L)));
-        when(members.aggregateDailyNewMembers(from, to))
-                .thenReturn(List.of(new MemberDailyRow(START, 2L)));
+        // 兩筆同日不同時刻的註冊，Java 端分桶後合成一列
+        when(members.findCreatedAtBetween(from, to))
+                .thenReturn(List.of(START.atTime(9, 30), START.atTime(23, 5)));
 
         assertThat(service.groupClassFill(START, END)).hasSize(1)
                 .first().satisfies(row -> assertThat(row.bookedTotal()).isEqualTo(30L));
         assertThat(service.memberGrowth(START, END)).hasSize(1)
-                .first().satisfies(row -> assertThat(row.newMembers()).isEqualTo(2L));
+                .first().satisfies(row -> {
+                    assertThat(row.statDate()).isEqualTo(START);
+                    assertThat(row.newMembers()).isEqualTo(2L);
+                });
 
         assertThatThrownBy(() -> service.groupClassFill(END, START))
                 .isInstanceOf(BusinessRuleException.class);

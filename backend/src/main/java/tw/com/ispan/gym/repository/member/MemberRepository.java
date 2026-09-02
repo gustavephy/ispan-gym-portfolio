@@ -26,18 +26,12 @@ public interface MemberRepository extends JpaRepository<Member, Integer> {
                              @Param("to") java.time.LocalDateTime to);
 
     /**
-     * 每日新會員聚合（報表趨勢用）；半開區間 [from, to)，
-     * CAST 至 LocalDate 由方言轉為資料庫層的日期截斷（寫法同 OrderRepository.aggregateDailyRevenue）。
+     * 期間內新會員的建立時間原始列（報表趨勢用）；半開區間 [from, to)。
+     * 日期分桶由 OperationReportService 在 Java 端做，不能在 DB 端 CAST 截日期，
+     * 原因見 OrderRepository.findPaidAtAndAmount：jdbc.time_zone=UTC 下 DB 截的是 UTC 日期。
      */
-    @Query("""
-            SELECT new tw.com.ispan.gym.dto.report.MemberDailyRow(
-                CAST(m.createdAt AS LocalDate), COUNT(m))
-            FROM Member m
-            WHERE m.createdAt >= :from AND m.createdAt < :to
-            GROUP BY CAST(m.createdAt AS LocalDate)
-            ORDER BY CAST(m.createdAt AS LocalDate)
-            """)
-    java.util.List<tw.com.ispan.gym.dto.report.MemberDailyRow> aggregateDailyNewMembers(
+    @Query("SELECT m.createdAt FROM Member m WHERE m.createdAt >= :from AND m.createdAt < :to")
+    java.util.List<java.time.LocalDateTime> findCreatedAtBetween(
             @Param("from") java.time.LocalDateTime from,
             @Param("to") java.time.LocalDateTime to);
 

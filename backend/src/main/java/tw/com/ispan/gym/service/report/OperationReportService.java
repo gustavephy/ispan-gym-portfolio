@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.IntStream;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -190,9 +191,9 @@ public class OperationReportService {
      * 會變成兩個口徑；過時一律靠 staleAt 警示、重新生成解決。
      */
     private void attachExtendedStats(ReportSnapshot snapshot, LocalDateTime from, LocalDateTime to) {
-        for (DailyRevenueRow row : orders.aggregateDailyRevenue(from, to, REVENUE_STATUSES)) {
+        for (DailyRevenueRow row : dailyRevenueBuckets(from, to)) {
             snapshot.addDailyTotal(new ReportDailyTotal(snapshot, row.statDate(),
-                    row.orderCount(), zeroIfNull(row.revenue())));
+                    row.orderCount(), row.revenue()));
         }
         // 分佈口徑同 getOrderOverview：下單日 createdAt（看訂單量，非營收歸屬）
         for (Object[] row : orders.aggregateByStatus(from, to)) {
@@ -277,11 +278,35 @@ public class OperationReportService {
                 periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay());
     }
 
-    /** 每日新會員趨勢（即時，不落快照）；無人註冊的日期不產生列 */
+    /** 每日新會員趨勢（即時，不落快照）；無人註冊的日期不產生列。Java 端分桶，原因同 dailyRevenueBuckets */
     public List<MemberDailyRow> memberGrowth(LocalDate periodStart, LocalDate periodEnd) {
         validatePeriod(periodStart, periodEnd);
-        return members.aggregateDailyNewMembers(
-                periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay());
+        Map<LocalDate, Long> byDay = new TreeMap<>();
+        for (LocalDateTime createdAt : members.findCreatedAtBetween(
+                periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay())) {
+            byDay.merge(createdAt.toLocalDate(), 1L, Long::sum);
+        }
+        return byDay.entrySet().stream()
+                .map(e -> new MemberDailyRow(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    /**
+     * 每日營收分桶。必須在 Java 端以 paidAt.toLocalDate() 分桶，不能在 DB 端 GROUP BY CAST：
+     * hibernate.jdbc.time_zone=UTC 讓 DB 存的是 UTC 牆鐘，DB 截日期會把台北 08:00 前的
+     * 付款歸到前一天（2026-09-01 以真實快照驗出）；Hibernate 讀回的 paidAt 已位移回台北牆鐘。
+     */
+    private List<DailyRevenueRow> dailyRevenueBuckets(LocalDateTime from, LocalDateTime to) {
+        Map<LocalDate, Long> countByDay = new TreeMap<>();
+        Map<LocalDate, BigDecimal> revenueByDay = new TreeMap<>();
+        for (Object[] row : orders.findPaidAtAndAmount(from, to, REVENUE_STATUSES)) {
+            LocalDate day = ((LocalDateTime) row[0]).toLocalDate();
+            countByDay.merge(day, 1L, Long::sum);
+            revenueByDay.merge(day, zeroIfNull((BigDecimal) row[1]), BigDecimal::add);
+        }
+        return countByDay.entrySet().stream()
+                .map(e -> new DailyRevenueRow(e.getKey(), e.getValue(), revenueByDay.get(e.getKey())))
+                .toList();
     }
 
     /** 教練時段使用率（即時，不落快照）：時間軸為時段開始時間，取消時段不計 */

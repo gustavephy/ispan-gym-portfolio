@@ -1,6 +1,5 @@
 package tw.com.ispan.gym.repository.order;
 
-import tw.com.ispan.gym.dto.report.DailyRevenueRow;
 import tw.com.ispan.gym.dto.report.OrderPeriodSummary;
 import tw.com.ispan.gym.dto.report.SubscriptionSalesRow;
 import tw.com.ispan.gym.entity.order.Order;
@@ -77,19 +76,19 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
                         @Param("statuses") Collection<OrderStatus> statuses);
 
         /**
-         * 每日營收聚合（報表趨勢用）。口徑同 summarizePeriod：paidAt 時間軸、
-         * 僅計入指定狀態；CAST 至 LocalDate 由方言轉為資料庫層的日期截斷。
+         * 每日營收的原始列（paidAt、totalAmount），日期分桶由 OperationReportService 在 Java 端做。
+         * 不能在 DB 端 GROUP BY CAST(paidAt AS DATE)：hibernate.jdbc.time_zone=UTC 讓
+         * LocalDateTime 以 UTC 牆鐘存放，DB 截出來的是 UTC 日期——台北 08:00 前的付款會被
+         * 歸到前一天（2026-09-01 以真實快照驗出）。Hibernate 讀回時已位移回台北牆鐘，
+         * Java 端 toLocalDate() 才是對的日期。口徑同 summarizePeriod：paidAt 時間軸、僅計入指定狀態。
          */
         @Query("""
-                        SELECT new tw.com.ispan.gym.dto.report.DailyRevenueRow(
-                            CAST(o.paidAt AS LocalDate), COUNT(o), SUM(o.totalAmount))
+                        SELECT o.paidAt, o.totalAmount
                         FROM Order o
                         WHERE o.paidAt >= :from AND o.paidAt < :to
                           AND o.status IN :statuses
-                        GROUP BY CAST(o.paidAt AS LocalDate)
-                        ORDER BY CAST(o.paidAt AS LocalDate)
                         """)
-        List<DailyRevenueRow> aggregateDailyRevenue(
+        List<Object[]> findPaidAtAndAmount(
                         @Param("from") LocalDateTime from,
                         @Param("to") LocalDateTime to,
                         @Param("statuses") Collection<OrderStatus> statuses);
