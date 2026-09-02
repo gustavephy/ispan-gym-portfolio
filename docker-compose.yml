@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: gym-db
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=${DB_PASSWORD:-YourStrongPass123!}
+      - MSSQL_SA_PASSWORD=${DB_PASSWORD:-P@ssw0rd}
     ports:
       - "1433:1433"
     volumes:
@@ -22,8 +20,8 @@ services:
     environment:
       - DB_URL=jdbc:sqlserver://db:1433;databaseName=ispan-proj-gymdb;encrypt=false;trustServerCertificate=true
       - DB_USERNAME=sa
-      - DB_PASSWORD=${DB_PASSWORD:-YourStrongPass123!}
-      - JWT_SECRET=${JWT_SECRET:-your_default_jwt_secret_key_must_be_very_long_and_secure_12345}
+      - DB_PASSWORD=${DB_PASSWORD:-P@ssw0rd}
+      - JWT_SECRET=${JWT_SECRET:-aXNwYW4tZ3ltLWxvY2FsLWRldi1vbmx5LXNlY3JldC1kby1ub3QtdXNlLWluLXByb2Qh}
       - ECPAY_RETURN_URL=${ECPAY_RETURN_URL:-http://localhost:8080/api/payments/ecpay/notify}
     depends_on:
       - db
@@ -34,7 +32,7 @@ services:
       dockerfile: Dockerfile
     container_name: gym-frontend
     ports:
-      - "80:80"
+      - "5173:80"
     depends_on:
       - backend
 

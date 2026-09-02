@@ -1,5 +1,5 @@
-# Build stage
-FROM eclipse-temurin:25-jdk AS builder
+# Build stage using GraalVM/OpenJDK 25 from GHCR
+FROM ghcr.io/graalvm/jdk-community:25 AS builder
 WORKDIR /app
 
 # Copy maven wrapper & pom
@@ -7,15 +7,12 @@ COPY .mvn/ .mvn
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw
 
-# Download dependencies for layer caching
-RUN ./mvnw dependency:go-offline -B || true
-
 # Copy source code and build jar
 COPY src ./src
 RUN ./mvnw clean package -DskipTests
 
-# Run stage
-FROM eclipse-temurin:25-jre
+# Run stage using GraalVM/OpenJDK 25
+FROM ghcr.io/graalvm/jdk-community:25
 WORKDIR /app
 
 COPY --from=builder /app/target/*.jar app.jar
