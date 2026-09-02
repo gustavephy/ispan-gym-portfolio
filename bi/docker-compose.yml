@@ -1,0 +1,20 @@
+# 自助式 BI：Metabase 直連 SQL Server（Demo 用；業界正式環境接的是唯讀副本／資料倉儲）。
+# 啟動（在 bi/ 目錄下）：docker compose up -d
+#   http://localhost:3001（首次啟動要跑 setup，見 README）
+# 儀表板等設定存在 metabase-data volume，docker compose down 不會消失。
+services:
+  metabase:
+    image: metabase/metabase:latest
+    container_name: gym-metabase
+    ports:
+      - "3001:3000"
+    environment:
+      # H2 應用資料庫放 volume 才能跨重啟保留儀表板
+      - MB_DB_FILE=/metabase-data/metabase.db
+    volumes:
+      - metabase-data:/metabase-data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  metabase-data:

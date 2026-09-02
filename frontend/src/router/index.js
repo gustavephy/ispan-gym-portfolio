@@ -145,6 +145,11 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
+          path: 'admin/analytics',
+          component: () => import('@/views/admin/AdminAnalyticsView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
           path: 'admin/refunds',
           component: () => import('@/views/admin/AdminRefundView.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
