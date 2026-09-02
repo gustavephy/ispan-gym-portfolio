@@ -93,12 +93,14 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
                         @Param("to") LocalDateTime to,
                         @Param("statuses") Collection<OrderStatus> statuses);
 
+        // 半開區間 [from, to)，與本檔其他統計查詢同口徑（早期版本用 BETWEEN 含尾，
+        // 剛好落在 to 這一瞬間的訂單會被相鄰兩個區間各算一次）
         @Query("SELECT o.status, COUNT(o), SUM(o.totalAmount) FROM Order o "
-                        + "WHERE o.createdAt BETWEEN :from AND :to GROUP BY o.status")
+                        + "WHERE o.createdAt >= :from AND o.createdAt < :to GROUP BY o.status")
         List<Object[]> aggregateByStatus(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
         @Query("SELECT o.paymentMethod, COUNT(o) FROM Order o "
-                        + "WHERE o.createdAt BETWEEN :from AND :to AND o.paymentMethod IS NOT NULL GROUP BY o.paymentMethod")
+                        + "WHERE o.createdAt >= :from AND o.createdAt < :to AND o.paymentMethod IS NOT NULL GROUP BY o.paymentMethod")
         List<Object[]> aggregateByPaymentMethod(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
         /**
