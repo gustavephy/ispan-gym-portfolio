@@ -90,21 +90,40 @@ else:
     if db_id is None:
         sys.exit("all database variants failed")
 
-# 4. 建圖卡（原始時間是 UTC 牆鐘，日期一律 DATEADD +8 轉台北——與後端修正同一口徑）
+# 4. 建圖卡（原始時間是 UTC 牆鐘，日期一律 DATEADD +8 轉台北——與後端修正同一口徑）。
+# 儀表板刻意只放「營運統計」頁沒有的探索維度——兩頁職責不同：對帳走快照、探索走 BI；
+# 日期趨勢類另存成卡（不上儀表板），當「已修正時區口徑」的示範。
 CARDS = [
-    ("每日營收趨勢", "line", """
-SELECT CAST(DATEADD(HOUR, 8, paid_at) AS DATE) AS [日期], SUM(total_amount) AS [營收]
-FROM orders
-WHERE paid_at IS NOT NULL AND status IN ('PAID','SHIPPED','COMPLETED')
-GROUP BY CAST(DATEADD(HOUR, 8, paid_at) AS DATE)
-ORDER BY [日期]"""),
-    ("訂單狀態分布", "pie", """
-SELECT status AS [狀態], COUNT(*) AS [筆數] FROM orders GROUP BY status"""),
-    ("每日新會員", "bar", """
-SELECT CAST(DATEADD(HOUR, 8, created_at) AS DATE) AS [日期], COUNT(*) AS [新會員]
-FROM member WHERE deleted_at IS NULL
-GROUP BY CAST(DATEADD(HOUR, 8, created_at) AS DATE)
-ORDER BY [日期]"""),
+    ("各商品分類營收", "bar", """
+SELECT pc.name AS [分類], SUM(oi.quantity * oi.price_at_buy) AS [營收]
+FROM order_item oi
+JOIN orders o ON o.order_id = oi.order_id
+JOIN product p ON p.product_id = oi.product_id
+JOIN product_category pc ON pc.product_category_id = p.category_id
+WHERE o.status IN ('PAID','SHIPPED','COMPLETED')
+GROUP BY pc.name
+ORDER BY [營收] DESC"""),
+    ("付款方式分布", "pie", """
+SELECT ISNULL(payment_method, N'未付款') AS [付款方式], COUNT(*) AS [筆數]
+FROM orders GROUP BY payment_method"""),
+    ("營收組成", "pie", """
+SELECT t.[類型], SUM(t.[金額]) AS [營收] FROM (
+    SELECT CASE WHEN oi.product_id IS NOT NULL THEN N'商品' ELSE N'私人課程' END AS [類型],
+           oi.quantity * oi.price_at_buy AS [金額]
+    FROM order_item oi JOIN orders o ON o.order_id = oi.order_id
+    WHERE o.status IN ('PAID','SHIPPED','COMPLETED')
+    UNION ALL
+    SELECT N'會籍訂閱', o.total_amount
+    FROM orders o
+    WHERE o.subscription_plan_id IS NOT NULL AND o.status IN ('PAID','SHIPPED','COMPLETED')
+) t GROUP BY t.[類型]"""),
+    ("各教練預約數", "row", """
+SELECT tr.last_name + tr.first_name AS [教練], COUNT(*) AS [預約數]
+FROM coach_booking cb
+JOIN coach_slot cs ON cs.id = cb.coach_slot_id
+JOIN trainer tr ON tr.trainer_id = cs.trainer_id
+GROUP BY tr.last_name, tr.first_name
+ORDER BY [預約數] DESC"""),
     ("商品銷售排行", "row", """
 SELECT TOP 10 oi.product_name_at_buy AS [商品],
        SUM(oi.quantity * oi.price_at_buy) AS [金額]
@@ -113,8 +132,22 @@ WHERE o.status IN ('PAID','SHIPPED','COMPLETED') AND oi.product_id IS NOT NULL
 GROUP BY oi.product_name_at_buy
 ORDER BY [金額] DESC"""),
 ]
+# 只存卡、不上儀表板：日期趨勢（DATEADD +8 修正示範，與營運統計頁重疊故不展示）
+EXTRA_CARDS = [
+    ("每日營收趨勢", "line", """
+SELECT CAST(DATEADD(HOUR, 8, paid_at) AS DATE) AS [日期], SUM(total_amount) AS [營收]
+FROM orders
+WHERE paid_at IS NOT NULL AND status IN ('PAID','SHIPPED','COMPLETED')
+GROUP BY CAST(DATEADD(HOUR, 8, paid_at) AS DATE)
+ORDER BY [日期]"""),
+    ("每日新會員", "bar", """
+SELECT CAST(DATEADD(HOUR, 8, created_at) AS DATE) AS [日期], COUNT(*) AS [新會員]
+FROM member WHERE deleted_at IS NULL
+GROUP BY CAST(DATEADD(HOUR, 8, created_at) AS DATE)
+ORDER BY [日期]"""),
+]
 card_ids = []
-for name, display, sql in CARDS:
+for name, display, sql in CARDS + EXTRA_CARDS:
     s, res = req("POST", "/api/card", token=session, body={
         "name": name, "display": display, "visualization_settings": {},
         "collection_id": None,
@@ -131,10 +164,11 @@ if s != 200:
     sys.exit(f"dashboard failed {s}: {res}")
 dash_id = res["id"]
 layout = [
-    {"id": -1, "card_id": card_ids[0], "row": 0, "col": 0, "size_x": 16, "size_y": 8},
-    {"id": -2, "card_id": card_ids[1], "row": 0, "col": 16, "size_x": 8, "size_y": 8},
-    {"id": -3, "card_id": card_ids[2], "row": 8, "col": 0, "size_x": 12, "size_y": 8},
-    {"id": -4, "card_id": card_ids[3], "row": 8, "col": 12, "size_x": 12, "size_y": 8},
+    {"id": -1, "card_id": card_ids[0], "row": 0, "col": 0, "size_x": 14, "size_y": 8},
+    {"id": -2, "card_id": card_ids[1], "row": 0, "col": 14, "size_x": 10, "size_y": 8},
+    {"id": -3, "card_id": card_ids[2], "row": 8, "col": 0, "size_x": 10, "size_y": 8},
+    {"id": -4, "card_id": card_ids[3], "row": 8, "col": 10, "size_x": 14, "size_y": 8},
+    {"id": -5, "card_id": card_ids[4], "row": 16, "col": 0, "size_x": 24, "size_y": 8},
 ]
 s, res = req("PUT", f"/api/dashboard/{dash_id}", token=session,
              body={"dashcards": layout})
