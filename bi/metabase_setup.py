@@ -10,7 +10,18 @@ import time
 import urllib.error
 import urllib.request
 
-BASE = "http://localhost:3001"
+# 可用環境變數覆蓋，供全容器模式的 metabase-init 一次性容器使用（見根目錄 docker-compose.yml）：
+# MB_BASE_URL：腳本呼叫 Metabase API 的位置（容器網路內是 http://metabase:3000）
+# MB_PUBLIC_BASE_URL：寫給瀏覽器用的公開網址基底（永遠是宿主視角的 http://localhost:3001）
+# MB_DB_HOST／MB_DB_PORT：Metabase 連 SQL Server 的位置（開發模式=宿主機、全容器=sqlserver）
+# MB_URL_OUT：public 儀表板網址輸出檔——前端「營運分析」頁執行期讀 /mbconfig/url.txt，
+#             預設寫進 frontend/public/mbconfig/（gitignored，各機器自己的）
+BASE = os.environ.get("MB_BASE_URL", "http://localhost:3001")
+PUBLIC_BASE = os.environ.get("MB_PUBLIC_BASE_URL", "http://localhost:3001")
+DB_HOST = os.environ.get("MB_DB_HOST", "host.docker.internal")
+DB_PORT = int(os.environ.get("MB_DB_PORT", "1433"))
+URL_OUT = os.environ.get("MB_URL_OUT", os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "public", "mbconfig", "url.txt"))
 ADMIN_EMAIL = "admin@local.test"
 ADMIN_PW = "Gym@Admin12345"
 DB_PASSWORD = os.environ["DB_PASSWORD"]
@@ -74,10 +85,10 @@ if existing:
     print(f"database exists id={db_id}")
 else:
     details_variants = [
-        {"host": "host.docker.internal", "port": 1433, "db": "ispan-proj-gymdb",
+        {"host": DB_HOST, "port": DB_PORT, "db": "ispan-proj-gymdb",
          "user": "sa", "password": DB_PASSWORD, "ssl": False,
          "additional-options": "trustServerCertificate=true"},
-        {"host": "host.docker.internal", "port": 1433, "db": "ispan-proj-gymdb",
+        {"host": DB_HOST, "port": DB_PORT, "db": "ispan-proj-gymdb",
          "user": "sa", "password": DB_PASSWORD, "ssl": False,
          "additional-options": "encrypt=false"},
     ]
@@ -244,5 +255,15 @@ s, res = req("POST", f"/api/dashboard/{dash_id}/public_link", token=session, bod
 if s != 200:
     sys.exit(f"public link failed {s}: {res}")
 uuid = res["uuid"]
-print("PUBLIC_URL=" + f"{BASE}/public/dashboard/{uuid}")
+public_url = f"{PUBLIC_BASE}/public/dashboard/{uuid}"
+print("PUBLIC_URL=" + public_url)
 print("DASH_ID=" + str(dash_id))
+
+# 寫給前端「營運分析」頁執行期讀取——public link 是各機器自己的，不能寫死在程式碼裡
+try:
+    os.makedirs(os.path.dirname(URL_OUT), exist_ok=True)
+    with open(URL_OUT, "w", encoding="utf-8") as f:
+        f.write(public_url + "\n")
+    print("URL written to " + URL_OUT)
+except OSError as e:
+    print(f"WARN: 寫入 {URL_OUT} 失敗（{e}），請手動把 PUBLIC_URL 放進 frontend/public/mbconfig/url.txt")

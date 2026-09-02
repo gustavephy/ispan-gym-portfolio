@@ -4,10 +4,29 @@
  *
  * 用的是 public link 的 iframe——無認證、拿到網址就能看，本機 Demo 可接受；
  * 正式環境要換 signed embedding（後端用 embed secret 簽短效 JWT）。
- * public link 重新產生時要同步更新這裡的常數。
+ *
+ * public link 是各機器自己產生的，寫死在程式碼裡換機器就開天窗——
+ * 因此執行期讀 /mbconfig/url.txt（bi/metabase_setup.py 產生：開發模式寫在
+ * frontend/public/、全容器模式由 metabase-init 寫進共用 volume），
+ * 讀不到才退回下面的常數（本機既有的儀表板）。
  */
+import { ref, onMounted } from 'vue'
+
 const METABASE_BASE = 'http://localhost:3001'
-const PUBLIC_DASHBOARD_URL = `${METABASE_BASE}/public/dashboard/dda53c1f-30f4-460a-9f21-9b0f825e77e2`
+const FALLBACK_DASHBOARD_URL = `${METABASE_BASE}/public/dashboard/dda53c1f-30f4-460a-9f21-9b0f825e77e2`
+const dashboardUrl = ref(FALLBACK_DASHBOARD_URL)
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/mbconfig/url.txt', { cache: 'no-store' })
+    if (res.ok) {
+      const text = (await res.text()).trim()
+      if (text.startsWith('http')) dashboardUrl.value = text
+    }
+  } catch {
+    // 拿不到就用預設常數，頁面照常
+  }
+})
 </script>
 
 <template>
@@ -23,7 +42,7 @@ const PUBLIC_DASHBOARD_URL = `${METABASE_BASE}/public/dashboard/dda53c1f-30f4-46
 
     <div class="frame-card">
       <iframe
-        :src="PUBLIC_DASHBOARD_URL"
+        :src="dashboardUrl"
         title="Metabase 營運總覽"
         allowtransparency
         loading="lazy"
@@ -31,7 +50,7 @@ const PUBLIC_DASHBOARD_URL = `${METABASE_BASE}/public/dashboard/dda53c1f-30f4-46
     </div>
     <p class="frame-hint">
       看不到內容時，請確認 Metabase 容器有啟動（bi/ 下 docker compose up -d），
-      或直接開 <a :href="PUBLIC_DASHBOARD_URL" target="_blank" rel="noopener">公開儀表板</a>。
+      或直接開 <a :href="dashboardUrl" target="_blank" rel="noopener">公開儀表板</a>。
     </p>
   </div>
 </template>

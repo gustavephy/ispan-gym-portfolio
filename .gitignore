@@ -19,3 +19,6 @@
 
 # Claude Code 的專案指引（各層目錄都可能有），先當個人本機設定不進版控
 CLAUDE.md
+
+# Metabase public 儀表板網址（各機器自己的，由 bi/metabase_setup.py 產生）
+/frontend/public/mbconfig/

@@ -1,92 +1,102 @@
 # Demo 部署 Runbook（在另一台電腦從零起機）
 
-目標配置與平常開發相同：**後端 8080（dev 模式）＋前端 5173（Vite）＋ monitoring/ 與 bi/ 容器**。
-全容器版（`docker compose up`，後端 8088）當備援展示用，不當 Demo 主線——主線用彩排過的組合。
+兩種模式，**擇一**（埠與 container 名會互撞，不要混跑）：
 
-> **黃金原則：Demo 前一天在目標機完整跑通一次。** 現場網路不可靠，
-> Docker 映像檔（~2GB）、npm、Maven 依賴都要在家先抓好。
+| | A. 全容器模式（新機器推薦） | B. 開發模式（本機彩排用的組合） |
+|---|---|---|
+| 要裝的東西 | 只要 Docker Desktop | JDK 25、Node、Python、SQL Server、Docker |
+| 資料庫 | 容器內（獨立資料，首次自動建庫播種） | 宿主機 SQL Server |
+| 埠 | 前端 5173／後端 8088／DB 14333 | 前端 5173／後端 8080／DB 1433 |
+| 適用 | 換機部署、一鍵展示 | 平常開發、E2E |
 
-## 0. 前置安裝（一次性）
+> **黃金原則：Demo 前一天在目標機完整跑通一次。** 首次要拉 ~3.5GB 映像檔、
+> 容器內抓 Maven 依賴，全都吃網路——當天不要賭現場 Wi-Fi。
 
-- [ ] Git、**Node 20+**、**JDK 25**（後端 dev 模式要；只跑容器版可免）
-- [ ] **Python 3**（跑 Metabase 重建腳本用）
-- [ ] **SQL Server**（Developer/Express 皆可）：啟用 SQL 驗證、sa 帳號、TCP 1433；
-      服務名 MSSQLSERVER 設自動啟動
-- [ ] **Docker Desktop**：BIOS 要先開虛擬化（Intel VT-x／AMD SVM，在 Advanced／CPU 設定），
-      沒開的話 WSL2 引擎起不來——別問我們怎麼知道的
+---
 
-## 1. 拿程式碼與機密
+## 模式 A：全容器（三步）
 
-- [ ] `git clone`（或隨身碟 `git bundle`）拉最新 dev
-- [ ] **手動複製根目錄 `.env`**（隨身碟）——它刻意不在 git 裡，含 DB 密碼、信箱、
-      Google OAuth、Cloudinary、Gemini 金鑰。沒有它後端起不來
+**0. 出發前（原機器）**：程式碼推上 GitHub 或 `git bundle create /e/gym.bundle dev`；
+`cp .env /e/gym.env`（機密不在 git 裡，一定要帶）。
 
-## 2. 建資料庫（一次性）
+**1. 目標機裝 Docker Desktop**——先進 BIOS 開虛擬化（Intel VT-x／AMD SVM），
+不然 WSL2 引擎起不來。
 
+**2. 拿碼＋放機密**：
 ```bash
-# SSMS 或 sqlcmd 建空庫即可，表結構與種子資料由後端首次啟動自動建立
-sqlcmd -S localhost,1433 -U sa -P "<密碼>" -C -Q "CREATE DATABASE [ispan-proj-gymdb]"
+git clone <repo 或 bundle> ispan-proj-gym && cd ispan-proj-gym
+cp /e/gym.env .env
 ```
 
-首次啟動後端時 SchemaFixupRunner ＋種子會自動：建表、46 商品（含 Cloudinary 圖）、
-12 教練、16 團課、36 擬真會員、60 樣本訂單、過去場次與預約——統計圖表開箱即有資料；
-昨日日報也會由啟動補跑自動生成。
-
-## 3. 啟動（每次，Git Bash）
-
+**3. 一鍵啟動**：
 ```bash
-# 3-1 後端（確認 MSSQLSERVER 服務在跑）
-cd backend && set -a && . ../.env && set +a && ./mvnw spring-boot:run
-# 就緒判準：log 出現 Started BackendApplication 且 GET /api/products 回 200
-
-# 3-2 前端
-cd frontend && npm ci && npm run dev        # http://localhost:5173
-
-# 3-3 監控（Prometheus 9090 + Grafana 3000，儀表板自動佈建）
-cd monitoring && docker compose up -d
-
-# 3-4 BI（Metabase 3001）
-cd bi && docker compose up -d
+docker compose up -d --build
 ```
+首次啟動的自動化鏈（約 5–10 分鐘）：SQL Server 容器健康 → 自動建庫 →
+後端建表＋播種（商品/教練/擬真會員/訂單/場次全自動）→ Metabase 自動建好
+BI 儀表板並把 public 網址交給前端。**零手動設定。**
 
-## 4. Metabase 首次設定（換機器必做）
+進度看 `docker compose logs -f backend`（出現 `Started BackendApplication` 即就緒）、
+`docker compose logs metabase-init`（結尾印 PUBLIC_URL 即完成）。
 
-Metabase 的儀表板存在 docker volume 裡，**不會跟著 git 走**，新機器要重建：
+入口：前端 http://localhost:5173 ・ Grafana :3000 ・ Metabase :3001 ・
+Prometheus :9090 ・ 後端 API :8088 ・ 容器 DB（SSMS 觀察用）localhost,14333
 
-```bash
-# repo 根目錄；腳本會等它初始化、建管理員、接 SQL Server、建卡與儀表板、開 public link
-set -a && . ./.env && set +a && python bi/metabase_setup.py
-```
+---
 
-結尾會印出 `PUBLIC_URL=...`。**把該網址的 UUID 換進
-`frontend/src/views/admin/AdminAnalyticsView.vue` 的 `PUBLIC_DASHBOARD_URL`**（Vite 會熱更新）
-——public link 是各機器自己的，不換的話「營運分析」頁會是空框。
+## 模式 B：開發模式（與平常本機相同）
 
-## 5. 驗收清單（Demo 前跑一遍）
+<details>
+<summary>展開完整步驟</summary>
 
-- [ ] 前台：商品頁**圖片有出來**（Cloudinary 外連，需要網路）
+1. 安裝：Git、Node 20+、JDK 25、Python 3、SQL Server（混合驗證、sa 密碼設成跟
+   .env 一樣、TCP 1433、服務自動啟動）、Docker Desktop
+2. 拿碼＋`.env`（同模式 A 步驟 0、2）
+3. 建空庫：`sqlcmd -S localhost,1433 -U sa -P "<密碼>" -C -Q "CREATE DATABASE [ispan-proj-gymdb]"`
+4. 啟動（Git Bash，各開一個終端）：
+   ```bash
+   cd backend && set -a && . ../.env && set +a && ./mvnw spring-boot:run  # 等 Started
+   cd frontend && npm ci && npm run dev
+   cd monitoring && docker compose up -d
+   cd bi && docker compose up -d
+   ```
+5. Metabase 首次建置（它的狀態在 volume、不跟 git 走）：
+   ```bash
+   set -a && . ./.env && set +a && python bi/metabase_setup.py
+   ```
+   腳本會自動把 public 網址寫進 `frontend/public/mbconfig/url.txt`，前端執行期自己讀，
+   不用改程式碼。
+
+</details>
+
+---
+
+## 驗收清單（兩種模式通用，Demo 前跑一遍）
+
+- [ ] 前台商品頁**圖片有出來**（Cloudinary 外連，需網路）
 - [ ] 管理端登入 `emp-admin@local.test`／`Admin@12345`
-- [ ] 營運統計：四張即時圖有資料；產生一份報表 → 再生成一次 → 版本選單出現
+- [ ] 營運統計：四張即時圖有資料；產生報表 → 再生成 → 版本選單出現
 - [ ] 營運分析：Metabase 儀表板顯示、日期選擇器能切
-- [ ] 系統監控：折線圖從右緣長出來；F5 歷史不消失
-- [ ] Grafana http://localhost:3000 儀表板有畫面
+- [ ] 系統監控：折線從右緣長出來；F5 歷史不消失
+- [ ] Grafana :3000 有畫面（Prometheus Targets 兩個目標會有一個 down——
+      對應另一種跑法，正常）
 - [ ] 聊天室能開（WebSocket）
 
-## 6. 常見坑
+## 常見坑
 
 | 症狀 | 原因／解法 |
 |---|---|
-| 後端連線被拒 | MSSQLSERVER 服務沒起來，服務管理員手動開 |
 | Docker 引擎起不來 | BIOS 虛擬化沒開 |
+| compose 報 DB_PASSWORD 未設定 | `.env` 沒放到 repo 根目錄 |
+| 容器名衝突（gym-prometheus 等） | A/B 模式混跑了——把另一邊 down 掉 |
+| 5173 被占 | 同上：Vite dev 與前端容器只能擇一 |
 | 登入一直 429 | 登入限流（同 IP 30 次/時），重啟後端歸零 |
 | 商品沒圖 | 現場沒網路（Cloudinary 是外連） |
-| 營運分析空白 | Metabase 沒起／public UUID 沒換（見步驟 4） |
-| Vite 起不來說 5173 被占 | 全容器版和 dev 模式撞埠，二選一 |
+| 營運分析空白 | Metabase 還在初始化，看 `docker compose logs metabase-init` |
+| 模式 B 後端連線被拒 | MSSQLSERVER 服務沒起來，服務管理員手動開 |
 
-## 備援：全容器一鍵版
+## Demo 當天（開場前 15 分鐘）
 
-目標機裝不了 JDK／Node 時的退路（仍需宿主 SQL Server 與 .env）：
-
-```bash
-docker compose up -d --build   # 後端 8088、前端 5173（nginx）
-```
+模式 A：開 Docker Desktop → `docker compose up -d`（資料都在 volume，秒起）。
+模式 B：確認 MSSQLSERVER 服務 → 四組啟動指令 → 快速點驗收清單前四項。
+兩種模式都建議把「系統監控」頁提前開著，讓 5 分鐘折線在上台前畫滿。

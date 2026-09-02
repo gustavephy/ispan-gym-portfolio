@@ -8,5 +8,7 @@ scrape_configs:
   - job_name: gym-backend
     metrics_path: /actuator/prometheus
     static_configs:
-      # 後端跑在宿主機上（管理埠 8081），容器內用 host.docker.internal 指回宿主
-      - targets: ["host.docker.internal:8081"]
+      # 兩個目標對應兩種跑法，同一時間只會有一個活著（另一個顯示 down 屬正常）：
+      # - host.docker.internal:8081：開發模式，後端跑在宿主機（管理埠 8081）
+      # - backend:8081：全容器模式（根目錄 docker-compose include 本檔，同網路互通）
+      - targets: ["host.docker.internal:8081", "backend:8081"]
