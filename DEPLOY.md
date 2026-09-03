@@ -88,12 +88,58 @@ Prometheus :9090 ・ 後端 API :8088 ・ 容器 DB（SSMS 觀察用）localhost
 |---|---|
 | Docker 引擎起不來 | BIOS 虛擬化沒開 |
 | compose 報 DB_PASSWORD 未設定 | `.env` 沒放到 repo 根目錄 |
+| 拉映像報 `TLS handshake timeout` | 該網路連不上 Docker Hub——見下方「Docker Hub 連不上」一節 |
 | 容器名衝突（gym-prometheus 等） | A/B 模式混跑了——把另一邊 down 掉 |
+| 容器名衝突（gym-docker-* 等） | 上次部署失敗的殘骸——見「Docker Hub 連不上」節末的清理指令 |
 | 5173 被占 | 同上：Vite dev 與前端容器只能擇一 |
 | 登入一直 429 | 登入限流（同 IP 30 次/時），重啟後端歸零 |
 | 商品沒圖 | 現場沒網路（Cloudinary 是外連） |
 | 營運分析空白 | Metabase 還在初始化，看 `docker compose logs metabase-init` |
 | 模式 B 後端連線被拒 | MSSQLSERVER 服務沒起來，服務管理員手動開 |
+
+## Docker Hub 連不上（TLS handshake timeout）
+
+有些網路（實測過某些家用 ISP；會場 Wi-Fi 風險更高）連不上 `registry-1.docker.io`，
+症狀是拉映像卡住後報 `net/http: TLS handshake timeout`——MCR（SQL Server）與
+GHCR（GraalVM）通常不受影響，只有 Docker Hub 的映像（node/nginx/python/grafana/
+prometheus/metabase）會炸。先用一行確認 Google 鏡像站通不通：
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" -m 15 https://mirror.gcr.io/v2/   # 回 401 = 通
+```
+
+**解法一（首選，一次設定永久有效）**：Docker Desktop → Settings → Docker Engine，
+JSON 加 `"registry-mirrors": ["https://mirror.gcr.io"]` → Apply & restart。
+之後所有 Docker Hub 拉取自動走鏡像。注意重啟會停掉運行中的容器，
+之後要 `docker compose up -d` 帶回來。
+
+**解法二（不動設定，逐個手拉）**：從鏡像站拉、改回原名；官方映像
+（名稱沒有斜線的）要補 `library/` 前綴：
+
+```bash
+docker pull mirror.gcr.io/library/node:20-alpine && docker tag mirror.gcr.io/library/node:20-alpine node:20-alpine
+docker pull mirror.gcr.io/grafana/grafana:12.1.0 && docker tag mirror.gcr.io/grafana/grafana:12.1.0 grafana/grafana:12.1.0
+# python:3.12-alpine、nginx:alpine、prom/prometheus、metabase/metabase 同理
+```
+
+本機有同名映像後 compose 就不會再去 Docker Hub。
+
+**解法三（現場完全沒網路的保險）**：前一天在能動的機器打包、現場載入：
+
+```bash
+docker save -o gym-images.tar ispan-proj-gym-backend ispan-proj-gym-frontend \
+  mcr.microsoft.com/mssql/server:2022-latest prom/prometheus:v3.5.0 \
+  grafana/grafana:12.1.0 metabase/metabase:latest python:3.12-alpine
+# 目標機：
+docker load -i gym-images.tar && docker compose up -d
+```
+
+**失敗過一次後重跑**，常撞 `container name already in use`（上次的殘骸）：
+
+```bash
+docker ps -a --filter "name=gym-" -q | xargs docker rm -f
+docker compose up -d
+```
 
 ## Demo 當天（開場前 15 分鐘）
 
