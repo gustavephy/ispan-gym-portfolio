@@ -1232,52 +1232,48 @@ public class TestDataSeedRunner implements CommandLineRunner {
         List<CouponSeed> seeds = List.of(
                 new CouponSeed("新店開張大紅包", "NEWOPEN100", CouponType.CASH, new BigDecimal("100"), new BigDecimal("500"),
                         CouponApplicableType.ALL, "慶祝新店開幕，全館滿500折100！"),
-                new CouponSeed("體驗會籍折價券", "MEMB150", CouponType.CASH, new BigDecimal("150"), new BigDecimal("1500"),
-                        CouponApplicableType.SUBSCRIPTION, "會籍方案專屬，滿1500折150！"),
-                new CouponSeed("高級補給品八五折", "SUPP85", CouponType.PERCENT, new BigDecimal("15"), new BigDecimal("1000"),
-                        CouponApplicableType.PRODUCT, "商城補給品專用，滿1000享85折優惠！"),
-                new CouponSeed("團體有氧體驗券", "GROUPCLASS50", CouponType.CASH, new BigDecimal("50"), new BigDecimal("400"),
-                        CouponApplicableType.COURSE, "團體/預約課程專用，滿400折50！"),
-                new CouponSeed("專業啞鈴器材優惠", "DUMBBELL90", CouponType.PERCENT, new BigDecimal("10"),
-                        new BigDecimal("800"), CouponApplicableType.PRODUCT, "商城器材類別專屬，滿800享9折優惠！"),
-                new CouponSeed("年度會籍大特惠", "ANNUAL90", CouponType.PERCENT, new BigDecimal("10"), new BigDecimal("10000"),
-                        CouponApplicableType.SUBSCRIPTION, "訂閱年費方案專用，滿10000享9折優惠！"),
-                new CouponSeed("私教課程特別折扣", "PTVIP200", CouponType.CASH, new BigDecimal("200"), new BigDecimal("2000"),
-                        CouponApplicableType.COURSE, "一對一私人教練課專屬，滿2000折200！"),
-                new CouponSeed("運動配件大禮包", "ACC80", CouponType.PERCENT, new BigDecimal("20"), new BigDecimal("300"),
-                        CouponApplicableType.PRODUCT, "商城配件類別專用，滿300享8折優惠！"),
-                new CouponSeed("瑜珈專屬回饋券", "YOGA120", CouponType.CASH, new BigDecimal("120"), new BigDecimal("1200"),
-                        CouponApplicableType.COURSE, "瑜珈伸展課程專屬，滿1200折120！"),
-                new CouponSeed("乳清蛋白專屬優惠", "WHEY50", CouponType.CASH, new BigDecimal("50"), new BigDecimal("500"),
-                        CouponApplicableType.PRODUCT, "補給品分類專屬，滿500折50！"),
-                new CouponSeed("季費會籍專屬特惠", "SEASON300", CouponType.CASH, new BigDecimal("300"), new BigDecimal("4000"),
-                        CouponApplicableType.SUBSCRIPTION, "季費會籍方案專屬，滿4000折300！"),
-                new CouponSeed("核心穩定課程優惠", "CORE85", CouponType.PERCENT, new BigDecimal("15"), new BigDecimal("1500"),
-                        CouponApplicableType.COURSE, "核心肌群訓練課程專用，滿1500享85折！"),
-                new CouponSeed("健身拉力帶專屬折扣", "STRAP88", CouponType.PERCENT, new BigDecimal("12"), new BigDecimal("400"),
-                        CouponApplicableType.PRODUCT, "配件商品專用，滿400享88折！"),
+                new CouponSeed("商城商品八五折優惠券", "SUPP85", CouponType.PERCENT, new BigDecimal("15"), new BigDecimal("1000"),
+                        CouponApplicableType.PRODUCT, "商城全系列商品適用，滿1000享85折優惠！"),
+                new CouponSeed("商城商品滿額九折券", "DUMBBELL90", CouponType.PERCENT, new BigDecimal("10"),
+                        new BigDecimal("800"), CouponApplicableType.PRODUCT, "商城全系列商品適用，滿800享9折優惠！"),
+                new CouponSeed("商城商品八折特惠券", "ACC80", CouponType.PERCENT, new BigDecimal("20"), new BigDecimal("300"),
+                        CouponApplicableType.PRODUCT, "商城全系列商品適用，滿300享8折優惠！"),
+                new CouponSeed("商城商品折50優惠券", "WHEY50", CouponType.CASH, new BigDecimal("50"), new BigDecimal("500"),
+                        CouponApplicableType.PRODUCT, "商城全系列商品適用，滿500折50！"),
+                new CouponSeed("商城商品88折優惠券", "STRAP88", CouponType.PERCENT, new BigDecimal("12"), new BigDecimal("400"),
+                        CouponApplicableType.PRODUCT, "商城全系列商品適用，滿400享88折！"),
                 new CouponSeed("全館慶典狂歡券", "CELEBRATE200", CouponType.CASH, new BigDecimal("200"),
-                        new BigDecimal("2000"), CouponApplicableType.ALL, "全館不限商品/課程/訂閱，滿2000折200！"),
+                        new BigDecimal("2000"), CouponApplicableType.ALL, "全館不限商品，滿2000折200！"),
                 new CouponSeed("新會員首購好禮", "FIRSTFREE", CouponType.PERCENT, new BigDecimal("5"), new BigDecimal("100"),
                         CouponApplicableType.ALL, "新朋友體驗好禮，滿100享95折優惠！"),
-                new CouponSeed("重磅壺鈴系列折價", "KETTLEBELL150", CouponType.CASH, new BigDecimal("150"),
-                        new BigDecimal("1500"), CouponApplicableType.PRODUCT, "商城器材類別專屬，滿1500折150！"),
-                new CouponSeed("雙人同行會籍優惠", "DOUBLE95", CouponType.PERCENT, new BigDecimal("5"), new BigDecimal("3000"),
-                        CouponApplicableType.SUBSCRIPTION, "會籍方案專屬，滿3000享95折！"));
+                new CouponSeed("商城商品滿額折150券", "KETTLEBELL150", CouponType.CASH, new BigDecimal("150"),
+                        new BigDecimal("1500"), CouponApplicableType.PRODUCT, "商城全系列商品適用，滿1500折150！"));
 
         int created = 0;
         for (CouponSeed seed : seeds) {
             java.util.Optional<Coupon> existing = couponRepository.findByCode(seed.code());
             if (existing.isPresent()) {
+                Coupon coupon = existing.get();
+                boolean updated = false;
+                if (!seed.name().equals(coupon.getName())) {
+                    coupon.setName(seed.name());
+                    updated = true;
+                }
+                if (!seed.description().equals(coupon.getDescription())) {
+                    coupon.setDescription(seed.description());
+                    updated = true;
+                }
                 // 如果是 FIRSTFREE 且數量不是剩餘 1 張，我們自動修正它，確保錄影每次都對
                 if ("FIRSTFREE".equals(seed.code())) {
-                    Coupon coupon = existing.get();
                     if (coupon.getTotalQuantity() != 10 || coupon.getClaimedQuantity() != 9) {
                         coupon.setTotalQuantity(10);
                         coupon.setClaimedQuantity(9);
-                        couponRepository.save(coupon);
+                        updated = true;
                         log.info("已修正 FIRSTFREE 優惠券為剩餘 1 張（總數 10，已領取 9）以供錄影");
                     }
+                }
+                if (updated) {
+                    couponRepository.save(coupon);
                 }
                 continue;
             }
