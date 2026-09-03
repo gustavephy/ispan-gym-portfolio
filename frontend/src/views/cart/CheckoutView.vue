@@ -198,7 +198,7 @@ const hasProfileAddress = computed(() =>
 )
 const profileName = computed(() =>
   memberProfile.value
-    ? `${memberProfile.value.firstName ?? ''}${memberProfile.value.lastName ?? ''}`.trim()
+    ? `${memberProfile.value.lastName ?? ''}${memberProfile.value.firstName ?? ''}`.trim()
     : '',
 )
 const profilePhone = computed(() => memberProfile.value?.phone ?? '')

@@ -119,7 +119,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
      * 圖檔 2026-08-30 就從後台上傳過，但「哪張圖對哪個商品」只存在上傳者本機的資料庫，
      * 重建資料庫就全部消失；把對應寫進種子，任何人重建或首次啟動都會有圖。
      * 交付網址不需要金鑰，沒設 CLOUDINARY_* 的組員一樣看得到。原檔為 avif 的改用 .jpg 副檔名交付
-     *（Cloudinary 依副檔名轉格式），避免舊瀏覽器不支援。
+     * （Cloudinary 依副檔名轉格式），避免舊瀏覽器不支援。
      * 既有資料只在圖片為空時回填，不覆蓋後台自行上傳的圖。
      */
     private static final String CLOUD_IMG_BASE = "https://res.cloudinary.com/mksmqzij/image/upload/";
@@ -206,13 +206,21 @@ public class TestDataSeedRunner implements CommandLineRunner {
             "重訓進階計畫（10堂）", cloudImg("9b2bd23ceb1e8baba80679884280bcde.jpg"));
 
     /**
-     * 教練帳號 → 頭像。雲端只有三張真人照，給三位「重量訓練」專長、會出現在私教課頁的教練
-     *（林志強、王志明、黃冠宇）；其餘教練維持姓氏字首的預設頭像。
+     * 教練帳號 → 頭像。
      */
-    private static final java.util.Map<String, String> SEED_TRAINER_AVATARS = java.util.Map.of(
-            "emp-trainer@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg"),
-            "emp-trainer2@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg"),
-            "emp-trainer6@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg"));
+    private static final java.util.Map<String, String> SEED_TRAINER_AVATARS = java.util.Map.ofEntries(
+            java.util.Map.entry("emp-trainer@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg")),
+            java.util.Map.entry("emp-trainer2@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg")),
+            java.util.Map.entry("emp-trainer3@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg")),
+            java.util.Map.entry("emp-trainer4@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg")),
+            java.util.Map.entry("emp-trainer5@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg")),
+            java.util.Map.entry("emp-trainer6@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg")),
+            java.util.Map.entry("emp-trainer7@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg")),
+            java.util.Map.entry("emp-trainer8@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg")),
+            java.util.Map.entry("emp-trainer9@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg")),
+            java.util.Map.entry("emp-trainer10@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg")),
+            java.util.Map.entry("emp-trainer11@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg")),
+            java.util.Map.entry("emp-trainer12@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg")));
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
@@ -300,23 +308,23 @@ public class TestDataSeedRunner implements CommandLineRunner {
         }
 
         Account wendy = ensureAccount("wendy-test@local.test", AccountType.MEMBER);
-        Member wendyMember = ensureMember(wendy, "美秀", "陳", "0911111111");
+        Member wendyMember = ensureMember(wendy, "陳", "美秀", "0911111111");
 
         Account admin = ensureAccount("emp-admin@local.test", AccountType.MEMBER, AccountType.EMPLOYEE);
-        ensureMember(admin, "大同", "王", "0922222222");
-        ensureEmployee(admin, "大同", "王", "0922222222", EmployeeRole.ADMIN);
+        ensureMember(admin, "林", "威力", "0922222222");
+        ensureEmployee(admin, "林", "威力", "0922222222", EmployeeRole.ADMIN);
 
         // 純管理員：刻意不建 member 列，roles 只有 ["EMPLOYEE","ADMIN"]。
         // emp-admin 帶著會員身分（適合展示角色疊加），但那也讓 NavBar 同時出現會員與管理
         // 兩個工作區；要呈現乾淨的管理端畫面時用這組，不必動用 AdminSeedRunner 的始祖帳號。
         Account adminOnly = ensureAccount("admin-only@local.test", AccountType.EMPLOYEE);
-        ensureEmployee(adminOnly, "小美", "張", "0944444444", EmployeeRole.ADMIN);
+        ensureEmployee(adminOnly, "張", "小美", "0944444444", EmployeeRole.ADMIN);
 
         record TrainerSeed(String email, String lastName, String firstName, String phone, String specialty) {
         }
         List<TrainerSeed> trainerSeeds = List.of(
                 new TrainerSeed("emp-trainer@local.test", "林", "志強", "0933333333", "重量訓練、肌力提升"),
-                new TrainerSeed("emp-trainer2@local.test", "王", "志明", "0933333334", "重量訓練、心肺耐力"),
+                new TrainerSeed("emp-trainer2@local.test", "陳", "麥克", "0933333334", "重量訓練、心肺耐力"),
                 new TrainerSeed("emp-trainer3@local.test", "張", "美玲", "0933333335", "空中瑜珈、柔軟伸展"),
                 new TrainerSeed("emp-trainer4@local.test", "李", "健宏", "0933333336", "TRX懸吊、核心強化"),
                 new TrainerSeed("emp-trainer5@local.test", "陳", "怡君", "0933333337", "Zumba、流動瑜珈"),
@@ -331,8 +339,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
         List<Trainer> seededTrainers = new java.util.ArrayList<>();
         for (TrainerSeed ts : trainerSeeds) {
             Account acc = ensureAccount(ts.email(), AccountType.MEMBER, AccountType.EMPLOYEE);
-            ensureMember(acc, ts.firstName(), ts.lastName(), ts.phone());
-            Employee emp = ensureEmployee(acc, ts.firstName(), ts.lastName(), ts.phone(), EmployeeRole.EMPLOYEE);
+            ensureMember(acc, ts.lastName(), ts.firstName(), ts.phone());
+            Employee emp = ensureEmployee(acc, ts.lastName(), ts.firstName(), ts.phone(), EmployeeRole.EMPLOYEE);
             Trainer tr = ensureTrainer(emp, ts.specialty());
             seededTrainers.add(tr);
         }
@@ -386,13 +394,13 @@ public class TestDataSeedRunner implements CommandLineRunner {
     }
 
     /** 會員列不存在就建立；存在則導正為 ACTIVE、未刪除、名字電話一致 */
-    private Member ensureMember(Account account, String firstName, String lastName, String phone) {
+    private Member ensureMember(Account account, String lastName, String firstName, String phone) {
         Member member = members.findByAccountId(account.getId()).orElse(null);
         if (member == null) {
             member = new Member();
             member.setAccount(account);
-            member.setFirstName(firstName);
             member.setLastName(lastName);
+            member.setFirstName(firstName);
             member.setPhone(phone);
             member.setStatus(UserStatus.ACTIVE);
             log.info("已建立測試會員 {}", account.getEmail());
@@ -406,8 +414,8 @@ public class TestDataSeedRunner implements CommandLineRunner {
             log.info("已將測試會員 {} 導正為 ACTIVE", account.getEmail());
         }
         if (!firstName.equals(member.getFirstName()) || !lastName.equals(member.getLastName())) {
-            member.setFirstName(firstName);
             member.setLastName(lastName);
+            member.setFirstName(firstName);
             changed = true;
             log.info("已導正測試會員 {} 姓名 → {}{}", account.getEmail(), lastName, firstName);
         }
@@ -423,14 +431,14 @@ public class TestDataSeedRunner implements CommandLineRunner {
     }
 
     /** 員工列不存在就建立；存在則導正為 ACTIVE、指定職級、未刪除、姓名電話一致 */
-    private Employee ensureEmployee(Account account, String firstName, String lastName,
+    private Employee ensureEmployee(Account account, String lastName, String firstName,
             String phone, EmployeeRole role) {
         Employee employee = employees.findByAccountId(account.getId()).orElse(null);
         if (employee == null) {
             employee = new Employee();
             employee.setAccount(account);
-            employee.setFirstName(firstName);
             employee.setLastName(lastName);
+            employee.setFirstName(firstName);
             employee.setPhone(phone);
             employee.setRole(role);
             employee.setStatus(EmployeeStatus.ACTIVE);
@@ -1360,7 +1368,10 @@ public class TestDataSeedRunner implements CommandLineRunner {
     /** 擬真示範會員的 email 格式；統計展示資料以此辨識，不會動到手動註冊的會員 */
     private static final String DEMO_MEMBER_EMAIL_FMT = "seed-member%02d@local.test";
     private static final int DEMO_MEMBER_COUNT = 36;
-    /** 樣本訂單總數；前 {@value #SAMPLE_ORDER_COUNT} 筆是 ensureSampleOrders 的，其餘由 ensureMoreSampleOrders 補齊 */
+    /**
+     * 樣本訂單總數；前 {@value #SAMPLE_ORDER_COUNT} 筆是 ensureSampleOrders 的，其餘由
+     * ensureMoreSampleOrders 補齊
+     */
     private static final int DEMO_ORDER_TARGET = 60;
     /** 付款方式輪替：信用卡佔多數，其餘平均分佈——代碼須存在於前端 paymentLabels.js 的對照表 */
     private static final List<String> DEMO_PAYMENT_METHODS = List.of(

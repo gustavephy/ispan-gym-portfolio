@@ -74,7 +74,7 @@
         <div class="item-info">
             <h3 class="item-name">
                 {{ course.name }}
-                <span class="title-trainer"> {{ course.trainer?.trainerName || course.trainerName }}</span>
+                <span class="title-trainer"> {{ course.trainer?.name || course.trainerName }}</span>
                 <span v-if = "isPrivate" class="session-badge"> </span>
             </h3>
             <p class="item-desc">{{ course.description || '點擊查看詳情' }}</p>
