@@ -8,7 +8,8 @@ import tw.com.ispan.gym.enums.report.ReportType;
 /**
  * 歷史報表列表列。staleAt 非 null＝生成後涵蓋區間內發生過退款，建議重新生成；
  * supersededAt 非 null＝已被較新版本取代的歷史版本（列表端點只回現行版，
- * 版本清單端點兩者都回）。
+ * 版本清單端點兩者都回）；voidedAt 非 null＝已作廢（誤生成，數字僅供追溯，
+ * 列表端點預設不回，includeVoided=true 才回）。
  */
 public record ReportSummaryResponse(
         Integer id,
@@ -20,5 +21,6 @@ public record ReportSummaryResponse(
         BigDecimal discountAmount,
         LocalDateTime generatedAt,
         LocalDateTime staleAt,
-        LocalDateTime supersededAt) {
+        LocalDateTime supersededAt,
+        LocalDateTime voidedAt) {
 }

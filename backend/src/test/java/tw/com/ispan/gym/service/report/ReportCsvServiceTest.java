@@ -25,7 +25,7 @@ class ReportCsvServiceTest {
     private ReportDetailResponse reportWith(List<ReportSalesItemResponse> items) {
         return new ReportDetailResponse(1, ReportType.MONTHLY, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
                 10L, new BigDecimal("1000"), BigDecimal.ZERO, null, null, items,
-                List.of(), List.of(), List.of(), 0L, BigDecimal.ZERO, 0L, 0L);
+                List.of(), List.of(), List.of(), 0L, BigDecimal.ZERO, 0L, 0L, null, null);
     }
 
     @Test

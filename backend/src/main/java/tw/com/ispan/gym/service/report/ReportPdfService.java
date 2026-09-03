@@ -113,6 +113,14 @@ public class ReportPdfService {
         document.add(new Paragraph("生成時間：" + generatedAt + describeGeneratedBy(snapshot.getGeneratedBy()),
                 bodyFont));
 
+        // 作廢警示排在最前：紙本流通後讀者第一眼就知道這份數字已不作營運依據
+        if (snapshot.getVoidedAt() != null) {
+            document.add(Chunk.NEWLINE);
+            document.add(new Paragraph("【已作廢】本報表已於 " + snapshot.getVoidedAt().format(DATETIME_FMT)
+                    + describeVoidedBy(snapshot.getVoidedBy()) + " 作廢"
+                    + (snapshot.getVoidReason() == null ? "" : "（原因：" + snapshot.getVoidReason() + "）")
+                    + "，數據僅供追溯，不得作為營運依據引用。", staleFont));
+        }
         if (snapshot.getStaleAt() != null) {
             document.add(Chunk.NEWLINE);
             document.add(new Paragraph("注意：本報表生成後（" + snapshot.getStaleAt().format(DATETIME_FMT)
@@ -325,6 +333,13 @@ public class ReportPdfService {
             return "";
         }
         return "　產生者：" + generatedBy.getLastName() + generatedBy.getFirstName();
+    }
+
+    private String describeVoidedBy(Employee voidedBy) {
+        if (voidedBy == null) {
+            return "";
+        }
+        return " 由 " + voidedBy.getLastName() + voidedBy.getFirstName();
     }
 
     private String describeType(ReportType type) {

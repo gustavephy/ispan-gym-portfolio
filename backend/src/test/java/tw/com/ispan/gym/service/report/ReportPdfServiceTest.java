@@ -100,6 +100,24 @@ class ReportPdfServiceTest {
     }
 
     @Test
+    void 已作廢快照帶作廢警示仍產出合法PDF() {
+        ReportSnapshot snapshot = snapshot(employee());
+        snapshot.markVoided(LocalDateTime.of(2026, 8, 18, 9, 0), employee(), "選錯區間");
+        when(snapshots.findById(REPORT_ID)).thenReturn(Optional.of(snapshot));
+
+        assertIsPdf(service.generateReportPdf(REPORT_ID));
+    }
+
+    @Test
+    void 已作廢但無作廢人與原因的快照仍產出合法PDF() {
+        ReportSnapshot snapshot = snapshot(null);
+        snapshot.markVoided(LocalDateTime.of(2026, 8, 18, 9, 0), null, null);
+        when(snapshots.findById(REPORT_ID)).thenReturn(Optional.of(snapshot));
+
+        assertIsPdf(service.generateReportPdf(REPORT_ID));
+    }
+
+    @Test
     void 明細金額缺值與無產生者不影響產出() {
         ReportSnapshot snapshot = snapshot(null);
         snapshot.addItem(new ReportSalesItem(snapshot, 1, 100,

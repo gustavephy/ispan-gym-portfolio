@@ -1442,13 +1442,14 @@ no-op，不重新檢查。
 
 | 方法 | 路徑 | 成功狀態 | 說明 |
 |---|---|---|---|
-| GET | `/api/admin/reports` | 200 | 報表快照列表（`generatedAt DESC`） |
+| GET | `/api/admin/reports?includeVoided=false` | 200 | 報表快照列表（只列現行版，`generatedAt DESC`；預設不含已作廢，`includeVoided=true` 才列） |
 | GET | `/api/admin/reports/stats` | 200 | 即時銷售統計（不落地） |
 | GET | `/api/admin/reports/{reportId}` | 200 | 報表明細 |
+| GET | `/api/admin/reports/{reportId}/versions` | 200 | 同型別同區間的全部版本（現行版第一筆，含歷史版與已作廢） |
 | GET | `/api/admin/reports/{reportId}/pdf` | 200 | **報表匯出 PDF** |
 | GET | `/api/admin/reports/{reportId}/csv` | 200 | 品項排行匯出 CSV（`text/csv`，UTF-8 with BOM，`filename="operation-report-{id}-ranking.csv"`） |
 | POST | `/api/admin/reports` | **201** | 產生報表快照 |
-| DELETE | `/api/admin/reports/{reportId}` | **204** | 刪除快照（連同明細） |
+| POST | `/api/admin/reports/{reportId}/void` | 200 | **作廢**快照（現行版或歷史版皆可；快照不提供刪除） |
 
 `GET /{reportId}/pdf` 回應：
 - `Content-Type: application/pdf`
@@ -1459,7 +1460,11 @@ no-op，不重新檢查。
 - **只能匯出已生成的快照** —— 即時統計（`/stats`）要匯出前先 `POST` 生成快照，
   確保 PDF 上的數字永遠有資料庫紀錄可回查
 - 快照已過時（`staleAt` 非 null）時，PDF 開頭會帶紅字警示，紙本流通後讀者仍知數據可能過時
+- 快照已作廢（`voidedAt` 非 null）時，PDF 開頭帶「【已作廢】」紅字警示，含作廢時間、作廢人與原因
 - 錯誤：`404` 找不到報表資料；`500 PDF_GENERATION_FAILED` 報表 PDF 產生失敗，請稍後再試
+
+`POST /{reportId}/void` Request `VoidReportRequest`：`reason` 選填（`@Size(max = 200)`），body 可整個省略；
+回 `ReportSummaryResponse`（`voidedAt` 已填）。錯誤：`404` 找不到報表資料；`409 BUSINESS_RULE_VIOLATION` 此報表快照已作廢。
 
 `GET /stats` 參數：
 
@@ -1473,11 +1478,11 @@ no-op，不重新檢查。
 `POST` Request `GenerateReportRequest`：`reportType`（`DAILY`｜`MONTHLY`｜`CUSTOM`）、`periodStart`、`periodEnd`，皆 `@NotNull`。
 
 回應 DTO：
-- `ReportSummaryResponse`：`id`、`reportType`、`periodStart`、`periodEnd`、`orderCount` Long、`totalAmount`、`discountAmount`、`generatedAt`、`staleAt`
-- `ReportDetailResponse`：上述 + `items` `List<ReportSalesItemResponse>`，以及延伸統計：
+- `ReportSummaryResponse`：`id`、`reportType`、`periodStart`、`periodEnd`、`orderCount` Long、`totalAmount`、`discountAmount`、`generatedAt`、`staleAt`、`supersededAt`、`voidedAt`
+- `ReportDetailResponse`：上述（無 `supersededAt`）+ `items` `List<ReportSalesItemResponse>`，以及延伸統計：
   `statusBreakdown`／`paymentBreakdown` `List<ReportBreakdownResponse>`（`itemKey`、`orderCount`、`amount`；
   付款方式的 `amount` 為 null）、`dailyTotals` `List<ReportDailyTotalResponse>`（`statDate`、`orderCount`、`revenue`）、
-  `refundCount`、`refundAmount`、`newMemberCount`、`newSubscriptionCount`
+  `refundCount`、`refundAmount`、`newMemberCount`、`newSubscriptionCount`、`voidedAt`、`voidReason`
 
 > 延伸統計於 2026-08-17 加入，與總覽同一份快照凍結（趨勢資料不於讀取時重算，
 > 避免退款後趨勢與總覽變成兩個口徑）。此前生成的舊快照這些欄位為 null、清單為空，前端需容忍。
@@ -1487,9 +1492,13 @@ no-op，不重新檢查。
 
 > `staleAt` 非 null 代表快照涵蓋期間內事後發生過退款，數字已過時，建議重新產生。
 > 日期區間**頭尾皆含**；營收只計 `PAID`／`SHIPPED`／`COMPLETED` 且以 `paid_at` 為時間軸。
-> 重複產生同一組 `(reportType, periodStart, periodEnd)` 會先刪舊快照再寫入。
+> 重複產生同一組 `(reportType, periodStart, periodEnd)` 是 append-only 版本化：舊快照標上 `supersededAt` 成為歷史版、
+> 新的成為現行版，舊版不刪、可經 `/versions` 回看。
+> **快照不提供刪除**（2026-09-03 定案）：報表是稽核紀錄，誤生成只能 `POST /{id}/void` 作廢——
+> `voidedAt`／`voidReason` 記錄作廢時間與原因，資料列與明細保留；作廢的現行版清單預設隱藏，
+> `includeVoided=true` 才列，並仍是該區間歷史版本的入口。作廢的現行版重生成時照常被標 `supersededAt`，舊版不會因作廢而復活。
 
-錯誤：`404` 找不到報表資料；`409` 排行筆數須介於 1 到 100／起始日期不可晚於結束日期／統計區間不可超過 366 天
+錯誤：`404` 找不到報表資料；`409` 排行筆數須介於 1 到 100／起始日期不可晚於結束日期／統計區間不可超過 366 天／此報表快照已作廢
 
 ---
 

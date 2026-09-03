@@ -504,7 +504,7 @@ class OperationReportServiceTest {
         assertThat(overview.newSubscriptionCount()).isEqualTo(3L);
     }
 
-    // === listReports() / getReport() / delete() ================================
+    // === listReports() / getReport() / voidSnapshot() ==========================
 
     @Test
     void 查不存在的報表回404() {
@@ -515,28 +515,78 @@ class OperationReportServiceTest {
     }
 
     @Test
-    void 刪除不存在的報表回404且不刪除() {
+    void 作廢不存在的報表回404() {
         when(snapshots.findById(1)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.delete(1))
+        assertThatThrownBy(() -> service.voidSnapshot(1, 7, null))
                 .isInstanceOf(ResourceNotFoundException.class);
 
-        verify(snapshots, never()).delete(any());
+        verify(snapshots, never()).save(any());
     }
 
     @Test
-    void 報表列表只列現行版並回傳摘要欄位() {
-        when(snapshots.findAllBySupersededAtIsNullOrderByGeneratedAtDesc()).thenReturn(List.of(
+    void 作廢只蓋時間原因與作廢人且統計數字原封不動() {
+        ReportSnapshot snapshot = new ReportSnapshot(ReportType.MONTHLY, START, END, 10L,
+                new BigDecimal("10000"), new BigDecimal("500"), null);
+        Employee operator = new Employee();
+        when(snapshots.findById(1)).thenReturn(Optional.of(snapshot));
+        when(employees.findByAccountId(7)).thenReturn(Optional.of(operator));
+
+        var summary = service.voidSnapshot(1, 7, "  選錯區間  ");
+
+        assertThat(snapshot.isVoided()).isTrue();
+        assertThat(snapshot.getVoidedBy()).isSameAs(operator);
+        assertThat(snapshot.getVoidReason()).isEqualTo("選錯區間");
+        assertThat(snapshot.getOrderCount()).isEqualTo(10L);
+        assertThat(snapshot.getTotalAmount()).isEqualByComparingTo("10000");
+        assertThat(summary.voidedAt()).isNotNull();
+        verify(snapshots).save(snapshot);
+        verify(snapshots, never()).delete(any()); // 快照不提供刪除
+    }
+
+    @Test
+    void 歷史版也可作廢但已作廢的不可重複作廢() {
+        ReportSnapshot old = new ReportSnapshot(ReportType.MONTHLY, START, END, 10L,
+                new BigDecimal("10000"), BigDecimal.ZERO, null);
+        old.markSuperseded(LocalDateTime.of(2026, 9, 1, 0, 10));
+        when(snapshots.findById(2)).thenReturn(Optional.of(old));
+        when(employees.findByAccountId(any())).thenReturn(Optional.empty());
+
+        service.voidSnapshot(2, 7, "   ");
+        assertThat(old.isVoided()).isTrue();
+        assertThat(old.getVoidReason()).isNull(); // 空白原因視為未說明
+        assertThat(old.getSupersededAt()).isNotNull(); // 歷史版身分不變
+
+        assertThatThrownBy(() -> service.voidSnapshot(2, 7, "再作廢一次"))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void 報表列表預設只列現行版且未作廢並回傳摘要欄位() {
+        when(snapshots.findAllBySupersededAtIsNullAndVoidedAtIsNullOrderByGeneratedAtDesc()).thenReturn(List.of(
                 new ReportSnapshot(ReportType.MONTHLY, START, END, 10L,
                         new BigDecimal("10000"), new BigDecimal("500"), null)));
 
-        assertThat(service.listReports()).singleElement()
+        assertThat(service.listReports(false)).singleElement()
                 .satisfies(summary -> {
                     assertThat(summary.reportType()).isEqualTo(ReportType.MONTHLY);
                     assertThat(summary.orderCount()).isEqualTo(10L);
                     assertThat(summary.totalAmount()).isEqualByComparingTo("10000");
                     assertThat(summary.supersededAt()).isNull();
+                    assertThat(summary.voidedAt()).isNull();
                 });
+        verify(snapshots, never()).findAllBySupersededAtIsNullOrderByGeneratedAtDesc();
+    }
+
+    @Test
+    void 報表列表可連已作廢的現行版一起列() {
+        ReportSnapshot voided = new ReportSnapshot(ReportType.DAILY, START, START, 0L,
+                BigDecimal.ZERO, BigDecimal.ZERO, null);
+        voided.markVoided(LocalDateTime.of(2026, 9, 3, 9, 0), null, "測試多按");
+        when(snapshots.findAllBySupersededAtIsNullOrderByGeneratedAtDesc()).thenReturn(List.of(voided));
+
+        assertThat(service.listReports(true)).singleElement()
+                .satisfies(summary -> assertThat(summary.voidedAt()).isNotNull());
     }
 
     @Test

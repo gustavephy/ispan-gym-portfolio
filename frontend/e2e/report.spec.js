@@ -2,7 +2,7 @@ import { statSync } from 'node:fs'
 import { test, expect, ACCOUNTS, loginAs } from './fixtures.js'
 
 /**
- * A7 營運報表：生成快照、檢視、匯出、刪除。
+ * A7 營運報表：生成快照、檢視、匯出、作廢（快照不提供刪除，誤生成只能作廢）。
  *
  * <p>報表是快照式的——生成當下把統計算完寫進 report_snapshot 與三張明細表，
  * 之後讀取不重算。同型別同區間重新生成是 append-only 版本化：新的成為現行版、
@@ -105,20 +105,25 @@ test.describe('A7 營運報表', () => {
     expect(statSync(await csvFile.path()).size).toBeGreaterThan(0)
   })
 
-  test('刪除快照後從下拉選單消失', async ({ page }) => {
+  test('作廢快照後預設從下拉隱藏，勾「顯示已作廢」可回看', async ({ page }) => {
     await generateDailyReport(page)
 
     const selector = page.locator('select').nth(1)
     const before = await selector.locator('option').count()
 
-    // 刪除是 window.confirm
+    // 作廢原因是 window.prompt；accept() 不帶值＝空原因
     page.on('dialog', (d) => d.accept())
-    const deleted = page.waitForResponse(
-      (r) => r.url().includes('/api/admin/reports/') && r.request().method() === 'DELETE',
+    const voided = page.waitForResponse(
+      (r) => /\/api\/admin\/reports\/\d+\/void$/.test(r.url()) && r.request().method() === 'POST',
     )
-    await page.getByRole('button', { name: '刪除' }).click()
-    await deleted
+    await page.getByRole('button', { name: '作廢', exact: true }).click()
+    await voided
 
+    // 快照不刪：預設清單隱藏作廢的；勾選後回來並標示「已作廢」
+    //（歷次殘留的其他作廢快照也會一起回來，所以只驗「至少回到原數量」）
     await expect(selector.locator('option')).toHaveCount(before - 1)
+    await page.getByLabel('顯示已作廢').check()
+    await expect(selector.locator('option', { hasText: '已作廢' })).not.toHaveCount(0)
+    expect(await selector.locator('option').count()).toBeGreaterThanOrEqual(before)
   })
 })

@@ -121,11 +121,16 @@ public class OperationReportService {
         snapshots.markStaleCovering(event.paidDate(), LocalDateTime.now());
     }
 
-    /** 歷史報表列表（只列現行版），新的在前；同區間的歷史版本走 versions() */
-    public List<ReportSummaryResponse> listReports() {
-        return snapshots.findAllBySupersededAtIsNullOrderByGeneratedAtDesc().stream()
-                .map(this::toSummary)
-                .toList();
+    /**
+     * 歷史報表列表（只列現行版），新的在前；同區間的歷史版本走 versions()。
+     * 預設略過已作廢的（誤生成的快照不該混在正常清單裡）；includeVoided 才連作廢的一起列——
+     * 作廢的現行版仍是該區間歷史版本的唯一入口，隱藏它不等於刪掉它。
+     */
+    public List<ReportSummaryResponse> listReports(boolean includeVoided) {
+        List<ReportSnapshot> heads = includeVoided
+                ? snapshots.findAllBySupersededAtIsNullOrderByGeneratedAtDesc()
+                : snapshots.findAllBySupersededAtIsNullAndVoidedAtIsNullOrderByGeneratedAtDesc();
+        return heads.stream().map(this::toSummary).toList();
     }
 
     /**
@@ -144,7 +149,7 @@ public class OperationReportService {
         return new ReportSummaryResponse(s.getId(), s.getReportType(),
                 s.getPeriodStart(), s.getPeriodEnd(), s.getOrderCount(),
                 s.getTotalAmount(), s.getDiscountAmount(), s.getGeneratedAt(),
-                s.getStaleAt(), s.getSupersededAt());
+                s.getStaleAt(), s.getSupersededAt(), s.getVoidedAt());
     }
 
     /** 單份報表含排行明細 */
@@ -155,14 +160,28 @@ public class OperationReportService {
     }
 
     /**
-     * 刪除單份報表（單一版本）；排行明細子項由 cascade 一併刪除。
-     * 刪掉現行版不會讓舊版「復活」為現行——該區間就是沒有現行版，要看就重新生成。
+     * 作廢單份快照（現行版或歷史版皆可）。快照不提供刪除（2026-09-03 定案）：
+     * 報表是稽核紀錄，「當初印出去的數字」連同作廢這件事都要留得下來——
+     * 只蓋作廢時間、作廢人與原因，統計欄位與明細原封不動。
+     * 作廢現行版不會讓舊版「復活」：該區間要看有效數字就重新生成，新版照常把它標 superseded。
+     * 排程判斷「昨日日報是否存在」不分作廢與否——管理者作廢的排程日報不自動補生，尊重人的決定。
+     *
+     * @param operatorAccountId 操作者帳號 id（JWT subject），以 account_id 反查 Employee
+     * @param reason            作廢原因，空白視為未說明
      */
     @Transactional
-    public void delete(Integer reportId) {
+    public ReportSummaryResponse voidSnapshot(Integer reportId, Integer operatorAccountId, String reason) {
         ReportSnapshot snapshot = snapshots.findById(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("找不到報表資料"));
-        snapshots.delete(snapshot);
+        if (snapshot.isVoided()) {
+            throw new BusinessRuleException("此報表快照已作廢");
+        }
+        Employee operator = operatorAccountId == null ? null
+                : employees.findByAccountId(operatorAccountId).orElse(null);
+        String normalizedReason = reason == null || reason.isBlank() ? null : reason.strip();
+        snapshot.markVoided(LocalDateTime.now(), operator, normalizedReason);
+        snapshots.save(snapshot);
+        return toSummary(snapshot);
     }
 
     /**
@@ -388,7 +407,8 @@ public class OperationReportService {
                 s.getPeriodEnd(), s.getOrderCount(), s.getTotalAmount(), s.getDiscountAmount(),
                 s.getGeneratedAt(), s.getStaleAt(), items,
                 statusBreakdown, paymentBreakdown, dailyTotals,
-                s.getRefundCount(), s.getRefundAmount(), s.getNewMemberCount(), s.getNewSubscriptionCount());
+                s.getRefundCount(), s.getRefundAmount(), s.getNewMemberCount(), s.getNewSubscriptionCount(),
+                s.getVoidedAt(), s.getVoidReason());
     }
 
     private List<ReportBreakdownResponse> breakdownOf(ReportSnapshot s, ReportBreakdownDimension dimension) {

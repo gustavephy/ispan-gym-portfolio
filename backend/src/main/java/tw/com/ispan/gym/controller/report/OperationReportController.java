@@ -8,7 +8,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +24,7 @@ import tw.com.ispan.gym.dto.report.TrainerSlotRow;
 import tw.com.ispan.gym.dto.report.ReportDetailResponse;
 import tw.com.ispan.gym.dto.report.ReportSummaryResponse;
 import tw.com.ispan.gym.dto.report.SalesStatsResponse;
+import tw.com.ispan.gym.dto.report.VoidReportRequest;
 import tw.com.ispan.gym.enums.report.ReportItemType;
 import tw.com.ispan.gym.security.CurrentUserProvider;
 import tw.com.ispan.gym.service.report.OperationReportService;
@@ -51,10 +51,11 @@ public class OperationReportController {
         this.currentUser = currentUser;
     }
 
-    /** 歷史報表列表 */
+    /** 歷史報表列表（現行版）；預設不含已作廢，includeVoided=true 連作廢的一起列 */
     @GetMapping
-    public List<ReportSummaryResponse> listReports() {
-        return reportService.listReports();
+    public List<ReportSummaryResponse> listReports(
+            @RequestParam(defaultValue = "false") boolean includeVoided) {
+        return reportService.listReports(includeVoided);
     }
 
     /**
@@ -142,10 +143,14 @@ public class OperationReportController {
         return reportService.generate(request, currentUser.requireCurrentUserId());
     }
 
-    /** 刪除單份歷史報表 */
-    @DeleteMapping("/{reportId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Integer reportId) {
-        reportService.delete(reportId);
+    /**
+     * 作廢單份快照（現行版或歷史版皆可）。快照不提供刪除：報表是稽核紀錄，
+     * 誤生成只能作廢——列表預設隱藏、資料保留，記錄作廢人與原因。body 可省略。
+     */
+    @PostMapping("/{reportId}/void")
+    public ReportSummaryResponse voidReport(@PathVariable Integer reportId,
+                                            @Valid @RequestBody(required = false) VoidReportRequest request) {
+        String reason = request == null ? null : request.reason();
+        return reportService.voidSnapshot(reportId, currentUser.requireCurrentUserId(), reason);
     }
 }

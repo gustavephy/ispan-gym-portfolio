@@ -41,8 +41,12 @@ export const getTrainerUtilization = ({ from, to }) =>
 /** 優惠券成效（即時，看券的整個生命週期），需 ADMIN。不吃期間參數 */
 export const getCouponEffect = () => api.get('/api/admin/reports/coupon-effect')
 
-/** 歷史報表列表（不含明細），需 ADMIN */
-export const getReports = () => api.get('/api/admin/reports')
+/**
+ * 歷史報表列表（不含明細），需 ADMIN。只列現行版；預設不含已作廢，
+ * includeVoided 為 true 才連作廢的一起列（作廢的現行版是該區間歷史版本的入口）
+ */
+export const getReports = ({ includeVoided = false } = {}) =>
+  api.get('/api/admin/reports', { params: { includeVoided: includeVoided || undefined } })
 
 /**
  * 單份報表快照，含排行明細、狀態／付款分佈、每日營收與退款統計，需 ADMIN。
@@ -61,8 +65,12 @@ export const getReportVersions = (reportId) => api.get(`/api/admin/reports/${rep
  */
 export const generateReport = (payload) => api.post('/api/admin/reports', payload)
 
-/** 刪除報表快照，需 ADMIN */
-export const deleteReport = (reportId) => api.delete(`/api/admin/reports/${reportId}`)
+/**
+ * 作廢報表快照（現行版或歷史版皆可），需 ADMIN。快照不提供刪除——報表是稽核紀錄，
+ * 誤生成只能作廢：清單預設隱藏、資料保留，記錄作廢人與原因（reason 選填，最多 200 字）
+ */
+export const voidReport = (reportId, reason) =>
+  api.post(`/api/admin/reports/${reportId}/void`, { reason: reason || null })
 
 /** 下載報表 PDF（回傳 blob，呼叫端自行轉成下載連結），需 ADMIN */
 export const downloadReportPdf = (reportId) =>

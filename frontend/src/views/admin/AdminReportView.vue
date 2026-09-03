@@ -19,7 +19,7 @@ import {
   downloadReportPdf,
   downloadReportCsv,
   generateReport,
-  deleteReport,
+  voidReport,
 } from '@/api/adminReport.js'
 import { notifyApiError } from '@/api/error-bus.js'
 import OperationMessage from '@/components/OperationMessage.vue'
@@ -77,8 +77,13 @@ const selectedReportId = ref(null)
 const detail = ref(null)
 const detailLoading = ref(false)
 
+// 已作廢的快照預設不列（誤生成的不該混在正常清單裡）；勾選才連同作廢的一起列——
+// 作廢的現行版是該區間歷史版本的唯一入口，隱藏不等於消失
+const includeVoided = ref(false)
+watch(includeVoided, () => fetchReports())
+
 // append-only 版本化：主下拉只列現行版；選中後抓同區間全部版本，
-// 有多版時出現版本選單，可回看「當初生成的那份凍結數字」（可下載、不可刪）
+// 有多版時出現版本選單，可回看「當初生成的那份凍結數字」（可下載；不可刪除，誤生成只能作廢）
 const versions = ref([])
 const viewingVersionId = ref(null)
 const viewingHistorical = computed(
@@ -537,14 +542,14 @@ async function fetchStats() {
 
 async function fetchReports() {
   try {
-    const { data } = await getReports()
+    const { data } = await getReports({ includeVoided: includeVoided.value })
     reports.value = data
     // 預設選最新一份；明細與版本清單由 selectedReportId 的 watch 載入。
     // 重生成時 handleGenerate 已先切到新 id（此處值相同不再觸發），那次 watch 已載過
     if (data.length > 0) {
       selectedReportId.value = data[0].id
     } else {
-      // 清單被刪光時要跟著清掉，否則畫面會停留在最後一份已刪除快照的殘留資料
+      // 清單空了（全部作廢且未勾「顯示已作廢」）要跟著清掉，否則畫面會停留在最後一份快照的殘留資料
       selectedReportId.value = null
       viewingVersionId.value = null
       versions.value = []
@@ -594,8 +599,8 @@ async function handleGenerate() {
   generateError.value = null
   try {
     const { data: created } = await generateReport({ reportType: genReportType.value, periodStart, periodEnd })
-    // 同區間重複生成是「刪舊插新」，舊 id 已經不存在——回應一到就先把選取切到新 id，
-    // 不等清單重抓；否則這段空窗內按「下載 PDF」／「刪除」會打到剛被刪掉的舊 id 而 404。
+    // 同區間重複生成後舊版被標 superseded、退出主清單——回應一到就先把選取切到新 id，
+    // 不等清單重抓；否則這段空窗內按「下載 PDF」／「作廢」會打到已被取代的舊版。
     if (created?.id != null) {
       selectedReportId.value = created.id
     }
@@ -608,28 +613,37 @@ async function handleGenerate() {
   }
 }
 
-// ── 刪除目前選取的報表快照 ──────────────────────────────────
-const deleting = ref(false)
+// ── 作廢正在檢視的報表快照 ──────────────────────────────────
+// 快照不提供刪除：報表是稽核紀錄，誤生成（選錯區間、測試多按）只能作廢。
+// 現行版與歷史版都可作廢；作廢後資料保留、清單預設隱藏，作廢人與原因記在快照上。
+const voiding = ref(false)
 
-async function handleDelete() {
-  // 以「目前選中的快照」為準，不用 detail：生成後選取會立刻切到新 id，但 detail 要等重抓
-  // 才更新——這段空窗按刪除會刪到已被覆蓋掉的舊 id（DELETE 回 204 卻什麼都沒刪）
-  const targetId = selectedReportId.value
-  const target = reports.value.find((r) => r.id === targetId) ?? detail.value
+async function handleVoid() {
+  // 以「正在檢視的版本」為準（同 currentReportId）：回看歷史版時作廢的就是那一版。
+  // 用 id 從清單找目標，不用 detail：生成後選取會立刻切到新 id，detail 要等重抓才更新
+  const targetId = currentReportId()
+  const target =
+    versions.value.find((v) => v.id === targetId) ??
+    reports.value.find((r) => r.id === targetId) ??
+    detail.value
   if (!targetId || !target) return
-  const confirmed = window.confirm(
-    `確定要刪除這份報表快照嗎？（${REPORT_TYPE_LABELS[target.reportType] ?? target.reportType}｜${formatDate(target.periodStart)} – ${formatDate(target.periodEnd)}）此動作無法復原。`,
+  const reason = window.prompt(
+    `確定要作廢這份報表快照嗎？（${REPORT_TYPE_LABELS[target.reportType] ?? target.reportType}｜${formatDate(target.periodStart)} – ${formatDate(target.periodEnd)}）\n作廢後資料保留、清單預設隱藏，此動作無法復原。請輸入作廢原因（可留空）：`,
+    '',
   )
-  if (!confirmed) return
+  if (reason === null) return // 按了取消
 
-  deleting.value = true
+  voiding.value = true
   try {
-    await deleteReport(targetId)
+    await voidReport(targetId, reason.trim())
     await fetchReports()
+    // 作廢的是歷史版、或勾了「顯示已作廢」時，選取不會變、watch 不會觸發，這裡自己重抓
+    await fetchVersions(selectedReportId.value)
+    await fetchDetail(viewingVersionId.value ?? selectedReportId.value)
   } catch (e) {
     notifyApiError(e)
   } finally {
-    deleting.value = false
+    voiding.value = false
   }
 }
 
@@ -662,8 +676,7 @@ watch(selectedReportId, (id) => {
 // 轉成下載連結；寫法比照 AiPlanPanel.vue 的 onDownloadPdf
 const downloadingPdf = ref(false)
 
-// 下載以「正在檢視的版本」為準——回看歷史版本時下載的就是當初那份；
-// 刪除仍以現行版為準（歷史版本不開放刪除，見範本的 disabled 條件）
+// 下載與作廢都以「正在檢視的版本」為準——回看歷史版本時下載／作廢的就是當初那份
 const currentReportId = () => viewingVersionId.value ?? selectedReportId.value ?? detail.value?.id
 
 async function onDownloadPdf() {
@@ -870,9 +883,14 @@ onBeforeUnmount(() => {
             <select v-model="selectedReportId" class="filter__input">
               <option v-for="r in reports" :key="r.id" :value="r.id">
                 {{ REPORT_TYPE_LABELS[r.reportType] ?? r.reportType }}｜{{ formatDate(r.periodStart) }} –
-                {{ formatDate(r.periodEnd) }}
+                {{ formatDate(r.periodEnd) }}{{ r.voidedAt ? '｜已作廢' : '' }}
               </option>
             </select>
+          </label>
+          <!-- 快照不刪只作廢：作廢的預設不列，勾選才回來（帶「已作廢」標示） -->
+          <label class="report-picker__field report-picker__check">
+            <input v-model="includeVoided" type="checkbox" />
+            <span class="filter__label">顯示已作廢</span>
           </label>
           <!-- append-only 版本化：同區間被重生成過才會出現，可回看歷史版本 -->
           <label v-if="versions.length > 1" class="report-picker__field">
@@ -883,7 +901,9 @@ onBeforeUnmount(() => {
               @change="fetchDetail(viewingVersionId)"
             >
               <option v-for="v in versions" :key="v.id" :value="v.id">
-                {{ v.supersededAt ? '歷史版' : '現行版' }}｜{{ formatDateTime(v.generatedAt) }} 生成
+                {{ v.supersededAt ? '歷史版' : '現行版' }}｜{{ formatDateTime(v.generatedAt) }} 生成{{
+                  v.voidedAt ? '｜已作廢' : ''
+                }}
               </option>
             </select>
           </label>
@@ -904,13 +924,14 @@ onBeforeUnmount(() => {
           >
             {{ downloadingCsv ? '產生中…' : '排行 CSV' }}
           </button>
+          <!-- 作廢的是正在檢視的版本（歷史版也可）；已作廢的不能再作廢 -->
           <button
             type="button"
             class="btn btn-danger-outline"
-            :disabled="!detail || deleting || viewingHistorical"
-            @click="handleDelete"
+            :disabled="!detail || voiding || !!detail?.voidedAt"
+            @click="handleVoid"
           >
-            {{ deleting ? '刪除中…' : '刪除' }}
+            {{ voiding ? '作廢中…' : detail?.voidedAt ? '已作廢' : '作廢' }}
           </button>
           <button type="button" class="btn btn-accent" @click="toggleGenerateForm">
             {{ showGenerateForm ? '取消' : '+ 產生報表' }}
@@ -961,11 +982,16 @@ onBeforeUnmount(() => {
         <OperationMessage :message="generateError" />
       </div>
 
+      <p v-if="detail?.voidedAt" class="stale-notice stale-notice--void">
+        此快照已於 {{ formatDateTime(detail.voidedAt) }} 作廢{{
+          detail.voidReason ? `（原因：${detail.voidReason}）` : ''
+        }}，數字僅供追溯、不得引用；需要有效數字請重新生成。
+      </p>
       <p v-if="viewingHistorical" class="stale-notice">
-        正在檢視歷史版本——這是當時生成的凍結數字（可下載存證，不可刪除）；
+        正在檢視歷史版本——這是當時生成的凍結數字（可下載存證；誤生成可作廢，紀錄仍保留）；
         現行數字請切回「現行版」。
       </p>
-      <p v-if="detail?.staleAt && !viewingHistorical" class="stale-notice">
+      <p v-if="detail?.staleAt && !viewingHistorical && !detail?.voidedAt" class="stale-notice">
         此報表生成後區間內發生過退款，數字已與現況不符，建議重新生成。
       </p>
 
@@ -1227,6 +1253,16 @@ onBeforeUnmount(() => {
   color: #8a6410;
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
+}
+
+.stale-notice--void {
+  background: #fde8e6;
+  color: #a12f24;
+}
+
+.report-picker__check {
+  gap: 0.35rem;
+  cursor: pointer;
 }
 
 /* ---- 表格 ---- */

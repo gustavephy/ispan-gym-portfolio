@@ -102,6 +102,33 @@ public class ReportSnapshot {
         this.supersededAt = at;
     }
 
+    /**
+     * 作廢時間；null＝有效。快照不提供刪除（2026-09-03 定案）：報表是稽核紀錄，
+     * 誤生成（選錯區間、測試多按）只能「作廢」——清單預設隱藏、資料列與明細原封保留，
+     * 作廢人與原因一併記錄。現行版與歷史版都可作廢；作廢的現行版仍占著「現行版」
+     * 的篩選唯一索引，重生成時照樣被標 superseded 讓位，舊版不會因作廢而「復活」。
+     */
+    @Column(name = "voided_at", columnDefinition = "datetime2")
+    private LocalDateTime voidedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "voided_by_id", foreignKey = @ForeignKey(name = "FK_report_voided_by"))
+    private Employee voidedBy;
+
+    @Column(name = "void_reason", columnDefinition = "nvarchar(200)")
+    private String voidReason;
+
+    public boolean isVoided() {
+        return voidedAt != null;
+    }
+
+    /** 作廢：只蓋時間戳、作廢人與原因，統計欄位與明細一律不動，數字仍可追溯 */
+    public void markVoided(LocalDateTime at, Employee by, String reason) {
+        this.voidedAt = at;
+        this.voidedBy = by;
+        this.voidReason = reason;
+    }
+
     @OneToMany(mappedBy = "snapshot", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("rankNo ASC")
     private List<ReportSalesItem> items = new ArrayList<>();

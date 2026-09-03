@@ -1015,6 +1015,14 @@ class EndpointAuthorizationTest {
     }
 
     @Test
+    void 報表作廢僅限管理者() throws Exception {
+        expectUnauthorizedWhenAnonymous(post("/api/admin/reports/1/void"));
+        expectForbidden(post("/api/admin/reports/1/void"), memberToken());
+        expectForbidden(post("/api/admin/reports/1/void"), employeeToken());
+        expectAuthorized(post("/api/admin/reports/1/void"), adminToken());
+    }
+
+    @Test
     void 後台金流交易紀錄僅限管理者() throws Exception {
         expectUnauthorizedWhenAnonymous(get("/api/admin/payments/transactions"));
         expectForbidden(get("/api/admin/payments/transactions"), memberToken());
