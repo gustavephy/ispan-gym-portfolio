@@ -76,6 +76,8 @@ services:
       # 註冊驗證信的寄件憑證（Gmail 應用程式密碼）；沒設時寄信功能停用，其餘不受影響
       - MAIL_USERNAME=${MAIL_USERNAME:-}
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      # Gemini 金鑰（AI 課表／AI 顧問）；沒設時 AI 功能回覆服務暫停，其餘不受影響
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
 
   frontend:
     build:
