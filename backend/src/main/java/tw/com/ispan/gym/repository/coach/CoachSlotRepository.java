@@ -85,12 +85,17 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
          * PENDING 的預約）、COMPLETED（已完成，對應 s.status=BOOKED 且該時段目前有 COMPLETED
          * 的預約）——後兩者只看 status 欄位分不出來，需要額外用 EXISTS 檢查關聯的 CoachBooking。
          * status／startAtFrom／startAtTo 皆為 null 代表不篩選該條件。
+         *
+         * 另外固定排除「過期又沒人預約」的廢資料：AVAILABLE 狀態且 endAt 已經過去的時段，
+         * 對教練來說已經沒有任何操作意義，不該一直留在清單裡；BOOKED／CANCELLED 的時段即使
+         * 是過去的也保留，因為那是實際發生過的預約歷史紀錄。
          */
         @Query("""
                         SELECT s FROM CoachSlot s
                         WHERE s.trainer.id = :trainerId
                                 AND (:startAtFrom IS NULL OR s.startAt >= :startAtFrom)
                                 AND (:startAtTo IS NULL OR s.startAt < :startAtTo)
+                                AND (s.status <> tw.com.ispan.gym.enums.coach.SlotStatus.AVAILABLE OR s.endAt > CURRENT_TIMESTAMP)
                                 AND (
                                         :status IS NULL
                                         OR (:status = 'AVAILABLE' AND s.status = tw.com.ispan.gym.enums.coach.SlotStatus.AVAILABLE)
