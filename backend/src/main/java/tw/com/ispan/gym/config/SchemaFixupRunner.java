@@ -1279,11 +1279,11 @@ public class SchemaFixupRunner implements CommandLineRunner {
         }
         if (tableExists("member")) {
             fixReversedName("member", "wendy-test@local.test", "Wen", "Dy", "斐凝", "測試");
-            fixReversedName("member", "emp-admin@local.test", "Ad", "Min", "管理", "測試");
+            fixReversedName("member", "emp-admin@local.test", "Ad", "Min", "威力", "林");
             fixReversedName("member", "emp-trainer@local.test", "Trai", "Ner", "教練", "測試");
         }
         if (tableExists("employee")) {
-            fixReversedName("employee", "emp-admin@local.test", "管理", "員", "管理", "測試");
+            fixReversedName("employee", "emp-admin@local.test", "管理", "員", "威力", "林");
             fixReversedName("employee", "emp-trainer@local.test", "教", "練", "教練", "測試");
         }
         // trainer 的姓名是建立當下自 employee 複製的快照，employee 改了要跟著對齊，
