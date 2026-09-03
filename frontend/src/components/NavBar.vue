@@ -85,6 +85,8 @@
       requires: 'ADMIN',
       links: [
         { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' },
+        { to: '/admin/analytics', label: '營運分析', requires: 'ADMIN' },
+        { to: '/admin/system', label: '系統監控', requires: 'ADMIN' },
         { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
         { to: '/admin/employees', label: '員工管理', requires: 'ADMIN' },
         { to: '/admin/trainers', label: '教練管理', requires: 'ADMIN' },
@@ -234,7 +236,9 @@
       key: 'reports',
       label: '營運數據',
       links: [
-        { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' }
+        { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' },
+        { to: '/admin/analytics', label: '營運分析', requires: 'ADMIN' },
+        { to: '/admin/system', label: '系統監控', requires: 'ADMIN' }
       ]
     },
     {

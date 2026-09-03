@@ -16,7 +16,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,19 +31,21 @@ import tw.com.ispan.gym.enums.report.ReportType;
  * 營運報表快照主檔。
  *
  * 快照語意：生成當下以真實訂單算出的結算結果，寫入後即凍結——
- * 之後訂單被退款/取消不回頭改快照；需要修正時整份重算
- * （同一交易內刪舊插新，見 OperationReportService.generate）。
+ * 之後訂單被退款/取消不回頭改快照；需要修正時整份重算。
  *
- * 冪等由 UX_report_type_period 保證：同型別同區間永遠只有一份，
- * 排程重跑或兩位管理員同時觸發都不會產生重複報表。
+ * append-only 版本化（2026-09-03 定案）：同型別同區間重新生成不刪舊版，
+ * 舊版蓋上 supersededAt 成為歷史版本、新版為現行版（supersededAt IS NULL）。
+ * 「當初印出去的那份數字」永遠調得出來——財務對帳的硬需求。
+ *
+ * 「現行版唯一」由篩選唯一索引 UX_report_type_period_current 保證
+ * （UNIQUE CONSTRAINT 帶不了 WHERE，JPA 表達不了，見 SchemaFixupRunner），
+ * 排程重跑或兩位管理員同時觸發都不會產生兩份現行版。
  *
  * periodStart / periodEnd 為「含頭含尾」的日期區間（對人類友善），
  * 查詢訂單時由 service 轉為 [start 00:00, end+1 00:00) 的半開區間。
  */
 @Entity
-@Table(name = "report_snapshot",
-       uniqueConstraints = @UniqueConstraint(name = "UX_report_type_period",
-               columnNames = {"report_type", "period_start", "period_end"}))
+@Table(name = "report_snapshot")
 @Getter
 @EntityListeners(AuditingEntityListener.class)
 public class ReportSnapshot {
@@ -86,11 +87,20 @@ public class ReportSnapshot {
 
     /**
      * 生成後、涵蓋區間內發生退款的時點；null＝數字仍與訂單一致。
-     * 由 RefundCompletedEvent 的 listener 標記，提示管理者重新生成；
-     * 重算是刪舊插新，新快照自然回到 null，不需清除邏輯。
+     * 由 RefundCompletedEvent 的 listener 標記（只標現行版），提示管理者重新生成；
+     * 重算後新版自然回到 null，不需清除邏輯。
      */
     @Column(name = "stale_at", columnDefinition = "datetime2")
     private LocalDateTime staleAt;
+
+    /** 被較新版本取代的時間；null＝現行版。歷史版本從此唯讀（stale 標記也不再打上來） */
+    @Column(name = "superseded_at", columnDefinition = "datetime2")
+    private LocalDateTime supersededAt;
+
+    /** append-only 版本化：被新版取代時蓋上時間戳讓出「現行版」篩選唯一索引，不刪列 */
+    public void markSuperseded(LocalDateTime at) {
+        this.supersededAt = at;
+    }
 
     @OneToMany(mappedBy = "snapshot", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("rankNo ASC")

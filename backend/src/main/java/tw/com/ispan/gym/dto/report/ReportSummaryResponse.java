@@ -5,7 +5,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import tw.com.ispan.gym.enums.report.ReportType;
 
-/** 歷史報表列表列。staleAt 非 null＝生成後涵蓋區間內發生過退款，建議重新生成 */
+/**
+ * 歷史報表列表列。staleAt 非 null＝生成後涵蓋區間內發生過退款，建議重新生成；
+ * supersededAt 非 null＝已被較新版本取代的歷史版本（列表端點只回現行版，
+ * 版本清單端點兩者都回）。
+ */
 public record ReportSummaryResponse(
         Integer id,
         ReportType reportType,
@@ -15,5 +19,6 @@ public record ReportSummaryResponse(
         BigDecimal totalAmount,
         BigDecimal discountAmount,
         LocalDateTime generatedAt,
-        LocalDateTime staleAt) {
+        LocalDateTime staleAt,
+        LocalDateTime supersededAt) {
 }

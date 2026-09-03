@@ -25,4 +25,19 @@ public interface CouponRepository extends JpaRepository<Coupon, Integer> {
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("SELECT c FROM Coupon c WHERE c.couponId =:couponId")
 	Optional<Coupon> findByIdForUpdate(@Param("couponId") Integer couponId);
+
+	/**
+	 * 優惠券成效聚合（營運報表用）：各券的領取與使用數。
+	 * LEFT JOIN 讓沒人領過的券也產生列；成效看整個生命週期，不做期間篩選。
+	 */
+	@Query("""
+			SELECT new tw.com.ispan.gym.dto.report.CouponEffectRow(
+			    c.name, c.code, c.totalQuantity, c.claimedQuantity,
+			    SUM(CASE WHEN mc.status = 'USED' THEN 1L ELSE 0L END))
+			FROM Coupon c
+			LEFT JOIN MemberCoupon mc ON mc.coupon = c
+			GROUP BY c.couponId, c.name, c.code, c.totalQuantity, c.claimedQuantity
+			ORDER BY c.claimedQuantity DESC
+			""")
+	List<tw.com.ispan.gym.dto.report.CouponEffectRow> aggregateEffect();
 }

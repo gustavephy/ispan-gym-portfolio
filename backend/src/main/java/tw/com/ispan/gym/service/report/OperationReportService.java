@@ -9,12 +9,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.IntStream;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.com.ispan.gym.dto.report.DailyRevenueRow;
+import tw.com.ispan.gym.dto.report.CouponEffectRow;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
+import tw.com.ispan.gym.dto.report.GroupClassFillRow;
+import tw.com.ispan.gym.dto.report.MemberDailyRow;
+import tw.com.ispan.gym.dto.report.TrainerSlotRow;
 import tw.com.ispan.gym.dto.report.OrderOverviewResponse;
 import tw.com.ispan.gym.dto.report.OrderPeriodSummary;
 import tw.com.ispan.gym.dto.report.ProductSalesRow;
@@ -37,6 +42,9 @@ import tw.com.ispan.gym.enums.report.ReportItemType;
 import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
+import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
+import tw.com.ispan.gym.repository.coupon.CouponRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
@@ -80,11 +88,16 @@ public class OperationReportService {
     private final PaymentRefundRepository refundRepository;
     private final MemberRepository members;
     private final MemberSubscriptionRepository subscriptions;
+    private final GroupClassSessionRepository groupClassSessions;
+    private final CoachSlotRepository coachSlots;
+    private final CouponRepository coupons;
 
     public OperationReportService(ReportSnapshotRepository snapshots, OrderRepository orders,
                                   OrderItemRepository orderItems, EmployeeRepository employees,
                                   PaymentRefundRepository refundRepository, MemberRepository members,
-                                  MemberSubscriptionRepository subscriptions) {
+                                  MemberSubscriptionRepository subscriptions,
+                                  GroupClassSessionRepository groupClassSessions,
+                                  CoachSlotRepository coachSlots, CouponRepository coupons) {
         this.snapshots = snapshots;
         this.orders = orders;
         this.orderItems = orderItems;
@@ -92,6 +105,9 @@ public class OperationReportService {
         this.refundRepository = refundRepository;
         this.members = members;
         this.subscriptions = subscriptions;
+        this.groupClassSessions = groupClassSessions;
+        this.coachSlots = coachSlots;
+        this.coupons = coupons;
     }
 
     /**
@@ -105,13 +121,30 @@ public class OperationReportService {
         snapshots.markStaleCovering(event.paidDate(), LocalDateTime.now());
     }
 
-    /** 歷史報表列表，新的在前 */
+    /** 歷史報表列表（只列現行版），新的在前；同區間的歷史版本走 versions() */
     public List<ReportSummaryResponse> listReports() {
-        return snapshots.findAllByOrderByGeneratedAtDesc().stream()
-                .map(s -> new ReportSummaryResponse(s.getId(), s.getReportType(),
-                        s.getPeriodStart(), s.getPeriodEnd(), s.getOrderCount(),
-                        s.getTotalAmount(), s.getDiscountAmount(), s.getGeneratedAt(), s.getStaleAt()))
+        return snapshots.findAllBySupersededAtIsNullOrderByGeneratedAtDesc().stream()
+                .map(this::toSummary)
                 .toList();
+    }
+
+    /**
+     * 指定快照所屬（型別＋區間）的全部版本，新的在前——現行版第一筆、其後是被取代的歷史版本。
+     * append-only 版本化：重生成不刪舊版，這裡就是「當初印出去那份」的入口。
+     */
+    public List<ReportSummaryResponse> versions(Integer reportId) {
+        ReportSnapshot any = snapshots.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException("找不到報表資料"));
+        return snapshots.findAllByReportTypeAndPeriodStartAndPeriodEndOrderByGeneratedAtDesc(
+                        any.getReportType(), any.getPeriodStart(), any.getPeriodEnd())
+                .stream().map(this::toSummary).toList();
+    }
+
+    private ReportSummaryResponse toSummary(ReportSnapshot s) {
+        return new ReportSummaryResponse(s.getId(), s.getReportType(),
+                s.getPeriodStart(), s.getPeriodEnd(), s.getOrderCount(),
+                s.getTotalAmount(), s.getDiscountAmount(), s.getGeneratedAt(),
+                s.getStaleAt(), s.getSupersededAt());
     }
 
     /** 單份報表含排行明細 */
@@ -121,7 +154,10 @@ public class OperationReportService {
         return toDetail(snapshot);
     }
 
-    /** 刪除單份歷史報表；排行明細子項由 cascade 一併刪除 */
+    /**
+     * 刪除單份報表（單一版本）；排行明細子項由 cascade 一併刪除。
+     * 刪掉現行版不會讓舊版「復活」為現行——該區間就是沒有現行版，要看就重新生成。
+     */
     @Transactional
     public void delete(Integer reportId) {
         ReportSnapshot snapshot = snapshots.findById(reportId)
@@ -131,8 +167,9 @@ public class OperationReportService {
 
     /**
      * 以真實訂單結算並寫入快照。
-     * 同型別同區間重新生成＝同一交易內刪舊插新，對外永遠只看得到一份完整的；
-     * 併發觸發由 UX_report_type_period 唯一約束作最後防線。
+     * 同型別同區間重新生成＝append-only 版本化：舊版蓋上 supersededAt 成為歷史版本
+     * （不刪，「當初印出去的數字」永遠可追溯），新版成為現行版；
+     * 併發觸發由篩選唯一索引 UX_report_type_period_current 作最後防線。
      *
      * @param operatorAccountId 手動觸發的操作者帳號 id（JWT subject）；排程觸發傳 null。
      *                          身分域拆分後操作者記 Employee，以 account_id 反查。
@@ -143,11 +180,11 @@ public class OperationReportService {
         LocalDateTime from = request.periodStart().atStartOfDay();
         LocalDateTime to = request.periodEnd().plusDays(1).atStartOfDay();
 
-        snapshots.findByReportTypeAndPeriodStartAndPeriodEnd(
+        snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(
                         request.reportType(), request.periodStart(), request.periodEnd())
                 .ifPresent(existing -> {
-                    snapshots.delete(existing);
-                    snapshots.flush(); // 先送出 DELETE，避免新快照撞唯一約束
+                    existing.markSuperseded(LocalDateTime.now());
+                    snapshots.saveAndFlush(existing); // 先送出 UPDATE 讓出「現行版」篩選唯一索引，新版才插得進去
                 });
 
         OrderPeriodSummary summary = orders.summarizePeriod(from, to, REVENUE_STATUSES);
@@ -175,9 +212,9 @@ public class OperationReportService {
      * 會變成兩個口徑；過時一律靠 staleAt 警示、重新生成解決。
      */
     private void attachExtendedStats(ReportSnapshot snapshot, LocalDateTime from, LocalDateTime to) {
-        for (DailyRevenueRow row : orders.aggregateDailyRevenue(from, to, REVENUE_STATUSES)) {
+        for (DailyRevenueRow row : dailyRevenueBuckets(from, to)) {
             snapshot.addDailyTotal(new ReportDailyTotal(snapshot, row.statDate(),
-                    row.orderCount(), zeroIfNull(row.revenue())));
+                    row.orderCount(), row.revenue()));
         }
         // 分佈口徑同 getOrderOverview：下單日 createdAt（看訂單量，非營收歸屬）
         for (Object[] row : orders.aggregateByStatus(from, to)) {
@@ -245,8 +282,64 @@ public class OperationReportService {
             countByPaymentMethod.put((String) row[0], (Long) row[1]);
         }
 
+        // 退款與新會員／新訂閱：口徑同 attachExtendedStats（含無退款時投影回 null 的正規化）
+        ReportRefundSummary refunds = refundRepository.summarizeCompleted(from, to);
+        long refundCount = refunds == null || refunds.refundCount() == null ? 0L : refunds.refundCount();
+        BigDecimal refundAmount = refunds == null ? BigDecimal.ZERO : zeroIfNull(refunds.refundAmount());
+
         return new OrderOverviewResponse(from, to, totalOrders, totalRevenue, countByStatus, revenueByStatus,
-                countByPaymentMethod);
+                countByPaymentMethod, refundCount, refundAmount,
+                members.countCreatedBetween(from, to), subscriptions.countCreatedBetween(from, to));
+    }
+
+    /** 團課滿座率（即時，不落快照）：時間軸為場次開始時間，取消場次不計 */
+    public List<GroupClassFillRow> groupClassFill(LocalDate periodStart, LocalDate periodEnd) {
+        validatePeriod(periodStart, periodEnd);
+        return groupClassSessions.aggregateFillRate(
+                periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay());
+    }
+
+    /** 每日新會員趨勢（即時，不落快照）；無人註冊的日期不產生列。Java 端分桶，原因同 dailyRevenueBuckets */
+    public List<MemberDailyRow> memberGrowth(LocalDate periodStart, LocalDate periodEnd) {
+        validatePeriod(periodStart, periodEnd);
+        Map<LocalDate, Long> byDay = new TreeMap<>();
+        for (LocalDateTime createdAt : members.findCreatedAtBetween(
+                periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay())) {
+            byDay.merge(createdAt.toLocalDate(), 1L, Long::sum);
+        }
+        return byDay.entrySet().stream()
+                .map(e -> new MemberDailyRow(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    /**
+     * 每日營收分桶。必須在 Java 端以 paidAt.toLocalDate() 分桶，不能在 DB 端 GROUP BY CAST：
+     * hibernate.jdbc.time_zone=UTC 讓 DB 存的是 UTC 牆鐘，DB 截日期會把台北 08:00 前的
+     * 付款歸到前一天（2026-09-01 以真實快照驗出）；Hibernate 讀回的 paidAt 已位移回台北牆鐘。
+     */
+    private List<DailyRevenueRow> dailyRevenueBuckets(LocalDateTime from, LocalDateTime to) {
+        Map<LocalDate, Long> countByDay = new TreeMap<>();
+        Map<LocalDate, BigDecimal> revenueByDay = new TreeMap<>();
+        for (Object[] row : orders.findPaidAtAndAmount(from, to, REVENUE_STATUSES)) {
+            LocalDate day = ((LocalDateTime) row[0]).toLocalDate();
+            countByDay.merge(day, 1L, Long::sum);
+            revenueByDay.merge(day, zeroIfNull((BigDecimal) row[1]), BigDecimal::add);
+        }
+        return countByDay.entrySet().stream()
+                .map(e -> new DailyRevenueRow(e.getKey(), e.getValue(), revenueByDay.get(e.getKey())))
+                .toList();
+    }
+
+    /** 教練時段使用率（即時，不落快照）：時間軸為時段開始時間，取消時段不計 */
+    public List<TrainerSlotRow> trainerUtilization(LocalDate periodStart, LocalDate periodEnd) {
+        validatePeriod(periodStart, periodEnd);
+        return coachSlots.aggregateUtilization(
+                periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay());
+    }
+
+    /** 優惠券成效（即時，不落快照）：看券的整個生命週期，不隨期間篩選 */
+    public List<CouponEffectRow> couponEffect() {
+        return coupons.aggregateEffect();
     }
 
     /**

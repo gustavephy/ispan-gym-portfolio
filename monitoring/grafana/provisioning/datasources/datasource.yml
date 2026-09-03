@@ -1,0 +1,9 @@
+# 自動佈建資料來源：Grafana 起來就接好 Prometheus，Demo 不用手動點設定
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: gym-prom
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true

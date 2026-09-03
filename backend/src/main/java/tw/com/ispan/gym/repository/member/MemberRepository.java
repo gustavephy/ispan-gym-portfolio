@@ -26,6 +26,16 @@ public interface MemberRepository extends JpaRepository<Member, Integer> {
                              @Param("to") java.time.LocalDateTime to);
 
     /**
+     * 期間內新會員的建立時間原始列（報表趨勢用）；半開區間 [from, to)。
+     * 日期分桶由 OperationReportService 在 Java 端做，不能在 DB 端 CAST 截日期，
+     * 原因見 OrderRepository.findPaidAtAndAmount：jdbc.time_zone=UTC 下 DB 截的是 UTC 日期。
+     */
+    @Query("SELECT m.createdAt FROM Member m WHERE m.createdAt >= :from AND m.createdAt < :to")
+    java.util.List<java.time.LocalDateTime> findCreatedAtBetween(
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to);
+
+    /**
      * 依 account id 悲觀鎖定：自助修改個資專用。刻意不透過 findByAccountId() 先載入，
      * 避免同一 transaction 內 Member 被 Persistence Context 快取後，之後即使改用鎖定查詢
      * 命中同一列，Hibernate 仍回傳先前那個未鎖定讀到的舊物件、不會用新結果覆蓋欄位值，

@@ -17,7 +17,6 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import tw.com.ispan.gym.dto.report.DailyRevenueRow;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
 import tw.com.ispan.gym.dto.report.OrderOverviewResponse;
 import tw.com.ispan.gym.dto.report.OrderPeriodSummary;
@@ -36,7 +35,13 @@ import tw.com.ispan.gym.enums.report.ReportType;
 import tw.com.ispan.gym.event.order.RefundCompletedEvent;
 import tw.com.ispan.gym.exception.BusinessRuleException;
 import tw.com.ispan.gym.exception.ResourceNotFoundException;
+import tw.com.ispan.gym.dto.report.CouponEffectRow;
+import tw.com.ispan.gym.dto.report.GroupClassFillRow;
+import tw.com.ispan.gym.dto.report.TrainerSlotRow;
 import tw.com.ispan.gym.dto.report.ReportRefundSummary;
+import tw.com.ispan.gym.repository.coach.CoachSlotRepository;
+import tw.com.ispan.gym.repository.coach.GroupClassSessionRepository;
+import tw.com.ispan.gym.repository.coupon.CouponRepository;
 import tw.com.ispan.gym.repository.employee.EmployeeRepository;
 import tw.com.ispan.gym.repository.member.MemberRepository;
 import tw.com.ispan.gym.repository.member.MemberSubscriptionRepository;
@@ -50,7 +55,8 @@ import tw.com.ispan.gym.repository.report.ReportSnapshotRepository;
  *
  * 涵蓋類別註解列出的統計口徑：計入營收的三種狀態、日期區間轉半開區間
  * （end 要 +1 天才含尾）、品項排行三分來源的合併與金額降冪、
- * 區間驗證（起訖顛倒／超過上限）、重新生成時先刪後插，以及退款事件標記快照過時。
+ * 區間驗證（起訖顛倒／超過上限）、重新生成時的 append-only 版本化（舊版標記
+ * superseded、不刪），以及退款事件標記快照過時。
  *
  * 聚合本身是 JPQL，這裡只驗證「service 有沒有用正確的參數去查、拿到結果後怎麼組裝」，
  * SQL 正確性要靠實際資料庫驗證。
@@ -67,8 +73,12 @@ class OperationReportServiceTest {
     private final PaymentRefundRepository refunds = mock(PaymentRefundRepository.class);
     private final MemberRepository members = mock(MemberRepository.class);
     private final MemberSubscriptionRepository subscriptions = mock(MemberSubscriptionRepository.class);
+    private final GroupClassSessionRepository groupClassSessions = mock(GroupClassSessionRepository.class);
+    private final CoachSlotRepository coachSlots = mock(CoachSlotRepository.class);
+    private final CouponRepository coupons = mock(CouponRepository.class);
     private final OperationReportService service = new OperationReportService(
-            snapshots, orders, orderItems, employees, refunds, members, subscriptions);
+            snapshots, orders, orderItems, employees, refunds, members, subscriptions, groupClassSessions,
+            coachSlots, coupons);
 
     // === 共用測試資料 ========================================================
 
@@ -86,7 +96,7 @@ class OperationReportServiceTest {
 
     private void stubSnapshotSaveReturnsArgument() {
         when(snapshots.save(any(ReportSnapshot.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEnd(any(), any(), any()))
+        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(any(), any(), any()))
                 .thenReturn(Optional.empty());
     }
 
@@ -150,19 +160,21 @@ class OperationReportServiceTest {
     }
 
     @Test
-    void 同型別同區間重新生成先刪舊再插新() {
+    void 同型別同區間重新生成舊版標記superseded新版為現行不刪舊() {
         stubEmptyAggregates();
         ReportSnapshot existing = new ReportSnapshot(ReportType.MONTHLY, START, END, 5L,
                 new BigDecimal("1000"), BigDecimal.ZERO, null);
-        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEnd(ReportType.MONTHLY, START, END))
-                .thenReturn(Optional.of(existing));
+        when(snapshots.findByReportTypeAndPeriodStartAndPeriodEndAndSupersededAtIsNull(
+                ReportType.MONTHLY, START, END)).thenReturn(Optional.of(existing));
         when(snapshots.save(any(ReportSnapshot.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(snapshots.saveAndFlush(any(ReportSnapshot.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.generate(request(), null);
 
-        verify(snapshots).delete(existing);
-        // 先 flush 送出 DELETE，新快照才不會撞唯一約束
-        verify(snapshots).flush();
+        // append-only：舊版不刪、蓋上 supersededAt；先 flush 讓出「現行版」篩選唯一索引
+        assertThat(existing.getSupersededAt()).isNotNull();
+        verify(snapshots).saveAndFlush(existing);
+        verify(snapshots, never()).delete(any());
         verify(snapshots).save(any(ReportSnapshot.class));
     }
 
@@ -172,9 +184,11 @@ class OperationReportServiceTest {
     void 延伸統計與總覽同口徑一併固化進快照() {
         stubEmptyAggregates();
         stubSnapshotSaveReturnsArgument();
-        when(orders.aggregateDailyRevenue(any(), any(), any())).thenReturn(List.of(
-                new DailyRevenueRow(LocalDate.of(2026, 8, 1), 2L, new BigDecimal("3000")),
-                new DailyRevenueRow(LocalDate.of(2026, 8, 2), 1L, new BigDecimal("1200"))));
+        // 原始列由 service 在 Java 端分桶：8/1 兩筆合 3000、8/2 一筆 1200
+        when(orders.findPaidAtAndAmount(any(), any(), any())).thenReturn(List.<Object[]>of(
+                new Object[] { LocalDateTime.of(2026, 8, 1, 10, 0), new BigDecimal("1800") },
+                new Object[] { LocalDateTime.of(2026, 8, 1, 14, 30), new BigDecimal("1200") },
+                new Object[] { LocalDateTime.of(2026, 8, 2, 9, 0), new BigDecimal("1200") }));
         when(orders.aggregateByStatus(any(), any())).thenReturn(List.<Object[]>of(
                 new Object[] { OrderStatus.PAID, 3L, new BigDecimal("4200") },
                 new Object[] { OrderStatus.CANCELLED, 1L, new BigDecimal("500") }));
@@ -187,9 +201,12 @@ class OperationReportServiceTest {
 
         ReportDetailResponse response = service.generate(request(), null);
 
-        // 每日營收：趨勢資料隨快照凍結，讀取時不重算
+        // 每日營收：趨勢資料隨快照凍結，讀取時不重算；同日多筆要合併加總
         assertThat(response.dailyTotals()).extracting(ReportDailyTotalResponse::statDate)
                 .containsExactly(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 2));
+        assertThat(response.dailyTotals()).extracting(ReportDailyTotalResponse::orderCount)
+                .containsExactly(2L, 1L);
+        assertThat(response.dailyTotals().get(0).revenue()).isEqualByComparingTo("3000");
         // 兩種分佈依維度分流，不混在同一份清單
         assertThat(response.statusBreakdown()).extracting(ReportBreakdownResponse::itemKey)
                 .containsExactly("PAID", "CANCELLED");
@@ -208,10 +225,28 @@ class OperationReportServiceTest {
 
         service.generate(request(), null);
 
-        verify(orders).aggregateDailyRevenue(
+        verify(orders).findPaidAtAndAmount(
                 eq(LocalDate.of(2026, 8, 1).atStartOfDay()),
                 eq(LocalDate.of(2026, 9, 1).atStartOfDay()),
                 eq(List.of(OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.COMPLETED)));
+    }
+
+    @Test
+    void 台北清晨付款分到付款當日不因UTC存放歸前一天() {
+        stubEmptyAggregates();
+        stubSnapshotSaveReturnsArgument();
+        // Hibernate 讀回的 paidAt 是台北牆鐘：8/31 07:00 在 DB 實際存成 UTC 8/30 23:00，
+        // 若在 DB 端 CAST 截日期會錯歸 8/30（真實快照 #3003 驗出的 bug）——分桶必須在 Java 端做。
+        // mock 擋在 repository 介面，這裡守的是「service 用讀回的牆鐘時間分桶」這個口徑
+        when(orders.findPaidAtAndAmount(any(), any(), any())).thenReturn(List.<Object[]>of(
+                new Object[] { LocalDateTime.of(2026, 8, 31, 7, 0), new BigDecimal("999") }));
+
+        ReportDetailResponse response = service.generate(request(), null);
+
+        assertThat(response.dailyTotals()).singleElement().satisfies(d -> {
+            assertThat(d.statDate()).isEqualTo(LocalDate.of(2026, 8, 31));
+            assertThat(d.revenue()).isEqualByComparingTo("999");
+        });
     }
 
     @Test
@@ -404,6 +439,69 @@ class OperationReportServiceTest {
 
         assertThat(overview.totalRevenue()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(overview.revenueByStatus()).containsEntry("PAID", BigDecimal.ZERO);
+        // 退款投影未 stub（回 null）也要正規化為零，口徑同 attachExtendedStats
+        assertThat(overview.refundCount()).isZero();
+        assertThat(overview.refundAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void 團課滿座率與會員成長皆以半開區間查詢且起訖顛倒會被擋下() {
+        LocalDateTime from = START.atStartOfDay();
+        LocalDateTime to = END.plusDays(1).atStartOfDay();
+        when(groupClassSessions.aggregateFillRate(from, to))
+                .thenReturn(List.of(new GroupClassFillRow("熱瑜珈", 4L, 30L, 40L)));
+        // 兩筆同日不同時刻的註冊，Java 端分桶後合成一列
+        when(members.findCreatedAtBetween(from, to))
+                .thenReturn(List.of(START.atTime(9, 30), START.atTime(23, 5)));
+
+        assertThat(service.groupClassFill(START, END)).hasSize(1)
+                .first().satisfies(row -> assertThat(row.bookedTotal()).isEqualTo(30L));
+        assertThat(service.memberGrowth(START, END)).hasSize(1)
+                .first().satisfies(row -> {
+                    assertThat(row.statDate()).isEqualTo(START);
+                    assertThat(row.newMembers()).isEqualTo(2L);
+                });
+
+        assertThatThrownBy(() -> service.groupClassFill(END, START))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThatThrownBy(() -> service.memberGrowth(END, START))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void 教練使用率有期間驗證而優惠券成效不分期間() {
+        LocalDateTime from = START.atStartOfDay();
+        LocalDateTime to = END.plusDays(1).atStartOfDay();
+        when(coachSlots.aggregateUtilization(from, to))
+                .thenReturn(List.of(new TrainerSlotRow("林志強", 10L, 7L)));
+        when(coupons.aggregateEffect())
+                .thenReturn(List.of(new CouponEffectRow("新春折扣", "CNY100", 100, 60, 25L)));
+
+        assertThat(service.trainerUtilization(START, END)).hasSize(1)
+                .first().satisfies(row -> assertThat(row.bookedSlots()).isEqualTo(7L));
+        assertThat(service.couponEffect()).hasSize(1)
+                .first().satisfies(row -> assertThat(row.usedCount()).isEqualTo(25L));
+
+        assertThatThrownBy(() -> service.trainerUtilization(END, START))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void 訂單總覽帶回退款與新會員新訂閱數() {
+        LocalDateTime from = START.atStartOfDay();
+        LocalDateTime to = END.plusDays(1).atStartOfDay();
+        when(orders.aggregateByStatus(from, to)).thenReturn(List.of());
+        when(orders.aggregateByPaymentMethod(from, to)).thenReturn(List.of());
+        when(refunds.summarizeCompleted(from, to)).thenReturn(new ReportRefundSummary(2L, new BigDecimal("800")));
+        when(members.countCreatedBetween(from, to)).thenReturn(5L);
+        when(subscriptions.countCreatedBetween(from, to)).thenReturn(3L);
+
+        OrderOverviewResponse overview = service.getOrderOverview(from, to);
+
+        assertThat(overview.refundCount()).isEqualTo(2L);
+        assertThat(overview.refundAmount()).isEqualByComparingTo("800");
+        assertThat(overview.newMemberCount()).isEqualTo(5L);
+        assertThat(overview.newSubscriptionCount()).isEqualTo(3L);
     }
 
     // === listReports() / getReport() / delete() ================================
@@ -427,8 +525,8 @@ class OperationReportServiceTest {
     }
 
     @Test
-    void 報表列表回傳摘要欄位() {
-        when(snapshots.findAllByOrderByGeneratedAtDesc()).thenReturn(List.of(
+    void 報表列表只列現行版並回傳摘要欄位() {
+        when(snapshots.findAllBySupersededAtIsNullOrderByGeneratedAtDesc()).thenReturn(List.of(
                 new ReportSnapshot(ReportType.MONTHLY, START, END, 10L,
                         new BigDecimal("10000"), new BigDecimal("500"), null)));
 
@@ -437,7 +535,27 @@ class OperationReportServiceTest {
                     assertThat(summary.reportType()).isEqualTo(ReportType.MONTHLY);
                     assertThat(summary.orderCount()).isEqualTo(10L);
                     assertThat(summary.totalAmount()).isEqualByComparingTo("10000");
+                    assertThat(summary.supersededAt()).isNull();
                 });
+    }
+
+    @Test
+    void 版本清單回傳同區間全部版本且現行版在前() {
+        ReportSnapshot current = new ReportSnapshot(ReportType.MONTHLY, START, END, 12L,
+                new BigDecimal("12000"), BigDecimal.ZERO, null);
+        ReportSnapshot old = new ReportSnapshot(ReportType.MONTHLY, START, END, 10L,
+                new BigDecimal("10000"), BigDecimal.ZERO, null);
+        old.markSuperseded(LocalDateTime.of(2026, 9, 1, 0, 10));
+        when(snapshots.findById(7)).thenReturn(Optional.of(current));
+        when(snapshots.findAllByReportTypeAndPeriodStartAndPeriodEndOrderByGeneratedAtDesc(
+                ReportType.MONTHLY, START, END)).thenReturn(List.of(current, old));
+
+        var versions = service.versions(7);
+
+        assertThat(versions).hasSize(2);
+        assertThat(versions.get(0).supersededAt()).isNull(); // 現行版
+        assertThat(versions.get(1).supersededAt()).isNotNull(); // 歷史版本仍可讀
+        assertThat(versions.get(1).totalAmount()).isEqualByComparingTo("10000");
     }
 
     // === onRefundCompleted() ==================================================

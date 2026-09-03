@@ -1,19 +1,79 @@
+# 全容器一鍵啟動：資料庫、後端、前端、監控（Prometheus/Grafana）、BI（Metabase）全包。
+# 用法：repo 根目錄放好 .env 後 `docker compose up -d --build`。
+# docker compose 會自動讀同目錄的 .env——DB_PASSWORD 為必填、刻意不給預設值（密碼不進版控）。
+#
+# 首次啟動的自動化鏈：sqlserver 健康 → db-init 建空庫 → backend 建表＋播種
+# （商品/教練/擬真會員/樣本訂單全自動）→ metabase-init 建 BI 儀表板並把 public 網址
+# 寫進共用 volume 供前端讀取。第二次以後全部秒過（冪等）。
+#
+# 注意：
+# - 對外埠：前端 5173、後端 8088、SQL Server 14333（避開宿主機可能存在的 1433）、
+#   Grafana 3000、Prometheus 9090、Metabase 3001
+# - 與「開發模式」（Vite dev＋宿主 SQL Server＋monitoring/bi 各自 compose）二選一：
+#   本檔用獨立的容器資料庫與獨立的 Metabase volume，兩種模式資料互不相通；
+#   起本檔前先把 monitoring/ 與 bi/ 的 standalone 容器 down 掉（container_name 相同會撞）
+# - 信箱／Cloudinary／Gemini／OAuth 金鑰未帶入，相關功能優雅降級（application.properties 皆有空預設）
+include:
+  - monitoring/docker-compose.yml
+  - bi/docker-compose.yml
+
 services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: gym-docker-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${DB_PASSWORD:?請在 .env 設定 DB_PASSWORD（不進版控）}
+    ports:
+      - "14333:1433" # 供宿主機用 SSMS/sqlcmd 觀察容器庫；避開宿主 SQL Server 的 1433
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # 一次性：建空資料庫（表結構與種子由後端首次啟動自動建立）
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: gym-docker-db-init
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD:?}
+    entrypoint: ["/bin/bash", "-c",
+      "/opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P \"$$DB_PASSWORD\" -C -b -Q \"IF DB_ID('ispan-proj-gymdb') IS NULL CREATE DATABASE [ispan-proj-gymdb]\""]
+    restart: "no"
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: gym-docker-backend
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     ports:
       - "8088:8080"
     environment:
-      - DB_URL=jdbc:sqlserver://host.docker.internal:1433;databaseName=ispan-proj-gymdb;encrypt=false;trustServerCertificate=true
+      - DB_URL=jdbc:sqlserver://sqlserver:1433;databaseName=ispan-proj-gymdb;encrypt=false;trustServerCertificate=true
       - DB_USERNAME=sa
-      - DB_PASSWORD=${DB_PASSWORD:-P@ssw0rd}
+      - DB_PASSWORD=${DB_PASSWORD:?}
+      # 本機開發專用預設值（base64 內容即寫明 dev-only），正式環境必以環境變數覆蓋
       - JWT_SECRET=${JWT_SECRET:-aXNwYW4tZ3ltLWxvY2FsLWRldi1vbmx5LXNlY3JldC1kby1ub3QtdXNlLWluLXByb2Qh}
       - ECPAY_RETURN_URL=${ECPAY_RETURN_URL:-http://localhost:8088/api/payments/ecpay/notify}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      # Google OAuth：憑證從 .env 帶入（沒設就維持停用、按鈕隱藏）。回呼走後端對外埠 8088，
+      # Google Console 需一併註冊 http://localhost:8088/login/oauth2/code/google
+      - GOOGLE_OAUTH_ENABLED=${GOOGLE_OAUTH_ENABLED:-false}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-unset-client-id}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-unset-client-secret}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:8088/login/oauth2/code/google}
+      # 註冊驗證信的寄件憑證（Gmail 應用程式密碼）；沒設時寄信功能停用，其餘不受影響
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
 
   frontend:
     build:
@@ -24,3 +84,31 @@ services:
       - "5173:80"
     depends_on:
       - backend
+    volumes:
+      # metabase-init 寫入的 public 儀表板網址，前端「營運分析」頁執行期讀 /mbconfig/url.txt
+      - mbconfig:/usr/share/nginx/html/mbconfig:ro
+
+  # 一次性：等 Metabase 起來後自動完成初始設定（管理員、接容器資料庫、建卡與儀表板、
+  # 開 public link），並把瀏覽器用的公開網址寫進 mbconfig volume
+  metabase-init:
+    image: python:3.12-alpine
+    container_name: gym-docker-metabase-init
+    depends_on:
+      - metabase
+      - backend # 等後端把種子播完，儀表板第一眼就有資料
+    volumes:
+      - ./bi/metabase_setup.py:/setup.py:ro
+      - mbconfig:/out
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD:?}
+      - MB_BASE_URL=http://metabase:3000
+      - MB_PUBLIC_BASE_URL=http://localhost:3001
+      - MB_DB_HOST=sqlserver
+      - MB_DB_PORT=1433
+      - MB_URL_OUT=/out/url.txt
+    command: ["python", "/setup.py"]
+    restart: "no"
+
+volumes:
+  mssql-data:
+  mbconfig:

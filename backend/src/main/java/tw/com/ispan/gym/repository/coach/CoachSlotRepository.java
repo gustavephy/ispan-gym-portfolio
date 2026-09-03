@@ -15,6 +15,23 @@ import tw.com.ispan.gym.entity.coach.CoachSlot;
 public interface CoachSlotRepository extends JpaRepository<CoachSlot, Integer> {
 
         /**
+         * 教練時段使用率聚合（營運報表用）：以教練為單位彙總期間內開放時段數與被預約數。
+         * 取消的時段不計；半開區間 [from, to)，時間軸為時段開始時間。
+         */
+        @Query("""
+                        SELECT new tw.com.ispan.gym.dto.report.TrainerSlotRow(
+                            CONCAT(COALESCE(t.lastName, ''), COALESCE(t.firstName, '')),
+                            COUNT(s), SUM(CASE WHEN s.status = 'BOOKED' THEN 1L ELSE 0L END))
+                        FROM CoachSlot s JOIN s.trainer t
+                        WHERE s.startAt >= :from AND s.startAt < :to AND s.status <> 'CANCELLED'
+                        GROUP BY t.id, t.lastName, t.firstName
+                        ORDER BY COUNT(s) DESC
+                        """)
+        List<tw.com.ispan.gym.dto.report.TrainerSlotRow> aggregateUtilization(
+                        @Param("from") LocalDateTime from,
+                        @Param("to") LocalDateTime to);
+
+        /**
          * 建立新時段時的重疊檢查：同一位教練，新時段的時間範圍是否跟既有的（未取消）時段有交集。
          * 排除 CANCELLED，因為已取消的時段不該再佔用這個時間點。
          */
