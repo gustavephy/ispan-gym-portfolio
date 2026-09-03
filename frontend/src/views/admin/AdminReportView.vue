@@ -892,14 +892,17 @@ onBeforeUnmount(() => {
             <input v-model="includeVoided" type="checkbox" />
             <span class="filter__label">顯示已作廢</span>
           </label>
-          <!-- append-only 版本化：同區間被重生成過才會出現，可回看歷史版本 -->
-          <label v-if="versions.length > 1" class="report-picker__field">
+          <!-- append-only 版本化：可回看歷史版本。固定佔位、只有一版時 disabled，
+               不用 v-if——出現／消失會讓右邊的按鈕左右橫跳 -->
+          <label class="report-picker__field">
             <span class="filter__label">版本</span>
             <select
               v-model="viewingVersionId"
-              class="filter__input"
+              class="filter__input report-picker__version"
+              :disabled="versions.length <= 1"
               @change="fetchDetail(viewingVersionId)"
             >
+              <option v-if="versions.length === 0" :value="viewingVersionId">現行版</option>
               <option v-for="v in versions" :key="v.id" :value="v.id">
                 {{ v.supersededAt ? '歷史版' : '現行版' }}｜{{ formatDateTime(v.generatedAt) }} 生成{{
                   v.voidedAt ? '｜已作廢' : ''
@@ -1194,6 +1197,7 @@ onBeforeUnmount(() => {
 
 .report-picker {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   margin-left: auto;
@@ -1203,6 +1207,16 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+}
+
+/* 標籤不可折行：擠不下就整組換到下一列，不要「報表快／照」逐字疊起來 */
+.report-picker .filter__label {
+  white-space: nowrap;
+}
+
+/* 版本下拉固定寬度：一版與多版、現行版與歷史版的文字長度不同，寬度變了按鈕也會跳 */
+.report-picker__version {
+  width: 16rem;
 }
 
 .chart {
