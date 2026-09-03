@@ -338,7 +338,7 @@ onBeforeUnmount(() => {
                     class="uri__bar"
                     :style="{ width: maxEndpointCount ? `${(e.count / maxEndpointCount) * 100}%` : '0%' }"
                   ></span>
-                  <code>{{ e.uri }}</code>
+                  <code :title="e.uri">{{ e.uri }}</code>
                 </td>
                 <td class="num">{{ number.format(e.count) }}</td>
                 <td class="num">{{ Number(e.avgMillis ?? 0).toFixed(1) }} ms</td>
@@ -448,6 +448,16 @@ onBeforeUnmount(() => {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  /* 固定佈局：長 URI 不再把端點欄撐開、將數字欄擠出面板（改由下方 code 的省略號吸收） */
+  table-layout: fixed;
+}
+
+.ep-table th:nth-child(2) {
+  width: 4.4rem;
+}
+
+.ep-table th:nth-child(3) {
+  width: 5.6rem;
 }
 
 .ep-table th {
@@ -491,5 +501,10 @@ onBeforeUnmount(() => {
   color: #ccccdc;
   background: none;
   padding: 0;
+  /* 搭配 table-layout: fixed——超長 URI 以省略號收尾，完整路徑看 title 提示 */
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
