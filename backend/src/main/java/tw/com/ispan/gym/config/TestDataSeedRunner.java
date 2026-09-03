@@ -209,18 +209,18 @@ public class TestDataSeedRunner implements CommandLineRunner {
      * 教練帳號 → 頭像。
      */
     private static final java.util.Map<String, String> SEED_TRAINER_AVATARS = java.util.Map.ofEntries(
-            java.util.Map.entry("emp-trainer@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg")),
-            java.util.Map.entry("emp-trainer2@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg")),
-            java.util.Map.entry("emp-trainer3@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg")),
-            java.util.Map.entry("emp-trainer4@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg")),
-            java.util.Map.entry("emp-trainer5@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg")),
-            java.util.Map.entry("emp-trainer6@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg")),
-            java.util.Map.entry("emp-trainer7@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg")),
-            java.util.Map.entry("emp-trainer8@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg")),
-            java.util.Map.entry("emp-trainer9@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg")),
-            java.util.Map.entry("emp-trainer10@local.test", cloudImg("45921b1680b0ad5b569362e57ffd3057.jpg")),
-            java.util.Map.entry("emp-trainer11@local.test", cloudImg("7713fb070e168c0bb62d5facc504bdcb.jpg")),
-            java.util.Map.entry("emp-trainer12@local.test", cloudImg("b60c82ad1fcefe01f999ebe51fcf6c55.jpg")));
+            java.util.Map.entry("emp-trainer@local.test", cloudImg("e30dbaae9c9bc29dbf8564ce01261a22.jpg")),
+            java.util.Map.entry("emp-trainer2@local.test", cloudImg("1b0d5a805cc6a2d80123f602a1dbc1e6.jpg")),
+            java.util.Map.entry("emp-trainer3@local.test", cloudImg("c8fc47abd2af887e05529534d88e36e2.jpg")),
+            java.util.Map.entry("emp-trainer4@local.test", cloudImg("848f2f40321ad9e9f0031589744b43b7.jpg")),
+            java.util.Map.entry("emp-trainer5@local.test", cloudImg("de9fdffba4fc1b18ba789d882c91b6d7.jpg")),
+            java.util.Map.entry("emp-trainer6@local.test", cloudImg("8476efc7ce8723da2abcaca5226176a2.png")),
+            java.util.Map.entry("emp-trainer7@local.test", cloudImg("381bb229ad65baf5c71eeb0167715163.webp")),
+            java.util.Map.entry("emp-trainer8@local.test", cloudImg("03df533da878abbf4e19ef7e97404f8f.jpg")),
+            java.util.Map.entry("emp-trainer9@local.test", cloudImg("36062fab8d19a2bd01cef22342023b32.jpg")),
+            java.util.Map.entry("emp-trainer10@local.test", cloudImg("20714275339cce85fbd629c3b579ef98.jpg")),
+            java.util.Map.entry("emp-trainer11@local.test", cloudImg("6d10bd14e48d3d2781c1a20ae67dd708.jpg")),
+            java.util.Map.entry("emp-trainer12@local.test", cloudImg("08a7525f6b9c7a7f0a901d51421f6c80.jpg")));
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
