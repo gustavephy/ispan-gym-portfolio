@@ -590,3 +590,32 @@ textarea.form-input {
   justify-content: flex-end;
   margin-top: 1.5rem;
 }
+
+/* 6. 後台狀態圓點與標籤共用樣式 */
+.status-cell-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.active {
+  background-color: #2ec4b6;
+}
+.status-dot.inactive {
+  background-color: #e63946;
+}
+.status-text-label {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.status-text-label.text-active {
+  color: #2ec4b6;
+}
+.status-text-label.text-inactive {
+  color: #e63946;
+}

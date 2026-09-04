@@ -151,11 +151,11 @@
         </span>
       </template>
 
-      <template #status="{ value }">
+      <template #status="{ row }">
         <div class="status-cell-wrap">
-          <span :class="['status-dot', value === 1 || value === 'ACTIVE' ? 'active' : 'inactive']"></span>
-          <span :class="['status-text-label', value === 1 || value === 'ACTIVE' ? 'text-active' : 'text-inactive']">
-            {{ value === 1 || value === 'ACTIVE' ? '上架中' : '已下架' }}
+          <span :class="['status-dot', row.status === 1 || row.status === 'ACTIVE' ? 'active' : 'inactive']"></span>
+          <span :class="['status-text-label', row.status === 1 || row.status === 'ACTIVE' ? 'text-active' : 'text-inactive']">
+            {{ row.status === 1 || row.status === 'ACTIVE' ? '上架中' : '已下架' }}
           </span>
         </div>
       </template>
@@ -659,34 +659,7 @@ onMounted(() => {
   color: #ffffff;
 }
 
-/* ===== 狀態圓點樣式 ===== */
-.status-cell-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.status-dot.active {
-  background-color: #2ec4b6;
-}
-.status-dot.inactive {
-  background-color: #e63946;
-}
-.status-text-label {
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-.status-text-label.text-active {
-  color: #2ec4b6;
-}
-.status-text-label.text-inactive {
-  color: #e63946;
-}
+
 
 .dashboard-footer-blank {
   height: 8rem;
