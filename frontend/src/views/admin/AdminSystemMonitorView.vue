@@ -13,6 +13,11 @@ echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, Canvas
 const POLL_MS = 5000
 /** 固定時間視窗：x 軸永遠是「最近 5 分鐘」，也是取樣點的保留期限 */
 const WINDOW_MS = 5 * 60 * 1000
+/**
+ * Grafana 位址；可用 VITE_GRAFANA_URL 覆寫（部署到別台機器時指向該機的 3000 埠）。
+ * 走瀏覽器直連而非後端代理：Grafana 是獨立的維運工具，不該成為本站的相依。
+ */
+const GRAFANA_URL = import.meta.env.VITE_GRAFANA_URL || 'http://localhost:3000'
 
 const metrics = ref(null)
 const error = ref(null)
@@ -274,10 +279,20 @@ onBeforeUnmount(() => {
 <template>
   <div class="page-container system-monitor-page">
     <span class="section-tag">ADMIN</span>
-    <h1 class="section-title">系統監控</h1>
+    <div class="monitor-head">
+      <h1 class="section-title">系統監控</h1>
+      <!-- 另開分頁而非 iframe 內嵌：本頁直接讀應用程式內的 MeterRegistry，不經過 Prometheus，
+           Grafana 沒起來時本頁仍照常運作；內嵌會讓後台硬相依於監控容器，且 Grafana 有自己的
+           帳號系統，嵌進 JWT 後台等於繞過本站的權限控制。 -->
+      <a class="btn grafana-link" :href="GRAFANA_URL" target="_blank" rel="noopener noreferrer">
+        進階監控（Grafana）
+        <span aria-hidden="true">↗</span>
+      </a>
+    </div>
     <p class="section-desc">
       服務健康狀態與資源使用情形，每 {{ POLL_MS / 1000 }} 秒自動更新；取樣與速率差分由後端排程完成，
       重新整理頁面歷史不會消失。延遲分位數由直方圖插值（與 Grafana／PromQL 同款算法）。
+      同一份 Micrometer 指標另以 Prometheus 標準格式曝露於管理埠，供 Grafana 取用。
     </p>
 
     <OperationMessage :message="error" />
@@ -354,6 +369,38 @@ onBeforeUnmount(() => {
 <style scoped>
 .system-monitor-page {
   padding-bottom: 2rem;
+}
+
+/* 標題與外連按鈕同一列：標題左、按鈕右，窄螢幕才換行 */
+.monitor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* .section-title 預設帶下方留白，同列時交給 .monitor-head 控制 */
+.monitor-head .section-title {
+  margin-bottom: 0;
+}
+
+/* 深色描邊：呼應下方 Grafana 風格的深色儀表板，與後台淺色主按鈕區隔 */
+.grafana-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  background: #111217;
+  border: 1px solid #2c3235;
+  color: #ccccdc;
+  text-decoration: none;
+}
+
+.grafana-link:hover {
+  background: #1c1d24;
+  border-color: #3d444a;
+  color: #fff;
 }
 
 /* Grafana 風深色儀表板：獨立於後台淺色主題之外的一塊深色板 */
