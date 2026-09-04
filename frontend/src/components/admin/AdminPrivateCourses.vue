@@ -127,11 +127,11 @@
       <template #price="{ value }">
         <span style="font-weight: 700; color: var(--accent);">NT$ {{ Number(value || 0).toLocaleString() }}</span>
       </template>
-      <template #status="{ value }">
-        <div class="status-cell-wrap" style="display: flex; align-items: center; justify-content: center; gap: 0.25rem;">
-          <span :class="['status-dot', value === 'ACTIVE' || value === undefined ? 'active' : 'inactive']"></span>
-          <span :class="['status-text-label', value === 'ACTIVE' || value === undefined ? 'text-active' : 'text-inactive']">
-            {{ value === 'ACTIVE' || value === undefined ? '上架中' : '已下架' }}
+      <template #status="{ row, value }">
+        <div class="status-cell-wrap">
+          <span :class="['status-dot', (value === 'ACTIVE' || row?.status === 'ACTIVE' || value === undefined) ? 'active' : 'inactive']"></span>
+          <span :class="['status-text-label', (value === 'ACTIVE' || row?.status === 'ACTIVE' || value === undefined) ? 'text-active' : 'text-inactive']">
+            {{ (value === 'ACTIVE' || row?.status === 'ACTIVE' || value === undefined) ? '上架中' : '已下架' }}
           </span>
         </div>
       </template>

@@ -122,11 +122,11 @@
           {{ value ? '開放體驗' : '無體驗' }}
         </span>
       </template>
-      <template #status="{ value }">
-        <div class="status-cell-wrap" style="display: flex; align-items: center; justify-content: center; gap: 0.25rem;">
-          <span :class="['status-dot', value === 'ACTIVE' ? 'active' : 'inactive']"></span>
-          <span :class="['status-text-label', value === 'ACTIVE' ? 'text-active' : 'text-inactive']">
-            {{ value === 'ACTIVE' ? '上架中' : '已下架' }}
+      <template #status="{ row, value }">
+        <div class="status-cell-wrap">
+          <span :class="['status-dot', (value === 'ACTIVE' || row?.status === 'ACTIVE') ? 'active' : 'inactive']"></span>
+          <span :class="['status-text-label', (value === 'ACTIVE' || row?.status === 'ACTIVE') ? 'text-active' : 'text-inactive']">
+            {{ (value === 'ACTIVE' || row?.status === 'ACTIVE') ? '上架中' : '已下架' }}
           </span>
         </div>
       </template>
