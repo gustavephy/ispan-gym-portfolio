@@ -86,7 +86,8 @@ public class ReportSnapshot {
     private LocalDateTime generatedAt;
 
     /**
-     * 生成後、涵蓋區間內發生退款的時點；null＝數字仍與訂單一致。
+     * 生成後、有退款影響到區間內數字的時點；null＝數字仍與訂單一致。
+     * 退款的付款日落在區間內（營收欄位失真）或退款完成日落在區間內（退款彙總欄位失真）都算，
      * 由 RefundCompletedEvent 的 listener 標記（只標現行版），提示管理者重新生成；
      * 重算後新版自然回到 null，不需清除邏輯。
      */

@@ -486,9 +486,11 @@ public class OrderService {
         orderStatusHistories.save(new OrderStatusHistory(order, fromStatus, order.getStatus().name(), order.getMember(),
                 "ADMIN", "REFUND_COMPLETE"));
 
-        // 同步事件、同一交易：下游（如報表標記快照過時）與退款原子成敗
+        // 同步事件、同一交易：下游（如報表標記快照過時）與退款原子成敗。
+        // 付款日與退款完成日都帶：報表的營收看付款日、退款彙總看完成日，兩者可能落在不同區間
         if (order.getPaidAt() != null) {
-            events.publishEvent(new RefundCompletedEvent(order.getOrderId(), order.getPaidAt().toLocalDate()));
+            events.publishEvent(new RefundCompletedEvent(order.getOrderId(), order.getPaidAt().toLocalDate(),
+                    refund.getCompletedAt().toLocalDate()));
         }
     }
 

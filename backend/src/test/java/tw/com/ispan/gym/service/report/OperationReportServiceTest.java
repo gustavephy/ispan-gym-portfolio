@@ -611,12 +611,14 @@ class OperationReportServiceTest {
     // === onRefundCompleted() ==================================================
 
     @Test
-    void 退款完成標記涵蓋原付款日的快照為過時() {
+    void 退款完成以付款日與退款完成日兩個日期標記快照為過時() {
         LocalDate paidDate = LocalDate.of(2026, 8, 15);
+        LocalDate completedDate = LocalDate.of(2026, 9, 3);
 
-        service.onRefundCompleted(new RefundCompletedEvent(900, paidDate));
+        service.onRefundCompleted(new RefundCompletedEvent(900, paidDate, completedDate));
 
-        // 報表口徑以付款日歸屬營收，退款會讓涵蓋該日的既有快照失真
-        verify(snapshots).markStaleCovering(eq(paidDate), any(LocalDateTime.class));
+        // 營收欄位以付款日歸屬、退款彙總以完成日歸屬，兩個日期可能落在不同區間，
+        // 都要交給 repository 判斷；OR 條件本身由 ReportSnapshotRepositoryIntegrationTest 對真實 DB 驗
+        verify(snapshots).markStaleCovering(eq(paidDate), eq(completedDate), any(LocalDateTime.class));
     }
 }

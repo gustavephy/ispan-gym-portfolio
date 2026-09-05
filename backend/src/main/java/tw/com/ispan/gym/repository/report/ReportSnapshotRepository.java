@@ -28,14 +28,20 @@ public interface ReportSnapshotRepository extends JpaRepository<ReportSnapshot, 
             ReportType reportType, LocalDate periodStart, LocalDate periodEnd);
 
     /**
-     * 退款後標記涵蓋該付款日的快照為過時（日報/月報/自訂區間一體適用）；已標過的不重標。
+     * 退款後標記受影響的快照為過時（日報/月報/自訂區間一體適用）；已標過的不重標。
+     * 兩個日期任一落在區間內就算受影響：涵蓋付款日的快照營收欄位失真（該訂單已轉 REFUNDED），
+     * 涵蓋退款完成日的快照退款筆數／金額欄位失真（summarizeCompleted 以 completedAt 歸屬）。
+     * 區間結束後才生成的快照不會被第二個條件打到；會中的是月初生成的月報、週中生成的自訂區間。
      * 只標現行版且未作廢——歷史版本是「當初的數字」、作廢的快照已不作引用，兩者都不再變動。
      */
     @Modifying
     @Query("""
             UPDATE ReportSnapshot s SET s.staleAt = :now
-                WHERE s.periodStart <= :date AND s.periodEnd >= :date
+                WHERE ((s.periodStart <= :paidDate AND s.periodEnd >= :paidDate)
+                    OR (s.periodStart <= :completedDate AND s.periodEnd >= :completedDate))
                   AND s.staleAt IS NULL AND s.supersededAt IS NULL AND s.voidedAt IS NULL
             """)
-    int markStaleCovering(@Param("date") LocalDate date, @Param("now") LocalDateTime now);
+    int markStaleCovering(@Param("paidDate") LocalDate paidDate,
+                          @Param("completedDate") LocalDate completedDate,
+                          @Param("now") LocalDateTime now);
 }

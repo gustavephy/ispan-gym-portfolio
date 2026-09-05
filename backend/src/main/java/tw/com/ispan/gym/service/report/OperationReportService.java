@@ -111,14 +111,16 @@ public class OperationReportService {
     }
 
     /**
-     * 退款完成 → 標記涵蓋原付款日的快照為過時。
+     * 退款完成 → 標記涵蓋原付款日或退款完成日的快照為過時。
+     * 付款日對應營收欄位（該訂單已不計入），完成日對應退款彙總欄位（completedAt 歸屬）；
+     * 兩者可能落在不同區間，只看付款日會漏掉「先生成、之後區間內才完成退款」的快照。
      * 同步 listener：事件在退款交易內發布，這裡的 UPDATE 加入同一交易，
      * 退款與標記原子成敗。方法級 @Transactional 覆寫類別級的 readOnly。
      */
     @EventListener
     @Transactional
     public void onRefundCompleted(RefundCompletedEvent event) {
-        snapshots.markStaleCovering(event.paidDate(), LocalDateTime.now());
+        snapshots.markStaleCovering(event.paidDate(), event.completedDate(), LocalDateTime.now());
     }
 
     /**

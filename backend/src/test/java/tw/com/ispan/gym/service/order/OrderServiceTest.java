@@ -9,6 +9,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import org.mockito.ArgumentCaptor;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -908,7 +910,14 @@ class OrderServiceTest {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.REFUNDED);
         assertThat(product.getStock()).isEqualTo(5);
         assertThat(used.getStatus()).isEqualTo(MemberCouponStatus.UNUSED);
-        verify(events).publishEvent(any(RefundCompletedEvent.class));
+
+        // 事件要同時帶付款日與退款完成日：報表的營收看付款日、退款彙總看完成日，兩者可能落在不同區間
+        ArgumentCaptor<Object> published = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(published.capture());
+        RefundCompletedEvent event = (RefundCompletedEvent) published.getValue();
+        assertThat(event.orderId()).isEqualTo(order.getOrderId());
+        assertThat(event.paidDate()).isEqualTo(order.getPaidAt().toLocalDate());
+        assertThat(event.completedDate()).isEqualTo(refund.getCompletedAt().toLocalDate());
     }
 
     @Test
