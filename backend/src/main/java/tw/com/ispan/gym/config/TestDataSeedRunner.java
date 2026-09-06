@@ -537,6 +537,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
      * <p>
      * 訂單比照 ensureSampleOrders 的規矩：走正式建構子＋markPaid()，並補 PaymentTransaction
      * （退款後台以它為起點，缺了會 404）；以固定 order_no 冪等，不重複建單。
+     *
+     * <p>
+     * 日期比照 {@link #ensureSampleOrders} 用 SQL 回填到訂閱起日（前一天）：不回填的話
+     * paid_at 會是後端啟動當下，每次重建資料庫，當天的營運統計就憑空多一筆訂單與營收
+     * （2026-09-07 demo 彩排時實際發生）。{@link #ensureSampleOrderHistory} 之後會讀回填後的
+     * 日期補時間軸，所以這裡要在它之前完成。
      */
     private void ensureActiveSubscription(Member member) {
         boolean hasActive = memberSubscriptions
@@ -552,6 +558,9 @@ public class TestDataSeedRunner implements CommandLineRunner {
             log.warn("沒有任何訂閱方案，略過測試訂閱播種");
             return;
         }
+        // 訂閱起日往前推一天：閉區間邊界在「剛好現在」的比較上容易剛好差一瞬間，測試資料不玩這種邊緣；
+        // 訂單的建立／付款時間也回填成同一刻，才不會落在啟動當天的報表裡
+        LocalDateTime startedAt = LocalDateTime.now().minusDays(1);
 
         // 訂單可能在前次播種留下（訂閱被遷移刪除但訂單是新表重建後才建的），有就重用
         tw.com.ispan.gym.entity.order.Order order = orders.findAll().stream()
@@ -567,13 +576,17 @@ public class TestDataSeedRunner implements CommandLineRunner {
             order.markPaid("Credit_CreditCard", SEED_SUBSCRIPTION_ORDER_NO);
             order.setSubscriptionPlan(plan);
             order = orders.save(order);
+            // created_at 由 @PrePersist 設成「現在」、paid_at 由 markPaid() 設成「現在」，
+            // 都回填到訂閱起日，做法同 ensureSampleOrders
+            jdbc.update("UPDATE orders SET created_at = ?, updated_at = ?, paid_at = ? WHERE order_id = ?",
+                    startedAt, startedAt, startedAt, order.getOrderId());
 
             PaymentTransaction payment = new PaymentTransaction(
                     order, "ECPAY", SEED_SUBSCRIPTION_ORDER_NO, plan.getPrice(), "TWD");
             payment.setTradeNo(SEED_SUBSCRIPTION_ORDER_NO);
             payment.setPaymentMethod("Credit_CreditCard");
             payment.setStatus("SUCCESS");
-            payment.setPaidAt(LocalDateTime.now());
+            payment.setPaidAt(startedAt);
             payment.setRtnCode(1);
             payment.setRtnMsg("交易成功");
             paymentTransactions.save(payment);
@@ -584,8 +597,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         subscription.setOrder(order);
         subscription.setSubscriptionPlan(plan);
         subscription.setPlanName(plan.getName());
-        // 起日往前推一天：閉區間邊界在「剛好現在」的比較上容易剛好差一瞬間，測試資料不玩這種邊緣
-        subscription.setStartDate(LocalDateTime.now().minusDays(1));
+        subscription.setStartDate(startedAt);
         subscription.setEndDate(LocalDateTime.now().plusMonths(3));
         subscription.setStatus(SubscriptionStatus.ACTIVE);
         memberSubscriptions.save(subscription);
