@@ -71,6 +71,8 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 
 /**
  * 開發用測試帳號播種：讓每位組員的本機資料庫收斂到同一組已知帳號，
@@ -109,6 +111,13 @@ public class TestDataSeedRunner implements CommandLineRunner {
 
     /** 樣本訂單的 order_no 前綴，用來辨識哪些是播種產生的，不會誤動真實下單流程的訂單 */
     private static final String SAMPLE_ORDER_PREFIX = "SEED-ORD-";
+
+    /**
+     * 測試帳號（wendy、emp-admin、emp-trainer 1–12）的 member.created_at 回填到幾天前。
+     * 不回填的話它們是「播種當下」建立的，重建資料庫那天營運統計的新會員會憑空多 14 位；
+     * 120 天落在所有近期區間（近 30／90 天）之外，也不會混進擬真會員的成長曲線。
+     */
+    private static final int TEST_MEMBER_BACKDATE_DAYS = 120;
     private static final int SAMPLE_ORDER_COUNT = 10;
     /** 種子私教課的課名；ensureCatalogData 用它辨識哪些私教課是種子建的、哪些是後台手動新增的 */
     private static final List<String> SEED_PRIVATE_COURSE_NAMES = List.of(
@@ -368,6 +377,16 @@ public class TestDataSeedRunner implements CommandLineRunner {
     }
 
     /** 帳號不存在就建立；存在則導正為與密碼與角色集合 */
+    /**
+     * 給 JDBC 回填用：把「JVM 預設時區的牆鐘時間」轉成「UTC 牆鐘時間」再寫進資料庫。
+     * Hibernate 因 {@code hibernate.jdbc.time_zone=UTC} 寫入時會做這個轉換、讀出時反向轉回，
+     * JdbcTemplate 不會；不轉的話回填值被 Hibernate 讀回來時會多 8 小時（台北），
+     * 下午四點以後啟動的播種會整批漂到隔天。JVM 本來就是 UTC 時等於不轉，行為與過去相同。
+     */
+    private static LocalDateTime toDbUtc(LocalDateTime local) {
+        return local.atZone(ZoneId.systemDefault()).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+    }
+
     private Account ensureAccount(String email, AccountType... roles) {
         Account account = accounts.findByEmailIgnoreCase(email).orElse(null);
         if (account == null) {
@@ -404,7 +423,12 @@ public class TestDataSeedRunner implements CommandLineRunner {
             member.setPhone(phone);
             member.setStatus(UserStatus.ACTIVE);
             log.info("已建立測試會員 {}", account.getEmail());
-            return members.save(member);
+            member = members.save(member);
+            // created_at 由 @PrePersist 設成「現在」，比照擬真會員直接下 SQL 回填，理由見 TEST_MEMBER_BACKDATE_DAYS
+            LocalDateTime seededAt = toDbUtc(LocalDateTime.now().minusDays(TEST_MEMBER_BACKDATE_DAYS));
+            jdbc.update("UPDATE member SET created_at = ?, updated_at = ? WHERE member_id = ?",
+                    seededAt, seededAt, member.getId());
+            return member;
         }
         boolean changed = false;
         if (member.getStatus() != UserStatus.ACTIVE || member.getDeletedAt() != null) {
@@ -579,7 +603,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             // created_at 由 @PrePersist 設成「現在」、paid_at 由 markPaid() 設成「現在」，
             // 都回填到訂閱起日，做法同 ensureSampleOrders
             jdbc.update("UPDATE orders SET created_at = ?, updated_at = ?, paid_at = ? WHERE order_id = ?",
-                    startedAt, startedAt, startedAt, order.getOrderId());
+                    toDbUtc(startedAt), toDbUtc(startedAt), toDbUtc(startedAt), order.getOrderId());
 
             PaymentTransaction payment = new PaymentTransaction(
                     order, "ECPAY", SEED_SUBSCRIPTION_ORDER_NO, plan.getPrice(), "TWD");
@@ -600,7 +624,10 @@ public class TestDataSeedRunner implements CommandLineRunner {
         subscription.setStartDate(startedAt);
         subscription.setEndDate(LocalDateTime.now().plusMonths(3));
         subscription.setStatus(SubscriptionStatus.ACTIVE);
-        memberSubscriptions.save(subscription);
+        MemberSubscription saved = memberSubscriptions.save(subscription);
+        // created_at 由 @CreatedDate 設成「現在」，會被算成播種當天的新訂閱；回填到訂閱起日，與訂單一致
+        jdbc.update("UPDATE member_subscription SET created_at = ?, updated_at = ? WHERE member_subscription_id = ?",
+                toDbUtc(startedAt), toDbUtc(startedAt), saved.getMemberSubscriptionId());
         log.info("已為測試會員 {} 播種有效訂閱（方案：{}，效期 3 個月）",
                 member.getAccount().getEmail(), plan.getName());
     }
@@ -796,11 +823,11 @@ public class TestDataSeedRunner implements CommandLineRunner {
             // 不改的話十筆訂單全部落在同一天，趨勢圖只會有一個點。這裡直接下 SQL 回填
             // 分散的日期——是刻意繞過 JPA 的稽核欄位，僅限測試資料播種使用。
             jdbc.update("UPDATE orders SET created_at = ?, updated_at = ? WHERE order_id = ?",
-                    placedAt, placedAt, savedOrder.getOrderId());
+                    toDbUtc(placedAt), toDbUtc(placedAt), savedOrder.getOrderId());
             jdbc.update("UPDATE order_item SET created_at = ? WHERE order_id = ?",
-                    placedAt, savedOrder.getOrderId());
+                    toDbUtc(placedAt), savedOrder.getOrderId());
             if (savedOrder.getPaidAt() != null) {
-                jdbc.update("UPDATE orders SET paid_at = ? WHERE order_id = ?", placedAt, savedOrder.getOrderId());
+                jdbc.update("UPDATE orders SET paid_at = ? WHERE order_id = ?", toDbUtc(placedAt), savedOrder.getOrderId());
             }
             created++;
         }
@@ -1450,7 +1477,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             LocalDateTime createdAt = LocalDateTime.now().minusDays(daysAgo)
                     .withHour(9 + (i * 5) % 12).withMinute((i * 17) % 60).withSecond(0).withNano(0);
             jdbc.update("UPDATE member SET created_at = ?, updated_at = ? WHERE member_id = ?",
-                    createdAt, createdAt, m.getId());
+                    toDbUtc(createdAt), toDbUtc(createdAt), m.getId());
             result.add(m);
             created++;
         }
@@ -1533,11 +1560,11 @@ public class TestDataSeedRunner implements CommandLineRunner {
             }
 
             jdbc.update("UPDATE orders SET created_at = ?, updated_at = ? WHERE order_id = ?",
-                    placedAt, placedAt, savedOrder.getOrderId());
+                    toDbUtc(placedAt), toDbUtc(placedAt), savedOrder.getOrderId());
             jdbc.update("UPDATE order_item SET created_at = ? WHERE order_id = ?",
-                    placedAt, savedOrder.getOrderId());
+                    toDbUtc(placedAt), savedOrder.getOrderId());
             if (savedOrder.getPaidAt() != null) {
-                jdbc.update("UPDATE orders SET paid_at = ? WHERE order_id = ?", placedAt, savedOrder.getOrderId());
+                jdbc.update("UPDATE orders SET paid_at = ? WHERE order_id = ?", toDbUtc(placedAt), savedOrder.getOrderId());
             }
             created++;
         }
@@ -1610,7 +1637,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
                 }
                 // 報名時間回填到開課前兩天，前端明細的時間軸才合理
                 jdbc.update("UPDATE group_class_booking SET created_at = ?, updated_at = ? WHERE session_id = ?",
-                        start.minusDays(2), start.minusDays(2), saved.getId());
+                        toDbUtc(start.minusDays(2)), toDbUtc(start.minusDays(2)), saved.getId());
             }
         }
         log.info("已補 {} 筆過去團課場次與 {} 筆報名（滿座率 50–95%）", sessionCount, bookingCount);
@@ -1677,7 +1704,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
             coachBookings.save(booking);
             // 預約成立時間回填到上課前三天
             jdbc.update("UPDATE coach_booking SET created_at = ?, updated_at = ? WHERE check_in_key = ?",
-                    slot.getStartAt().minusDays(3), slot.getStartAt().minusDays(3), "SEED-" + slot.getId());
+                    toDbUtc(slot.getStartAt().minusDays(3)), toDbUtc(slot.getStartAt().minusDays(3)), "SEED-" + slot.getId());
             made++;
         }
         if (made > 0) {
