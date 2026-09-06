@@ -59,6 +59,58 @@ const from = ref(isoDate(daysAgo(29)))
 const to = ref(isoDate(new Date()))
 const typeFilter = ref('')
 
+// 期間快選：對齊「營運分析」Metabase 儀表板的日期選擇器，選了就立刻套用；
+// 手動改起迄日則自動切回「自訂區間」，再按套用
+const RANGE_PRESETS = [
+  { value: 'today', label: '今天' },
+  { value: 'yesterday', label: '昨天' },
+  { value: 'last7', label: '近 7 天' },
+  { value: 'last30', label: '近 30 天' },
+  { value: 'thisMonth', label: '本月' },
+  { value: 'lastMonth', label: '上月' },
+  { value: 'custom', label: '自訂區間' },
+]
+const rangePreset = ref('last30')
+
+/** 快選對應的 [起日, 迄日]（含頭含尾，與後端口徑一致）；自訂區間回 null */
+function presetRange(preset) {
+  const today = new Date()
+  switch (preset) {
+    case 'today':
+      return [isoDate(today), isoDate(today)]
+    case 'yesterday':
+      return [isoDate(daysAgo(1)), isoDate(daysAgo(1))]
+    case 'last7':
+      return [isoDate(daysAgo(6)), isoDate(today)]
+    case 'last30':
+      return [isoDate(daysAgo(29)), isoDate(today)]
+    case 'thisMonth':
+      return [isoDate(new Date(today.getFullYear(), today.getMonth(), 1)), isoDate(today)]
+    case 'lastMonth':
+      // 下個月第 0 天＝上個月最後一天
+      return [
+        isoDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
+        isoDate(new Date(today.getFullYear(), today.getMonth(), 0)),
+      ]
+    default:
+      return null
+  }
+}
+
+function onPresetChange() {
+  const range = presetRange(rangePreset.value)
+  if (!range) return // 自訂區間：保留目前日期，讓使用者自己改再按套用
+  from.value = range[0]
+  to.value = range[1]
+  fetchStats()
+}
+
+// 手動改日期就切成自訂區間；由快選寫入的日期和快選一致，不會誤切
+watch([from, to], ([f, t]) => {
+  const range = presetRange(rangePreset.value)
+  if (range && (range[0] !== f || range[1] !== t)) rangePreset.value = 'custom'
+})
+
 const stats = ref(null)
 const statsLoading = ref(true)
 const statsError = ref(null)
@@ -738,6 +790,12 @@ onBeforeUnmount(() => {
 
     <!-- 篩選列：所有圖表共用同一組期間條件，統一放在最上方 -->
     <div class="filters card">
+      <label class="filter">
+        <span class="filter__label">期間</span>
+        <select v-model="rangePreset" class="filter__input" @change="onPresetChange">
+          <option v-for="p in RANGE_PRESETS" :key="p.value" :value="p.value">{{ p.label }}</option>
+        </select>
+      </label>
       <label class="filter">
         <span class="filter__label">起始日</span>
         <input v-model="from" type="date" class="filter__input" :max="to" />

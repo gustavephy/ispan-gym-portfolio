@@ -36,7 +36,8 @@ async function generateDailyReport(page, date = REPORT_DATE) {
   // 同區間重複生成是「舊版標記 superseded、新版為現行」：POST 回來的瞬間頁面可能
   // 還選著已被取代的舊版。等下拉真的切到新 id 再回傳，後續操作才可靠。
   const created = await res.json()
-  await expect(page.locator('select').nth(1)).toHaveValue(String(created.id))
+  // 頁面上的 select 順序：0 期間快選、1 品項型別、2 報表快照、3 版本（快選是 2026-09-07 加的，索引因此各 +1）
+  await expect(page.locator('select').nth(2)).toHaveValue(String(created.id))
   return created
 }
 
@@ -68,7 +69,7 @@ test.describe('A7 營運報表', () => {
 
   test('同區間重複生成成為現行版，舊版保留為可回看的歷史版本', async ({ page }) => {
     const snapshotCount = async () => {
-      const options = page.locator('select').nth(1).locator('option')
+      const options = page.locator('select').nth(2).locator('option')
       return options.count()
     }
 
@@ -80,7 +81,7 @@ test.describe('A7 營運報表', () => {
     expect(await snapshotCount()).toBe(before)
 
     // ……但版本選單出現：現行版在前、被取代的歷史版本仍可回看（append-only）
-    const versionSelect = page.locator('select').nth(2)
+    const versionSelect = page.locator('select').nth(3)
     await expect(versionSelect).toBeVisible()
     const versionOptions = versionSelect.locator('option')
     await expect(versionOptions.first()).toContainText('現行版')
@@ -108,7 +109,7 @@ test.describe('A7 營運報表', () => {
   test('作廢快照後預設從下拉隱藏，勾「顯示已作廢」可回看', async ({ page }) => {
     await generateDailyReport(page)
 
-    const selector = page.locator('select').nth(1)
+    const selector = page.locator('select').nth(2)
     const before = await selector.locator('option').count()
 
     // 作廢原因是 window.prompt；accept() 不帶值＝空原因
