@@ -788,6 +788,34 @@ onBeforeUnmount(() => {
       ></div>
     </section>
 
+    <!-- 排行的表格版：圖表之外也提供可讀的數字，兼顧無障礙與精確比對 -->
+    <section v-if="hasRanking" class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">品項明細</h2>
+        <span class="chart-card__sub">熱門品項排行的表格版</span>
+      </header>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="col-num">#</th>
+            <th>品項</th>
+            <th>型別</th>
+            <th class="col-num">售出</th>
+            <th class="col-num">營收</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in stats.ranking" :key="`${row.productType}-${row.productId}`">
+            <td class="col-num">{{ row.rankNo }}</td>
+            <td>{{ row.productName }}</td>
+            <td>{{ TYPE_LABELS[row.productType] ?? row.productType }}</td>
+            <td class="col-num">{{ number.format(Number(row.quantitySold ?? 0)) }}</td>
+            <td class="col-num">{{ currency.format(Number(row.grossAmount ?? 0)) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <!-- 付款方式分布：即時統計，各方式的訂單數佔比（口徑：下單日，與上方營收的付款日不同） -->
     <section class="card chart-card">
       <header class="chart-card__header">
@@ -1057,33 +1085,6 @@ onBeforeUnmount(() => {
       </table>
     </section>
 
-    <!-- 排行的表格版：圖表之外也提供可讀的數字，兼顧無障礙與精確比對 -->
-    <section v-if="hasRanking" class="card chart-card">
-      <header class="chart-card__header">
-        <h2 class="chart-card__title">品項明細</h2>
-        <span class="chart-card__sub">熱門品項排行的表格版</span>
-      </header>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="col-num">#</th>
-            <th>品項</th>
-            <th>型別</th>
-            <th class="col-num">售出</th>
-            <th class="col-num">營收</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in stats.ranking" :key="`${row.productType}-${row.productId}`">
-            <td class="col-num">{{ row.rankNo }}</td>
-            <td>{{ row.productName }}</td>
-            <td>{{ TYPE_LABELS[row.productType] ?? row.productType }}</td>
-            <td class="col-num">{{ number.format(Number(row.quantitySold ?? 0)) }}</td>
-            <td class="col-num">{{ currency.format(Number(row.grossAmount ?? 0)) }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
   </div>
 </template>
 
