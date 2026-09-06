@@ -64,6 +64,9 @@ services:
       - DB_URL=jdbc:sqlserver://sqlserver:1433;databaseName=ispan-proj-gymdb;encrypt=false;trustServerCertificate=true
       - DB_USERNAME=sa
       - DB_PASSWORD=${DB_PASSWORD:?}
+      # 容器 JVM 預設 UTC；程式裡 Member 的 @PrePersist、種子等處用的是不帶時區的 LocalDateTime.now()，
+      # 會比 now(TAIPEI) 的地方早 8 小時（新會員、樣本訂單掉到前一天）。統一成台北時間。
+      - TZ=Asia/Taipei
       # 本機開發專用預設值（base64 內容即寫明 dev-only），正式環境必以環境變數覆蓋
       - JWT_SECRET=${JWT_SECRET:-aXNwYW4tZ3ltLWxvY2FsLWRldi1vbmx5LXNlY3JldC1kby1ub3QtdXNlLWluLXByb2Qh}
       - ECPAY_RETURN_URL=${ECPAY_RETURN_URL:-http://localhost:8088/api/payments/ecpay/notify}
