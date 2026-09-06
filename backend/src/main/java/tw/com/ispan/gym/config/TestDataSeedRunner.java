@@ -1473,7 +1473,9 @@ public class TestDataSeedRunner implements CommandLineRunner {
             m = members.save(m);
 
             // created_at 由 @PrePersist 設成「現在」，比照 ensureSampleOrders 直接下 SQL 回填分散日期
-            int daysAgo = 89 - (i * i * 89) / ((DEMO_MEMBER_COUNT - 1) * (DEMO_MEMBER_COUNT - 1));
+            // 最晚的一位至少是昨天：公式在 i = N-1 時會算出 0 天前，加上 withHour 還可能是未來時刻，
+            // 重建資料庫那天營運統計的「新會員」就會憑空多 1 位（2026-09-07 demo 彩排實際發生）
+            int daysAgo = Math.max(1, 89 - (i * i * 89) / ((DEMO_MEMBER_COUNT - 1) * (DEMO_MEMBER_COUNT - 1)));
             LocalDateTime createdAt = LocalDateTime.now().minusDays(daysAgo)
                     .withHour(9 + (i * 5) % 12).withMinute((i * 17) % 60).withSecond(0).withNano(0);
             jdbc.update("UPDATE member SET created_at = ?, updated_at = ? WHERE member_id = ?",
