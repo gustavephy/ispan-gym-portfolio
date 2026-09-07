@@ -157,10 +157,6 @@ const hasMemberDaily = computed(() => memberDaily.value.length > 0)
 const hasTrainerUtil = computed(() => trainerUtil.value.length > 0)
 const hasCategoryRevenue = computed(() => categoryRevenue.value.length > 0)
 const hasRevenueComposition = computed(() => revenueComposition.value.length > 0)
-// 與排行同律：高度隨分類數成長
-const categoryRevenueHeight = computed(
-  () => Math.max(120, categoryRevenue.value.length * 44 + 32),
-)
 // 與排行同律：高度隨課程數成長
 const classFillHeight = computed(() => Math.max(120, classFill.value.length * 44 + 32))
 const trainerUtilHeight = computed(() => Math.max(120, trainerUtil.value.length * 44 + 32))
@@ -270,13 +266,23 @@ function renderPaymentPie() {
         {
           type: 'pie',
           // 甜甜圈：中空讓佔比讀起來不那麼像面積比較，圓心留白也讓整體不擁擠
-          radius: ['42%', '68%'],
-          center: ['50%', '44%'],
+          // 三張並排時卡片只有三百多 px 寬：圓縮小、標籤靠邊對齊並允許折行，長標籤才不會被裁掉
+          radius: ['36%', '58%'],
+          center: ['50%', '42%'],
           data: entries.map(([method, count]) => ({
             name: paymentMethodLabel(method),
             value: Number(count ?? 0),
           })),
-          label: { color: INK, formatter: '{b} {d}%' },
+          label: {
+            color: INK,
+            formatter: '{b} {d}%',
+            alignTo: 'edge',
+            edgeDistance: 4,
+            width: 92,
+            overflow: 'break',
+            lineHeight: 16,
+          },
+          labelLine: { length: 10, length2: 8 },
         },
       ],
     },
@@ -423,41 +429,38 @@ function renderTrainerUtil() {
 function renderCategoryRevenue() {
   if (!categoryRevenueEl.value) return
   if (!categoryRevenueChart) categoryRevenueChart = echarts.init(categoryRevenueEl.value)
-  // 營收由低到高排，最高的分類落在最上方（同滿座率、教練使用率的方向邏輯）
+  // 甜甜圈，與並排的營收組成、付款方式分布同款：三張形狀一致，佔比一眼可比。
+  // 分類數少（種子只有器材／補給品／配件三類）時圓餅比橫條清楚；營收高的排前面讓圖例順序穩定
   const rows = [...categoryRevenue.value].sort(
-    (a, b) => Number(a.grossAmount ?? 0) - Number(b.grossAmount ?? 0),
+    (a, b) => Number(b.grossAmount ?? 0) - Number(a.grossAmount ?? 0),
   )
   categoryRevenueChart.setOption(
     {
-      color: [SERIES_1],
+      color: CATEGORICAL,
       tooltip: {
         trigger: 'item',
         formatter: (p) => {
           const row = rows[p.dataIndex]
-          return `${row.categoryName}<br/>營收 ${currency.format(Number(row.grossAmount ?? 0))}<br/>售出 ${number.format(Number(row.quantitySold ?? 0))} 件`
+          return `${row.categoryName}<br/>營收 ${currency.format(Number(row.grossAmount ?? 0))}（${p.percent}%）<br/>售出 ${number.format(Number(row.quantitySold ?? 0))} 件`
         },
       },
-      grid: { left: 8, right: 96, top: 8, bottom: 8, containLabel: true },
-      xAxis: { type: 'value', show: false },
-      yAxis: {
-        type: 'category',
-        data: rows.map((r) => r.categoryName),
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { color: INK },
-      },
+      legend: { bottom: 0, textStyle: { color: INK } },
       series: [
         {
-          type: 'bar',
-          data: rows.map((r) => Number(r.grossAmount ?? 0)),
-          barMaxWidth: 18,
-          itemStyle: { borderRadius: [0, 4, 4, 0] },
+          type: 'pie',
+          radius: ['36%', '58%'],
+          center: ['50%', '42%'],
+          data: rows.map((r) => ({ name: r.categoryName, value: Number(r.grossAmount ?? 0) })),
           label: {
-            show: true,
-            position: 'right',
-            color: MUTED,
-            formatter: (p) => currency.format(Number(p.value ?? 0)),
+            color: INK,
+            formatter: '{b} {d}%',
+            alignTo: 'edge',
+            edgeDistance: 4,
+            width: 92,
+            overflow: 'break',
+            lineHeight: 16,
           },
+          labelLine: { length: 10, length2: 8 },
         },
       ],
     },
@@ -485,14 +488,23 @@ function renderRevenueComposition() {
       series: [
         {
           type: 'pie',
-          // 甜甜圈：規格同付款方式分布，兩張圓餅視覺一致
-          radius: ['42%', '68%'],
-          center: ['50%', '44%'],
+          // 甜甜圈：規格同付款方式分布與各商品分類營收，三張並排視覺一致
+          radius: ['36%', '58%'],
+          center: ['50%', '42%'],
           data: revenueComposition.value.map((r) => ({
             name: r.type,
             value: Number(r.grossAmount ?? 0),
           })),
-          label: { color: INK, formatter: '{b} {d}%' },
+          label: {
+            color: INK,
+            formatter: '{b} {d}%',
+            alignTo: 'edge',
+            edgeDistance: 4,
+            width: 92,
+            overflow: 'break',
+            lineHeight: 16,
+          },
+          labelLine: { length: 10, length2: 8 },
         },
       ],
     },
@@ -652,6 +664,45 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- 結構總覽：三張甜甜圈並排。營收組成看整體怎麼分，「商品」那一片展開就是旁邊的各商品分類營收；
+         付款方式分布依訂單數與下單日，口徑和前兩張的營收／付款日不同，副標題有註明 -->
+    <div class="chart-row">
+      <!-- 營收組成：商品／私人課程／會籍訂閱三分 -->
+      <section class="card chart-card">
+        <header class="chart-card__header">
+          <h2 class="chart-card__title">營收組成</h2>
+          <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依營收</span>
+        </header>
+        <p v-if="!statsLoading && !hasRevenueComposition" class="empty-hint">此期間沒有營收資料。</p>
+        <div
+          v-show="hasRevenueComposition"
+          ref="revenueCompositionEl"
+          class="chart"
+          style="height: 300px"
+        ></div>
+      </section>
+
+      <!-- 各商品分類營收：只含商品品項，私教課與訂閱沒有商品分類（佔比看左邊營收組成） -->
+      <section class="card chart-card">
+        <header class="chart-card__header">
+          <h2 class="chart-card__title">各商品分類營收</h2>
+          <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．僅商品</span>
+        </header>
+        <p v-if="!statsLoading && !hasCategoryRevenue" class="empty-hint">此期間沒有商品營收。</p>
+        <div v-show="hasCategoryRevenue" ref="categoryRevenueEl" class="chart" style="height: 300px"></div>
+      </section>
+
+      <!-- 付款方式分布：各方式的訂單數佔比（口徑：下單日） -->
+      <section class="card chart-card">
+        <header class="chart-card__header">
+          <h2 class="chart-card__title">付款方式分布</h2>
+          <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依訂單數</span>
+        </header>
+        <p v-if="!statsLoading && !hasPaymentData" class="empty-hint">此期間沒有付款資料。</p>
+        <div v-show="hasPaymentData" ref="paymentEl" class="chart" style="height: 300px"></div>
+      </section>
+    </div>
+
     <!-- 熱門品項排行：橫向長條，品項名稱較長時比直向好讀 -->
     <section class="card chart-card">
       <header class="chart-card__header">
@@ -694,46 +745,6 @@ onBeforeUnmount(() => {
           </tr>
         </tbody>
       </table>
-    </section>
-
-    <!-- 各商品分類營收：只含商品品項，私教課與訂閱沒有商品分類（佔比看下方營收組成） -->
-    <section class="card chart-card">
-      <header class="chart-card__header">
-        <h2 class="chart-card__title">各商品分類營收</h2>
-        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．僅商品</span>
-      </header>
-      <p v-if="!statsLoading && !hasCategoryRevenue" class="empty-hint">此期間沒有商品營收。</p>
-      <div
-        v-show="hasCategoryRevenue"
-        ref="categoryRevenueEl"
-        class="chart"
-        :style="{ height: `${categoryRevenueHeight}px` }"
-      ></div>
-    </section>
-
-    <!-- 營收組成：商品／私人課程／會籍訂閱三分，補齊上一張圖看不到的非商品營收 -->
-    <section class="card chart-card">
-      <header class="chart-card__header">
-        <h2 class="chart-card__title">營收組成</h2>
-        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依營收</span>
-      </header>
-      <p v-if="!statsLoading && !hasRevenueComposition" class="empty-hint">此期間沒有營收資料。</p>
-      <div
-        v-show="hasRevenueComposition"
-        ref="revenueCompositionEl"
-        class="chart"
-        style="height: 300px"
-      ></div>
-    </section>
-
-    <!-- 付款方式分布：即時統計，各方式的訂單數佔比（口徑：下單日，與上方營收的付款日不同） -->
-    <section class="card chart-card">
-      <header class="chart-card__header">
-        <h2 class="chart-card__title">付款方式分布</h2>
-        <span class="chart-card__sub">{{ formatDate(from) }} – {{ formatDate(to) }}．依訂單數</span>
-      </header>
-      <p v-if="!statsLoading && !hasPaymentData" class="empty-hint">此期間沒有付款資料。</p>
-      <div v-show="hasPaymentData" ref="paymentEl" class="chart" style="height: 300px"></div>
     </section>
 
     <!-- 團課滿座率：健身房營運最關心的供需指標，軸固定 0–100% -->
@@ -900,6 +911,19 @@ onBeforeUnmount(() => {
 .chart-card {
   padding: 1.5rem 1.75rem;
   margin-bottom: 1.5rem;
+}
+
+/* 三張甜甜圈並排；螢幕窄時 auto-fit 自動收成單欄 */
+.chart-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.chart-row .chart-card {
+  margin-bottom: 0;
+  padding: 1.25rem;
 }
 
 .chart-card__header {
