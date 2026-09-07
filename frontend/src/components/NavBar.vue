@@ -85,6 +85,7 @@
       requires: 'ADMIN',
       links: [
         { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' },
+        { to: '/admin/report-snapshots', label: '報表快照', requires: 'ADMIN' },
         { to: '/admin/analytics', label: '營運分析', requires: 'ADMIN' },
         { to: '/admin/system', label: '系統監控', requires: 'ADMIN' },
         { to: '/admin/members', label: '會員管理', requires: 'ADMIN' },
@@ -237,6 +238,7 @@
       label: '營運數據',
       links: [
         { to: '/admin/reports', label: '營運統計', requires: 'ADMIN' },
+        { to: '/admin/report-snapshots', label: '報表快照', requires: 'ADMIN' },
         { to: '/admin/analytics', label: '營運分析', requires: 'ADMIN' },
         { to: '/admin/system', label: '系統監控', requires: 'ADMIN' }
       ]

@@ -140,6 +140,13 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
         },
         {
+          // 快照與即時統計分頁：兩者的數字性質不同（凍結 vs 即時），
+          // 混在一頁時最上方的日期篩選看起來像全域、實際卻不影響快照，會誤導
+          path: 'admin/report-snapshots',
+          component: () => import('@/views/admin/AdminReportSnapshotView.vue'),
+          meta: { requiresAuth: true, requiresRole: 'ADMIN' },
+        },
+        {
           path: 'admin/system',
           component: () => import('@/views/admin/AdminSystemMonitorView.vue'),
           meta: { requiresAuth: true, requiresRole: 'ADMIN' },
