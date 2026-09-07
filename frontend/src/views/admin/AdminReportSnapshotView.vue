@@ -180,6 +180,8 @@ function renderTrend() {
       },
       yAxis: {
         type: 'value',
+        // 全 0 時 ECharts 會自動把軸拉成 0～1 並切出 0.2、0.4 的小數刻度，金額軸不該有小數
+        minInterval: 1,
         axisLabel: { color: MUTED, formatter: (v) => number.format(v) },
         splitLine: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
       },
@@ -192,6 +194,13 @@ function renderTrend() {
           lineStyle: { width: 2 },
           symbolSize: 8,
           barMaxWidth: 48,
+          // 長條模式（三天以內）直接把金額標在長條上，0 也會在基準線上顯示 $0，不會看起來像沒畫
+          label: {
+            show: asBar,
+            position: 'top',
+            color: MUTED,
+            formatter: (p) => currency.format(Number(p.value ?? 0)),
+          },
         },
       ],
     },
