@@ -1,5 +1,6 @@
 package tw.com.ispan.gym.repository.order;
 
+import tw.com.ispan.gym.dto.report.CategoryRevenueRow;
 import tw.com.ispan.gym.dto.report.ProductSalesRow;
 import tw.com.ispan.gym.entity.order.OrderItem;
 import tw.com.ispan.gym.enums.order.OrderStatus;
@@ -50,6 +51,47 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Integer> {
             ORDER BY SUM(oi.priceAtBuy * oi.quantity) DESC
             """)
     List<ProductSalesRow> aggregateItemSales(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("statuses") Collection<OrderStatus> statuses);
+
+    /**
+     * 各商品分類營收（營運統計用）。只計商品品項——私教課掛在 course 側、沒有商品分類，
+     * 會籍訂閱更無明細列，兩者都由營收組成那支呈現。
+     * 分類名取自 product_category，未掛分類的商品以 JOIN（非 LEFT JOIN）排除。
+     */
+    @Query("""
+            SELECT new tw.com.ispan.gym.dto.report.CategoryRevenueRow(
+                pc.name, SUM(oi.quantity), SUM(oi.priceAtBuy * oi.quantity))
+            FROM OrderItem oi
+            JOIN oi.order o
+            JOIN oi.product p
+            JOIN p.productCategory pc
+            WHERE o.paidAt >= :from AND o.paidAt < :to
+              AND o.status IN :statuses
+            GROUP BY pc.name
+            ORDER BY SUM(oi.priceAtBuy * oi.quantity) DESC
+            """)
+    List<CategoryRevenueRow> aggregateCategoryRevenue(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("statuses") Collection<OrderStatus> statuses);
+
+    /**
+     * 明細列營收依「商品／私人課程」二分（營收組成用）。
+     * 會籍訂閱沒有明細列，由 OrderRepository.aggregateSubscriptionSales 另行聚合後併入。
+     * 回傳 Object[]{isProduct(Boolean), 金額}，由 service 轉成顯示用型別字串。
+     */
+    @Query("""
+            SELECT CASE WHEN oi.product IS NOT NULL THEN true ELSE false END,
+                   SUM(oi.priceAtBuy * oi.quantity)
+            FROM OrderItem oi
+            JOIN oi.order o
+            WHERE o.paidAt >= :from AND o.paidAt < :to
+              AND o.status IN :statuses
+            GROUP BY CASE WHEN oi.product IS NOT NULL THEN true ELSE false END
+            """)
+    List<Object[]> aggregateRevenueByItemKind(
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,
             @Param("statuses") Collection<OrderStatus> statuses);

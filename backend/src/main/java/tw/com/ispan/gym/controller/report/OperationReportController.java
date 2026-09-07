@@ -16,7 +16,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import tw.com.ispan.gym.dto.report.CategoryRevenueRow;
 import tw.com.ispan.gym.dto.report.CouponEffectRow;
+import tw.com.ispan.gym.dto.report.RevenueCompositionRow;
 import tw.com.ispan.gym.dto.report.GenerateReportRequest;
 import tw.com.ispan.gym.dto.report.GroupClassFillRow;
 import tw.com.ispan.gym.dto.report.MemberDailyRow;
@@ -78,6 +80,22 @@ public class OperationReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return reportService.groupClassFill(from, to);
+    }
+
+    /** 各商品分類營收（即時統計，不落快照） */
+    @GetMapping("/category-revenue")
+    public List<CategoryRevenueRow> categoryRevenue(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return reportService.categoryRevenue(from, to);
+    }
+
+    /** 營收組成：商品／私人課程／會籍訂閱三分（即時統計，不落快照） */
+    @GetMapping("/revenue-composition")
+    public List<RevenueCompositionRow> revenueComposition(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return reportService.revenueComposition(from, to);
     }
 
     /** 每日新會員趨勢（即時統計，不落快照） */

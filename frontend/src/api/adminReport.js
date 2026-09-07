@@ -26,6 +26,17 @@ export const getLiveStats = ({ from, to, type = '', top = 10 }) =>
 export const getOrderOverview = ({ from, to }) =>
   api.get('/api/admin/orders/reports/overview', { params: { from, to } })
 
+/**
+ * 各商品分類營收（即時，不落快照），需 ADMIN。口徑同 /stats：付款日時間軸。
+ * 只含商品品項——私教課與會籍訂閱沒有商品分類，佔比看 getRevenueComposition
+ */
+export const getCategoryRevenue = ({ from, to }) =>
+  api.get('/api/admin/reports/category-revenue', { params: { from, to } })
+
+/** 營收組成：商品／私人課程／會籍訂閱三分（即時，不落快照），需 ADMIN。金額為 0 的類型不回列 */
+export const getRevenueComposition = ({ from, to }) =>
+  api.get('/api/admin/reports/revenue-composition', { params: { from, to } })
+
 /** 團課滿座率（即時，不落快照），需 ADMIN。from／to 為 yyyy-MM-dd，時間軸為場次開始時間 */
 export const getGroupClassFill = ({ from, to }) =>
   api.get('/api/admin/reports/group-class-fill', { params: { from, to } })

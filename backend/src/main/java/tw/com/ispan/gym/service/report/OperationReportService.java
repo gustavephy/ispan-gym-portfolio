@@ -30,6 +30,8 @@ import tw.com.ispan.gym.dto.report.ReportRefundSummary;
 import tw.com.ispan.gym.dto.report.ReportSalesItemResponse;
 import tw.com.ispan.gym.dto.report.ReportSummaryResponse;
 import tw.com.ispan.gym.dto.report.SalesStatsResponse;
+import tw.com.ispan.gym.dto.report.CategoryRevenueRow;
+import tw.com.ispan.gym.dto.report.RevenueCompositionRow;
 import tw.com.ispan.gym.dto.report.SubscriptionSalesRow;
 import tw.com.ispan.gym.entity.employee.Employee;
 import tw.com.ispan.gym.entity.report.ReportBreakdown;
@@ -311,6 +313,55 @@ public class OperationReportService {
         return new OrderOverviewResponse(from, to, totalOrders, totalRevenue, countByStatus, revenueByStatus,
                 countByPaymentMethod, refundCount, refundAmount,
                 members.countCreatedBetween(from, to), subscriptions.countCreatedBetween(from, to));
+    }
+
+    /**
+     * 各商品分類營收（即時，不落快照）。口徑同排行明細：paidAt 時間軸、僅計入 REVENUE_STATUSES。
+     * 只含商品品項——私教課與會籍訂閱沒有商品分類，兩者的佔比看 {@link #revenueComposition}。
+     */
+    public List<CategoryRevenueRow> categoryRevenue(LocalDate periodStart, LocalDate periodEnd) {
+        validatePeriod(periodStart, periodEnd);
+        return orderItems.aggregateCategoryRevenue(
+                periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay(), REVENUE_STATUSES);
+    }
+
+    /**
+     * 營收組成（即時，不落快照）：商品／私人課程／會籍訂閱三分。
+     * 前兩者來自 order_item 的雙 FK，訂閱單無明細列、另由 orders 聚合後併入。
+     * 金額為 0 的類型不回傳，避免圓餅出現空扇形。
+     */
+    public List<RevenueCompositionRow> revenueComposition(LocalDate periodStart, LocalDate periodEnd) {
+        validatePeriod(periodStart, periodEnd);
+        LocalDateTime from = periodStart.atStartOfDay();
+        LocalDateTime to = periodEnd.plusDays(1).atStartOfDay();
+
+        BigDecimal productAmount = BigDecimal.ZERO;
+        BigDecimal courseAmount = BigDecimal.ZERO;
+        for (Object[] row : orderItems.aggregateRevenueByItemKind(from, to, REVENUE_STATUSES)) {
+            BigDecimal amount = zeroIfNull((BigDecimal) row[1]);
+            if (Boolean.TRUE.equals(row[0])) {
+                productAmount = productAmount.add(amount);
+            } else {
+                courseAmount = courseAmount.add(amount);
+            }
+        }
+
+        BigDecimal subscriptionAmount = BigDecimal.ZERO;
+        for (SubscriptionSalesRow row : orders.aggregateSubscriptionSales(from, to, REVENUE_STATUSES)) {
+            subscriptionAmount = subscriptionAmount.add(zeroIfNull(row.grossAmount()));
+        }
+
+        List<RevenueCompositionRow> rows = new ArrayList<>();
+        addIfPositive(rows, "商品", productAmount);
+        addIfPositive(rows, "私人課程", courseAmount);
+        addIfPositive(rows, "會籍訂閱", subscriptionAmount);
+        return rows;
+    }
+
+    private static void addIfPositive(List<RevenueCompositionRow> rows, String type, BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) > 0) {
+            rows.add(new RevenueCompositionRow(type, amount));
+        }
     }
 
     /** 團課滿座率（即時，不落快照）：時間軸為場次開始時間，取消場次不計 */
