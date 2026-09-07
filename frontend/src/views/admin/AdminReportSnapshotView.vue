@@ -79,6 +79,41 @@ const dailyTotals = computed(() => detail.value?.dailyTotals ?? [])
  */
 const hasDailyStats = computed(() => detail.value != null && detail.value.refundCount != null)
 
+// 品項型別對照：後端 ReportItemType
+const TYPE_LABELS = { PRODUCT: '商品', COURSE: '課程', SUBSCRIPTION: '會籍' }
+
+/**
+ * 快照總覽：所選版本凍結當下的總計，切版本時跟著換，兩個版本的差異（訂單 0→1、退款 0→1 筆）一眼可比。
+ * 退款與新會員是 2026-08-17 擴充的延伸統計，舊快照這幾格顯示「—」而不是 0，避免把「沒算過」讀成「沒有」。
+ */
+const snapshotKpis = computed(() => {
+  const d = detail.value
+  if (!d) return []
+  const ext = d.refundCount != null
+  const noStat = '此快照生成時尚無此統計'
+  return [
+    { key: 'orders', label: '訂單數', value: number.format(Number(d.orderCount ?? 0)) },
+    { key: 'gross', label: '營收總額', value: currency.format(Number(d.totalAmount ?? 0)) },
+    { key: 'discount', label: '折扣總額', value: currency.format(Number(d.discountAmount ?? 0)) },
+    {
+      key: 'refund',
+      label: '退款金額',
+      value: ext ? currency.format(Number(d.refundAmount ?? 0)) : '—',
+      hint: ext ? `${number.format(Number(d.refundCount ?? 0))} 筆` : noStat,
+      tone: ext && Number(d.refundAmount ?? 0) > 0 ? 'warn' : null,
+    },
+    {
+      key: 'members',
+      label: '新會員',
+      value: ext ? number.format(Number(d.newMemberCount ?? 0)) : '—',
+      hint: ext ? `新訂閱 ${number.format(Number(d.newSubscriptionCount ?? 0))}` : noStat,
+    },
+    { key: 'kinds', label: '有銷售的品項', value: number.format(d.items?.length ?? 0) },
+  ]
+})
+/** 快照凍結的品項排行，與「排行 CSV」的內容相同 */
+const snapshotItems = computed(() => detail.value?.items ?? [])
+
 /**
  * 快照的每日營收補齊區間內每一天。後端 dailyRevenueBuckets 只回有付款訂單的日期：
  * 直接畫會把沒單的日子吃掉、兩個有單的日子被連成一線；日報或整段沒訂單時清單是空的，
@@ -497,6 +532,20 @@ onBeforeUnmount(() => {
       此報表生成後區間內發生過退款，數字已與現況不符，建議重新生成。
     </p>
 
+    <!-- 快照總覽：所選版本凍結當下的總計；切版本時跟著換 -->
+    <div v-if="detail" class="kpi-row">
+      <div
+        v-for="k in snapshotKpis"
+        :key="k.key"
+        class="card kpi"
+        :class="{ 'kpi--warn': k.tone === 'warn' }"
+      >
+        <span class="kpi__label">{{ k.label }}</span>
+        <span class="kpi__value">{{ k.value }}</span>
+        <span v-if="k.hint" class="kpi__hint">{{ k.hint }}</span>
+      </div>
+    </div>
+
     <!-- 每日營收趨勢：所選快照凍結當下的數字 -->
     <section class="card chart-card">
       <header class="chart-card__header">
@@ -564,6 +613,34 @@ onBeforeUnmount(() => {
           <tr v-for="row in paymentBreakdown" :key="row.itemKey">
             <td>{{ paymentMethodLabel(row.itemKey) }}</td>
             <td class="col-num">{{ number.format(Number(row.orderCount ?? 0)) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 品項排行：所選快照凍結的排行明細，與「排行 CSV」內容相同 -->
+    <section v-if="snapshotItems.length > 0" class="card chart-card">
+      <header class="chart-card__header">
+        <h2 class="chart-card__title">品項排行</h2>
+        <span class="chart-card__sub">依所選快照，與排行 CSV 相同</span>
+      </header>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="col-num">#</th>
+            <th>品項</th>
+            <th>型別</th>
+            <th class="col-num">售出</th>
+            <th class="col-num">營收</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in snapshotItems" :key="`${row.productType}-${row.productId}-${row.rankNo}`">
+            <td class="col-num">{{ row.rankNo }}</td>
+            <td>{{ row.productName }}</td>
+            <td>{{ TYPE_LABELS[row.productType] ?? row.productType }}</td>
+            <td class="col-num">{{ number.format(Number(row.quantitySold ?? 0)) }}</td>
+            <td class="col-num">{{ currency.format(Number(row.grossAmount ?? 0)) }}</td>
           </tr>
         </tbody>
       </table>
@@ -698,6 +775,49 @@ onBeforeUnmount(() => {
   font-size: 0.78rem;
   color: var(--muted);
   line-height: 1.6;
+}
+
+/* ---- 快照總覽 KPI（樣式同營運統計頁的 .kpi） ---- */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 0;
+}
+
+.kpi__label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.kpi__value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.kpi__hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* 退款有值時給一個克制的提示色，不用整張卡變色 */
+.kpi--warn .kpi__value {
+  color: #9b2c1e;
+}
+
+.col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .stale-notice {
