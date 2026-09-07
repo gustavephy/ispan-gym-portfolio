@@ -242,6 +242,43 @@ const rankingHeight = computed(() => {
   return Math.max(120, n * 44 + 32)
 })
 const dailyTotals = computed(() => detail.value?.dailyTotals ?? [])
+
+/**
+ * 舊快照（2026-08-17 延伸統計擴充前生成）沒有算過每日營收，純量欄位全是 null，
+ * 以 refundCount 判斷。只有這種才是「沒有資料」；新快照就算清單是空的，也是真的 0。
+ */
+const hasDailyStats = computed(() => detail.value != null && detail.value.refundCount != null)
+
+/**
+ * 快照的每日營收補齊區間內每一天。後端 dailyRevenueBuckets 只回有付款訂單的日期：
+ * 直接畫會把沒單的日子吃掉、兩個有單的日子被連成一線；日報或整段沒訂單時清單是空的，
+ * 該畫零線而不是說「沒有資料」。區間最長 366 天（後端 validatePeriod），這裡保險上限 400。
+ */
+const trendRows = computed(() => {
+  const d = detail.value
+  if (!d?.periodStart || !d?.periodEnd) return []
+  const byDate = new Map(
+    dailyTotals.value.map((r) => [String(r.statDate).slice(0, 10), Number(r.revenue ?? 0)]),
+  )
+  const rows = []
+  const cursor = new Date(`${d.periodStart}T00:00:00`)
+  // 軸的終點取「區間迄日」與「生成日」較早者：月初就生成的月報，生成日之後的日子還沒發生，
+  // 畫成 0 會被誤讀成下半月沒營收
+  let end = new Date(`${d.periodEnd}T00:00:00`)
+  if (d.generatedAt) {
+    const generatedDay = new Date(`${String(d.generatedAt).slice(0, 10)}T00:00:00`)
+    if (generatedDay < end) end = generatedDay
+  }
+  while (cursor <= end && rows.length < 400) {
+    const key = isoDate(cursor)
+    rows.push({ statDate: key, revenue: byDate.get(key) ?? 0 })
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return rows
+})
+const trendAllZero = computed(
+  () => trendRows.value.length > 0 && trendRows.value.every((r) => r.revenue === 0),
+)
 const statusBreakdown = computed(() => detail.value?.statusBreakdown ?? [])
 const paymentBreakdown = computed(() => detail.value?.paymentBreakdown ?? [])
 
@@ -275,7 +312,9 @@ function renderTrend() {
     trendChart = null
   }
   if (!trendChart) trendChart = echarts.init(trendEl.value)
-  const rows = dailyTotals.value
+  const rows = trendRows.value
+  // 日報或三天內的區間只有一兩個點，畫不出線；改長條比孤零零一個點好讀
+  const asBar = rows.length <= 3
   trendChart.setOption(
     {
       // 單一序列不需要圖例——標題已經說明它是什麼
@@ -299,11 +338,12 @@ function renderTrend() {
       series: [
         {
           name: '營收',
-          type: 'line',
+          type: asBar ? 'bar' : 'line',
           data: rows.map((r) => Number(r.revenue ?? 0)),
           smooth: false,
           lineStyle: { width: 2 },
           symbolSize: 8,
+          barMaxWidth: 48,
         },
       ],
     },
@@ -714,7 +754,7 @@ async function fetchDetail(reportId) {
   // 換掉、根本不在 DOM 裡，trendEl 是 null，renderTrend() 會靜靜地什麼都不做，
   // 切換快照後畫面就一片空白。nextTick 等 v-else 分支重新掛載完成。
   await nextTick()
-  if (dailyTotals.value.length > 0) renderTrend()
+  if (hasDailyStats.value) renderTrend()
 }
 
 watch(selectedReportId, (id) => {
@@ -1089,10 +1129,13 @@ onBeforeUnmount(() => {
         <p v-if="reports.length === 0" class="empty-hint">
           目前沒有任何報表快照，點上方「+ 產生報表」建立第一份。
         </p>
-        <p v-else-if="dailyTotals.length === 0" class="empty-hint">
-          這份報表沒有每日營收資料（較早生成的快照沒有這項統計）。
+        <p v-else-if="!hasDailyStats" class="empty-hint">
+          這份報表沒有每日營收資料（2026-08-17 之前生成的快照沒有這項統計，重新生成即可補上）。
         </p>
-        <div v-show="dailyTotals.length > 0" ref="trendEl" class="chart chart--trend"></div>
+        <div v-show="hasDailyStats" ref="trendEl" class="chart chart--trend"></div>
+        <p v-if="hasDailyStats && trendAllZero" class="empty-hint">
+          區間內沒有計入營收的付款訂單，每日營收為 0。
+        </p>
       </template>
     </section>
 
