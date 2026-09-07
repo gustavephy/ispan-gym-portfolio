@@ -10,6 +10,21 @@ export const PAYMENT_METHOD_LABELS = {
   BARCODE: '超商條碼',
   Simulated: '模擬付款（測試）',
   aio: '綠界整合金流',
+  DigitalPayment_IPASS: '電子支付（iPASS MONEY）',
+  ApplePay: 'Apple Pay',
+}
+
+// 綠界的 PaymentType 是「大類_子類」（ATM_LAND、CVS_CVS、TWQR_OPAY…），子類太多不一一列，
+// 對照表沒命中時退回大類名稱，圖表與列表才不會直接印出原始代碼
+const PAYMENT_FAMILY_LABELS = {
+  Credit: '信用卡',
+  ATM: 'ATM 轉帳',
+  WebATM: '網路 ATM',
+  CVS: '超商代碼',
+  BARCODE: '超商條碼',
+  TWQR: 'TWQR 行動支付',
+  BNPL: '先買後付',
+  DigitalPayment: '電子支付',
 }
 
 export const PAYMENT_STATUS_LABELS = {
@@ -37,5 +52,9 @@ export const PAYMENT_PROVIDER_LABELS = {
 }
 
 export function paymentMethodLabel(code) {
-  return PAYMENT_METHOD_LABELS[code] ?? code ?? '—'
+  if (code == null || code === '') return '—'
+  const exact = PAYMENT_METHOD_LABELS[code]
+  if (exact) return exact
+  const family = PAYMENT_FAMILY_LABELS[String(code).split('_')[0]]
+  return family ? `${family}（${code}）` : code
 }
