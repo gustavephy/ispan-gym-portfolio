@@ -52,7 +52,11 @@ async function login(request, email, password) {
 }
 
 test.describe('C7 重設密碼', () => {
-  test('申請 → 重設頁改密碼 → 舊密碼失效、新密碼可登入、連結不能重用', async ({ page, request }) => {
+  test('申請 → 另一分頁重設 → 原分頁同步「密碼已重設」、舊密碼失效、新密碼可登入、連結不能重用', async ({
+    page,
+    context,
+    request,
+  }) => {
     test.setTimeout(180_000) // 撞到 forgot-password 的 60 秒冷卻時要原地等一輪，預設 60 秒不夠
     await page.goto('/forgot-password')
     await page.locator('#forgot-email').fill(EMAIL)
@@ -61,22 +65,29 @@ test.describe('C7 重設密碼', () => {
     )
     await page.locator('form button[type="submit"]').first().click()
     expect((await requested).ok()).toBeTruthy()
+    // 原分頁留在「已送出」狀態（表單還在、重寄倒數中），等另一分頁完成後靠 BroadcastChannel 同步
+    await expect(page.getByText('若此 Email 可使用密碼登入')).toBeVisible()
 
     // 頁面申請的那筆可能因 60 秒冷卻沒產生 token（見 requestAndHijackToken），helper 會自行補申請
     const raw = hijackLatestResetToken(EMAIL) ?? (await requestAndHijackToken(request, EMAIL))
     let changed = false
+    const tabB = await context.newPage()
     try {
-      await page.goto(`/reset-password?token=${raw}`)
-      await page.locator('#reset-password').fill(NEW_PASSWORD)
-      await page.locator('#reset-confirm').fill(NEW_PASSWORD)
-      const reset = page.waitForResponse(
+      // 另一分頁：從信件連結開啟重設頁並完成重設
+      await tabB.goto(`/reset-password?token=${raw}`)
+      await tabB.locator('#reset-password').fill(NEW_PASSWORD)
+      await tabB.locator('#reset-confirm').fill(NEW_PASSWORD)
+      const reset = tabB.waitForResponse(
         (r) => r.url().endsWith('/api/auth/reset-password') && r.request().method() === 'POST',
       )
-      await page.locator('form button[type="submit"]').first().click()
+      await tabB.locator('form button[type="submit"]').first().click()
       const res = await reset
       expect(res.ok(), `重設失敗：${await res.text()}`).toBeTruthy()
       changed = true
-      await expect(page.getByText('密碼已成功重設')).toBeVisible()
+      await expect(tabB.getByText('密碼已成功重設')).toBeVisible()
+
+      // 原「忘記密碼」分頁：收到同一個 Email 的完成事件，切成「密碼已重設」
+      await expect(page.getByRole('heading', { name: '密碼已重設' })).toBeVisible()
 
       expect((await login(request, EMAIL, PASSWORD)).status()).toBe(401)
       expect((await login(request, EMAIL, NEW_PASSWORD)).ok()).toBeTruthy()
@@ -88,6 +99,7 @@ test.describe('C7 重設密碼', () => {
       expect(reuse.ok()).toBeFalsy()
       expect((await login(request, EMAIL, NEW_PASSWORD)).ok()).toBeTruthy()
     } finally {
+      await tabB.close()
       if (changed) await restoreSeedPassword(request, EMAIL, NEW_PASSWORD)
     }
   })

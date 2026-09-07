@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { forgotPassword } from '@/api/auth.js'
 import OperationMessage from '@/components/OperationMessage.vue'
 
@@ -23,6 +23,32 @@ const errorMessage = ref('')
 
 const cooldown = ref(0)
 let cooldownTimer = null
+
+// 送出成功後記住申請的信箱；使用者可能在信件連結那頭（另一個分頁）完成重設，
+// 監聽同一個 BroadcastChannel，Email 正規化後跟這頁申請的信箱相符才切換畫面，
+// 避免把別人帳號的重設結果套進來。比照 MemberRegisterView 的 verifiedElsewhere。
+const submittedEmail = ref('')
+const resetCompleted = ref(false)
+let resetChannel = null
+
+function normalizeEmail(value) {
+  return (value || '').trim().toLowerCase()
+}
+
+onMounted(() => {
+  if (typeof BroadcastChannel === 'undefined') return
+  resetChannel = new BroadcastChannel('password-reset')
+  resetChannel.onmessage = (event) => {
+    const doneEmail = event.data?.email
+    if (!doneEmail || !submittedEmail.value) return
+    if (normalizeEmail(doneEmail) !== normalizeEmail(submittedEmail.value)) return
+    resetCompleted.value = true
+    clearInterval(cooldownTimer)
+    cooldown.value = 0
+  }
+})
+
+onUnmounted(() => resetChannel?.close())
 
 function startCooldown() {
   cooldown.value = COOLDOWN_SECONDS
@@ -50,6 +76,7 @@ async function onSubmit() {
   try {
     const { data } = await forgotPassword(email.value.trim())
     resultMessage.value = data.message
+    submittedEmail.value = email.value.trim()
     startCooldown()
   } catch (e) {
     // 正常流程下這裡幾乎不會走到（後端一律回202），只有格式錯誤／網路失敗等才會進來
@@ -63,6 +90,15 @@ async function onSubmit() {
 <template>
   <main class="auth-page">
     <section class="auth-card">
+      <template v-if="resetCompleted">
+        <h1 class="auth-card__title">密碼已重設</h1>
+        <OperationMessage message="您的密碼已在另一個分頁完成重設，請使用新密碼重新登入。" tone="success" />
+        <div class="auth-card__links">
+          <RouterLink to="/login">前往登入</RouterLink>
+        </div>
+      </template>
+
+      <template v-else>
       <h1 class="auth-card__title">忘記密碼</h1>
       <p class="auth-card__subtitle">輸入您的 Email，我們會寄送密碼重設連結給您</p>
 
@@ -97,6 +133,7 @@ async function onSubmit() {
       <div class="auth-card__links">
         <RouterLink to="/login">返回登入</RouterLink>
       </div>
+      </template>
     </section>
   </main>
 </template>

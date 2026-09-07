@@ -37,7 +37,8 @@ export const resendVerificationEmail = (email) =>
 export const forgotPassword = (email) => api.post('/api/auth/forgot-password', { email }, ANONYMOUS_CONFIG)
 
 /**
- * POST /api/auth/reset-password — 成功回 204（無 body）
+ * POST /api/auth/reset-password — 成功回 200 `{ email }`（token 所屬帳號的 Email，
+ * 供前端做「同一個 Email 的重設完成事件」跨分頁比對；不核發 JWT）。
  * 失敗一律 400 RESET_TOKEN_INVALID（不存在／已使用／已作廢／已過期／帳號已不符資格皆同一訊息）
  */
 export const resetPassword = (payload) => api.post('/api/auth/reset-password', payload, ANONYMOUS_CONFIG)

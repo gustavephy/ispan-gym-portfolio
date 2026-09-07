@@ -1079,7 +1079,7 @@ class EndpointAuthorizationTest {
                         .content("""
                                 { "token": "t", "newPassword": "Newpass@2026", "confirmPassword": "Newpass@2026" }
                                 """))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk());
     }
 
     // === Google OAuth 綁定管理 ====================================================

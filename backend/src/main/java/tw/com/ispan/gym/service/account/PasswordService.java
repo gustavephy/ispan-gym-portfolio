@@ -287,8 +287,13 @@ public class PasswordService {
 
     private static final String RESET_TOKEN_INVALID_MESSAGE = "重設連結無效或已過期，請重新申請。";
 
+    /**
+     * @return token 所屬帳號的 Email。前端據此做「同一個 Email 的重設完成事件」跨分頁比對
+     *         （見 ForgotPasswordView 的 BroadcastChannel）；這裡回傳的是帳號實際 Email，
+     *         不涉及忘記密碼申請端點的反帳號列舉設計。
+     */
     @Transactional
-    public void resetPassword(String rawToken, String newPassword) {
+    public String resetPassword(String rawToken, String newPassword) {
         String tokenHash = sha256(rawToken);
 
         // 帳號安全域統一採「先鎖 Account、再鎖短效憑證」的順序。
@@ -335,6 +340,7 @@ public class PasswordService {
                 .forEach(t -> t.setInvalidatedAt(now));
         // 刻意不簽發新 JWT——重設密碼視為「帳號可能已遭他人取得」的復原流程，
         // 一律要求以新密碼重新登入，而不是延續一個未必是本人的既有工作階段。
+        return account.getEmail();
     }
 
     // === 共用：重用檢查、歷史裁切 =============================================

@@ -35,7 +35,11 @@ test.describe('C5 會員資料', () => {
       const saved = page.waitForResponse(
         (r) => r.url().endsWith('/api/member/profile') && r.request().method() === 'PUT',
       )
+      // 儲存前有二次確認彈窗，列出變更欄位，按「確認修改」才真的送出
       await page.locator('form button[type="submit"]').first().click()
+      await expect(page.getByRole('heading', { name: '確認修改會員資料' })).toBeVisible()
+      await expect(page.getByText('鄉鎮市區', { exact: true })).toBeVisible()
+      await page.getByRole('button', { name: '確認修改' }).click()
       const res = await saved
       expect(res.ok(), `儲存失敗：${await res.text()}`).toBeTruthy()
       await expect(page.getByText('會員資料已更新')).toBeVisible()
@@ -81,6 +85,8 @@ test.describe('C5 會員資料', () => {
       .waitForResponse((r) => r.url().endsWith('/api/member/profile') && r.request().method() === 'PUT', { timeout: 3000 })
       .catch(() => null)
     await page.locator('form button[type="submit"]').first().click()
+    // 格式錯誤時前端擋在確認彈窗之前，彈窗根本不該出現
+    await expect(page.getByRole('heading', { name: '確認修改會員資料' })).toHaveCount(0)
     const res = await attempt
     if (res) expect(res.ok(), '後端不該接受格式錯誤的電話').toBeFalsy()
     expect((await (await request.get(`${API}/api/member/profile`, auth(token))).json()).phone).toBe(before)

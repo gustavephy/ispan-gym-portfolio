@@ -585,7 +585,8 @@ VALUES (@accountId, @tokenHash, DATEADD(MINUTE, 15, SYSDATETIME()), SYSDATETIME(
     $resetResp = Invoke-ApiCall -Method Post -Path "/api/auth/reset-password" -Body @{
         token = $rawTokenB; newPassword = "E2eReset@02"; confirmPassword = "E2eReset@02"
     }
-    Test-Case "憑 Token 重設密碼成功回 204" ($resetResp.StatusCode -eq 204)
+    Test-Case "憑 Token 重設密碼成功回 200" ($resetResp.StatusCode -eq 200)
+    Test-Case "重設密碼回應帶 token 所屬 Email" (($resetResp.Content | ConvertFrom-Json).email -ieq $emailB)
     Test-Case "重設密碼後舊 JWT 立即失效（401）" (-not (Test-ProfileReachable -Token $tokenB0))
 
     $tokenB1 = Get-AuthToken -Email $emailB -Password "E2eReset@02"
@@ -671,7 +672,7 @@ VALUES (@accountId, @tokenHash, DATEADD(MINUTE, 15, SYSDATETIME()), SYSDATETIME(
         # 刻意先用 @() 把兩個狀態碼組成陣列再送進 pipeline——逗號運算子在管線裡的優先權
         # 容易讓人誤讀，寫成 @($a, $b) | Where-Object 才能保證兩個值都真的進了篩選
         $statuses = @($status1, $status2)
-        $successCount = ($statuses | Where-Object { $_ -eq 204 }).Count
+        $successCount = ($statuses | Where-Object { $_ -eq 200 }).Count
 
         Test-Case "同一個 Token 的兩個並行重設請求只有一個成功" ($successCount -eq 1) "狀態碼=$status1,$status2"
     } finally {

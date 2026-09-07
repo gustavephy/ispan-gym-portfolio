@@ -13,6 +13,16 @@ import PasswordInput from '@/components/PasswordInput.vue'
 const route = useRoute()
 const token = computed(() => (typeof route.query.token === 'string' ? route.query.token : ''))
 
+// 重設常常發生在另一個分頁（使用者從信箱點連結開啟），廣播出去讓還開著的「忘記密碼
+// 已寄出」分頁（ForgotPasswordView）即時知道已完成、切成「密碼已重設」並停用重寄。
+// 比照 EmailVerificationView 的 broadcastVerified。
+function broadcastReset(email) {
+  if (typeof BroadcastChannel === 'undefined' || !email) return
+  const channel = new BroadcastChannel('password-reset')
+  channel.postMessage({ email })
+  channel.close()
+}
+
 const newPassword = ref('')
 const confirmPassword = ref('')
 const submitting = ref(false)
@@ -47,12 +57,13 @@ async function onSubmit() {
   }
   submitting.value = true
   try {
-    await resetPassword({
+    const { data } = await resetPassword({
       token: token.value,
       newPassword: newPassword.value,
       confirmPassword: confirmPassword.value,
     })
     done.value = true
+    broadcastReset(data?.email)
   } catch (e) {
     errorMessage.value = e.message
   } finally {
