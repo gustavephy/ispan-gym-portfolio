@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import tw.com.ispan.gym.dto.account.ForgotPasswordRequest;
 import tw.com.ispan.gym.dto.account.ForgotPasswordResponse;
 import tw.com.ispan.gym.dto.account.ResetPasswordRequest;
+import tw.com.ispan.gym.dto.account.ResetPasswordResponse;
 import tw.com.ispan.gym.service.account.PasswordService;
 
 /**
@@ -40,9 +41,14 @@ public class PasswordResetController {
         return new ForgotPasswordResponse("若此 Email 可使用密碼登入，我們將寄送密碼重設信。");
     }
 
+    /**
+     * 成功回 200 + {@link ResetPasswordResponse}（token 所屬帳號的 Email），
+     * 供前端跨分頁比對「這封重設信是不是同一個帳號的」。持有有效 token 已等同證明
+     * 能收該信箱的信，回傳 Email 不構成帳號列舉。失敗一律 400 RESET_TOKEN_INVALID。
+     */
     @PostMapping("/reset-password")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-        passwordService.resetPassword(request.getToken(), request.getNewPassword());
+    public ResetPasswordResponse resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        String email = passwordService.resetPassword(request.getToken(), request.getNewPassword());
+        return new ResetPasswordResponse(email);
     }
 }

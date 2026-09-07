@@ -578,7 +578,7 @@ Response **`202`** `ForgotPasswordResponse`：`message` 固定為「若此 Email
 #### 🔓 `POST /api/auth/reset-password`
 
 Request `ResetPasswordRequest`：`token`（`@NotBlank`）、`newPassword`（`@NotBlank`，見下方密碼規則）、`confirmPassword`（`@NotBlank`，須與 `newPassword` 相同）
-Response **`204`**（無 body，不核發 JWT——視為救援可能已外流的帳號，一律導回登入頁重新輸入密碼）
+Response **`200`** `ResetPasswordResponse`：`email`（token 所屬帳號的 Email）。**不核發 JWT**——視為救援可能已外流的帳號，一律導回登入頁重新輸入密碼。`email` 僅供前端做「同一個 Email 的重設完成事件」跨分頁比對（`ForgotPasswordView` 的 `BroadcastChannel`）；持有有效 token 已等同證明能收該信箱的信，回傳 Email 不構成帳號列舉，`forgot-password` 申請端點的固定 `202` 反列舉設計不受影響。
 
 錯誤：`400 RESET_TOKEN_INVALID`「重設連結無效或已過期，請重新申請。」——涵蓋 token 不存在／已使用／已作廢／已過期／帳號已不符資格共 5 種情況，**刻意不區分**，避免回應形狀被拿來反推帳號狀態。
 

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -99,11 +100,15 @@ class PasswordResetControllerTest {
             """;
 
     @Test
-    void resetPassword_有效body回204並委派() throws Exception {
+    void resetPassword_有效body回200並帶token所屬Email並委派() throws Exception {
+        when(passwordService.resetPassword("raw-token-value", "Newpass@2026"))
+                .thenReturn("owner@local.test");
+
         mockMvc.perform(post("/api/auth/reset-password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_RESET_BODY))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("owner@local.test"));
 
         verify(passwordService).resetPassword("raw-token-value", "Newpass@2026");
     }
@@ -133,9 +138,9 @@ class PasswordResetControllerTest {
         verify(passwordService, never()).resetPassword(any(), any());
     }
 
-    /** 失敗時仍要走各自的業務錯誤映射，不能被 @ResponseStatus(NO_CONTENT) 蓋掉 */
+    /** 失敗時仍要走各自的業務錯誤映射，不能被成功路徑的 200 蓋掉 */
     @Test
-    void resetPassword_ServiceThrowResetTokenInvalid時映射400_不是204() throws Exception {
+    void resetPassword_ServiceThrowResetTokenInvalid時映射400_不是200() throws Exception {
         doThrow(new ResetTokenInvalidException("重設連結無效或已過期，請重新申請。"))
                 .when(passwordService).resetPassword(any(), any());
 

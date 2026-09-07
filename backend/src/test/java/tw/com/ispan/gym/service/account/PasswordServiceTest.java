@@ -738,11 +738,13 @@ class PasswordServiceTest {
         when(passwordResetTokens.findByAccountIdAndIdNotAndUsedAtIsNullAndInvalidatedAtIsNull(ACCOUNT_ID, token.getId()))
                 .thenReturn(List.of());
 
-        service.resetPassword("raw-token", "Newpass@2026");
+        String returnedEmail = service.resetPassword("raw-token", "Newpass@2026");
 
         assertThat(account.getPasswordHash()).isEqualTo("new-hash");
         assertThat(account.getCredentialsVersion()).isEqualTo(3);
         assertThat(token.getUsedAt()).isNotNull();
+        // 回傳 token 所屬帳號 Email，供前端跨分頁比對「同一個 Email 的重設完成事件」
+        assertThat(returnedEmail).isEqualTo("wendy-test@local.test");
         verify(jwtUtil, never()).generateToken(any(Account.class));
     }
 
