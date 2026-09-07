@@ -620,7 +620,10 @@ onBeforeUnmount(() => {
   <div class="page-container admin-report-page">
     <span class="section-tag">ADMIN</span>
     <h1 class="section-title">營運統計</h1>
-    <p class="section-desc">即時銷售統計與歷史報表快照，用於掌握營收趨勢與熱門品項。</p>
+    <p class="section-desc">
+      依所選期間即時重算的營運數字：營收結構、熱門品項、團課滿座率、新會員與教練使用率。
+      對帳用的凍結報表請看「報表快照」。
+    </p>
 
     <!-- 篩選列：所有圖表共用同一組期間條件，統一放在最上方 -->
     <div class="filters card">
