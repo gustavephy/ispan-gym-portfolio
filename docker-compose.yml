@@ -76,11 +76,9 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-unset-client-id}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-unset-client-secret}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:8088/login/oauth2/code/google}
-      # 註冊驗證信的寄件憑證（Gmail 應用程式密碼）；沒設時寄信功能停用，其餘不受影響
-      - MAIL_USERNAME=${MAIL_USERNAME:-}
-      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
-      # Gemini 金鑰（AI 課表／AI 顧問）；沒設時 AI 功能回覆服務暫停，其餘不受影響
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      # 註冊驗證信的寄件憑證（MAIL_USERNAME／MAIL_PASSWORD）與 Gemini 金鑰（GOOGLE_API_KEY）
+      # 不列在此處，改由上方 env_file 直接帶入：這幾個沒有預設值可言（沒設就是功能停用），
+      # 寫成 ${VAR:-} 只是讓值多經一次 compose 的變數替換，含特殊字元時反而可能被解析壞掉。
 
   frontend:
     build:
