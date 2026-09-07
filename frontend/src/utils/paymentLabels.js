@@ -10,7 +10,7 @@ export const PAYMENT_METHOD_LABELS = {
   BARCODE: '超商條碼',
   Simulated: '模擬付款（測試）',
   aio: '綠界整合金流',
-  DigitalPayment_IPASS: '電子支付（iPASS MONEY）',
+  DigitalPayment_IPASS: 'iPASS MONEY',
   ApplePay: 'Apple Pay',
 }
 
