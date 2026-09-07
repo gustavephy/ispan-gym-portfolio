@@ -361,6 +361,7 @@ public class TestDataSeedRunner implements CommandLineRunner {
         // 放在 ensureSampleOrderHistory 之前，新訂單才會一併補到狀態時間軸）
         List<Member> demoMembers = ensureRealisticMembers();
         ensureMoreSampleOrders(demoMembers);
+        ensureSampleCourseOrders(demoMembers);
         ensurePastGroupClassSessions(demoMembers);
         ensurePastCoachSlotBookings(demoMembers);
 
@@ -1416,6 +1417,10 @@ public class TestDataSeedRunner implements CommandLineRunner {
     private static final List<String> DEMO_PAYMENT_METHODS = List.of(
             "Credit_CreditCard", "Credit_CreditCard", "ATM", "Credit_CreditCard",
             "CVS", "WebATM", "Credit_CreditCard", "BARCODE");
+    /** 私教課樣本訂單編號前綴；與 SEED-ORD-（商品）分開計數，各自冪等 */
+    private static final String SAMPLE_COURSE_ORDER_PREFIX = "SEED-CRS-";
+    /** 私教課樣本訂單筆數：每門種子私教課各一筆已付款訂單 */
+    private static final int SAMPLE_COURSE_ORDER_COUNT = 3;
 
     /**
      * 擬真示範會員：中文姓名、性別、生日、城市齊全，created_at 攤在最近 90 天
@@ -1572,6 +1577,78 @@ public class TestDataSeedRunner implements CommandLineRunner {
         }
         if (created > 0) {
             log.info("已補 {} 筆樣本訂單（買家/付款方式/日期分散，總數 {}）", created, DEMO_ORDER_TARGET);
+        }
+    }
+
+    /**
+     * 私教課樣本訂單。上面兩批樣本訂單的明細全在 order_item.product_id 那一側，資料庫裡從沒有人
+     * 買過私教課：營運統計「品項型別＝課程」的排行永遠是空的，營收組成也只有商品與會籍兩片。
+     * 這裡對每門種子私教課各建一筆已付款訂單，日期攤在最近三週（5／12／19 天前，都不是今天，
+     * 不影響「今天」的 KPI），買家輪流用示範會員，付款方式輪替。
+     * 只建訂單、明細與付款紀錄，不發堂數：member_course_quota 是 hasRealTransactionData 判斷
+     * 「真實交易」的依據之一，發了會讓種子誤判這不是展示資料庫；報表只看 order_item。
+     * 冪等：以 SEED-CRS- 前綴計數，補滿即停。
+     */
+    private void ensureSampleCourseOrders(List<Member> demoMembers) {
+        if (demoMembers.isEmpty()) {
+            return;
+        }
+        long existing = orders.findAll().stream()
+                .filter(o -> o.getOrderNo() != null && o.getOrderNo().startsWith(SAMPLE_COURSE_ORDER_PREFIX))
+                .count();
+        if (existing >= SAMPLE_COURSE_ORDER_COUNT) {
+            return;
+        }
+        // 只挑種子私教課（以名稱辨識），管理員自己建的課不替它造訂單；種子課不在就退回任何上架課
+        List<PrivateCourse> active = privateCourses.findByStatus(CourseStatus.ACTIVE).stream()
+                .filter(c -> c.getPrice() != null)
+                .sorted(java.util.Comparator.comparing(PrivateCourse::getPrivateCourseId))
+                .toList();
+        List<PrivateCourse> seeded = active.stream()
+                .filter(c -> SEED_PRIVATE_COURSE_NAMES.contains(c.getName()))
+                .toList();
+        List<PrivateCourse> pool = seeded.isEmpty() ? active : seeded;
+        if (pool.isEmpty()) {
+            return;
+        }
+
+        int created = 0;
+        for (int i = (int) existing; i < SAMPLE_COURSE_ORDER_COUNT; i++) {
+            PrivateCourse course = pool.get(i % pool.size());
+            int daysAgo = 5 + i * 7;
+            int hour = 10 + (i * 5) % 9;
+            Member buyer = demoMembers.get((i * 11) % demoMembers.size());
+            String method = DEMO_PAYMENT_METHODS.get((i * 3) % DEMO_PAYMENT_METHODS.size());
+            BigDecimal unit = course.getPrice();
+            BigDecimal amount = unit;
+            LocalDateTime placedAt = LocalDateTime.now().minusDays(daysAgo)
+                    .withHour(hour).withMinute((i * 17) % 60).withSecond(0).withNano(0);
+            String no = SAMPLE_COURSE_ORDER_PREFIX + String.format("%03d", i + 1);
+
+            tw.com.ispan.gym.entity.order.Order order = new tw.com.ispan.gym.entity.order.Order(
+                    buyer, no, no, amount, BigDecimal.ZERO, amount, amount, null,
+                    buyer.getLastName() + buyer.getFirstName(), buyer.getPhone(), null, null);
+            order.markPaid(method, no);
+            tw.com.ispan.gym.entity.order.Order savedOrder = orders.save(order);
+            orderItems.save(new OrderItem(savedOrder, course, course.getName(), unit, 1));
+
+            PaymentTransaction payment = new PaymentTransaction(savedOrder, "ECPAY", no, amount, "TWD");
+            payment.setTradeNo(no);
+            payment.setPaymentMethod(method);
+            payment.setStatus("SUCCESS");
+            payment.setPaidAt(placedAt);
+            payment.setRtnCode(1);
+            payment.setRtnMsg("交易成功");
+            paymentTransactions.save(payment);
+
+            jdbc.update("UPDATE orders SET created_at = ?, updated_at = ?, paid_at = ? WHERE order_id = ?",
+                    toDbUtc(placedAt), toDbUtc(placedAt), toDbUtc(placedAt), savedOrder.getOrderId());
+            jdbc.update("UPDATE order_item SET created_at = ? WHERE order_id = ?",
+                    toDbUtc(placedAt), savedOrder.getOrderId());
+            created++;
+        }
+        if (created > 0) {
+            log.info("已建立 {} 筆私教課樣本訂單（營運統計的課程排行與營收組成才有資料）", created);
         }
     }
 
