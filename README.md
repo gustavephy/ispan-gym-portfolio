@@ -1,8 +1,8 @@
 # 威力健身房管理系統 (Power Gym Management System)
 
-本專案為 6 人團隊協同開發之企業級健身房營運管理系統，涵蓋會員服務、金流交易、商品商城、預約排程與營運報表等業務範疇。
+本專案為 6 人團隊協同開發之健身房營運管理系統，涵蓋會員服務、金流交易、商品商城、預約排程與營運報表等業務範疇。
 
-個人在團隊中擔任全端核心開發者，獨立負責「商城商品、課程管理、優惠券系統、會籍方案」四大核心模組的前後端架構設計、資料庫建模、RESTful API 實作、前端介面開發與系統整合。
+個人在團隊中擔任全端核心開發者，獨立負責「商城商品、課程管理、優惠券系統、會籍方案」四大模組的前後端架構設計、資料庫建模、RESTful API 實作、前端介面開發與系統整合。
 
 ---
 
@@ -13,7 +13,7 @@
 | 後端框架 | Java 25 / Spring Boot 4.1.0 / Spring Security (JWT) / Spring Data JPA |
 | 資料庫 | Microsoft SQL Server 2022 (MSSQL) |
 | 前端架構 | Vue 3 (Composition API) / Vite / Pinia / Vue Router / Axios |
-| 多媒體服務 | Cloudinary 雲端圖床 / 本機磁碟儲存雙軌備援 |
+| 多媒體服務 | Cloudinary 雲端圖 |
 | 測試與部署 | JUnit 5 / 併發壓力測試 / Docker / Docker Compose |
 
 ---
@@ -22,7 +22,7 @@
 
 - 商城商品模組：商品型錄多條件篩選、規格展示、即時庫存狀態提示、後台商品與庫存維護、結帳庫存連動扣減。
 - 優惠券模組：促銷優惠券發行管理、會員個人錢包（分頁檢視與狀態過濾）、結帳門檻折抵計算、限量優惠券併發搶領。
-- 課程管理模組：團體課程與私人教練課程方案 CRUD、課程分類階層維護、前台清單展示與後台課程主檔管理。
+- 課程管理模組：團體課程與私人教練課程方案 CRUD、課程分類階層維護、前台清單展示與後台課程管理。
 - 會籍方案模組：多元會籍方案公開瀏覽、會員個人合約起訖日與剩餘天數查詢、直接訂閱結帳整合。
 
 ---
@@ -30,17 +30,17 @@
 ## 3. 核心技術亮點與工程實踐
 
 ### 3.1 併發交易處理：JPA 悲觀寫入鎖防止超領與超賣
-在促銷優惠券搶領與熱門商品結帳扣庫存的情境下，為避免競態條件 (Race Condition) 導致超領或超賣，採用以下機制：
+在促銷優惠券搶領與熱門商品結帳扣庫存的情境下，為避免競態條件導致超領或超賣，採用以下機制：
 - 於 Repository 宣告 `@Lock(LockModeType.PESSIMISTIC_WRITE)` 施加資料庫排他列鎖，搭配 `@Transactional` 將檢查與扣減封裝於同一交易邊界內。
 - 撰寫多執行緒併發壓測（`CountDownLatch` 搭配 `ExecutorService`），實測 1,000 位會員同時搶領限量 10 張優惠券，成功數精準為 10、失敗 990，資料庫數值完全一致。
 - 實作位置：`backend/src/main/java/tw/com/ispan/gym/service/coupon/MemberCouponService.java`
 - 測試驗證：`backend/src/test/java/tw/com/ispan/gym/service/coupon/MemberCouponConcurrencyTest.java`
 
 ### 3.2 商城多條件查詢與樂觀鎖並行控制
-為滿足商城前台多維度交叉篩選並兼顧伺服器記憶體負載：
+為滿足商城前台多條件篩選並兼顧伺服器記憶體負載：
 - 使用 Spring Data JPA `@Query` 搭配 JPQL 條件語法 `(:param IS NULL OR field = :param)`，以靜態查詢語句優雅支援分類、關鍵字、品牌、口味、價格區間等多條件可選組合篩選。
 - 搭配 `Pageable` 實現分頁資料傳輸，避免一次載入大量資料導致記憶體負載過大。
-- 管理端商品實體導入 `@Version` 樂觀鎖機制，在多位管理員並行更新商品時防止資料覆寫 (Lost Update)。
+- 管理端商品實體導入 `@Version` 樂觀鎖機制，在多位管理員並行更新商品時防止資料覆寫。
 - 查詢介面：`backend/src/main/java/tw/com/ispan/gym/repository/product/ProductRepository.java`
 - 實體配置：`backend/src/main/java/tw/com/ispan/gym/entity/product/Product.java`
 
