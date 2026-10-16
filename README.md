@@ -34,7 +34,7 @@
 - 於 Repository 宣告 `@Lock(LockModeType.PESSIMISTIC_WRITE)` 施加資料庫排他列鎖，搭配 `@Transactional` 將檢查與扣減封裝於同一交易邊界內。
 - 撰寫多執行緒併發壓測（`CountDownLatch` 搭配 `ExecutorService`），實測 1,000 位會員同時搶領限量 10 張優惠券，成功數精準為 10、失敗 990，資料庫數值完全一致。
 - 實作位置：`backend/src/main/java/tw/com/ispan/gym/service/coupon/MemberCouponService.java`
-- 壓測驗證：`backend/src/test/java/tw/com/ispan/gym/service/coupon/MemberCouponConcurrencyTest.java`
+- 測試驗證：`backend/src/test/java/tw/com/ispan/gym/service/coupon/MemberCouponConcurrencyTest.java`
 
 ### 3.2 商城多條件查詢與樂觀鎖並行控制
 為滿足商城前台多維度交叉篩選並兼顧伺服器記憶體負載：
