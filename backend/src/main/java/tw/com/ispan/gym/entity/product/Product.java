@@ -3,6 +3,7 @@ package tw.com.ispan.gym.entity.product;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.Check;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -26,6 +27,7 @@ import tw.com.ispan.gym.enums.product.ProductStatus;
 
 @Entity
 @Table(name = "product")
+@Check(constraints = "price >= 0 AND stock >= 0")
 @Getter
 @Setter
 @EntityListeners(AuditingEntityListener.class)
@@ -41,11 +43,11 @@ public class Product {
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
-    
+
     @Column(length = 500, columnDefinition = "NVARCHAR(500)")
     private String description;
-    
-    @Column(nullable=false)
+
+    @Column(nullable = false)
     private Integer stock;
 
     @Version
@@ -79,7 +81,7 @@ public class Product {
     @Column(length = 50, columnDefinition = "NVARCHAR(50)")
     private String origin;
 
-    @ManyToOne(fetch=FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id")
     private ProductCategory productCategory;
 
